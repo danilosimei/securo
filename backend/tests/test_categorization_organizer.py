@@ -1594,3 +1594,58 @@ async def test_retry_of_a_capped_redistribution_sends_only_the_unsent_rows(
     assert (await _fresh(session, CategorizationRun, again["redistribute_run_id"])).detail[
         "source_tx_ids"
     ] == unsent
+
+
+def test_filter_ops_drops_a_split_whose_child_matches_a_flagged_sibling():
+    """Applying would refuse to reuse (or duplicate) a same-named category
+    with other flags, so the proposal does not offer it."""
+    stats = _stats()
+    stats.categories["c9"] = CategoryStat(name="Shows", group="g1", transfer=True)
+    ops = [
+        _op("o1", "split_category", target="c1", name="Lazer", children=["Jogos", "Shows"]),
+        # Same split reusing a sibling with the same flags: kept.
+        _op("o2", "split_category", target="c1", name="Lazer", children=["Jogos", "Cinema"]),
+    ]
+    assert [op["id"] for op in filter_ops(ops, stats)] == ["o2"]
+
+
+@pytest.mark.asyncio
+async def test_split_refuses_a_same_named_child_with_other_flags(
+    session, test_user, test_workspace
+):
+    lazer_group = _group(session, test_user, test_workspace, "Lazer")
+    lazer = _cat(session, test_user, test_workspace, "Lazer", lazer_group)
+    _cat(session, test_user, test_workspace, "Shows", lazer_group, is_ignored=True)
+    run = await _organize_run(
+        session, test_workspace,
+        [_op("o1", "split_category", target="c1", name="Lazer", children=["Jogos", "Shows"])],
+        {"c1": lazer.id},
+    )
+    ws_id, user_id = test_workspace.id, test_user.id
+
+    with pytest.raises(organizer.OpConflict, match="gere outra"):
+        await apply_op(session, ws_id, run.id, "o1", user_id)
+    await session.rollback()
+
+    names = (
+        await session.execute(select(Category.name).where(Category.workspace_id == ws_id))
+    ).scalars().all()
+    assert sorted(names) == ["Lazer", "Shows"]
+
+
+@pytest.mark.asyncio
+async def test_split_first_child_may_repeat_a_hidden_name(session, test_user, test_workspace):
+    """The person cannot see a hidden category, so it does not block a name."""
+    lazer_group = _group(session, test_user, test_workspace, "Lazer")
+    lazer = _cat(session, test_user, test_workspace, "Lazer", lazer_group)
+    _cat(session, test_user, test_workspace, "Cinema", lazer_group, is_hidden=True)
+    run = await _organize_run(
+        session, test_workspace,
+        [_op("o1", "split_category", target="c1", name="Lazer", children=["Cinema", "Shows"])],
+        {"c1": lazer.id},
+    )
+
+    await apply_op(session, test_workspace.id, run.id, "o1", test_user.id)
+    await session.commit()
+
+    assert (await _fresh(session, Category, lazer.id)).name == "Cinema"

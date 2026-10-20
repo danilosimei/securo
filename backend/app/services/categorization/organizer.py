@@ -533,11 +533,17 @@ class _Sim:
             self.touch(key, position, 0)
 
     def has_category_named(self, group: str, name: str, *, besides: str | None = None) -> bool:
+        return bool(self.categories_named(group, name, besides=besides))
+
+    def categories_named(self, group: str, name: str, *, besides: str | None = None) -> list[str]:
         wanted = _norm(name)
-        return any(
-            g == group and self.cat_name.get(c) == wanted and c != besides
-            for c, g in self.cat_group.items()
-        )
+        return [
+            c for c, g in self.cat_group.items()
+            if g == group and self.cat_name.get(c) == wanted and c != besides
+        ]
+
+    def flags(self, category: str) -> tuple[bool, bool]:
+        return self.transfer[category], self.ignored[category]
 
 
 def _new_usage(stores: list[str], stats: OrganizerStats) -> tuple[int, Decimal]:
@@ -651,6 +657,10 @@ def _step(sim: _Sim, position: int, op: dict[str, Any], stats: OrganizerStats) -
         key in sim.group_name and sim.has_category_named(key, children[0], besides=target)
     ):
         return False  # unknown group, or the first child would repeat a name there
+    for child in children[1:]:
+        same = sim.categories_named(key, child, besides=target)
+        if same and all(sim.flags(c) != sim.flags(target) for c in same):
+            return False  # applying refuses to reuse it (other flags) or duplicate it
     sim.ensure_group(key, position)
     old = sim.cat_group[target]
     sim.cat_group[target] = None  # out of the way while the children are named
@@ -1271,12 +1281,14 @@ async def _category_in(
     """An assignable category of that name in the group, or a new one.
 
     With `like` (a split's original) the category also shares its
-    `treat_as_transfer` / `is_ignored` flags: one with other flags is not
-    reused, and a new one inherits them."""
+    `treat_as_transfer` / `is_ignored` flags and a new one inherits them;
+    when the only one of that name has other flags, OpConflict (reusing it
+    would change what the rows mean, a second one would repeat the name)."""
     transfer = bool(like.treat_as_transfer) if like is not None else False
     ignored = bool(like.is_ignored) if like is not None else False
     assignable = await category_service.get_assignable_category_ids(session, workspace_id)
     wanted = _norm(name)
+    other_flags = False
     for category in (
         await session.execute(
             select(Category)
@@ -1284,17 +1296,17 @@ async def _category_in(
             .order_by(Category.id)
         )
     ).scalars().all():
-        if (
-            category.id != besides
-            and category.id in assignable
-            and _norm(category.name) == wanted
-            and (
-                like is None
-                or (bool(category.treat_as_transfer), bool(category.is_ignored))
-                == (transfer, ignored)
-            )
-        ):
+        if category.id == besides or category.id not in assignable:
+            continue
+        if _norm(category.name) != wanted:
+            continue
+        if like is None or (
+            bool(category.treat_as_transfer), bool(category.is_ignored)
+        ) == (transfer, ignored):
             return category
+        other_flags = True
+    if other_flags:
+        raise OpConflict(STALE_MESSAGE)
     return await category_service.create_category(
         session, workspace_id, user_id,
         CategoryCreate(
@@ -1318,6 +1330,9 @@ async def _name_taken(
                     Category.workspace_id == workspace_id,
                     Category.group_id == group.id,
                     Category.id != besides,
+                    # A hidden one is out of sight: the 409 would cite a
+                    # name the person cannot find.
+                    Category.is_hidden.is_(False),
                 )
             )
         ).scalars().all()
