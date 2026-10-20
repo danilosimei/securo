@@ -105,7 +105,7 @@ UBER = "UBER DO BRASIL TECNOLOGIA LTDA."
         (
             "JUROS S/ CAPITAL DE CLIENTES BBDC3 S/            263",
             None,
-            "JUROS S CAPITAL DE CLIENTES BBDC3 S",
+            "JUROS S CAPITAL DE CLIENTES BBDC3",
         ),
         ("IOF de compra internacional", None, "IOF DE COMPRA INTERNACIONAL"),
         ("Null", None, "UNKNOWN"),
@@ -134,3 +134,93 @@ def test_sample_description_scrubs_and_truncates():
     out = sample_description("A" * 100)
     assert len(out) == 60
     assert "12345678909" not in sample_description("PIX 123.456.789-09 JOAO")
+
+
+@pytest.mark.parametrize(
+    "raw,forbidden",
+    [
+        ("PIX 123.456.789-09 15/10", "12345678909"),
+        ("TED 12345678909 25 JOAO", "12345678909"),
+        ("TED 12.345.678/0001-90 25 X", "12345678000190"),
+        ("PIX 12345678000190 99", "12345678000190"),
+    ],
+)
+def test_scrub_documents_with_trailing_digit_groups(raw, forbidden):
+    out = scrub_documents(raw)
+    digits = "".join(c for c in out if c.isdigit())
+    assert forbidden not in digits
+    assert "123.456.789" not in out and "12.345.678" not in out
+    assert "12345678" not in out
+
+
+def test_scrub_keeps_trailing_group():
+    assert scrub_documents("PIX 123.456.789-09 15/10") == "PIX 15/10"
+
+
+@pytest.mark.parametrize(
+    "desc",
+    [
+        "TED 12345678909 25 JOAO",
+        "x|088.124.924-60",
+        "Pagamento efetuado|088.124.924-60",
+        "Transferência Recebida|088.124.924-60",
+        "PAGTO 12.345.678/0001-90 15/10 ACME",
+    ],
+)
+def test_merchant_key_never_leaks_document_digits(desc):
+    key = merchant_key(desc)
+    assert "088.124.924" not in key and "124.924" not in key
+    assert "12345678909" not in key and "12345678000190" not in key
+    assert "12.345.678" not in key
+    assert "124 924" not in key and "123 456" not in key and "345 678" not in key
+
+
+def test_replacement_char_in_transfer_kind():
+    assert (
+        merchant_key(
+            "Transfer\ufffdncia Recebida|DANILO SIMEI S NASCIMENTO", payee_name="088.124.924-60"
+        )
+        == "PIX:DANILO SIMEI S NASCIMENTO"
+    )
+    assert (
+        merchant_key(
+            "Transfer\ufffdncia enviada pelo Pix|Eliel Simei do Nascimento",
+            payee_name="066.560.644-34",
+        )
+        == "PIX:ELIEL SIMEI DO NASCIMENTO"
+    )
+
+
+def test_replacement_char_is_deleted_not_spaced():
+    assert merchant_key("Aplica\ufffd\ufffdo RDB") == "APLICAO RDB"
+    assert merchant_key("Cr\ufffddito Ref. Taxa BTC") == "CRDITO REF TAXA BTC"
+
+
+def test_nameless_transfer_with_document_payee_is_distinct_per_sender():
+    a = merchant_key(
+        "Transfer\ufffdncia Recebida", payee_name="088.124.924-60", payee_source="sync"
+    )
+    b = merchant_key(
+        "Transfer\ufffdncia Recebida", payee_name="066.560.644-34", payee_source="sync"
+    )
+    assert a.startswith("PIX:#") and b.startswith("PIX:#")
+    assert a != b
+    for key, doc in ((a, "08812492460"), (b, "06656064434")):
+        assert doc not in key
+    assert a == merchant_key("Transfer\ufffdncia Recebida", payee_name="088.124.924-60")
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("RENDIMENTOS DE CLIENTES KNRI11 S/  96", "RENDIMENTOS DE CLIENTES KNRI11"),
+        ("RENDIMENTOS DE CLIENTES HGLG11 S/ 106", "RENDIMENTOS DE CLIENTES HGLG11"),
+        ("RENDIMENTOS DE CLIENTES KNRI11 S/ 1,100", "RENDIMENTOS DE CLIENTES KNRI11"),
+        ("RENDIMENTOS DE CLIENTES KNRI11 S/ 1.100", "RENDIMENTOS DE CLIENTES KNRI11"),
+        ("JUROS S/ CAPITAL DE CLIENTES BBDC3 S/ 263", "JUROS S CAPITAL DE CLIENTES BBDC3"),
+        ("99 FOOD", "99 FOOD"),
+        ("7 ELEVEN 12", "7 ELEVEN"),
+    ],
+)
+def test_quantities_do_not_drift_key(raw, expected):
+    assert merchant_key(raw) == expected

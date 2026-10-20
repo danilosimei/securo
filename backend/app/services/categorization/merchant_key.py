@@ -104,16 +104,22 @@ _INSTALLMENT_RE = re.compile(
     r"|(?<![\d/])\b\d{1,2}/\d{1,2}\b(?![\d/])"
 )
 _LEGAL_SUFFIX_RE = re.compile(r"[\s,.]+(?:LTDA|S\.?\s*/?\s*A|ME|MEI|EIRELI|EPP)\.?\s*$")
-_TRANSFER_KIND_RE = re.compile(r"^(?:TRANSFERENCIA|TRANSF|PIX|TED|DOC)\b")
+# U+FFFD (encoding corrompido) e removido no fold, entao "TRANSFERNCIA" tambem casa.
+_TRANSFER_KIND_RE = re.compile(r"^(?:TRANSF\w*|PIX|TED|DOC)\b")
+NAMELESS_TRANSFER_MAX_TOKENS = 4
+_NUMERIC_TOKEN_RE = re.compile(r"^\d+(?:[.,]\d+)*$")
 EMPTY_WORDS = frozenset({"NULL", "NONE", "NAN"})
 _TRAILING_ID_RE = re.compile(r"^(?:\d{3,}|[A-Z]*\d{4,}[A-Z0-9]*|#\d+|NR|NUM)$")
-_DOCUMENT_RE = re.compile(r"(?<!\d)\d(?:[.\-/ ]?\d){10,13}(?!\d)")
+# Formas explicitas de CNPJ (14) e CPF (11); separadores so . - / (nunca espaco).
+_DOCUMENT_RE = re.compile(
+    r"(?<!\d)(?:\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{3}\.?\d{3}\.?\d{3}-?\d{2})(?!\d)"
+)
 _NON_TEXT_RE = re.compile(r"[^A-Z0-9.*&]+")
 _SPACES_RE = re.compile(r"\s+")
 
 
 def _fold(text: str) -> str:
-    decomposed = unicodedata.normalize("NFKD", text)
+    decomposed = unicodedata.normalize("NFKD", text.replace("�", ""))
     return "".join(c for c in decomposed if not unicodedata.combining(c)).upper()
 
 
@@ -124,11 +130,7 @@ def _squeeze(text: str) -> str:
 def scrub_documents(text: str) -> str:
     """Remove CPF/CNPJ (11 ou 14 digitos), com ou sem pontuacao."""
 
-    def _drop(match: re.Match[str]) -> str:
-        digits = re.sub(r"\D", "", match.group())
-        return " " if len(digits) in (11, 14) else match.group()
-
-    return _squeeze(_DOCUMENT_RE.sub(_drop, text))
+    return _squeeze(_DOCUMENT_RE.sub(" ", text))
 
 
 def sample_description(text: str | None) -> str:
@@ -187,11 +189,23 @@ def _strip_trailing(text: str) -> str:
     return " ".join(tokens)
 
 
+def _drop_quantities(text: str) -> str:
+    """Tira tokens numericos (nao-iniciais) e o "S" solto de "S/ <n>"."""
+    out: list[str] = []
+    for index, token in enumerate(text.split()):
+        if index > 0 and _NUMERIC_TOKEN_RE.match(token):
+            if len(out) > 1 and out[-1] == "S":
+                out.pop()
+            continue
+        out.append(token)
+    return " ".join(out)
+
+
 def _normalize_description(text: str) -> str:
     folded = _INSTALLMENT_RE.sub(" ", _fold(scrub_documents(text)))
     cleaned = _strip_leading(_clean(folded))
     cleaned = _cut_star(cleaned)
-    return _strip_trailing(cleaned)
+    return _strip_trailing(_drop_quantities(cleaned))
 
 
 def _plain_name(text: str) -> str:
@@ -257,6 +271,16 @@ def merchant_key(
 
     if not description or not description.strip():
         return UNKNOWN_KEY
+    folded_description = _fold(description).strip()
+    if (
+        payee_name
+        and payee_source != "description"
+        and not payee_ok
+        and not parts
+        and _TRANSFER_KIND_RE.match(folded_description)
+        and len(folded_description.split()) <= NAMELESS_TRANSFER_MAX_TOKENS
+    ):
+        return _person_key(payee_name)
     if parts:
         kind, counterpart = parts
         if _TRANSFER_KIND_RE.match(kind):
@@ -265,4 +289,4 @@ def merchant_key(
     key = _normalize_description(description)
     if key:
         return key
-    return _plain_name(description) or UNKNOWN_KEY
+    return _plain_name(scrub_documents(description)) or UNKNOWN_KEY
