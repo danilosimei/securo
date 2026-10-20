@@ -52,6 +52,7 @@ import { TransactionsViewSwitcher, type TransactionsViewMode } from '@/component
 import { RuleDialog, type RuleDialogInitialData } from '@/components/rule-dialog'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { categoryChanged, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
@@ -277,13 +278,23 @@ export default function DashboardPage() {
     queryFn: () => goalsApi.summary(3),
   })
 
+  // After a category fix: "apply to the similar ones" / "create rule".
+  const { notifyCorrection } = useCategoryCorrectionToast({
+    onCreateRule: (initialData) => {
+      setCreateRuleInitialData(initialData)
+      setCreateRuleOpen(true)
+    },
+  })
+
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }: TransactionSavePayload & { id: string }) =>
       transactions.update(id, data),
-    onSuccess: () => {
+    onSuccess: (_updated, { id, ...payload }) => {
+      const corrected = editingTx?.id === id && categoryChanged(editingTx, payload)
       invalidateFinancialQueries(queryClient)
       setDialogOpen(false)
       setEditingTx(null)
+      if (corrected) void notifyCorrection({ id })
     },
   })
 

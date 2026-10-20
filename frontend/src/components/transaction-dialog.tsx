@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { CategorySelect } from '@/components/category-select'
+import { ProvenanceBlock } from '@/components/categorization/provenance-block'
 import { PayeeSelect } from '@/components/payee-select'
 import { RuleDialog, type RuleDialogInitialData } from '@/components/rule-dialog'
 import { TransactionAttachments } from '@/components/transaction-attachments'
@@ -1158,6 +1159,15 @@ function TransactionForm({
           />
         </div>
       </div>
+      {transaction && (
+        <ProvenanceBlock
+          transactionId={transaction.id}
+          categories={categories}
+          // The row went back server-side; follow it so a later save does
+          // not re-file it under the category just undone.
+          onUndone={(restored) => setCategoryId(restored ?? '')}
+        />
+      )}
       <div className={cn("grid gap-4", isSynced ? "grid-cols-1" : "grid-cols-2")}>
         <div className="space-y-2">
           <Label>{t('payees.payee')}</Label>

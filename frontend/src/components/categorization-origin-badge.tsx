@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Brain, HelpCircle, Sparkles, Wand2 } from 'lucide-react'
+import { HelpCircle } from 'lucide-react'
 
+import { ORIGIN_STYLES } from '@/lib/categorization-origins'
 import { cn } from '@/lib/utils'
 import type { CategorySource } from '@/types'
 
@@ -14,21 +15,6 @@ interface CategorizationOriginBadgeProps {
   /** Icon only, for dense rows (mobile). */
   compact?: boolean
 }
-
-const ORIGINS = {
-  ai: {
-    Icon: Sparkles,
-    tone: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-300',
-  },
-  memory: {
-    Icon: Brain,
-    tone: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300',
-  },
-  rule: {
-    Icon: Wand2,
-    tone: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300',
-  },
-} as const
 
 /**
  * Discreet seal for categories the system chose. A person's own choices (and
@@ -70,7 +56,7 @@ export function CategorizationOriginBadge({
 
   if (source !== 'ai' && source !== 'memory' && source !== 'rule') return null
 
-  const { Icon, tone } = ORIGINS[source]
+  const { Icon, tone } = ORIGIN_STYLES[source]
   const label = t(`categorization.origin.${source}`)
   return (
     <span

@@ -1,10 +1,10 @@
 import { screen } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { TransactionDialog } from '@/components/transaction-dialog'
-import { currencies, groups, payees } from '@/lib/api'
+import { categorization, currencies, groups, payees, settings, transactions } from '@/lib/api'
 import { renderWithProviders, t } from '@/test/utils'
-import type { RecurringTransaction } from '@/types'
+import type { RecurringTransaction, Transaction } from '@/types'
 
 vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => ({ user: { preferences: { currency_display: 'USD' } } }),
@@ -71,3 +71,51 @@ it.each(['America/Los_Angeles', 'Pacific/Kiritimati'])(
     }
   },
 )
+
+describe('how the category got here', () => {
+  const props = {
+    open: true,
+    onClose: vi.fn(),
+    categories: [],
+    categoryGroups: [],
+    accounts: [],
+    onSave: vi.fn(),
+    loading: false,
+    error: null,
+  }
+
+  function stubLists() {
+    vi.spyOn(currencies, 'list').mockResolvedValue([])
+    vi.spyOn(payees, 'list').mockResolvedValue([])
+    vi.spyOn(groups, 'list').mockResolvedValue([])
+    vi.spyOn(settings, 'attachments').mockResolvedValue({ max_file_size_mb: 10, allowed_types: [] } as never)
+    vi.spyOn(transactions.attachments, 'list').mockResolvedValue([])
+  }
+
+  it('does not look up the origin of a transaction being created', async () => {
+    stubLists()
+    const provenance = vi.spyOn(categorization, 'provenance').mockResolvedValue({
+      current_source: 'ai', original_description: null, events: [],
+    })
+    renderWithProviders(<TransactionDialog {...props} transaction={null} />)
+    expect(await screen.findByText(t('transactions.addManual'))).toBeInTheDocument()
+    expect(provenance).not.toHaveBeenCalled()
+  })
+
+  it('shows the origin block under the category of an existing transaction', async () => {
+    stubLists()
+    const provenance = vi.spyOn(categorization, 'provenance').mockResolvedValue({
+      current_source: 'ai',
+      original_description: 'IFOOD *PEDIDO 123',
+      events: [],
+    })
+    const tx = {
+      id: 'tx-1', description: 'iFood', amount: 30, currency: 'USD', date: '2026-10-18',
+      type: 'debit', status: 'posted', account_id: 'acc-1', category_id: null,
+      category_source: 'ai', source: 'manual',
+    } as unknown as Transaction
+    renderWithProviders(<TransactionDialog {...props} transaction={tx} />)
+    expect(await screen.findByText(t('categorization.provenance.by_ai'))).toBeInTheDocument()
+    expect(provenance).toHaveBeenCalledWith('tx-1')
+  })
+})

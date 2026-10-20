@@ -2995,6 +2995,40 @@
       "filterProvider": "Bank",
       "filterNone": "No category",
       "reviewAria": "Category to review"
+    },
+    "provenance": {
+      "label": "How this category got here",
+      "by_ai": "Categorized by AI",
+      "by_memory": "Categorized from memory",
+      "by_rule": "Categorized by a rule",
+      "by_provider": "Category from the bank",
+      "by_user": "Categorized by you",
+      "by_none": "No category",
+      "by_other": "Category set automatically",
+      "confidence": "{{value}}%",
+      "original": "Original",
+      "noCategory": "No category",
+      "toggle": "Show or hide where this category came from",
+      "undo": "Undo",
+      "undoHintReview": "Restores the original category and sends the transaction to Review",
+      "undoHint": "Restores the original category",
+      "undoneReview": "Undone · the transaction is back in Review",
+      "undone": "Undone · original category restored",
+      "undoSkipped": "Nothing to undo: the category was already changed",
+      "undoError": "Could not undo"
+    },
+    "correction": {
+      "updated": "Category updated",
+      "applySimilar_one": "Apply to {{count}} similar",
+      "applySimilar_other": "Apply to {{count}} similar",
+      "createRule": "Create rule",
+      "applied_one": "Applied to {{count}} transaction",
+      "applied_other": "Applied to {{count}} transactions",
+      "applyError": "Could not apply to the similar transactions",
+      "undo": "Undo",
+      "undone_one": "{{count}} undone",
+      "undone_other": "{{count}} undone",
+      "undoError": "Could not undo"
     }
   }
 }

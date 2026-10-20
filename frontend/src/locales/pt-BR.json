@@ -2997,6 +2997,40 @@
       "filterProvider": "Banco",
       "filterNone": "Sem categoria",
       "reviewAria": "Categoria a revisar"
+    },
+    "provenance": {
+      "label": "Como esta categoria chegou aqui",
+      "by_ai": "Categorizado pela IA",
+      "by_memory": "Categorizado pela memória",
+      "by_rule": "Categorizado por uma regra",
+      "by_provider": "Categoria do banco",
+      "by_user": "Categorizado por você",
+      "by_none": "Sem categoria",
+      "by_other": "Categoria definida automaticamente",
+      "confidence": "{{value}}%",
+      "original": "Original",
+      "noCategory": "Sem categoria",
+      "toggle": "Mostrar ou ocultar de onde veio esta categoria",
+      "undo": "Desfazer",
+      "undoHintReview": "Volta para a categoria original e manda a transação para Revisar",
+      "undoHint": "Volta para a categoria original",
+      "undoneReview": "Desfeito · a transação voltou para Revisar",
+      "undone": "Desfeito · categoria original restaurada",
+      "undoSkipped": "Nada a desfazer: a categoria já foi alterada",
+      "undoError": "Não foi possível desfazer"
+    },
+    "correction": {
+      "updated": "Categoria atualizada",
+      "applySimilar_one": "Aplicar à {{count}} parecida",
+      "applySimilar_other": "Aplicar às {{count}} parecidas",
+      "createRule": "Criar regra",
+      "applied_one": "Aplicado a {{count}} transação",
+      "applied_other": "Aplicado a {{count}} transações",
+      "applyError": "Não foi possível aplicar às parecidas",
+      "undo": "Desfazer",
+      "undone_one": "{{count}} desfeita",
+      "undone_other": "{{count}} desfeitas",
+      "undoError": "Não foi possível desfazer"
     }
   }
 }

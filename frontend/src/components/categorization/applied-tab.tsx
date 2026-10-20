@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Brain, ChevronRight, ListChecks, Loader2, Sparkles, Undo2, Wand2, X } from 'lucide-react'
+import { ChevronRight, ListChecks, Loader2, Undo2, X, type LucideIcon } from 'lucide-react'
 import {
   categories as categoriesApi,
   categoryGroups as categoryGroupsApi,
@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/format'
+import { ORIGIN_STYLES } from '@/lib/categorization-origins'
 import { cn } from '@/lib/utils'
 import type { AppliedEvent, Category, CategoryGroup, CategorySource } from '@/types'
 
@@ -42,11 +43,9 @@ type ConfidenceFilter = 'all' | 'low' | 'high'
 
 const SOURCES: SourceFilter[] = ['ai', 'memory', 'rule']
 
-const ORIGIN: Record<string, { icon: typeof Sparkles; className: string }> = {
-  ai: { icon: Sparkles, className: 'text-violet-600 dark:text-violet-400' },
-  memory: { icon: Brain, className: 'text-sky-600 dark:text-sky-400' },
-  rule: { icon: Wand2, className: 'text-slate-500 dark:text-slate-400' },
-}
+const ORIGIN: Record<string, { icon: LucideIcon; className: string }> = Object.fromEntries(
+  (['ai', 'memory', 'rule'] as const).map((s) => [s, { icon: ORIGIN_STYLES[s].Icon, className: ORIGIN_STYLES[s].iconClass }]),
+)
 
 /** Undoing these puts the row back in Review as a pending suggestion. */
 const BACK_TO_REVIEW: CategorySource[] = ['ai', 'memory']

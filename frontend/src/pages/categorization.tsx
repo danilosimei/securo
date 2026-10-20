@@ -7,6 +7,7 @@ import { Loader2, Settings, Sparkles } from 'lucide-react'
 import { categorization as categorizationApi } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { invalidateCategorizationQueries } from '@/lib/invalidate-queries'
+import { formatRelativeFromNow } from '@/lib/relative-time'
 import { isCategorizationBusy, useCategorizationSummary } from '@/hooks/use-categorization-summary'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useDateLocale } from '@/hooks/use-display-locale'
@@ -19,19 +20,6 @@ import { OrganizeTab } from '@/components/categorization/organize-tab'
 
 type Tab = 'review' | 'applied' | 'organize'
 const TABS: Tab[] = ['review', 'applied', 'organize']
-/**
- * Own helper rather than `lib/relative-time.formatRelative`: that one emits
- * hard-coded English ("2h ago"), and this line is localized copy.
- */
-function relativeFromNow(iso: string, locale: string): string {
-  const diffSec = Math.round((new Date(iso).getTime() - Date.now()) / 1000)
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
-  const abs = Math.abs(diffSec)
-  if (abs < 60) return rtf.format(0, 'second')
-  if (abs < 3600) return rtf.format(Math.round(diffSec / 60), 'minute')
-  if (abs < 86400) return rtf.format(Math.round(diffSec / 3600), 'hour')
-  return rtf.format(Math.round(diffSec / 86400), 'day')
-}
 
 export default function CategorizationPage() {
   const { t } = useTranslation()
@@ -76,7 +64,7 @@ export default function CategorizationPage() {
     else if (lastRun.finished_at) {
       const stat = (key: string) => Number(lastRun.stats?.[key] ?? 0) || 0
       statusLine = t('categorization.lastRun', {
-        when: relativeFromNow(lastRun.finished_at, locale),
+        when: formatRelativeFromNow(lastRun.finished_at, locale),
         applied: stat('applied') + stat('memory'),
         review: stat('suggested'),
       })

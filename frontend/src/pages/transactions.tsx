@@ -62,6 +62,7 @@ import { TransactionCalendarView } from '@/components/transaction-calendar-view'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useCreateTransaction } from '@/hooks/use-create-transaction'
+import { categoryChanged, singleStoreReference, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
 import { MobileTransactionRow } from '@/components/mobile-transaction-row'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
@@ -543,14 +544,24 @@ export default function TransactionsPage() {
     resetForm,
   } = useCreateTransaction({ onDone: () => setDialogOpen(false) })
 
+  // After a category fix: "apply to the similar ones" / "create rule".
+  const { notifyCorrection } = useCategoryCorrectionToast({
+    onCreateRule: (initialData) => {
+      setCreateRuleInitialData(initialData)
+      setCreateRuleOpen(true)
+    },
+  })
+
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }: TransactionUpdatePayload & { id: string }) =>
       transactions.update(id, data),
-    onSuccess: () => {
+    onSuccess: (_updated, { id, ...payload }) => {
+      const before = editingTx?.id === id ? editingTx : data?.items.find((tx) => tx.id === id)
       invalidateAfterTxMutation()
       setDialogOpen(false)
       setEditingTx(null)
-      toast.success(t('transactions.updated'))
+      if (categoryChanged(before, payload)) void notifyCorrection({ id })
+      else toast.success(t('transactions.updated'))
     },
     onError: (error) => {
       toast.error(extractApiError(error))
@@ -574,11 +585,16 @@ export default function TransactionsPage() {
   const bulkCategorizeMutation = useMutation({
     mutationFn: ({ ids, categoryId }: { ids: string[]; categoryId: string | null }) =>
       transactions.bulkCategorize(ids, categoryId),
-    onSuccess: (result) => {
+    onSuccess: (result, { ids, categoryId }) => {
       invalidateAfterTxMutation()
       setSelectedIds(new Set())
       setBulkCategory('')
-      toast.success(t('transactions.bulkSuccess', { count: result.updated }))
+      const title = t('transactions.bulkSuccess', { count: result.updated })
+      // Shortcuts only when the selection is one store (all rows on screen).
+      const rows = (data?.items ?? []).filter((tx) => ids.includes(tx.id))
+      const reference = categoryId && rows.length === ids.length ? singleStoreReference(rows) : null
+      if (reference) void notifyCorrection(reference, { title })
+      else toast.success(title)
     },
     onError: (error) => {
       toast.error(extractApiError(error))
