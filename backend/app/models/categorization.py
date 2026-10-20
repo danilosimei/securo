@@ -49,6 +49,7 @@ EVENT_SOURCES = CATEGORY_SOURCES + ("undo",)
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
+    """A CHECK clause; also used by `Transaction.category_source` (098)."""
     return f"{column} IN ({', '.join(repr(v) for v in values)})"
 
 
@@ -92,7 +93,9 @@ class CategorizationSettings(Base):
     #: Whose API key and consent the runs use when no person is acting.
     owner_user_id: Mapped[Optional[uuid.UUID]] = _set_null_fk("users.id")
     #: Bank-provider category name -> Securo category id, learned over time.
-    provider_category_map: Mapped[dict[str, Any]] = mapped_column(_Json, default=dict)
+    provider_category_map: Mapped[dict[str, Any]] = mapped_column(
+        _Json, default=dict, server_default="{}"
+    )
     last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -137,8 +140,8 @@ class CategorizationRun(Base):
         Numeric(10, 6), default=Decimal("0"), server_default="0"
     )
     #: applied / suggested / memory / skipped counters.
-    stats: Mapped[dict[str, Any]] = mapped_column(_Json, default=dict)
-    detail: Mapped[dict[str, Any]] = mapped_column(_Json, default=dict)
+    stats: Mapped[dict[str, Any]] = mapped_column(_Json, default=dict, server_default="{}")
+    detail: Mapped[dict[str, Any]] = mapped_column(_Json, default=dict, server_default="{}")
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -234,7 +237,7 @@ class MerchantMemory(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     workspace_id: Mapped[uuid.UUID] = _workspace_fk()
     merchant_key: Mapped[str] = mapped_column(String(255))
-    counts: Mapped[dict[str, Any]] = mapped_column(_Json, default=dict)
+    counts: Mapped[dict[str, Any]] = mapped_column(_Json, default=dict, server_default="{}")
     last_user_category_id: Mapped[Optional[uuid.UUID]] = _set_null_fk("categories.id")
     ai_category_id: Mapped[Optional[uuid.UUID]] = _set_null_fk("categories.id")
     ai_confidence: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
