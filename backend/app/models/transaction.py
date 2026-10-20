@@ -3,7 +3,7 @@ from datetime import date as _date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional, cast
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, JSON, Numeric, SmallInteger, String, event
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, JSON, Numeric, SmallInteger, String, event
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        Index("ix_transactions_workspace_category_source", "workspace_id", "category_source"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -30,6 +33,10 @@ class Transaction(Base):
     )
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
     category_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True)
+    # Who set `category_id`: none, user, rule, memory, ai, provider,
+    # installment, import, recurring or legacy. The categorization pipeline
+    # only revisits none/provider/memory/ai; user and legacy are protected.
+    category_source: Mapped[str] = mapped_column(String(16), default="none", server_default="none")
     external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Provider's transaction ID
     description: Mapped[str] = mapped_column(String(500))
     original_description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
