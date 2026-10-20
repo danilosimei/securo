@@ -45,6 +45,8 @@ EXAMPLES_LIMIT = 40
 TOKENS_PER_ITEM = 80
 TOKENS_BASE = 200
 MAX_TOKENS_CAP = 16000
+#: Output fields in generation order: name and reason before the decision.
+OUTPUT_FIELDS = ("k", "n", "r", "c", "alt", "p", "new")
 #: Example store names are cut like the descriptions.
 EXAMPLE_NAME_LENGTH = 60
 
@@ -52,76 +54,102 @@ PATH_SEPARATOR = " › "
 _SPACES_RE = re.compile(r"\s+")
 _CENT = Decimal("0.01")
 _ACCOUNT_KINDS = {"credit_card": "cc", "checking": "ca", "savings": "ca"}
+#: Suffix on categories that only move money around (`treat_as_transfer`).
+TRANSFER_MARK = " (movimentação)"
+#: Previous choices per store sent as `h`.
+HISTORY_LIMIT = 3
 
-INSTRUCTIONS = """\
-Você categoriza as transações bancárias e de cartão de crédito de uma pessoa no Brasil. As \
-transações chegam agrupadas por loja: decida uma vez por item e a decisão vale para todas as \
-transações daquele item.
+# Prompt samples only (merchant keys are untouched): branch/account numbers
+# after their label, card-number shapes, "final 1234", and any run of 5+
+# digits with . - / * separators (masked documents like ***.456.789-**).
+# Bank codes (3 digits, e.g. "TED 341") stay: public, and a useful signal.
+_ACCOUNT_TOKEN_RE = re.compile(
+    r"\b(?:AG|AGENCIA|AGÊNCIA|CC|C/C|CONTA|CT)\b\.?:?\s*[.\-/]*\d[\d.\-/]*", re.IGNORECASE
+)
+_CARD_RE = re.compile(
+    r"(?<![\w*])(?:\d{4}|\*{4}|[Xx]{4})(?:[ .\-]?(?:\d{4}|\*{4}|[Xx]{4})){2,3}(?![\w*])"
+)
+_CARD_FINAL_RE = re.compile(r"\bFINAL\s*\d{4}\b", re.IGNORECASE)
+_NUMBER_RUN_RE = re.compile(r"[\d*][\d.\-/*]*")
+NUMBER_RUN_MIN_DIGITS = 5
+_TRAILING_JUNK = " |-/:"
 
-Entrada: uma lista JSON de itens com
+INSTRUCTIONS = """Você categoriza as transações bancárias e de cartão de crédito de uma pessoa no Brasil. As transações chegam agrupadas por loja: decida uma vez por item e a decisão vale para todas as transações daquele item.
+
+## Entrada (mensagem do usuário)
+Uma lista JSON de itens com:
 - k: id do item; devolva exatamente o mesmo.
-- s: até 2 descrições como aparecem no extrato.
-- n: quantas transações o item tem.
+- s: até 2 descrições como aparecem no extrato (documentos e números de conta já removidos).
+- q: quantas transações o item tem.
 - v: valor mediano em reais (sempre positivo).
-- t: "d" saída de dinheiro (compra, pagamento, envio); "c" entrada (recebimento, estorno).
-- r: 1 se repete todo mês com valor parecido (assinatura, conta fixa); 0 se não.
+- t: "d" saída de dinheiro (compra, pagamento, envio); "c" entrada (recebimento, estorno, rendimento).
+- m: 1 se repete todo mês com valor parecido (assinatura, conta fixa); 0 se não.
 - a: "cc" cartão de crédito; "ca" conta corrente ou poupança; "o" outro tipo de conta.
+- h (só às vezes): escolhas anteriores desta pessoa nessa mesma loja, como [id, vezes], da mais frequente para a menos. É um sinal forte: prefira a mais frequente, a não ser que s ou v apontem claramente para outra, e use a segunda como alt.
 
-Saída: um objeto por item recebido, sem omitir nenhum, com todos os campos:
+## Saída
+Um objeto por item recebido, sem omitir nenhum, com os campos nesta ordem:
 - k: o id do item.
-- c: id da categoria (ex.: "c4") que esta pessoa escolheria, ou null quando não dá para saber. \
-Use somente ids da lista de categorias desta pessoa; nunca invente um id.
+- n: nome limpo e curto da loja, como a marca se escreve ("iFood", "Uber", "Netflix", "Drogasil", "Mercado Livre"); para pessoa, o nome em Title Case ("Maria Souza"). Sem sufixo societário (Ltda, S.A., ME, Eireli, EPP), sem CPF/CNPJ, sem número de pedido, parcela ou conta, sem cidade e sem prefixo de adquirente ("PG *", "MP *", "PagSeguro", "Stone").
+- r: motivo em português, no máximo 12 palavras; pense nele antes de escolher c.
+- c: id da categoria (ex.: "c4") que esta pessoa escolheria, ou null quando não dá para saber. Use somente ids da lista de categorias desta pessoa; nunca invente um id.
 - alt: segunda melhor categoria (id da lista) ou null; nunca igual a c.
-- p: probabilidade honesta, de 0 a 100, de que c seja o que esta pessoa escolheria. Calibre: 95 \
-ou mais só quando a loja é inconfundível e a categoria, óbvia para esta árvore; 70 a 90 com bom \
-indício e alguma dúvida; abaixo de 60 quando é palpite. Com c null, p fica no máximo 40.
-- n: nome limpo e curto da loja em Title Case, como a pessoa reconheceria ("Ifood", "Uber", \
-"Netflix", "Drogasil", "Maria Souza"). Sem sufixo societário (Ltda, S.A., ME, Eireli, EPP), sem \
-CPF/CNPJ, sem número de pedido ou de parcela, sem cidade e sem prefixo de adquirente ("PG *", \
-"MP *", "PagSeguro", "Stone").
-- r: motivo em português, no máximo 12 palavras.
-- new: só quando nenhuma categoria da lista serve razoavelmente: {"g": grupo, "name": nome}, \
-curtos e em português, no estilo da árvore existente (de preferência um grupo que já existe). \
-Caso contrário, null. Com new, c continua sendo a categoria mais próxima, se houver, ou null.
+- p: probabilidade honesta, de 0 a 100, de que c seja o que esta pessoa escolheria. Calibre: 95 ou mais só quando a loja é inconfundível e a categoria, óbvia para esta árvore; 70 a 90 com bom indício e alguma dúvida; abaixo de 60 quando é palpite. Com c null, p fica no máximo 40.
+- new: só quando nenhuma categoria da lista serve razoavelmente: {"g": grupo, "name": nome}, curtos e em português, no estilo da árvore existente (de preferência um grupo que já existe). Caso contrário, null. Com new, c continua sendo a categoria mais próxima, se houver, ou null.
 
-Como decidir:
-1. Os exemplos desta pessoa são o sinal mais forte: a mesma loja, ou uma muito parecida, vai \
-para a categoria que ela já usou. Eles mostram também como ela organiza (se ela põe padaria em \
-Mercado, siga isso).
-2. Depois: o que a loja vende, o sentido (t), a recorrência (r) e o tipo de conta (a).
+## Como decidir
+1. O histórico h e os exemplos desta pessoa são os sinais mais fortes: a mesma loja, ou uma muito parecida, vai para a categoria que ela já usou. Os exemplos mostram também como ela organiza (se ela põe padaria em Mercado, siga isso).
+2. Depois: o que a loja vende, o sentido (t), a recorrência (m) e o tipo de conta (a).
 3. Na dúvida entre duas categorias, ponha a melhor em c, a outra em alt e baixe p.
+4. Categorias marcadas "(movimentação)" são para dinheiro que só muda de lugar (entre contas, cartão e aplicações); nunca as use para compras.
 
-Descrições comuns em extratos brasileiros:
-- Pix, TED, DOC ou "Transferência enviada/recebida" de ou para pessoa física: sem contexto (um \
-exemplo desta pessoa, um valor fixo todo mês que indique aluguel, salário ou mesada), devolva c \
-null e p no máximo 40, porque só a pessoa sabe o que foi. Se o nome parecer ser da própria \
-pessoa (conta dela em outro banco) e houver categoria de transferência, use-a.
-- Pix ou TED para empresa: trate como compra naquela empresa.
-- iFood, Rappi, Zé Delivery: delivery de comida; Uber, 99, Cabify: transporte (mas Uber Eats é \
-delivery).
-- "Pagamento de fatura", "Pgto fatura cartão": pagamento do cartão, uma transferência entre \
-contas, não um gasto novo.
+## Descrições comuns em extratos brasileiros
+- Pix, TED, DOC ou "Transferência enviada/recebida" de ou para pessoa física: sem contexto (h, um exemplo desta pessoa, um valor fixo todo mês que indique aluguel, salário ou mesada), devolva c null e p no máximo 40, porque só a pessoa sabe o que foi.
+- Pix, TED ou transferência para banco, corretora ou carteira digital (Nubank ou NU Pagamentos, Inter, C6, XP, BTG, Rico, Clear, PicPay, Mercado Pago; Itaú, Bradesco, Santander, Caixa ou BB quando a contraparte é o próprio banco), ou com "mesma titularidade" ou "conta própria": movimentação entre contas ou aplicação, nunca compra. Use a categoria de transferência ou de investimento, se existir; senão c null.
+- Pix ou TED para outra empresa: compra naquela empresa.
+- "Pagamento de fatura", "Pgto fatura cartão": pagamento do cartão, não é um gasto novo. Use a categoria de transferência, se existir; senão c null.
+- Boleto, "Pagamento de título", "Débito automático": categorize pelo favorecido (quem recebe).
 - "Parcela 3/10", "PARC 03/10": parcela de uma compra; categorize pela loja.
-- IOF (inclusive "IOF compra internacional"), tarifas, anuidade, juros, multa e encargos: \
-impostos e taxas bancárias.
-- Rendimento, "Rend pago aplic", dividendos, JCP ou "Juros s/ capital" de tickers como BBDC3, \
-ITSA4 ou KNRI11 (final 11 costuma ser fundo imobiliário): renda de investimentos.
-- RDB, CDB, LCI, Tesouro, "Aplicação" e "Resgate": dinheiro indo para ou voltando de aplicação; \
-não é gasto nem renda. Use a categoria de investimento ou de transferência, se existir.
-- Estorno, reembolso, devolução, cashback: dinheiro voltando (t "c"); use a categoria da compra \
-original quando fizer sentido, ou a de reembolso, se existir.
+- Saque, "Saque 24h", "Saque Banco24Horas": dinheiro em espécie; use a categoria de saque ou dinheiro, se existir, ou a mais genérica (como Outros).
+- IOF (inclusive "IOF compra internacional"), tarifas, anuidade e, com t "d", juros, multa e encargos: impostos e taxas bancárias.
+- Com t "c", juros, remuneração, rendimento, "Rend pago aplic", dividendos, JCP ou "Juros s/ capital" de tickers como BBDC3, ITSA4 ou KNRI11 (final 11 costuma ser fundo imobiliário): renda de investimentos.
+- RDB, CDB, LCI, LCA, Tesouro, "Aplicação" e "Resgate": dinheiro indo para ou voltando de aplicação; não é gasto nem renda. Use a categoria de investimento ou de transferência, se existir.
+- Estorno, reembolso, devolução, cashback: dinheiro voltando (t "c"); use a categoria da compra original quando fizer sentido, ou a de reembolso, se existir.
 - Salário, "Pagto salário", proventos, folha: renda do trabalho.
-- Netflix, Spotify, Disney+, Prime Video, YouTube Premium, iCloud, Google One: assinaturas; r 1 \
-reforça.
-- Supermercados (Carrefour, Assaí, Pão de Açúcar), farmácias (Drogasil, Raia, Pague Menos), \
-postos (Shell, Ipiranga, BR) e contas de luz, água, gás, internet e celular: use a categoria \
-correspondente desta pessoa.
+- iFood, Rappi, Zé Delivery: delivery de comida; Uber, 99, Cabify: transporte (mas Uber Eats é delivery).
+- Sem Parar, ConectCar, Veloe, pedágio e estacionamento: transporte.
+- Mercado Livre, Shopee, Amazon, Magalu, AliExpress: compras, a não ser que os exemplos desta pessoa digam outra coisa.
+- Netflix, Spotify, Disney+, Prime Video, YouTube Premium, iCloud, Google One: assinaturas; m 1 reforça.
+- Supermercados (Carrefour, Assaí, Pão de Açúcar), farmácias (Drogasil, Raia, Pague Menos), postos (Shell, Ipiranga, BR) e contas de luz, água, gás, internet e celular: use a categoria correspondente desta pessoa.
 
 Responda apenas no formato pedido."""
 
 
 def _one_line(text: str) -> str:
     return _SPACES_RE.sub(" ", text).strip()
+
+
+def _drop_long_number(match: re.Match[str]) -> str:
+    token = match.group(0)
+    digits = sum(ch.isdigit() for ch in token)
+    return " " if digits >= NUMBER_RUN_MIN_DIGITS else token
+
+
+def strip_account_numbers(text: str) -> str:
+    """Remove branch/account/card numbers and long digit runs (prompt text only)."""
+    text = _ACCOUNT_TOKEN_RE.sub(" ", text)
+    text = _CARD_RE.sub(" ", text)
+    text = _CARD_FINAL_RE.sub(" ", text)
+    text = _NUMBER_RUN_RE.sub(_drop_long_number, text)
+    return _one_line(text).rstrip(_TRAILING_JUNK)
+
+
+def prompt_sample(text: str | None) -> str:
+    """A description as the prompt may carry it: no documents, no account or
+    card numbers, at most `SAMPLE_MAX_LENGTH` characters."""
+    if not text:
+        return ""
+    return sample_description(strip_account_numbers(text)).rstrip(_TRAILING_JUNK)
 
 
 @dataclass(frozen=True)
@@ -158,7 +186,8 @@ def build_category_index(
     group name, then category name (ungrouped ones last).
 
     "Assignable" matches `category_service.get_assignable_category_ids`: a
-    category hidden directly or through its group is left out.
+    category hidden directly or through its group is left out. Categories
+    that only move money (`treat_as_transfer`) stay, marked TRANSFER_MARK.
     """
     by_group = {g.id: g for g in groups}
     ranked: list[tuple[tuple[Any, ...], uuid.UUID, str]] = []
@@ -179,6 +208,8 @@ def build_category_index(
         else:
             sort_key = (1, 0, "", "", "", name.casefold(), name, str(cat.id))
             label = name
+        if cat.treat_as_transfer:
+            label += TRANSFER_MARK
         ranked.append((sort_key, cat.id, label))
     ranked.sort(key=lambda item: item[0])
     return CategoryIndex(
@@ -198,7 +229,8 @@ def _example_name(key: str) -> str | None:
         name = "Pix " + key.removeprefix(PERSON_PREFIX)
     else:
         name = key.removeprefix(PAYEE_PREFIX)
-    name = scrub_documents(_one_line(name))[:EXAMPLE_NAME_LENGTH].rstrip()
+    name = strip_account_numbers(scrub_documents(_one_line(name)))
+    name = name[:EXAMPLE_NAME_LENGTH].rstrip()
     return name or None
 
 
@@ -254,7 +286,8 @@ def build_examples(
 
 
 def build_system_blocks(index: CategoryIndex, examples: str) -> list[dict[str, Any]]:
-    """[instructions, tree + examples]; the cache breakpoint closes the prefix."""
+    """[instructions, tree + examples], each closing a cache breakpoint: the
+    instructions stay cached when the tree or the examples change."""
     context = (
         "Categorias desta pessoa (id Grupo › Categoria):\n"
         f"{index.render() or '(nenhuma)'}\n\n"
@@ -262,7 +295,7 @@ def build_system_blocks(index: CategoryIndex, examples: str) -> list[dict[str, A
         f"{examples or '(nenhum ainda)'}"
     )
     return [
-        {"type": "text", "text": INSTRUCTIONS},
+        {"type": "text", "text": INSTRUCTIONS, "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": context, "cache_control": {"type": "ephemeral"}},
     ]
 
@@ -272,11 +305,45 @@ def _amount(value: Decimal) -> int | float:
     return int(cents) if cents == cents.to_integral_value() else float(cents)
 
 
-def build_user_message(groups: Sequence[MerchantGroup]) -> tuple[str, dict[str, str]]:
+def _history_entries(entries: Iterable[tuple[str, int]]) -> list[list[str | int]]:
+    positive = [(short, int(count)) for short, count in entries if count and int(count) > 0]
+    positive.sort(key=lambda e: (-e[1], int(e[0][1:]) if e[0][1:].isdigit() else 0, e[0]))
+    return [[short, count] for short, count in positive[:HISTORY_LIMIT]]
+
+
+def build_history(
+    memory_rows: Iterable[MerchantMemory], index: CategoryIndex
+) -> dict[str, list[tuple[str, int]]]:
+    """Merchant key -> the person's previous picks there as (short id, count),
+    most picked first (at most `HISTORY_LIMIT`); categories no longer in the
+    index are dropped, and so are stores left with nothing."""
+    history: dict[str, list[tuple[str, int]]] = {}
+    for row in memory_rows:
+        picks: list[tuple[str, int]] = []
+        for raw_id, raw_count in (row.counts or {}).items():
+            try:
+                short = index.to_short(uuid.UUID(raw_id))
+                count = int(raw_count or 0)
+            except (TypeError, ValueError):
+                continue
+            if short is not None and count > 0:
+                picks.append((short, count))
+        entries = _history_entries(picks)
+        if entries:
+            history[row.merchant_key] = [(str(short), int(count)) for short, count in entries]
+    return history
+
+
+def build_user_message(
+    groups: Sequence[MerchantGroup],
+    history: dict[str, list[tuple[str, int]]] | None = None,
+) -> tuple[str, dict[str, str]]:
     """The batch as compact JSON, plus item id -> merchant key.
 
     Items are ordered by merchant key so the same batch renders the same
-    bytes. Keys stay out of the message; samples are scrubbed again.
+    bytes. Keys stay out of the message; samples lose documents and account
+    or card numbers. `history` (merchant key -> previous picks as short id
+    and count) becomes the item's `h` when present.
     """
     items: list[dict[str, Any]] = []
     ids: dict[str, str] = {}
@@ -285,18 +352,22 @@ def build_user_message(groups: Sequence[MerchantGroup]) -> tuple[str, dict[str, 
         ids[item_id] = grp.key
         samples: list[str] = []
         for raw in grp.samples:
-            sample = sample_description(raw)
+            sample = prompt_sample(raw)
             if sample and sample not in samples:
                 samples.append(sample)
-        items.append({
+        item: dict[str, Any] = {
             "k": item_id,
             "s": samples,
-            "n": grp.count,
+            "q": grp.count,
             "v": _amount(grp.median_amount),
             "t": "c" if grp.type == "credit" else "d",
-            "r": 1 if grp.recurring else 0,
+            "m": 1 if grp.recurring else 0,
             "a": _ACCOUNT_KINDS.get(grp.account_type or "", "o"),
-        })
+        }
+        previous = _history_entries((history or {}).get(grp.key, []))
+        if previous:
+            item["h"] = previous
+        items.append(item)
     return json.dumps(items, ensure_ascii=False, separators=(",", ":")), ids
 
 
@@ -305,7 +376,11 @@ def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_result_schema(index: CategoryIndex) -> dict[str, Any]:
-    """Strict output schema; `c`/`alt` accept only this workspace's ids."""
+    """Strict output schema; `c`/`alt` accept only this workspace's ids.
+
+    Properties are ordered name and reason first, so the model writes them
+    before deciding (thinking is off; this is its only room to reason).
+    """
     short_ids = index.short_ids
 
     def category_ref() -> dict[str, Any]:
@@ -323,14 +398,14 @@ def build_result_schema(index: CategoryIndex) -> dict[str, Any]:
         "type": "object",
         "properties": {
             "k": {"type": "string"},
+            "n": {"type": "string"},
+            "r": {"type": "string"},
             "c": category_ref(),
             "alt": category_ref(),
-            "n": {"type": "string"},
             "p": {"type": "integer"},
-            "r": {"type": "string"},
             "new": _nullable(new_category),
         },
-        "required": ["k", "c", "alt", "n", "p", "r", "new"],
+        "required": list(OUTPUT_FIELDS),
         "additionalProperties": False,
     }
     return {

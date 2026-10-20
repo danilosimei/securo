@@ -154,9 +154,11 @@ necessário porque a feature dá a esse botão um papel maior).
 **Unidade de trabalho = chave de loja.** Uma decisão por loja vale para todas as suas transações
 candidatas.
 
-**Entrada por item**: `merchant_key`, até 2 descrições de exemplo truncadas em 60 caracteres (sem
-documentos), quantidade, valor mediano, débito/crédito, se parece recorrente, tipo de conta. Loja
-inconsistente: distribuição das escolhas do usuário.
+**Entrada por item**: id do item por requisição (`i1`, `i2`…, mapeado no backend para a chave de loja —
+a chave nunca vai à API, porque `PIX:#<hash>` de um CPF é reversível por força bruta), até 2 descrições
+de exemplo truncadas em 60 caracteres (sem documentos, agência, conta ou cartão), quantidade, valor
+mediano, débito/crédito, se parece recorrente, tipo de conta e, quando a pessoa já escolheu categorias
+para aquela loja, o histórico `h` (até 3 pares `[id curto, vezes]`, do mais escolhido para o menos).
 
 **Contexto fixo (cacheado)**: instruções; árvore com IDs curtos (`c1`, `c2`… mapeados no backend, em
 ordem determinística); até ~40 exemplos reais do usuário (loja → categoria).
@@ -253,7 +255,7 @@ usuário já usa, e ação a um clique onde a dúvida aparece.
 | **Organizar** | Aba `?tab=organize`; também link no header de `/categories` | Árvore no estilo de `categories.tsx` (grupos colapsáveis); cada operação como `ProposalCard` (âmbar → verde ao aplicar) com impacto ("14 transações, R$ 820"); diff em linha (verde novo, riscado o que sai); mesclar usa o Dialog de confirmação no padrão de `payees.tsx` |
 | **Selo de origem** | Ao lado do título da transação em `transactions.tsx` (`renderDescriptionCell`), `mobile-transaction-row.tsx`, `account-detail.tsx`, drill-down e calendário | Componente novo `categorization-origin-badge.tsx` no molde de `projected-transaction-badge.tsx` (pill `text-[10px]` + ícone `h-3 w-3`): `Sparkles` IA (violeta), `Brain` memória, `Wand2`/`Cog` regra; pendente = âmbar com `Link` para Revisar. `Tooltip` com o motivo. Sem selo para `user`/`legacy` (menos ruído). Filtro "Origem" na barra de filtros de Transações |
 | **"Como chegou aqui"** | `transaction-dialog.tsx`, logo abaixo do `CategorySelect` | Caixa `bg-muted/50 border rounded-md` (padrão do banner de recorrente vinculada): original (descrição do banco, categoria anterior) × aplicado (categoria, nome limpo, quem decidiu, confiança, motivo, data) + botão "Desfazer". "Criar regra" continua no footer |
-| **Depois de corrigir** | Qualquer edição de categoria (Transações, conta, dashboard, drill-down) | Toast `sonner` com ações: "Aplicar às 8 parecidas" e "Criar regra". Regra abre o `RuleDialog` com `initialData` pré-preenchido pela chave de loja (`description contains <chave>`, ex.: `contém IFOOD`), sem chamada ao Claude — mesmo resultado, custo zero (desvio do plano) e prévia (`POST /rules/preview`). Padrão novo de toast com ação (inclui "Desfazer" após aceitar em lote) |
+| **Depois de corrigir** | Qualquer edição de categoria (Transações, conta, dashboard, drill-down) | Toast `sonner` com ações: "Aplicar às 8 parecidas" e "Criar regra". Regra abre o `RuleDialog` com `initialData` pré-preenchido pela chave de loja (`description contains <chave>`, ex.: `contém IFOOD`; prefixos `P:`/`PIX:` removidos; chave com hash `PIX:#…` não gera regra por descrição), sem chamada ao Claude — mesmo resultado, custo zero (desvio do plano) e prévia (`POST /rules/preview`). Padrão novo de toast com ação (inclui "Desfazer" após aceitar em lote) |
 | **Tela inicial** | Substitui o banner de não categorizadas (`dashboard.tsx` ~868-904) | Mesmo lugar e estados (âmbar/verde): "47 categorizadas automaticamente esta semana · 5 para revisar →" abre `/categorization`; `Skeleton` no carregamento |
 | **Configurações** | Seção nova em `workspace-settings.tsx` (protegida por `canManage`) | `ui/switch` (ligar/desligar), limite de confiança como `Segmented` (Conservador 95 · Equilibrado 90 · Agressivo 80), teto mensal (`Input` numérico em US$) com gasto do mês, conexão Claude usada |
 

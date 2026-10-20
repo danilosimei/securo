@@ -9,12 +9,15 @@ from app.models.category_group import CategoryGroup
 from app.services.categorization.pipeline import MerchantGroup
 from app.services.categorization.prompts import (
     CLASSIFIER_MODEL,
+    OUTPUT_FIELDS,
     build_category_index,
     build_examples,
+    build_history,
     build_result_schema,
     build_system_blocks,
     build_user_message,
     classify_params,
+    prompt_sample,
 )
 
 UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
@@ -25,9 +28,12 @@ def group(name: str, position: int, hidden: bool = False) -> CategoryGroup:
     return CategoryGroup(id=uuid.uuid4(), name=name, position=position, is_hidden=hidden)
 
 
-def category(name: str, grp: CategoryGroup | None, hidden: bool = False) -> Category:
+def category(
+    name: str, grp: CategoryGroup | None, hidden: bool = False, transfer: bool = False
+) -> Category:
     return Category(
-        id=uuid.uuid4(), name=name, group_id=grp.id if grp else None, is_hidden=hidden
+        id=uuid.uuid4(), name=name, group_id=grp.id if grp else None, is_hidden=hidden,
+        treat_as_transfer=transfer,
     )
 
 
@@ -101,6 +107,15 @@ def test_category_index_is_deterministic_and_skips_hidden():
     assert index.to_short(by_name(cats, "Velha").id) is None
     assert index.to_short(by_name(cats, "Escondida").id) is None
     assert index.short_ids == ["c1", "c2", "c3", "c4", "c5"]
+
+
+def test_category_index_marks_transfer_categories():
+    casa = group("Finanças", 0)
+    cats = [category("Transferências", casa, transfer=True), category("Taxas", casa)]
+    assert build_category_index(cats, [casa]).render().splitlines() == [
+        "c1 Finanças › Taxas",
+        "c2 Finanças › Transferências (movimentação)",
+    ]
 
 
 def test_category_index_round_trips_ids():
@@ -177,8 +192,9 @@ def test_system_blocks_cache_the_tree_and_examples():
     index = build_category_index(cats, groups)
     blocks = build_system_blocks(index, "CARREFOUR -> c4")
     assert [b["type"] for b in blocks] == ["text", "text"]
-    assert "cache_control" not in blocks[0]
-    assert blocks[-1]["cache_control"] == {"type": "ephemeral"}
+    # Two breakpoints: the instructions stay cached when the tree changes.
+    assert blocks[0]["cache_control"] == {"type": "ephemeral"}
+    assert blocks[1]["cache_control"] == {"type": "ephemeral"}
     assert "c4 Casa › Mercado" in blocks[1]["text"]
     assert "CARREFOUR -> c4" in blocks[1]["text"]
 
@@ -208,6 +224,28 @@ def test_user_message_has_no_documents_nor_keys():
     assert set(ids.values()) == {"PIX:#0a1b2c3d4e", "P:LOJA SECRETA"}
 
 
+def test_prompt_samples_drop_account_and_card_numbers():
+    long_digits = re.compile(r"\d{4,}")
+    cases = {
+        "TED 341 AG 1234 CC 0012345-6 JOAO": "TED 341 JOAO",
+        "PIX ENVIADO ***.456.789-** JOAO": "PIX ENVIADO JOAO",
+        "TRANSF CONTA: 98765-4 AGÊNCIA 0001 MARIA": "TRANSF MARIA",
+        "COMPRA CARTAO 5502 **** **** 1234 LOJA": "COMPRA CARTAO LOJA",
+        "COMPRA CARTAO FINAL 1234 LOJA": "COMPRA CARTAO LOJA",
+        "PEDIDO 1234567 LOJA": "PEDIDO LOJA",
+        "Transferência enviada|123.456.789-09": "Transferência enviada",
+    }
+    for raw, expected in cases.items():
+        cleaned = prompt_sample(raw)
+        assert cleaned == expected, raw
+        assert not long_digits.search(cleaned), raw
+    # Short numbers that carry meaning stay.
+    assert prompt_sample("PARC 03/10 LOJA") == "PARC 03/10 LOJA"
+    assert prompt_sample("UBER *TRIP") == "UBER *TRIP"
+    text, _ = build_user_message([merchant("X", ["TED 341 AG 1234 CC 0012345-6 JOAO"])])
+    assert not long_digits.search(text.replace('"i1"', ""))
+
+
 def test_user_message_is_compact_and_maps_item_ids():
     groups = [
         merchant(
@@ -234,14 +272,37 @@ def test_user_message_is_compact_and_maps_item_ids():
     assert {ids[i["k"]] for i in items} == {"UBER", "NETFLIX", "RENDIMENTO", "XPTO"}
     netflix = next(i for i in items if ids[i["k"]] == "NETFLIX")
     assert netflix == {
-        "k": netflix["k"], "s": ["NETFLIX.COM", "NETFLIX"], "n": 4, "v": 55.9,
-        "t": "d", "r": 1, "a": "cc",
+        "k": netflix["k"], "s": ["NETFLIX.COM", "NETFLIX"], "q": 4, "v": 55.9,
+        "t": "d", "m": 1, "a": "cc",
     }
     uber = next(i for i in items if ids[i["k"]] == "UBER")
-    assert uber["v"] == 23.5 and uber["r"] == 0
+    assert uber["v"] == 23.5 and uber["m"] == 0
+    assert all("h" not in i for i in items)
     rendimento = next(i for i in items if ids[i["k"]] == "RENDIMENTO")
     assert rendimento["t"] == "c" and rendimento["a"] == "ca" and rendimento["v"] == 7
     assert next(i for i in items if ids[i["k"]] == "XPTO")["a"] == "o"
+
+
+def test_user_message_carries_previous_choices_as_history():
+    groups = [merchant("PADARIA X", ["PADARIA X"]), merchant("UBER", ["UBER"])]
+    history = {"PADARIA X": [("c7", 1), ("c3", 4), ("c9", 1), ("c2", 1)], "OTHER": [("c1", 2)]}
+    text, ids = build_user_message(groups, history)
+    items = {ids[i["k"]]: i for i in json.loads(text)}
+    assert items["PADARIA X"]["h"] == [["c3", 4], ["c2", 1], ["c7", 1]]
+    assert "h" not in items["UBER"]
+    assert '"h":[["c3",4],["c2",1],["c7",1]]' in text
+
+
+def test_build_history_maps_counts_to_short_ids():
+    cats, groups = tree()
+    index = build_category_index(cats, groups)
+    mercado, cinema = by_name(cats, "Mercado").id, by_name(cats, "Cinema").id
+    rows = [
+        memory("PADARIA X", {mercado: 3, cinema: 2, by_name(cats, "Velha").id: 9}),
+        memory("GONE", {by_name(cats, "Velha").id: 2}),
+        memory("EMPTY", {}),
+    ]
+    assert build_history(rows, index) == {"PADARIA X": [("c4", 3), ("c1", 2)]}
 
 
 def test_user_message_rounds_median_to_cents():
@@ -266,6 +327,11 @@ def test_result_schema_is_strict_with_enum_ids():
     cats, groups = tree()
     schema = build_result_schema(build_category_index(cats, groups))
     item = schema["properties"]["items"]["items"]
+    # Name and reason come before the decision: free reasoning, thinking off.
+    assert list(item["properties"]) == list(OUTPUT_FIELDS) == [
+        "k", "n", "r", "c", "alt", "p", "new",
+    ]
+    assert item["required"] == list(OUTPUT_FIELDS)
     nullable_ids = {"anyOf": [
         {"type": "string", "enum": ["c1", "c2", "c3", "c4", "c5"]}, {"type": "null"},
     ]}
