@@ -66,6 +66,8 @@ describe('CategorizationSettingsSection', () => {
   it('shows Personalizado with nothing selected when the threshold is off the presets', async () => {
     api.categorization.getSettings.mockResolvedValue({ ...base, auto_apply_threshold: 85 })
     renderWithProviders(<CategorizationSettingsSection />)
+    expect(await screen.findByTestId('categorization-threshold-custom')).toHaveTextContent(/Personalizado \(85\)|Custom \(85\)/)
+    expect(screen.getByTestId('categorization-threshold-custom').className).toContain('shadow-sm')
     expect(await screen.findByText(/Personalizado \(85\)|Custom \(85\)/)).toBeInTheDocument()
     for (const v of ['95', '90', '80']) {
       expect(screen.getByTestId(`categorization-threshold-${v}`).className).not.toContain('shadow-sm')
@@ -131,5 +133,33 @@ describe('CategorizationSettingsSection', () => {
     renderWithProviders(<CategorizationSettingsSection />)
     await screen.findByRole('switch')
     expect(api.agents.connections.list).not.toHaveBeenCalled()
+  })
+
+  it('scrolls to the section when opened with the hash', async () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    renderWithProviders(<CategorizationSettingsSection />, { route: '/workspace/settings#categorization' })
+    await screen.findByRole('switch')
+    await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1))
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+  })
+
+  it('does not scroll without the hash', async () => {
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    renderWithProviders(<CategorizationSettingsSection />)
+    await screen.findByRole('switch')
+    expect(scroll).not.toHaveBeenCalled()
+  })
+
+  it('locks the controls while a save is pending', async () => {
+    let resolve!: (v: unknown) => void
+    api.categorization.updateSettings.mockReturnValue(new Promise((r) => { resolve = r }))
+    const { user } = renderWithProviders(<CategorizationSettingsSection />)
+    await user.click(await screen.findByRole('switch'))
+    await waitFor(() => expect(screen.getByRole('switch')).toBeDisabled())
+    expect(screen.getByTestId('categorization-threshold-95')).toBeDisabled()
+    resolve({ ...base, enabled: false })
+    await waitFor(() => expect(screen.getByRole('switch')).not.toBeDisabled())
   })
 })

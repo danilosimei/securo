@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -47,6 +47,8 @@ function usd(value: number, locale: string): string {
 export function CategorizationSettingsSection() {
   const { t } = useTranslation()
   const qc = useQueryClient()
+  const { hash } = useLocation()
+  const sectionRef = useRef<HTMLElement>(null)
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
   const { canManage } = useWorkspace()
@@ -69,6 +71,15 @@ export function CategorizationSettingsSection() {
     connections.find((c) => c.kind === 'anthropic' && c.is_default)
   const connectionsAvailable = agentsEnabled && !connectionsQuery.isError
 
+  const settingsReady = !!settings
+  // The settings render async, so the browser's own hash scroll misses the
+  // section: scroll once it exists, once per navigation to the anchor.
+  useEffect(() => {
+    if (hash === '#categorization' && settingsReady) {
+      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [hash, settingsReady])
+
   const update = useMutation({
     mutationFn: (patch: CategorizationSettingsUpdate) => categorization.updateSettings(patch),
     onMutate: async (patch) => {
@@ -88,6 +99,8 @@ export function CategorizationSettingsSection() {
   })
 
   // What the person is typing; null shows the stored value.
+  // One save at a time: a failed first PUT must not revert a later success.
+  const busy = update.isPending
   const [capDraft, setCapDraft] = useState<string | null>(null)
   const [capError, setCapError] = useState(false)
   const storedCap = settings ? Number(settings.monthly_cap_usd) : null
@@ -113,7 +126,7 @@ export function CategorizationSettingsSection() {
   const preset = PRESETS.find((p) => p.threshold === settings?.auto_apply_threshold)
 
   return (
-    <section id="categorization" className="space-y-4 rounded-xl border bg-card p-6 scroll-mt-6">
+    <section ref={sectionRef} id="categorization" className="space-y-4 rounded-xl border bg-card p-6 scroll-mt-6">
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-base font-semibold">{t('categorization.config.title')}</h3>
@@ -139,7 +152,7 @@ export function CategorizationSettingsSection() {
             <Switch
               aria-labelledby="categorization-enabled-label"
               checked={settings.enabled}
-              disabled={!canManage}
+              disabled={!canManage || busy}
               onCheckedChange={(enabled) => update.mutate({ enabled })}
             />
           </div>
@@ -148,18 +161,23 @@ export function CategorizationSettingsSection() {
             <div>
               <p className="text-sm font-medium">{t('categorization.config.threshold')}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {preset
-                  ? t('categorization.config.thresholdHint', { value: preset.threshold })
-                  : t('categorization.config.custom', { value: settings.auto_apply_threshold })}
+                {t('categorization.config.thresholdHint', { value: settings.auto_apply_threshold })}
               </p>
             </div>
             <Segmented
               testIdPrefix="categorization-threshold"
-              disabled={!canManage || !settings.enabled}
-              // A stored value off the presets leaves nothing selected.
-              value={preset?.value ?? ''}
-              onChange={(value) => update.mutate({ auto_apply_threshold: Number(value) })}
-              options={PRESETS.map((p) => ({ value: p.value, label: t(`categorization.config.${p.labelKey}`) }))}
+              disabled={!canManage || !settings.enabled || busy}
+              // A stored value off the presets shows as its own selected chip.
+              value={preset?.value ?? 'custom'}
+              onChange={(value) => {
+                if (value !== 'custom') update.mutate({ auto_apply_threshold: Number(value) })
+              }}
+              options={[
+                ...PRESETS.map((p) => ({ value: p.value as string, label: t(`categorization.config.${p.labelKey}`) })),
+                ...(preset
+                  ? []
+                  : [{ value: 'custom', label: t('categorization.config.custom', { value: settings.auto_apply_threshold }) }]),
+              ]}
             />
           </div>
 
@@ -173,7 +191,7 @@ export function CategorizationSettingsSection() {
                 inputMode="decimal"
                 className="w-28 text-right"
                 value={capText}
-                disabled={!canManage}
+                disabled={!canManage || busy}
                 aria-invalid={capError}
                 onChange={(e) => {
                   setCapDraft(e.target.value)
