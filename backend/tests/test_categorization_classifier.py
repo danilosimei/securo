@@ -877,6 +877,12 @@ def test_ai_named_payee_does_not_change_the_store_key():
     assert merchant_key("IFOOD *REST 8812", payee_name="iFood", payee_source="manual") == "P:IFOOD"
 
 
+def test_sync_path_is_one_call():
+    """`classify` commits right after its paid call assuming nothing else is
+    pending, which holds only while the synchronous path is a single call."""
+    assert classifier.SYNC_LIMIT <= classifier.CHUNK_SIZE
+
+
 def test_every_custom_id_is_valid_for_message_batches():
     from app.services.categorization.classifier import _chunk_position, batch_custom_id
 

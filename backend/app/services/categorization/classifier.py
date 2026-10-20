@@ -116,7 +116,9 @@ logger = logging.getLogger(__name__)
 #: Stores per request.
 CHUNK_SIZE = 100
 #: Up to this many stores the run calls the Messages API and finishes now;
-#: beyond it, one Message Batch (half the price, up to 24 h).
+#: beyond it, one Message Batch (half the price, up to 24 h). Keep it
+#: <= `CHUNK_SIZE`: the synchronous path is then one call, and the commit
+#: after it (see `classify`) has nothing else pending.
 SYNC_LIMIT = 100
 #: `reason` of the suggestions for stores the model did not decide.
 UNDECIDED_REASON = "IA não decidiu"
@@ -789,7 +791,8 @@ async def classify(
             # The one commit of this module: the call is paid, so its cost
             # must reach `month_spend` even if applying the answer fails and
             # the task rolls back. Nothing else is pending at this point
-            # (the memory phase was committed; no row is locked yet).
+            # (the memory phase was committed; no row is locked yet), which
+            # holds because `SYNC_LIMIT <= CHUNK_SIZE` makes this one call.
             await session.commit()
             _count(stats, await _apply_message(
                 session, workspace_id, run, plan.groups_by_item, message,
