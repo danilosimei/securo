@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { dashboard, transactions, budgets, categories as categoriesApi, categoryGroups as categoryGroupsApi, accounts as accountsApi, goals as goalsApi, groups as groupsApi, payees as payeesApi, rules as rulesApi } from '@/lib/api'
+import { dashboard, transactions, budgets, categories as categoriesApi, categoryGroups as categoryGroupsApi, accounts as accountsApi, goals as goalsApi, groups as groupsApi, payees as payeesApi } from '@/lib/api'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -49,14 +49,15 @@ import { TransactionDialog, type TransactionSavePayload } from '@/components/tra
 import { extractApiError } from '@/lib/api-errors'
 import { TransactionCalendarView } from '@/components/transaction-calendar-view'
 import { TransactionsViewSwitcher, type TransactionsViewMode } from '@/components/transactions-view-switcher'
-import { RuleDialog, type RuleDialogInitialData } from '@/components/rule-dialog'
+import { RuleDialog } from '@/components/rule-dialog'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useIsMobile } from '@/hooks/use-mobile'
-import { categoryChanged, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
+import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
+import { categoryChanged, withUndoneCategory, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
-import type { Rule, Transaction } from '@/types'
+import type { Transaction } from '@/types'
 import { formatCurrency } from '@/lib/format'
 import { shouldShowPendingBadge } from '@/lib/transaction-status'
 
@@ -163,8 +164,7 @@ export default function DashboardPage() {
   }, [selectedMonth, txViewMode, calendarSelectedDate, setSearchParams])
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [createRuleOpen, setCreateRuleOpen] = useState(false)
-  const [createRuleInitialData, setCreateRuleInitialData] = useState<RuleDialogInitialData | undefined>(undefined)
+  const { openRuleDialog, ruleDialogKey, ruleDialogProps } = useCreateRuleDialog()
   const queryClient = useQueryClient()
   const [headerCalOpen, setHeaderCalOpen] = useState(false)
   const [hoveredDay, setHoveredDay] = useState<number | null>(null)
@@ -279,12 +279,7 @@ export default function DashboardPage() {
   })
 
   // After a category fix: "apply to the similar ones" / "create rule".
-  const { notifyCorrection } = useCategoryCorrectionToast({
-    onCreateRule: (initialData) => {
-      setCreateRuleInitialData(initialData)
-      setCreateRuleOpen(true)
-    },
-  })
+  const { notifyCorrection } = useCategoryCorrectionToast({ onCreateRule: openRuleDialog })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }: TransactionSavePayload & { id: string }) =>
@@ -316,31 +311,6 @@ export default function DashboardPage() {
     },
   })
 
-  const createRuleMutation = useMutation({
-    mutationFn: (data: Omit<Rule, 'id' | 'user_id'>) => rulesApi.create(data),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
-      setCreateRuleOpen(false)
-      setCreateRuleInitialData(undefined)
-      const applied = result.applied_count ?? 0
-      if (applied > 0) {
-        invalidateFinancialQueries(queryClient)
-        queryClient.invalidateQueries({ queryKey: ['payees'] })
-        toast.success(t('rules.createdAndApplied', { count: applied }))
-      } else {
-        toast.success(t('rules.created'))
-      }
-    },
-    onError: (error: unknown) => {
-      const err = error as { response?: { status?: number } }
-      if (err?.response?.status === 409) {
-        toast.error(t('rules.duplicateName'))
-      } else {
-        toast.error(t('common.error'))
-      }
-    },
-  })
-
   const handleCreateRuleFromTransaction = (tx: Transaction) => {
     const conditions = [
       { field: 'description', op: 'contains', value: tx.description },
@@ -355,8 +325,7 @@ export default function DashboardPage() {
     if (tags.length > 0) {
       actions.push({ op: 'append_notes', value: tags.join(' ') })
     }
-    setCreateRuleInitialData({ conditions, actions })
-    setCreateRuleOpen(true)
+    openRuleDialog({ conditions, actions })
   }
 
   // Calendar rows carry only an id, so the full transaction is fetched before
@@ -1581,6 +1550,9 @@ export default function DashboardPage() {
       />
 
       <TransactionDialog
+        onCategoryUndone={(txId, categoryId, source) =>
+          setEditingTx((prev) => withUndoneCategory(prev, txId, categoryId, source))
+        }
         open={dialogOpen}
         onClose={() => { setDialogOpen(false); setEditingTx(null) }}
         transaction={editingTx}
@@ -1605,17 +1577,12 @@ export default function DashboardPage() {
       />
 
       <RuleDialog
-        key={createRuleOpen ? 'rule-open' : 'rule-closed'}
-        open={createRuleOpen}
-        onClose={() => { setCreateRuleOpen(false); setCreateRuleInitialData(undefined) }}
-        rule={null}
+        key={ruleDialogKey}
+        {...ruleDialogProps}
         categories={categoriesList ?? []}
         categoryGroups={categoryGroupsList ?? []}
         accounts={(accountsList ?? []).map((a: { id: string; name: string; display_name?: string | null }) => ({ id: a.id, name: getAccountName(a) }))}
         payees={payeesList ?? []}
-        onSave={(data) => createRuleMutation.mutate(data as Omit<Rule, 'id' | 'user_id'>)}
-        loading={createRuleMutation.isPending}
-        initialData={createRuleInitialData}
       />
     </div>
   )

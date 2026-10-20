@@ -3168,6 +3168,7 @@
       "confidence": "{{value}}%",
       "original": "Original",
       "noCategory": "No category",
+      "removedCategory": "Deleted category",
       "toggle": "Show or hide where this category came from",
       "undo": "Undo",
       "undoHintReview": "Restores the original category and sends the transaction to Review",

@@ -5,14 +5,14 @@ import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, addDays, addMonths, parseISO } from 'date-fns'
-import { accounts, dashboard, transactions, categories as categoriesApi, categoryGroups as categoryGroupsApi, payees as payeesApi, rules as rulesApi } from '@/lib/api'
+import { accounts, dashboard, transactions, categories as categoriesApi, categoryGroups as categoryGroupsApi, payees as payeesApi } from '@/lib/api'
 import { localDateString } from '@/lib/date-utils'
 import { applyTransactionToBalance, excludeMaterializedProjections, transactionAmountForBalance } from '@/lib/account-detail-utils'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
 import { shouldShowPendingBadge } from '@/lib/transaction-status'
 import { closeDateForBill, isOpenCycleWindow } from '@/lib/credit-card-cycle'
 import { toast } from 'sonner'
-import type { CreditCardBill, ProjectedTransaction, Rule, Transaction } from '@/types'
+import type { CreditCardBill, ProjectedTransaction, Transaction } from '@/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, ArrowLeftRight, CalendarClock, ChevronLeft, ChevronRight, Clock, EyeClosed, HelpCircle, Paperclip, Pencil, Plus, X } from 'lucide-react'
@@ -22,7 +22,7 @@ import { CategoryIcon } from '@/components/category-icon'
 import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
 import { ProjectedTransactionBadge } from '@/components/projected-transaction-badge'
 import { TransactionDialog, type TransactionSavePayload } from '@/components/transaction-dialog'
-import { RuleDialog, type RuleDialogInitialData } from '@/components/rule-dialog'
+import { RuleDialog } from '@/components/rule-dialog'
 import { extractApiError } from '@/lib/api-errors'
 import { TransferDialog } from '@/components/transfer-dialog'
 import { DatePickerInput } from '@/components/ui/date-picker-input'
@@ -35,7 +35,8 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useCreateTransaction } from '@/hooks/use-create-transaction'
-import { categoryChanged, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
+import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
+import { categoryChanged, withUndoneCategory, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import { formatCurrency } from '@/lib/format'
 import {
@@ -553,41 +554,14 @@ export default function AccountDetailPage() {
     queryFn: categoryGroupsApi.list,
   })
 
-  // "Create rule" from the correction toast.
-  const [createRuleOpen, setCreateRuleOpen] = useState(false)
-  const [createRuleInitialData, setCreateRuleInitialData] = useState<RuleDialogInitialData | undefined>(undefined)
+  const { openRuleDialog, isRuleDialogOpen, ruleDialogKey, ruleDialogProps } = useCreateRuleDialog()
   const { data: payeesList } = useQuery({
     queryKey: ['payees'],
     queryFn: () => payeesApi.list(),
-    enabled: createRuleOpen,
-  })
-  const createRuleMutation = useMutation({
-    mutationFn: (data: Omit<Rule, 'id' | 'user_id'>) => rulesApi.create(data),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
-      setCreateRuleOpen(false)
-      setCreateRuleInitialData(undefined)
-      const applied = result.applied_count ?? 0
-      if (applied > 0) {
-        invalidateFinancialQueries(queryClient)
-        queryClient.invalidateQueries({ queryKey: ['payees'] })
-        toast.success(t('rules.createdAndApplied', { count: applied }))
-      } else {
-        toast.success(t('rules.created'))
-      }
-    },
-    onError: (error: unknown) => {
-      const err = error as { response?: { status?: number } }
-      toast.error(t(err?.response?.status === 409 ? 'rules.duplicateName' : 'common.error'))
-    },
+    enabled: isRuleDialogOpen,
   })
   // After a category fix: "apply to the similar ones" / "create rule".
-  const { notifyCorrection } = useCategoryCorrectionToast({
-    onCreateRule: (initialData) => {
-      setCreateRuleInitialData(initialData)
-      setCreateRuleOpen(true)
-    },
-  })
+  const { notifyCorrection } = useCategoryCorrectionToast({ onCreateRule: openRuleDialog })
 
   const updateMutation = useMutation({
     mutationFn: ({ id: txId, ...data }: TransactionSavePayload & { id: string }) =>
@@ -1765,6 +1739,9 @@ export default function AccountDetailPage() {
       </div>
 
       <TransactionDialog
+        onCategoryUndone={(txId, categoryId, source) =>
+          setEditingTx((prev) => withUndoneCategory(prev, txId, categoryId, source))
+        }
         open={dialogOpen}
         onClose={() => {
           setDialogOpen(false)
@@ -1794,17 +1771,12 @@ export default function AccountDetailPage() {
       />
 
       <RuleDialog
-        key={createRuleOpen ? 'rule-open' : 'rule-closed'}
-        open={createRuleOpen}
-        onClose={() => { setCreateRuleOpen(false); setCreateRuleInitialData(undefined) }}
-        rule={null}
+        key={ruleDialogKey}
+        {...ruleDialogProps}
         categories={categoriesList ?? []}
         categoryGroups={categoryGroupsList ?? []}
         accounts={accountsList ?? []}
         payees={payeesList ?? []}
-        onSave={(data) => createRuleMutation.mutate(data as Omit<Rule, 'id' | 'user_id'>)}
-        loading={createRuleMutation.isPending}
-        initialData={createRuleInitialData}
       />
 
       <TransferDialog

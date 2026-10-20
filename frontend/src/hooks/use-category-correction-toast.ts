@@ -10,7 +10,7 @@ import { categorization as categorizationApi } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { invalidateCategorizationQueries } from '@/lib/invalidate-queries'
 import type { RuleDialogInitialData } from '@/components/rule-dialog'
-import type { Transaction } from '@/types'
+import type { CategorySource, Transaction } from '@/types'
 
 /** Long enough to read the offer and reach for it. */
 const DURATION = 8000
@@ -34,24 +34,40 @@ export function categoryChanged(
   return !!payload.category_id && payload.category_id !== before.category_id
 }
 
+/**
+ * The page's copy of the row being edited, after the dialog undid its
+ * category server-side: without it, the next save would compare against the
+ * undone category and offer shortcuts for a change nobody made.
+ */
+export function withUndoneCategory<T extends Pick<Transaction, 'id' | 'category_id' | 'category_source'>>(
+  tx: T | null,
+  txId: string,
+  categoryId: string | null,
+  source: CategorySource | null,
+): T | null {
+  if (!tx || tx.id !== txId) return tx
+  return { ...tx, category_id: categoryId, category_source: source ?? tx.category_source }
+}
+
 const normalize = (value: string | null | undefined) =>
   (value ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
 
 /**
  * The row to offer the shortcuts for after a bulk change, when the whole
- * selection is one store (same payee, or the same description); null when
- * it spans several, since "apply to similar" would then speak for one of
- * them only.
+ * selection is one store: the same description and the same payee (or no
+ * payee on any). Null otherwise, since "apply to similar" would then speak
+ * for one store only; erring towards not offering is the safe side.
  */
 export function singleStoreReference<T extends Pick<Transaction, 'id' | 'description' | 'payee_id'>>(
   rows: T[],
 ): T | null {
   const [first] = rows
   if (!first) return null
-  if (first.payee_id && rows.every((r) => r.payee_id === first.payee_id)) return first
   const description = normalize(first.description)
-  if (description && rows.every((r) => normalize(r.description) === description)) return first
-  return null
+  if (!description) return null
+  const payee = first.payee_id ?? null
+  const same = rows.every((r) => normalize(r.description) === description && (r.payee_id ?? null) === payee)
+  return same ? first : null
 }
 
 export function useCategoryCorrectionToast({ onCreateRule }: Options = {}) {
@@ -103,7 +119,8 @@ export function useCategoryCorrectionToast({ onCreateRule }: Options = {}) {
       // Confirm at once; the offers are added to the same toast when known.
       // No canWrite check: this only runs after the person's own save went
       // through, which a viewer cannot make.
-      const id = toast.success(message)
+      // Already long, so it cannot expire and pop back while the offers load.
+      const id = toast.success(message, { duration: DURATION })
 
       const [similar, draft] = await Promise.allSettled([
         categorizationApi.similar(tx.id),

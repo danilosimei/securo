@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TransactionDialog } from '@/components/transaction-dialog'
 import { categorization, currencies, groups, payees, settings, transactions } from '@/lib/api'
 import { renderWithProviders, t } from '@/test/utils'
+import { WorkspaceContext } from '@/contexts/workspace-context'
 import type { RecurringTransaction, Transaction } from '@/types'
 
 vi.mock('@/contexts/auth-context', () => ({
@@ -117,5 +118,32 @@ describe('how the category got here', () => {
     renderWithProviders(<TransactionDialog {...props} transaction={tx} />)
     expect(await screen.findByText(t('categorization.provenance.by_ai'))).toBeInTheDocument()
     expect(provenance).toHaveBeenCalledWith('tx-1')
+  })
+
+  it('tells the page when the block undid the category', async () => {
+    stubLists()
+    vi.spyOn(categorization, 'provenance').mockResolvedValue({
+      current_source: 'ai',
+      original_description: 'IFOOD *PEDIDO 123',
+      events: [{
+        id: 'e1', run_id: 'r1', source: 'ai', previous_source: 'none', previous_category_id: 'c2',
+        new_category_id: 'c1', confidence: 94, reason: null, model: null, user_id: null,
+        created_at: new Date().toISOString(), undone_at: null,
+      }],
+    })
+    vi.spyOn(categorization, 'undo').mockResolvedValue({ restored: 1, skipped: 0 })
+    const onCategoryUndone = vi.fn()
+    const tx = {
+      id: 'tx-1', description: 'iFood', amount: 30, currency: 'USD', date: '2026-10-18',
+      type: 'debit', status: 'posted', account_id: 'acc-1', category_id: 'c1',
+      category_source: 'ai', source: 'manual',
+    } as unknown as Transaction
+    const { user } = renderWithProviders(
+      <WorkspaceContext.Provider value={{ canWrite: true } as unknown as React.ContextType<typeof WorkspaceContext>}>
+        <TransactionDialog {...props} transaction={tx} onCategoryUndone={onCategoryUndone} />
+      </WorkspaceContext.Provider>,
+    )
+    await user.click(await screen.findByRole('button', { name: t('categorization.provenance.undo') }))
+    await vi.waitFor(() => expect(onCategoryUndone).toHaveBeenCalledWith('tx-1', 'c2', 'none'))
   })
 })

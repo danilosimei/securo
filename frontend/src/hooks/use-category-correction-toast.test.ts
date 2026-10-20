@@ -7,6 +7,7 @@ import {
   categoryChanged,
   singleStoreReference,
   useCategoryCorrectionToast,
+  withUndoneCategory,
 } from '@/hooks/use-category-correction-toast'
 import type { RuleDialogInitialData } from '@/components/rule-dialog'
 import { createTestQueryClient, t } from '@/test/utils'
@@ -72,7 +73,8 @@ describe('useCategoryCorrectionToast', () => {
     expect(opts?.duration).toBe(8000)
     // Updates the toast already on screen instead of stacking a second one.
     expect(opts?.id).toBe('toast-1')
-    expect(toast.success).toHaveBeenNthCalledWith(1, t('categorization.correction.updated'))
+    // Long from the start, so it cannot expire while the offers load.
+    expect(toast.success).toHaveBeenNthCalledWith(1, t('categorization.correction.updated'), { duration: 8000 })
   })
 
   it('applies to the similar ones and offers to undo them', async () => {
@@ -145,13 +147,13 @@ describe('useCategoryCorrectionToast', () => {
     const { result } = render()
     await result.current.notifyCorrection({ id: 't1' })
     expect(toast.success).toHaveBeenCalledTimes(1)
-    expect(toast.success).toHaveBeenCalledWith(t('categorization.correction.updated'))
+    expect(toast.success).toHaveBeenCalledWith(t('categorization.correction.updated'), { duration: 8000 })
   })
 
   it('uses the caller title (bulk)', async () => {
     const { result } = render()
     await result.current.notifyCorrection({ id: 't1' }, { title: '4 updated' })
-    expect(toast.success).toHaveBeenNthCalledWith(1, '4 updated')
+    expect(toast.success).toHaveBeenNthCalledWith(1, '4 updated', { duration: 8000 })
   })
 })
 
@@ -171,12 +173,31 @@ describe('singleStoreReference', () => {
 
   it('picks the first row when every row is the same store', () => {
     expect(singleStoreReference([tx('a', 'IFOOD *PEDIDO'), tx('b', ' ifood  *pedido ')])?.id).toBe('a')
-    expect(singleStoreReference([tx('a', 'X', 'p1'), tx('b', 'Y', 'p1')])?.id).toBe('a')
+    expect(singleStoreReference([tx('a', 'IFOOD', 'p1'), tx('b', 'ifood', 'p1')])?.id).toBe('a')
   })
 
-  it('skips selections spanning several stores', () => {
+  it('skips selections that may span several stores', () => {
     expect(singleStoreReference([tx('a', 'IFOOD'), tx('b', 'UBER')])).toBeNull()
-    expect(singleStoreReference([tx('a', 'X', 'p1'), tx('b', 'Y', 'p2')])).toBeNull()
+    // A shared payee is not enough: the store key may come from the description.
+    expect(singleStoreReference([tx('a', 'X', 'p1'), tx('b', 'Y', 'p1')])).toBeNull()
+    // Nor the same description under different payees (or one without).
+    expect(singleStoreReference([tx('a', 'PIX', 'p1'), tx('b', 'PIX', 'p2')])).toBeNull()
+    expect(singleStoreReference([tx('a', 'PIX', 'p1'), tx('b', 'PIX')])).toBeNull()
+    expect(singleStoreReference([tx('a', '  '), tx('b', '')])).toBeNull()
     expect(singleStoreReference([])).toBeNull()
+  })
+})
+
+describe('withUndoneCategory', () => {
+  const row = { id: 't1', category_id: 'c1', category_source: 'ai' as const }
+
+  it('follows the undo on the row being edited', () => {
+    expect(withUndoneCategory(row, 't1', 'c2', 'none')).toEqual({ id: 't1', category_id: 'c2', category_source: 'none' })
+    expect(withUndoneCategory(row, 't1', null, null)).toEqual({ id: 't1', category_id: null, category_source: 'ai' })
+  })
+
+  it('leaves another row (or none) alone', () => {
+    expect(withUndoneCategory(row, 't2', 'c2', 'none')).toBe(row)
+    expect(withUndoneCategory(null, 't1', 'c2', 'none')).toBeNull()
   })
 })

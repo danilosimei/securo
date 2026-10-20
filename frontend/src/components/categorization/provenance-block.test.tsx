@@ -101,6 +101,15 @@ describe('ProvenanceBlock', () => {
     expect(await screen.findByText(new RegExp(t('categorization.provenance.noCategory')))).toBeInTheDocument()
   })
 
+  it('says the category was removed when it is no longer in the list', async () => {
+    api.categorization.provenance.mockResolvedValue(
+      provenance({ events: [event({ previous_category_id: 'gone' })] }),
+    )
+    renderBlock()
+    expect(await screen.findByText(new RegExp(t('categorization.provenance.removedCategory')))).toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(t('categorization.provenance.noCategory')))).not.toBeInTheDocument()
+  })
+
   it('undoes the latest event that is still in effect and says it went back to Review', async () => {
     api.categorization.provenance.mockResolvedValue(
       provenance({
@@ -118,7 +127,7 @@ describe('ProvenanceBlock', () => {
 
     await waitFor(() => expect(api.categorization.undo).toHaveBeenCalledWith({ event_ids: ['e-new'] }))
     expect(toast.success).toHaveBeenCalledWith(t('categorization.provenance.undoneReview'))
-    expect(onUndone).toHaveBeenCalledWith('c2')
+    expect(onUndone).toHaveBeenCalledWith('c2', 'none')
   })
 
   it('skips events already undone', async () => {

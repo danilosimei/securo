@@ -44,7 +44,7 @@ import type { AttachmentPreview } from '@/components/transaction-attachments'
 import { TransactionSplitsSection } from '@/components/transaction-splits-section'
 import { buildInstallmentSeriesInput, hasNonStatusChange, isManualInstallmentSeriesRow } from '@/lib/installment-series'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
-import type { Transaction, RecurringTransaction, TransactionSplitsInput, TransactionEditPayload, InstallmentSeriesInput, TransactionApplyScope, CategoryGroup, Category, Rule, RuleCondition, RuleConditionNode } from '@/types'
+import type { CategorySource, Transaction, RecurringTransaction, TransactionSplitsInput, TransactionEditPayload, InstallmentSeriesInput, TransactionApplyScope, CategoryGroup, Category, Rule, RuleCondition, RuleConditionNode } from '@/types'
 import { toast } from 'sonner'
 
 export type SaveAction = 'save' | 'saveAndNew' | 'saveAndDuplicate'
@@ -106,6 +106,7 @@ export function TransactionDialog({
   onUnlinkTransfer,
   onIgnoreChanged,
   onCreateRule,
+  onCategoryUndone,
   loading,
   error,
   isSynced = false,
@@ -125,6 +126,9 @@ export function TransactionDialog({
   onUnlinkTransfer?: (pairId: string) => void
   onIgnoreChanged?: () => void
   onCreateRule?: (tx: Transaction) => void
+  /** The "how it got here" block undid the category server-side: the page's
+   * copy of the row should follow, so the next save compares against it. */
+  onCategoryUndone?: (txId: string, categoryId: string | null, source: CategorySource | null) => void
   loading: boolean
   error: string | null
   isSynced?: boolean
@@ -232,6 +236,7 @@ export function TransactionDialog({
               onUnlinkTransfer={onUnlinkTransfer}
               onIgnoreChanged={onIgnoreChanged}
               onCreateRule={onCreateRule}
+              onCategoryUndone={onCategoryUndone}
               onCancel={handleClose}
               loading={loading}
               error={error}
@@ -394,6 +399,7 @@ function TransactionForm({
   onUnlinkTransfer,
   onIgnoreChanged,
   onCreateRule,
+  onCategoryUndone,
   onCancel,
   loading,
   error,
@@ -414,6 +420,7 @@ function TransactionForm({
   onUnlinkTransfer?: (pairId: string) => void
   onIgnoreChanged?: () => void
   onCreateRule?: (tx: Transaction) => void
+  onCategoryUndone?: (txId: string, categoryId: string | null, source: CategorySource | null) => void
   onCancel: () => void
   loading: boolean
   error: string | null
@@ -1165,7 +1172,10 @@ function TransactionForm({
           categories={categories}
           // The row went back server-side; follow it so a later save does
           // not re-file it under the category just undone.
-          onUndone={(restored) => setCategoryId(restored ?? '')}
+          onUndone={(restored, source) => {
+            setCategoryId(restored ?? '')
+            onCategoryUndone?.(transaction.id, restored, source)
+          }}
         />
       )}
       <div className={cn("grid gap-4", isSynced ? "grid-cols-1" : "grid-cols-2")}>

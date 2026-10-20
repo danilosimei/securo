@@ -3010,6 +3010,7 @@
       "confidence": "{{value}}%",
       "original": "Original",
       "noCategory": "Sem categoria",
+      "removedCategory": "Categoria removida",
       "toggle": "Mostrar ou ocultar de onde veio esta categoria",
       "undo": "Desfazer",
       "undoHintReview": "Volta para a categoria original e manda a transação para Revisar",

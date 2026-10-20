@@ -30,8 +30,8 @@ interface ProvenanceBlockProps {
   transactionId: string
   /** To name the category the row had before. */
   categories: Category[]
-  /** After an undo, with the category the row went back to. */
-  onUndone?: (restoredCategoryId: string | null) => void
+  /** After an undo, with the category (and its origin) the row went back to. */
+  onUndone?: (restoredCategoryId: string | null, restoredSource: CategorySource | null) => void
 }
 
 export function ProvenanceBlock({ transactionId, categories, onUndone }: ProvenanceBlockProps) {
@@ -67,8 +67,10 @@ export function ProvenanceBlock({ transactionId, categories, onUndone }: Provena
     latest ? formatRelativeFromNow(latest.created_at, locale) : null,
   ].filter(Boolean)
 
-  const categoryName = (id: string | null) =>
-    (id && categories.find((c) => c.id === id)?.name) || t('categorization.provenance.noCategory')
+  const categoryName = (id: string | null) => {
+    if (!id) return t('categorization.provenance.noCategory')
+    return categories.find((c) => c.id === id)?.name ?? t('categorization.provenance.removedCategory')
+  }
   const original = [
     data.original_description,
     latest ? categoryName(latest.previous_category_id) : null,
@@ -83,7 +85,7 @@ export function ProvenanceBlock({ transactionId, categories, onUndone }: Provena
       const result = await categorizationApi.undo({ event_ids: [latest.id] })
       if (result.restored > 0) {
         toast.success(t(backToReview ? 'categorization.provenance.undoneReview' : 'categorization.provenance.undone'))
-        onUndone?.(latest.previous_category_id)
+        onUndone?.(latest.previous_category_id, latest.previous_source)
       } else {
         toast.info(t('categorization.provenance.undoSkipped'))
       }

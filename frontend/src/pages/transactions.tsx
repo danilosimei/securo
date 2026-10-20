@@ -8,7 +8,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { transactions, categories as categoriesApi, categoryGroups as categoryGroupsApi, accounts as accountsApi, recurring, payees as payeesApi, admin, groups as groupsApi, rules as rulesApi, reconciliation as reconciliationApi } from '@/lib/api'
+import { transactions, categories as categoriesApi, categoryGroups as categoryGroupsApi, accounts as accountsApi, recurring, payees as payeesApi, admin, groups as groupsApi, reconciliation as reconciliationApi } from '@/lib/api'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -37,8 +37,8 @@ import {
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertTriangle, ArrowLeftRight, ArrowUp, ArrowDown, Check, Clock, HelpCircle, Info, Paperclip, Trash2, Users, X, EyeClosed, ChartNoAxesColumn, SlidersHorizontal, Receipt } from 'lucide-react'
-import type { Transaction, Rule, InstallmentSeriesInput, TransactionApplyScope, TransactionEditPayload, ReconciliationSuggestion } from '@/types'
-import { RuleDialog, type RuleDialogInitialData } from '@/components/rule-dialog'
+import type { Transaction, InstallmentSeriesInput, TransactionApplyScope, TransactionEditPayload, ReconciliationSuggestion } from '@/types'
+import { RuleDialog } from '@/components/rule-dialog'
 import { PageHeader } from '@/components/page-header'
 import { calculateRangeSelection } from '@/lib/selection-utils'
 import { isManualInstallmentSeriesRow } from '@/lib/installment-series'
@@ -62,7 +62,8 @@ import { TransactionCalendarView } from '@/components/transaction-calendar-view'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useCreateTransaction } from '@/hooks/use-create-transaction'
-import { categoryChanged, singleStoreReference, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
+import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
+import { categoryChanged, withUndoneCategory, singleStoreReference, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
 import { MobileTransactionRow } from '@/components/mobile-transaction-row'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
@@ -220,8 +221,7 @@ export default function TransactionsPage() {
   const [bulkCategory, setBulkCategory] = useState<string>('')
   const [bulkAddToGroupOpen, setBulkAddToGroupOpen] = useState(false)
   const [bulkTagInput, setBulkTagInput] = useState<string>('')
-  const [createRuleOpen, setCreateRuleOpen] = useState(false)
-  const [createRuleInitialData, setCreateRuleInitialData] = useState<RuleDialogInitialData | undefined>(undefined)
+  const { openRuleDialog, ruleDialogKey, ruleDialogProps } = useCreateRuleDialog()
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
   const highlightId = searchParams.get('highlight')
   const highlightedRowRef = useRef<HTMLTableRowElement | null>(null)
@@ -545,12 +545,7 @@ export default function TransactionsPage() {
   } = useCreateTransaction({ onDone: () => setDialogOpen(false) })
 
   // After a category fix: "apply to the similar ones" / "create rule".
-  const { notifyCorrection } = useCategoryCorrectionToast({
-    onCreateRule: (initialData) => {
-      setCreateRuleInitialData(initialData)
-      setCreateRuleOpen(true)
-    },
-  })
+  const { notifyCorrection } = useCategoryCorrectionToast({ onCreateRule: openRuleDialog })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }: TransactionUpdatePayload & { id: string }) =>
@@ -726,31 +721,6 @@ export default function TransactionsPage() {
     },
   })
 
-  const createRuleMutation = useMutation({
-    mutationFn: (data: Omit<Rule, 'id' | 'user_id'>) => rulesApi.create(data),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
-      setCreateRuleOpen(false)
-      setCreateRuleInitialData(undefined)
-      const applied = result.applied_count ?? 0
-      if (applied > 0) {
-        invalidateAfterTxMutation()
-        queryClient.invalidateQueries({ queryKey: ['payees'] })
-        toast.success(t('rules.createdAndApplied', { count: applied }))
-      } else {
-        toast.success(t('rules.created'))
-      }
-    },
-    onError: (error: unknown) => {
-      const err = error as { response?: { status?: number } }
-      if (err?.response?.status === 409) {
-        toast.error(t('rules.duplicateName'))
-      } else {
-        toast.error(t('common.error'))
-      }
-    },
-  })
-
   const handleCreateRuleFromTransaction = (tx: Transaction) => {
     const conditions = [
       { field: 'description', op: 'contains', value: tx.description },
@@ -765,8 +735,7 @@ export default function TransactionsPage() {
     if (tags.length > 0) {
       actions.push({ op: 'append_notes', value: tags.join(' ') })
     }
-    setCreateRuleInitialData({ conditions, actions })
-    setCreateRuleOpen(true)
+    openRuleDialog({ conditions, actions })
   }
 
   const toggleSelect = (id: string, isShiftKey: boolean = false) => {
@@ -2050,6 +2019,9 @@ export default function TransactionsPage() {
 
       {/* Add/Edit Dialog */}
       <TransactionDialog
+        onCategoryUndone={(txId, categoryId, source) =>
+          setEditingTx((prev) => withUndoneCategory(prev, txId, categoryId, source))
+        }
         open={dialogOpen}
         onClose={() => {
           setDialogOpen(false)
@@ -2208,17 +2180,12 @@ export default function TransactionsPage() {
 
       {/* Create Rule from Transaction Dialog */}
       <RuleDialog
-        key={createRuleOpen ? 'rule-open' : 'rule-closed'}
-        open={createRuleOpen}
-        onClose={() => { setCreateRuleOpen(false); setCreateRuleInitialData(undefined) }}
-        rule={null}
+        key={ruleDialogKey}
+        {...ruleDialogProps}
         categories={categoriesList ?? []}
         categoryGroups={categoryGroupsList ?? []}
         accounts={accountsList ?? []}
         payees={payeesList ?? []}
-        onSave={(data) => createRuleMutation.mutate(data as Omit<Rule, 'id' | 'user_id'>)}
-        loading={createRuleMutation.isPending}
-        initialData={createRuleInitialData}
       />
     </div>
   )
