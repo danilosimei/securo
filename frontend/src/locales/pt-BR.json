@@ -3134,7 +3134,7 @@
         "groupUsedLater": "Outras mudanças desta proposta também usam este grupo."
       },
       "redistributing": "Redistribuindo transações…",
-      "redistributed": "Transações redistribuídas: {{applied}} aplicadas · {{review}} para revisar",
+      "redistributed": "Transações redistribuídas: {{applied}} movidas · {{kept}} ficaram onde estavam",
       "redistributeFailed": "A redistribuição falhou; as transações continuam em {{name}}.",
       "redistributeCapped": "O teto mensal de gastos com IA parou a redistribuição; parte das transações continua em {{name}}. Aumente o teto nas configurações e tente de novo.",
       "adjustCap": "Ajustar teto",

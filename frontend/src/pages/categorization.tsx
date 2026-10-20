@@ -61,6 +61,7 @@ export default function CategorizationPage() {
   if (summary) {
     if (!lastRun) statusLine = t('categorization.neverRun')
     else if (lastRun.status === 'failed') statusLine = t('categorization.lastRunFailed')
+    else if (isCategorizationBusy(summary)) statusLine = t('categorization.running')
     else if (lastRun.finished_at) {
       const stat = (key: string) => Number(lastRun.stats?.[key] ?? 0) || 0
       statusLine = t('categorization.lastRun', {

@@ -788,7 +788,7 @@ function Redistribution({
         <Check className="h-3.5 w-3.5" />
         {t('categorization.organize.redistributed', {
           applied: stat('applied') + stat('memory'),
-          review: stat('suggested'),
+          kept: stat('skipped') + stat('confirmed'),
         })}
       </p>
     )

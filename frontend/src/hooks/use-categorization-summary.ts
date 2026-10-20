@@ -15,16 +15,17 @@ export function isCategorizationBusy(summary: CategorizationSummary | undefined)
  * The one reader of the summary, shared by the page and the sidebar so they
  * poll together: every 5 s while a run is busy, never otherwise.
  */
-export function useCategorizationSummary() {
+export function useCategorizationSummary({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: [...CATEGORIZATION_SUMMARY_KEY],
     queryFn: categorization.summary,
     staleTime: 60_000,
+    enabled,
     refetchInterval: (query) => (isCategorizationBusy(query.state.data) ? POLL_MS : false),
   })
 }
 
 /** Groups waiting for a person to review; 0 while loading. */
-export function useCategorizationPending(): number {
-  return useCategorizationSummary().data?.pending_groups ?? 0
+export function useCategorizationPending(enabled = true): number {
+  return useCategorizationSummary({ enabled }).data?.pending_groups ?? 0
 }

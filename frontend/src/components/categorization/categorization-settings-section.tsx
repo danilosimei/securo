@@ -113,9 +113,12 @@ export function CategorizationSettingsSection() {
       setCapError(true)
       return
     }
+    if (busy) return
     setCapError(false)
+    const text = capDraft
     setCapDraft(null)
-    if (parsed !== storedCap) update.mutate({ monthly_cap_usd: parsed.toFixed(2) })
+    // A failed save gives the typed draft back instead of losing it.
+    if (parsed !== storedCap) update.mutate({ monthly_cap_usd: parsed.toFixed(2) }, { onError: () => setCapDraft(text) })
   }
 
   const spent = Number(summary?.month_cost_usd ?? 0)
@@ -126,7 +129,7 @@ export function CategorizationSettingsSection() {
   const preset = PRESETS.find((p) => p.threshold === settings?.auto_apply_threshold)
 
   return (
-    <section ref={sectionRef} id="categorization" className="space-y-4 rounded-xl border bg-card p-6 scroll-mt-6">
+    <section ref={sectionRef} id="categorization" aria-busy={busy} className="space-y-4 rounded-xl border bg-card p-6 scroll-mt-6">
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-base font-semibold">{t('categorization.config.title')}</h3>
@@ -152,8 +155,11 @@ export function CategorizationSettingsSection() {
             <Switch
               aria-labelledby="categorization-enabled-label"
               checked={settings.enabled}
-              disabled={!canManage || busy}
-              onCheckedChange={(enabled) => update.mutate({ enabled })}
+              disabled={!canManage}
+              onCheckedChange={(enabled) => {
+                if (busy) return
+                update.mutate({ enabled })
+              }}
             />
           </div>
 
@@ -166,11 +172,11 @@ export function CategorizationSettingsSection() {
             </div>
             <Segmented
               testIdPrefix="categorization-threshold"
-              disabled={!canManage || !settings.enabled || busy}
+              disabled={!canManage || !settings.enabled}
               // A stored value off the presets shows as its own selected chip.
               value={preset?.value ?? 'custom'}
               onChange={(value) => {
-                if (value !== 'custom') update.mutate({ auto_apply_threshold: Number(value) })
+                if (value !== 'custom' && !busy) update.mutate({ auto_apply_threshold: Number(value) })
               }}
               options={[
                 ...PRESETS.map((p) => ({ value: p.value as string, label: t(`categorization.config.${p.labelKey}`) })),
@@ -191,9 +197,11 @@ export function CategorizationSettingsSection() {
                 inputMode="decimal"
                 className="w-28 text-right"
                 value={capText}
-                disabled={!canManage || busy}
+                disabled={!canManage}
+                readOnly={busy}
                 aria-invalid={capError}
                 onChange={(e) => {
+                  if (busy) return
                   setCapDraft(e.target.value)
                   setCapError(false)
                 }}

@@ -51,7 +51,7 @@ export function SidebarNavLink({
   onNavigate: () => void
 }) {
   const { t } = useTranslation()
-  const pending = useCategorizationPending()
+  const pending = useCategorizationPending(!!item.badgeQueryKey)
   const count = item.badgeQueryKey ? pending : 0
   const name = t(`nav.${item.key}`)
   // aria-label replaces the content for assistive tech, so the count has to

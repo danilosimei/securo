@@ -3132,7 +3132,7 @@
         "groupUsedLater": "Other changes in this proposal also use this group."
       },
       "redistributing": "Redistributing transactions…",
-      "redistributed": "Transactions redistributed: {{applied}} applied · {{review}} to review",
+      "redistributed": "Transactions redistributed: {{applied}} moved · {{kept}} stayed where they were",
       "redistributeFailed": "The redistribution failed; the transactions are still in {{name}}.",
       "redistributeCapped": "The monthly AI spending cap stopped the redistribution; some transactions are still in {{name}}. Raise the cap in settings, then try again.",
       "adjustCap": "Adjust cap",
