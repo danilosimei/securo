@@ -161,3 +161,26 @@ async def test_batch_results_yields_message_or_error_type():
 
 def test_prices_cover_both_models():
     assert set(costs.PRICES) == {"claude-haiku-5-5", "claude-opus-5-5"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stored, expected",
+    [
+        ("https://api.anthropic.com/v1", "https://api.anthropic.com"),
+        ("https://proxy.local/anthropic/v1/", "https://proxy.local/anthropic"),
+        (None, "https://api.anthropic.com"),
+    ],
+)
+async def test_resolve_client_base_url_has_no_trailing_v1(
+    session, test_user, test_workspace, stored, expected
+):
+    settings = await get_settings(session, test_workspace.id)
+    session.add(LlmConnection(
+        id=uuid.uuid4(), user_id=test_user.id, name="a", kind="anthropic", base_url=stored,
+        api_key_encrypted=encrypt("sk-ant"), is_default=True, extra={},
+    ))
+    await session.flush()
+    client = await resolve_client(session, settings)
+    assert client is not None
+    assert str(client.base_url).rstrip("/") == expected

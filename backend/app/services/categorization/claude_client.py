@@ -20,6 +20,7 @@ import anthropic
 from anthropic import AsyncAnthropic
 from anthropic.types import Message
 from anthropic.types.messages.batch_create_params import Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.providers.base import (
     LLMAuthError,
@@ -30,9 +31,22 @@ from app.agents.providers.base import (
 from app.agents.services.crypto import decrypt
 from app.models.categorization import CategorizationSettings
 from app.services.categorization.settings import find_ai_connection
-from sqlalchemy.ext.asyncio import AsyncSession
 
 MAX_RETRIES = 2
+_DEFAULT_BASE_URL = "https://api.anthropic.com"
+
+
+def _sdk_base_url(url: str | None) -> str | None:
+    """The connection's URL as the SDK wants it.
+
+    Connections store "https://api.anthropic.com/v1", but the SDK appends
+    /v1/messages itself, so a trailing /v1 would 404. None means the default.
+    """
+    cleaned = (url or "").strip().rstrip("/")
+    cleaned = cleaned.removesuffix("/v1").rstrip("/")
+    if not cleaned or cleaned == _DEFAULT_BASE_URL:
+        return None
+    return cleaned
 
 
 async def resolve_client(
@@ -47,7 +61,7 @@ async def resolve_client(
         return None
     return AsyncAnthropic(
         api_key=api_key,
-        base_url=connection.base_url or None,
+        base_url=_sdk_base_url(connection.base_url),
         max_retries=MAX_RETRIES,
     )
 

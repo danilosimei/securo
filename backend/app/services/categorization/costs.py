@@ -1,8 +1,8 @@
 """What categorization costs: per-call pricing and the month's spend against the cap.
 
-`cost_usd` prices one Claude response; runs are the ledger (`CategorizationRun.cost_usd`); a month is the
-workspace's calendar month, so the cap resets at its local midnight.
-Nothing here commits.
+`cost_usd` prices one Claude response. Runs are the ledger
+(`CategorizationRun.cost_usd`); a month is the workspace's calendar month,
+so the cap resets at its local midnight. Nothing here commits.
 """
 from __future__ import annotations
 
