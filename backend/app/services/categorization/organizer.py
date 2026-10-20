@@ -1026,8 +1026,10 @@ async def request_run(
     from app.tasks import categorization_tasks as tasks
 
     await tasks.lock_workspace(session, workspace_id)
-    # The same expiry the beat runs (`poll_batches`), for this workspace.
-    await tasks.expire_stale_runs(session, workspace_id)
+    # The same expiry the beat runs (`poll_batches`), for this workspace's
+    # organizer runs only: a classification expired here would lose the
+    # trigger it carries (`rerun`), which only the beat and `_claim` honor.
+    await tasks.expire_stale_runs(session, workspace_id, kinds=ORGANIZER_KINDS)
     busy = (
         await session.execute(
             select(CategorizationRun)

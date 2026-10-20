@@ -9,11 +9,12 @@ no trigger is lost. Only `classify` runs block classification: an organizer
 run (`organize` / `redistribute`) touches the category tree, not the rows,
 and runs alongside.
 
-`poll_batches` (beat, every 5 minutes) first expires the runs of any kind
-a dead worker left busy (`expire_stale_runs`), then collects the Message
-Batches of runs waiting in `processing_batch` and applies them
-(`classifier.collect_batch`), then calls `requeue_if_requested` for each run
-it closes, expired ones included.
+`poll_batches` (beat, every 5 minutes) first collects the Message Batches
+of runs waiting in `processing_batch` and applies them
+(`classifier.collect_batch`), then expires the runs of any kind a dead
+worker left busy (`expire_stale_runs`), so a batch that ended while the
+beat was down is applied rather than discarded; it calls
+`requeue_if_requested` for each run it closes, expired ones included.
 
 `organize_workspace` executes a queued organizer run: `organize` (Opus
 proposes a new tree) or `redistribute` (after an approved split, the old
@@ -212,12 +213,6 @@ async def _poll(session_maker: Any) -> dict:
     """
     summary = {"collected": 0, "pending": 0, "failed": 0}
     async with session_maker() as session:
-        # Runs a dead worker left busy are freed here too, so a stuck
-        # organizer run does not wait for the next request of its workspace.
-        expired = await expire_stale_runs(session)
-        await session.commit()
-        for run_id in expired:
-            await requeue_if_requested(session, run_id)
         waiting = (
             await session.execute(
                 select(CategorizationRun.id, CategorizationRun.workspace_id)
@@ -243,6 +238,15 @@ async def _poll(session_maker: Any) -> dict:
                     summary[outcome] += 1
                 if outcome != "pending":
                     await requeue_if_requested(session, run_id)
+    async with session_maker() as session:
+        # After the collection: only a batch that still did not end (or
+        # could not be read) is given up. Runs a dead worker left busy are
+        # freed here too, so a stuck organizer run does not wait for the
+        # next request of its workspace.
+        expired = await expire_stale_runs(session)
+        await session.commit()
+        for run_id in expired:
+            await requeue_if_requested(session, run_id)
     return summary
 
 
@@ -284,25 +288,35 @@ def _lock_key(workspace_id: uuid.UUID) -> int:
 
 
 async def expire_stale_runs(
-    session: AsyncSession, workspace_id: uuid.UUID | None = None
+    session: AsyncSession,
+    workspace_id: uuid.UUID | None = None,
+    *,
+    kinds: tuple[str, ...] = RUN_KINDS,
 ) -> list[uuid.UUID]:
-    """Mark failed (`abandoned`) the runs a dead worker left busy past
-    `STALE_AFTER`: classifications and organizer runs alike, of one
-    workspace or (None, from `poll_batches`) of all. The one rule for every
-    path that frees a workspace: a trigger, an organizer request, the beat.
+    """Mark failed (`abandoned`) the runs of `kinds` a dead worker left busy
+    past `STALE_AFTER`, of one workspace or (None, from `poll_batches`) of
+    all. The one rule for every path that frees a workspace: a trigger, a
+    request, the beat.
+
+    Only the beat gives up on a run waiting on its batch, right after it
+    tried to collect it: a batch that ended keeps its (paid) results for
+    29 days. A path that frees one workspace leaves those runs busy (a
+    trigger marks them `rerun` instead).
 
     Returns the expired ids: `poll_batches` honors their `rerun` marks
-    (a trigger or a request expiring them runs anyway). A run expired
-    while waiting on its batch keeps the batch's estimate as spend: the
-    money was committed when the batch was sent.
+    (a trigger or a request expiring a run of its own kind runs anyway).
+    A run expired while waiting on its batch keeps the batch's estimate as
+    spend: the money was committed when the batch was sent.
     """
     now = datetime.now(timezone.utc)
     scope = [CategorizationRun.workspace_id == workspace_id] if workspace_id is not None else []
     expired: list[uuid.UUID] = []
     for status, age in STALE_AFTER.items():
+        if status == "processing_batch" and workspace_id is not None:
+            continue
         stale = [
             *scope,
-            CategorizationRun.kind.in_(RUN_KINDS),
+            CategorizationRun.kind.in_(kinds),
             CategorizationRun.status == status,
             CategorizationRun.created_at < now - age,
         ]

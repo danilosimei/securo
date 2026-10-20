@@ -398,25 +398,33 @@ async def test_poll_expires_stale_runs_of_every_kind(session, test_workspace):
 
 
 @pytest.mark.asyncio
-async def test_expired_batch_keeps_its_estimate_as_spend(session, test_workspace):
+async def test_expired_batch_keeps_its_estimate_as_spend(session, test_workspace, monkeypatch):
     """The money was committed when the batch was sent: expiring the run
     must not take it out of the month's spend."""
+    from app.services.categorization.classifier import committed_spend
     from app.tasks.categorization_tasks import expire_stale_runs
 
+    # Every run is stale at once, so all of them are created (and counted)
+    # in the current month whatever the day the test runs.
+    monkeypatch.setattr(categorization_tasks, "STALE_AFTER", {
+        status: timedelta(minutes=-1) for status in categorization_tasks.STALE_AFTER
+    })
     ws = test_workspace.id
-    batch = _run(ws, "processing_batch", age=timedelta(hours=31))
+    batch = _run(ws, "processing_batch")
     batch.cost_usd = Decimal("0.01")
     batch.detail = {"batch": {"estimated_cost_usd": "0.25"}, "rerun": True}
-    no_estimate = _run(ws, "processing_batch", age=timedelta(hours=31), kind="redistribute")
-    running = _run(ws, "running", age=timedelta(hours=7))
+    no_estimate = _run(ws, "processing_batch", kind="redistribute")
+    running = _run(ws, "running")
     running.detail = {"batch": {"estimated_cost_usd": "9"}}
     session.add_all([batch, no_estimate, running])
     await session.commit()
+    before = await committed_spend(session, ws)
 
-    expired = await expire_stale_runs(session, ws)
+    expired = await expire_stale_runs(session)
     await session.commit()
 
     assert set(expired) == {batch.id, no_estimate.id, running.id}
+    assert await committed_spend(session, ws) == before == Decimal("0.26")
     assert (await _reload(session, batch.id)).cost_usd == Decimal("0.26")
     assert (await _reload(session, no_estimate.id)).cost_usd == Decimal("0")
     assert (await _reload(session, running.id)).cost_usd == Decimal("0")
@@ -493,3 +501,92 @@ async def test_request_run_waits_for_the_lock_when_nothing_is_busy(postgres_sess
 
     assert created is True
     assert (run.kind, run.status, run.trigger) == ("classify", "queued", "manual")
+
+
+@pytest.mark.asyncio
+async def test_organizer_request_leaves_a_stale_classification_to_the_beat(
+    session, test_workspace, categorization_enqueue
+):
+    """An organizer request only frees organizer runs: a stale classification
+    it expired would lose the trigger it carries."""
+    from app.services.categorization import organizer
+    from app.tasks.categorization_tasks import _poll
+
+    stale = _run(test_workspace.id, "running", age=timedelta(hours=7))
+    stale.detail = {"rerun": True}
+    stuck = _run(test_workspace.id, "running", age=timedelta(hours=7), kind="organize")
+    session.add_all([stale, stuck])
+    await session.commit()
+
+    run, created = await organizer.request_run(session, test_workspace.id)
+    await session.commit()
+
+    assert created is True and run.id != stuck.id
+    assert (await _reload(session, stuck.id)).status == "failed"
+    assert (await _reload(session, stale.id)).status == "running"
+
+    await _poll(_session_maker(session))
+
+    assert (await _reload(session, stale.id)).status == "failed"
+    categorization_enqueue.assert_called_once_with(test_workspace.id, "ingest")
+
+
+def _ended_batch_client():
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
+
+    client = MagicMock()
+    client.close = AsyncMock()
+    client.messages.batches.retrieve = AsyncMock(
+        return_value=SimpleNamespace(processing_status="ended")
+    )
+
+    async def results(_id):
+        for entry in ():
+            yield entry
+
+    client.messages.batches.results = AsyncMock(side_effect=results)
+    return client
+
+
+@pytest.mark.asyncio
+async def test_poll_collects_an_old_batch_that_ended_instead_of_expiring_it(
+    session, test_workspace, monkeypatch
+):
+    """After the beat was down past `STALE_AFTER`, a batch that ended still
+    has its (paid) results: they are applied, not discarded."""
+    from app.services.categorization import classifier
+    from app.tasks.categorization_tasks import _poll
+
+    old = _run(test_workspace.id, "processing_batch", age=timedelta(hours=31))
+    old.batch_id = "batch_old"
+    old.detail = {"batch": {
+        "chunks": [], "rows": {}, "index": [], "allowed": None, "capped": False,
+        "estimated_cost_usd": "0.25",
+    }}
+    session.add(old)
+    await session.commit()
+    monkeypatch.setattr(classifier, "resolve_client", AsyncMock(return_value=_ended_batch_client()))
+
+    summary = await _poll(_session_maker(session))
+
+    assert summary["collected"] == 1
+    old = await _reload(session, old.id)
+    assert (old.status, old.error) == ("done", None)
+    assert "batch" not in old.detail
+
+
+@pytest.mark.asyncio
+async def test_a_trigger_leaves_an_old_batch_to_the_beat(session, test_workspace):
+    """Only the beat, which tries to collect first, expires a run waiting on
+    its batch; a trigger marks it to run again instead."""
+    old = _run(test_workspace.id, "processing_batch", age=timedelta(hours=31))
+    old.batch_id = "batch_old"
+    session.add(old)
+    await session.commit()
+
+    result = await _categorize(_session_maker(session), test_workspace.id, "ingest", None)
+
+    assert result == {"status": "skipped", "reason": "busy"}
+    old = await _reload(session, old.id)
+    assert (old.status, old.detail) == ("processing_batch", {"rerun": True})
