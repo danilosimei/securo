@@ -900,3 +900,42 @@ async def test_record_changes_bulk_keeps_changes_when_event_insert_fails(
         assert row.category_id == target
         assert row.category_source == "ai"
         assert await _events(session, t.id) == []
+
+
+@pytest.mark.asyncio
+async def test_manual_clear_marks_none_but_records_the_person(
+    session, test_user, test_workspace, test_transactions
+):
+    """R27: a person who clears the category leaves the row reviewable again
+    (`none`); the event still says who did it."""
+    tx = test_transactions[1]  # IFOOD, categorized
+    previous = tx.category_id
+    assert previous is not None
+
+    await transaction_service.update_transaction(
+        session, tx.id, test_workspace.id, test_user.id, TransactionUpdate(category_id=None)
+    )
+
+    tx = await _reload(session, tx.id)
+    assert (tx.category_id, tx.category_source) == (None, "none")
+    [event] = await _events(session, tx.id)
+    assert (event.source, event.previous_category_id, event.new_category_id) == ("none", previous, None)
+    assert event.user_id == test_user.id
+
+
+@pytest.mark.asyncio
+async def test_bulk_clear_marks_none_but_records_the_person(
+    session, test_user, test_workspace, test_transactions
+):
+    rows = [t for t in test_transactions if t.category_id is not None][:2]
+    assert len(rows) == 2
+
+    await transaction_service.bulk_update_category(
+        session, test_workspace.id, [t.id for t in rows], None, user_id=test_user.id
+    )
+
+    for row in rows:
+        fresh = await _reload(session, row.id)
+        assert (fresh.category_id, fresh.category_source) == (None, "none")
+        [event] = await _events(session, row.id)
+        assert (event.source, event.user_id) == ("none", test_user.id)

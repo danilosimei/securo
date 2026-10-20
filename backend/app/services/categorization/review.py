@@ -112,18 +112,39 @@ def _open_row(workspace_id: uuid.UUID):
 # --- summary ----------------------------------------------------------------
 
 
+def _latest_pending(workspace_id: uuid.UUID) -> Any:
+    """Pending suggestions over open rows, each with its rank among its
+    row's (1 = the latest, as `_pending_groups` picks it)."""
+    return (
+        select(
+            CategorizationSuggestion.transaction_id.label("transaction_id"),
+            CategorizationSuggestion.merchant_key.label("merchant_key"),
+            func.row_number()
+            .over(
+                partition_by=CategorizationSuggestion.transaction_id,
+                order_by=(CategorizationSuggestion.created_at.desc(), CategorizationSuggestion.id),
+            )
+            .label("rank"),
+        )
+        .join(Transaction, _open_row(workspace_id))
+        .where(
+            CategorizationSuggestion.workspace_id == workspace_id,
+            CategorizationSuggestion.status == "pending",
+        )
+        .subquery()
+    )
+
+
 async def summary(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, Any]:
+    # The badge counts what Revisar lists: each row once, under the store of
+    # its latest pending suggestion.
+    latest = _latest_pending(workspace_id)
     groups, txs = (
         await session.execute(
             select(
-                func.count(func.distinct(CategorizationSuggestion.merchant_key)),
-                func.count(func.distinct(CategorizationSuggestion.transaction_id)),
-            )
-            .join(Transaction, _open_row(workspace_id))
-            .where(
-                CategorizationSuggestion.workspace_id == workspace_id,
-                CategorizationSuggestion.status == "pending",
-            )
+                func.count(func.distinct(latest.c.merchant_key)),
+                func.count(latest.c.transaction_id),
+            ).where(latest.c.rank == 1)
         )
     ).one()
     applied = await session.scalar(
@@ -455,7 +476,7 @@ async def _find_or_create_group(
         if not group.is_hidden and _norm_name(group.name) == wanted:
             return group
     return await category_group_service.create_group(
-        session, workspace_id, user_id, CategoryGroupCreate(name=name.strip())
+        session, workspace_id, user_id, CategoryGroupCreate(name=name.strip()), commit=False
     )
 
 
@@ -471,8 +492,9 @@ async def create_category(
     """Create a proposed category (and its group) and file the stores under it.
 
     An existing visible group, or assignable category, of the same
-    (normalized) name is reused; a hidden one is not.
-    The category services commit on their own; the rest is the caller's.
+    (normalized) name is reused; a hidden one is not. Nothing commits here
+    (the category services only flush): a failure while filing the stores
+    takes the new category and group back with everything else.
     """
     category_group = await _find_or_create_group(session, workspace_id, user_id, group)
     wanted = _norm_name(name)
@@ -494,6 +516,7 @@ async def create_category(
             workspace_id,
             user_id,
             CategoryCreate(name=name.strip(), group_id=category_group.id),
+            commit=False,
         )
     keys = list(dict.fromkeys(k for k in merchant_keys if k))
     result = await _accept_keys(session, workspace_id, user_id, keys, category.id)
@@ -679,6 +702,25 @@ async def undo(
     return result
 
 
+async def _keys_for(
+    session: AsyncSession, txs: list[Transaction]
+) -> dict[uuid.UUID, str]:
+    """Transaction id -> stored store key, the payees loaded per chunk
+    (`memory.key_for_transaction` costs a query per row)."""
+    payee_ids = list({tx.payee_id for tx in txs if tx.payee_id is not None})
+    payees: dict[uuid.UUID, tuple[str, str | None]] = {}
+    for chunk in _chunks(payee_ids):
+        rows = await session.execute(
+            select(Payee.id, Payee.name, Payee.source).where(Payee.id.in_(chunk))
+        )
+        payees.update((pid, (name, source)) for pid, name, source in rows.all())
+    keys: dict[uuid.UUID, str] = {}
+    for tx in txs:
+        name, source = payees.get(tx.payee_id, (None, None)) if tx.payee_id else (None, None)
+        keys[tx.id] = stored_key(merchant_key(tx.description, payee_name=name, payee_source=source))
+    return keys
+
+
 async def _back_to_review(
     session: AsyncSession, workspace_id: uuid.UUID, undone: list[CategorizationEvent]
 ) -> None:
@@ -701,6 +743,7 @@ async def _back_to_review(
                 )
             ).scalars().all()
         )
+    store_keys = await _keys_for(session, list(txs.values()))
     keys: dict[str, None] = {}
     payload: list[dict[str, Any]] = []
     now = _now()
@@ -708,7 +751,7 @@ async def _back_to_review(
         tx = txs.get(tx_id)
         if tx is None or tx.category_source in PROTECTED_SOURCES:
             continue
-        key = stored_key(await memory.key_for_transaction(session, tx))
+        key = store_keys[tx_id]
         keys[key] = None
         if tx_id in pending:
             continue
@@ -751,6 +794,7 @@ async def _take_back(
             else:
                 accepted.setdefault(sug.transaction_id, sug)
     txs = {tx.id: tx for tx in await _load_transactions(session, workspace_id, tx_ids)}
+    store_keys = await _keys_for(session, list(txs.values()))
 
     taught: dict[tuple[str, uuid.UUID], None] = {}
     for ev in restored:
@@ -772,7 +816,7 @@ async def _take_back(
                 sug.resolved_at = None
                 still_pending.add(tx.id)
         elif tx is not None:
-            key = stored_key(await memory.key_for_transaction(session, tx))
+            key = store_keys[tx.id]
         else:
             continue
         if ev.new_category_id is not None:

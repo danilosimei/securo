@@ -880,3 +880,132 @@ async def test_applied_exposes_store_key_and_name(client, auth_headers, session,
     pix = by_desc["Transferencia enviada|123.456.789-09"]
     assert pix["merchant_key"].startswith("PIX:#")
     assert "123" not in pix["store_name"] and "789" not in pix["store_name"]
+
+
+@pytest.mark.asyncio
+async def test_summary_keeps_the_settings_row_it_creates(postgres_sessions):
+    """The first summary creates the settings row: the route commits it, so
+    a poll is not an INSERT rolled back every time (Postgres: on SQLite the
+    savepoint release alone commits)."""
+    from types import SimpleNamespace
+    from typing import Any, cast
+
+    from app.api import categorization as categorization_api
+    from app.models.account import Account
+    from tests.test_admin_service import _make_user
+
+    async with postgres_sessions() as session:
+        user = await _make_user(session, f"sum_{uuid.uuid4().hex[:8]}@test.com")
+        account = Account(
+            id=uuid.uuid4(), user_id=user.id, name="Main", type="checking",
+            balance=Decimal("0"), currency="BRL",
+        )
+        session.add(account)
+        await session.commit()
+        ws = account.workspace_id
+    ctx = cast(Any, SimpleNamespace(workspace=SimpleNamespace(id=ws)))
+
+    for _ in range(2):
+        async with postgres_sessions() as session:
+            await categorization_api.get_summary(ctx=ctx, session=session)
+
+    async with postgres_sessions() as session:
+        rows = (await session.execute(
+            select(CategorizationSettings).where(CategorizationSettings.workspace_id == ws)
+        )).scalars().all()
+    assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_summary_counts_stores_like_the_review_queue(client, auth_headers, session, test_user, test_account):
+    """A row with two pending suggestions under different store keys counts
+    once, under its latest one, like the Review tab groups it."""
+    tx = _tx(session, test_user, test_account, "PADARIA DO ZE")
+    other = _tx(session, test_user, test_account, "POSTO SHELL")
+    await session.flush()
+    old = _suggest(session, tx, "PADARIA DO ZE")
+    old.created_at = datetime.now(timezone.utc) - timedelta(days=1)
+    _suggest(session, tx, "P:PADARIA DO ZE")
+    _suggest(session, other, "POSTO SHELL")
+    await session.commit()
+
+    queue = (await client.get(f"{API}/review", headers=auth_headers)).json()
+    body = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+
+    assert queue["total"] == 2
+    assert sorted(g["merchant_key"] for g in queue["groups"]) == ["P:PADARIA DO ZE", "POSTO SHELL"]
+    assert body["pending_groups"] == queue["total"]
+    assert body["pending_transactions"] == 2
+
+
+@pytest.mark.asyncio
+async def test_create_category_rolls_back_with_the_rest(session, test_user, test_workspace, monkeypatch):
+    """The new category and group belong to the caller's transaction: a
+    failure while filing the stores takes them back too."""
+    from app.services.categorization import review
+
+    async def boom(*_args, **_kwargs):
+        raise RuntimeError("filing failed")
+
+    ws_id, user_id = test_workspace.id, test_user.id
+    monkeypatch.setattr(review, "_accept_keys", boom)
+    with pytest.raises(RuntimeError):
+        await review.create_category(
+            session, ws_id, user_id,
+            group="Pets Novos", name="Veterinário", merchant_keys=["VET1"],
+        )
+    await session.rollback()
+
+    assert (await session.execute(
+        select(Category.id).where(Category.workspace_id == ws_id, Category.name == "Veterinário")
+    )).scalars().all() == []
+    assert (await session.execute(
+        select(CategoryGroup.id).where(CategoryGroup.workspace_id == ws_id, CategoryGroup.name == "Pets Novos")
+    )).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_undo_of_a_big_batch_takes_a_fixed_number_of_queries(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """"Desfazer este lote" loads what it needs per chunk, not per event:
+    the statements it runs do not grow with the batch."""
+    from sqlalchemy import event as sa_event
+
+    from app.services.categorization import review
+
+    async def batch(size):
+        run = CategorizationRun(
+            id=uuid.uuid4(), workspace_id=test_workspace.id, kind="classify",
+            trigger="manual", status="done", stats={}, detail={},
+        )
+        session.add(run)
+        for n in range(size):
+            payee = Payee(id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id,
+                          name=f"Loja {size} {n}", source="ai")
+            session.add(payee)
+            tx = _tx(session, test_user, test_account, f"LOJA {size} {n}", source="ai",
+                     category_id=test_categories[0].id, payee_id=payee.id)
+            await session.flush()
+            ev = _event(session, tx, new=test_categories[0].id, run_id=run.id)
+            ev.new_payee_id = payee.id
+            ev.previous_payee_id = payee.id
+        await session.commit()
+        session.expunge_all()
+        statements = []
+
+        def count(*_args, **_kwargs):
+            statements.append(1)
+
+        engine = session.bind.sync_engine
+        sa_event.listen(engine, "before_cursor_execute", count)
+        try:
+            result = await review.undo(session, test_workspace.id, run_id=run.id, user_id=test_user.id)
+        finally:
+            sa_event.remove(engine, "before_cursor_execute", count)
+        await session.commit()
+        assert result.restored == size
+        return len(statements)
+
+    small, big = await batch(3), await batch(40)
+    assert big == small

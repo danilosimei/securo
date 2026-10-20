@@ -10,6 +10,10 @@ Every write of `Transaction.category_id` goes through this module, so
   in one savepoint (rule runs, bulk categorize, sync and import loops);
 - `record_moves`: a set-based category merge that keeps each row's origin.
 
+A person clearing a category (`source="user"` with no category) is noted
+as `none` (R27): the row is a guess again, open to review and to the
+pipeline, and the event still names the person (`user_id`).
+
 Nothing here commits: the caller owns the transaction, like
 `reconciliation_history_service.record`.
 """
@@ -39,6 +43,8 @@ REVIEWABLE_SOURCES: frozenset[str] = frozenset({"none", "provider", "memory", "a
 #: `reason` of the events `record_moves` writes. Their previous category is
 #: the deleted one (nulled by the FK), so `undo` cannot restore them.
 CATEGORY_MERGE_REASON = "category_merge"
+#: Rows per `IN (...)` when `undo` loads what it checks.
+UNDO_CHUNK = 1000
 
 
 class Unset:
@@ -89,8 +95,19 @@ def is_protected(tx: Transaction) -> bool:
     return tx.category_source in PROTECTED_SOURCES
 
 
+def _origin(source: str, new_category_id: uuid.UUID | None) -> str:
+    """The origin a change leaves on the row: a person's empty choice is
+    no choice to protect (R27)."""
+    return "none" if source == "user" and new_category_id is None else source
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _aware(value: datetime) -> datetime:
+    """SQLite hands back naive datetimes; they are UTC."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
 async def _run_user_hooks(
@@ -127,6 +144,7 @@ async def record_change(
     if source not in CATEGORY_SOURCES:
         logger.error("invalid category source %r for transaction %s", source, tx.id)
         return None
+    source = _origin(source, new_category_id)
 
     payee_changes = not isinstance(new_payee_id, Unset) and new_payee_id != tx.payee_id
     if tx.category_id == new_category_id and tx.category_source == source and not payee_changes:
@@ -196,6 +214,7 @@ def stage_change(
     if source not in CATEGORY_SOURCES:
         logger.error("invalid category source %r for transaction %s", source, tx.id)
         return None
+    source = _origin(source, new_category_id)
     payee_changes = not isinstance(new_payee_id, Unset) and new_payee_id != tx.payee_id
     if tx.category_id == new_category_id and tx.category_source == source and not payee_changes:
         return None
@@ -410,6 +429,34 @@ async def undo(
         (await session.execute(query.order_by(CategorizationEvent.created_at.desc()))).scalars().all()
     )
 
+    # Loaded once per chunk of rows, not per event: a run may hold thousands.
+    tx_ids = list(dict.fromkeys(ev.transaction_id for ev in targets))
+    standing: dict[uuid.UUID, list[tuple[uuid.UUID, datetime]]] = {}
+    rows: dict[uuid.UUID, Transaction] = {}
+    for start in range(0, len(tx_ids), UNDO_CHUNK):
+        chunk = tx_ids[start:start + UNDO_CHUNK]
+        for ev_id, tx_id, created_at in (
+            await session.execute(
+                select(
+                    CategorizationEvent.id,
+                    CategorizationEvent.transaction_id,
+                    CategorizationEvent.created_at,
+                ).where(
+                    CategorizationEvent.transaction_id.in_(chunk),
+                    CategorizationEvent.undone_at.is_(None),
+                    CategorizationEvent.source != "undo",
+                )
+            )
+        ).all():
+            standing.setdefault(tx_id, []).append((ev_id, _aware(created_at)))
+        rows.update(
+            (tx.id, tx)
+            for tx in (
+                await session.execute(select(Transaction).where(Transaction.id.in_(chunk)))
+            ).scalars()
+        )
+
+    undone_now: set[uuid.UUID] = set()
     restored = skipped = 0
     for ev in targets:  # newest first, so chained events in one batch unwind in order
         if (
@@ -419,21 +466,15 @@ async def undo(
         ):
             skipped += 1
             continue
-        later = (
-            await session.execute(
-                select(CategorizationEvent.id).where(
-                    CategorizationEvent.transaction_id == ev.transaction_id,
-                    CategorizationEvent.id != ev.id,
-                    CategorizationEvent.undone_at.is_(None),
-                    CategorizationEvent.source != "undo",
-                    CategorizationEvent.created_at > ev.created_at,
-                )
-            )
-        ).scalars().all()
-        if later:
+        # A later event still standing (a person may have corrected it).
+        when = _aware(ev.created_at)
+        if any(
+            other_id != ev.id and other_id not in undone_now and created_at > when
+            for other_id, created_at in standing.get(ev.transaction_id, [])
+        ):
             skipped += 1
             continue
-        tx = await session.get(Transaction, ev.transaction_id)
+        tx = rows.get(ev.transaction_id)
         if tx is None or tx.workspace_id != workspace_id:
             skipped += 1
             continue
@@ -461,6 +502,7 @@ async def undo(
         if payee_changed:
             tx.payee_id = ev.previous_payee_id
         ev.undone_at = _now()
+        undone_now.add(ev.id)
         restored += 1
 
     await session.flush()

@@ -71,7 +71,11 @@ async def get_summary(
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    return await review.summary(session, ctx.workspace.id)
+    summary = await review.summary(session, ctx.workspace.id)
+    # The first read creates the settings row (like GET /settings): keep it,
+    # rather than inserting and rolling it back on every poll.
+    await session.commit()
+    return summary
 
 
 @router.get("/review", response_model=ReviewQueue)
@@ -365,7 +369,8 @@ async def retry_organizer_redistribution(
     ctx: WorkspaceContext = Depends(current_writable_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """Queue again the redistribution of an applied split whose run failed."""
+    """Queue again the redistribution of an applied split whose run failed or
+    stopped at the monthly cap."""
     ctx.require_owner()
     try:
         result = await organizer.retry_redistribution(session, ctx.workspace.id, run_id, op_id)
