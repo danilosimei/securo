@@ -115,9 +115,14 @@ NAMELESS_TRANSFER_MAX_TOKENS = 4
 _NUMERIC_TOKEN_RE = re.compile(r"^\d+(?:[.,]\d+)*$")
 EMPTY_WORDS = frozenset({"NULL", "NONE", "NAN"})
 _TRAILING_ID_RE = re.compile(r"^(?:\d{3,}|[A-Z]*\d{4,}[A-Z0-9]*|#\d+|NR|NUM)$")
-# Formas explicitas de CNPJ (14) e CPF (11); separadores so . - / (nunca espaco).
+# Formas explicitas de CNPJ (14: 2-3-3-4-2) e CPF (11: 3-3-3-2). Entre os
+# grupos, a pontuacao do documento (. / -) ou um espaco ("123 456 789 09");
+# nunca colado a outro digito.
 _DOCUMENT_RE = re.compile(
-    r"(?<!\d)(?:\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{3}\.?\d{3}\.?\d{3}-?\d{2})(?!\d)"
+    r"(?<!\d)(?:"
+    r"\d{2}[.\s]?\d{3}[.\s]?\d{3}[/\s]?\d{4}[-\s]?\d{2}"
+    r"|\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}"
+    r")(?!\d)"
 )
 _NON_TEXT_RE = re.compile(r"[^A-Z0-9.*&]+")
 _SPACES_RE = re.compile(r"\s+")
@@ -133,7 +138,7 @@ def _squeeze(text: str) -> str:
 
 
 def scrub_documents(text: str) -> str:
-    """Remove CPF/CNPJ (11 ou 14 digitos), com ou sem pontuacao."""
+    """Remove CPF/CNPJ (11 ou 14 digitos), com ou sem pontuacao ou espacos."""
 
     return _squeeze(_DOCUMENT_RE.sub(" ", text))
 

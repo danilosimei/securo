@@ -150,7 +150,9 @@ def prompt_sample(text: str | None) -> str:
     card numbers, at most `SAMPLE_MAX_LENGTH` characters."""
     if not text:
         return ""
-    return sample_description(strip_account_numbers(text)).rstrip(_TRAILING_JUNK)
+    # Documents first: the account/card patterns could take a piece of one
+    # and leave the rest unrecognizable.
+    return sample_description(strip_account_numbers(scrub_documents(text))).rstrip(_TRAILING_JUNK)
 
 
 @dataclass(frozen=True)

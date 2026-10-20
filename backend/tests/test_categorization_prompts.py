@@ -378,3 +378,13 @@ def test_max_tokens_scales_with_items():
     assert classify_params([], "[]", 1, schema)["max_tokens"] == 320
     assert classify_params([], "[]", 100, schema)["max_tokens"] == 12200
     assert classify_params([], "[]", 500, schema)["max_tokens"] == 16000
+
+
+def test_prompt_samples_drop_spaced_documents():
+    from app.services.categorization.merchant_key import scrub_documents
+    from app.services.categorization.prompts import strip_account_numbers
+
+    for raw in ("PIX 123 456 789 09 JOAO", "TED 12 345 678 0001 90 JOAO"):
+        cleaned = prompt_sample(raw)
+        assert cleaned == raw.split()[0] + " JOAO", raw
+    assert strip_account_numbers(scrub_documents("PIX 123 456 789 09 JOAO")) == "PIX JOAO"

@@ -224,3 +224,23 @@ def test_nameless_transfer_with_document_payee_is_distinct_per_sender():
 )
 def test_quantities_do_not_drift_key(raw, expected):
     assert merchant_key(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("PIX 123 456 789 09 JOAO", "PIX JOAO"),
+        ("12 345 678 0001 90", ""),
+        ("TED 12 345 678 0001 90 ACME", "TED ACME"),
+        ("PIX 123.456.789 09 JOAO", "PIX JOAO"),
+    ],
+)
+def test_scrub_documents_with_spaced_groups(raw, expected):
+    assert scrub_documents(raw) == expected
+
+
+def test_spaced_groups_need_document_shape():
+    # Other spaced numbers are not documents: the boundaries still hold.
+    assert scrub_documents("PARC 03 DE 10") == "PARC 03 DE 10"
+    assert scrub_documents("TED 341 0001 JOAO") == "TED 341 0001 JOAO"
+    assert scrub_documents("1234 456 789 09") == "1234 456 789 09"
