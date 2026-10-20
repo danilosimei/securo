@@ -342,6 +342,69 @@ async def test_undo_after_similar_apply_unlearns(client, auth_headers, session, 
 
 
 @pytest.mark.asyncio
+async def test_undoing_a_persons_clear_gives_the_store_its_pick_back(client, auth_headers, session, test_user, test_account, test_categories):
+    """B4-X: a person's clear takes one pick back from the store (R27-U);
+    undoing it gives that pick back, once per store and category."""
+    from app.services.categorization.memory import learn_choice
+    from app.services.categorization.merchant_key import merchant_key
+
+    food = test_categories[0].id
+    key = merchant_key("PADARIA PAO QUENTE")
+    for _ in range(2):
+        await learn_choice(session, test_account.workspace_id, key, food)
+    a = _tx(session, test_user, test_account, "PADARIA PAO QUENTE", source="user", category_id=food)
+    b = _tx(session, test_user, test_account, "PADARIA PAO QUENTE", source="user", category_id=food)
+    await session.commit()
+
+    resp = await client.patch(
+        "/api/transactions/bulk-categorize", headers=auth_headers,
+        json={"transaction_ids": [str(a.id), str(b.id)], "category_id": None},
+    )
+    assert resp.status_code == 200, resp.text
+    memory = (await session.execute(
+        select(MerchantMemory).where(MerchantMemory.merchant_key == key)
+    )).scalar_one()
+    await session.refresh(memory)
+    assert memory.counts == {str(food): 1}
+    clears = (await session.execute(
+        select(CategorizationEvent.id).where(
+            CategorizationEvent.transaction_id.in_([a.id, b.id]),
+            CategorizationEvent.source == "none",
+        )
+    )).scalars().all()
+    assert len(clears) == 2
+
+    undo = await client.post(f"{API}/undo", headers=auth_headers, json={"event_ids": [str(e) for e in clears]})
+
+    assert undo.json() == {"restored": 2, "skipped": 0}
+    fresh = await _fresh(session, Transaction, a.id)
+    assert (fresh.category_id, fresh.category_source) == (food, "user")
+    await session.refresh(memory)
+    assert memory.counts == {str(food): 2}
+    assert memory.last_user_category_id == food
+
+
+@pytest.mark.asyncio
+async def test_undoing_a_pipeline_empty_guess_teaches_nothing(client, auth_headers, session, test_user, test_account, test_categories):
+    """Only a person's clear gave a pick away: an event `none` with no
+    person behind it is undone without touching the memory."""
+    from app.services.categorization.merchant_key import merchant_key
+
+    food = test_categories[0].id
+    tx = _tx(session, test_user, test_account, "PADARIA PAO QUENTE")
+    await session.flush()
+    ev = _event(session, tx, source="none", previous=food, new=None)
+    await session.commit()
+
+    undo = await client.post(f"{API}/undo", headers=auth_headers, json={"event_ids": [str(ev.id)]})
+
+    assert undo.json() == {"restored": 1, "skipped": 0}
+    assert (await session.execute(
+        select(MerchantMemory).where(MerchantMemory.merchant_key == merchant_key("PADARIA PAO QUENTE"))
+    )).scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
 async def test_accept_only_selected_transactions(client, auth_headers, session, test_user, test_account, test_categories):
     food = test_categories[0].id
     a = _tx(session, test_user, test_account, "PADARIA")
@@ -413,6 +476,45 @@ async def test_review_and_summary_ignore_suggestions_over_protected_rows(client,
     assert review["groups"][0]["transaction_ids"] == [str(open_tx.id)]
     summary = (await client.get(f"{API}/summary", headers=auth_headers)).json()
     assert (summary["pending_groups"], summary["pending_transactions"]) == (1, 1)
+
+
+@pytest.mark.asyncio
+async def test_review_group_carries_its_first_transactions(client, auth_headers, session, test_user, test_account):
+    """Opening a store in Revisar costs no request per row: the queue
+    carries the store's first rows (T12-1)."""
+    from app.services.categorization.review import REVIEW_PREVIEW
+
+    rows = [
+        _tx(session, test_user, test_account, f"MERCADO X {n}", amount=f"{n + 1}.00",
+            day=date(2026, 9, n + 1), original_description=f"MERCADO X LTDA {n}")
+        for n in range(REVIEW_PREVIEW + 2)
+    ]
+    refund = _tx(session, test_user, test_account, "MERCADO X ESTORNO", amount="7.00", type="credit")
+    await session.flush()
+    for tx in [*rows, refund]:
+        _suggest(session, tx, "MERCADO X")
+    await session.commit()
+
+    [store] = (await client.get(f"{API}/review", headers=auth_headers)).json()["groups"]
+
+    assert store["count"] == REVIEW_PREVIEW + 3
+    assert len(store["transactions"]) == REVIEW_PREVIEW
+    assert [t["id"] for t in store["transactions"]] == store["transaction_ids"][:REVIEW_PREVIEW]
+    # Newest suggestion first: the refund leads.
+    assert store["transactions"][0] == {
+        "id": str(refund.id),
+        "date": "2026-09-10",
+        "description": "MERCADO X ESTORNO",
+        "original_description": None,
+        "amount": "7.00",
+        "currency": "BRL",
+        "type": "credit",
+    }
+    last = rows[-1]
+    first_debit = store["transactions"][1]
+    assert (first_debit["id"], first_debit["original_description"], first_debit["type"]) == (
+        str(last.id), last.original_description, "debit",
+    )
 
 
 @pytest.mark.asyncio
@@ -849,6 +951,28 @@ async def test_transactions_flag_pending_categorization(client, auth_headers, se
     assert flags[str(waiting.id)] is True
     assert flags[str(resolved.id)] is False
     assert flags[str(plain.id)] is False
+
+
+@pytest.mark.asyncio
+async def test_calendar_items_carry_origin_and_pending_review(client, auth_headers, session, test_user, test_account, test_categories):
+    """T14-1: the calendar shows the same origin seal as the lists."""
+    food = test_categories[0].id
+    filed = _tx(session, test_user, test_account, "IFOOD", source="ai", category_id=food, day=date(2026, 9, 10))
+    waiting = _tx(session, test_user, test_account, "PADARIA", day=date(2026, 9, 11))
+    mine = _tx(session, test_user, test_account, "POSTO", source="user", category_id=food, day=date(2026, 9, 12))
+    await session.flush()
+    _suggest(session, waiting, "PADARIA", category_id=food)
+    await session.commit()
+
+    resp = await client.get("/api/transactions/calendar?month=2026-09-01", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    items = {i["id"]: i for day in resp.json()["days"] for i in day["items"] if i["id"]}
+    seal = {
+        tx_id: (items[str(tx_id)]["category_source"], items[str(tx_id)]["categorization_pending"])
+        for tx_id in (filed.id, waiting.id, mine.id)
+    }
+    assert seal == {filed.id: ("ai", False), waiting.id: ("none", True), mine.id: ("user", False)}
 
 
 @pytest.mark.asyncio

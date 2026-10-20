@@ -221,13 +221,17 @@ async def transaction_calendar(
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    return await get_transaction_calendar(
+    calendar = await get_transaction_calendar(
         session,
         ctx.workspace.id,
         ctx.user_id,
         month,
         account_ids=_merge_id_filters(account_id, account_ids),
     )
+    await _attach_pending_categorization(
+        session, ctx, [item for day in calendar.days for item in day.items if item.id]
+    )
+    return calendar
 
 
 @router.get("/description-suggestions", response_model=list[DescriptionSuggestion])

@@ -30,6 +30,10 @@ class TransactionCalendarItem(BaseModel):
     #: balance, so the row needs its own marker: without one the day card
     #: shows 0/0 while its ending balance jumps, and nothing explains why.
     exclude_from_pnl: bool = False
+    #: Who decided the category (actual rows only): the lists' origin seal.
+    category_source: Optional[str] = None
+    #: A categorization suggestion for this row waits for review.
+    categorization_pending: bool = False
 
 
 class TransactionCalendarDay(BaseModel):

@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy import insert as sa_insert
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,6 +71,8 @@ APPLIED_WINDOW = timedelta(days=7)
 ENQUEUE_FAILED = "enqueue_failed"
 #: Prefix of a person key built from a document hash: never a rule pattern.
 HASHED_PERSON_PREFIX = PERSON_PREFIX + "#"
+#: Rows of a store the review queue carries, so opening it costs no request.
+REVIEW_PREVIEW = 10
 
 
 class NotFound(Exception):
@@ -201,6 +203,8 @@ class _Group:
     total: Decimal = Decimal("0")
     tx_ids: list[uuid.UUID] = field(default_factory=list)
     descriptions: list[str] = field(default_factory=list)
+    #: The first `REVIEW_PREVIEW` rows, as the bank sent them.
+    preview: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _new_category(value: Any) -> dict[str, str] | None:
@@ -222,6 +226,10 @@ async def _pending_groups(session: AsyncSession, workspace_id: uuid.UUID) -> lis
             Transaction.description,
             Transaction.amount,
             Transaction.amount_primary,
+            Transaction.date,
+            Transaction.type,
+            Transaction.currency,
+            Transaction.original_description,
         )
         .join(Transaction, _open_row(workspace_id))
         .where(
@@ -233,13 +241,23 @@ async def _pending_groups(session: AsyncSession, workspace_id: uuid.UUID) -> lis
     )
     groups: dict[str, _Group] = {}
     seen: set[uuid.UUID] = set()
-    for sug, description, amount, amount_primary in rows.all():
+    for sug, description, amount, amount_primary, day, kind, currency, original in rows.all():
         if sug.transaction_id in seen:
             continue
         seen.add(sug.transaction_id)
         group = groups.setdefault(sug.merchant_key, _Group(key=sug.merchant_key))
         group.tx_ids.append(sug.transaction_id)
         group.descriptions.append(description or "")
+        if len(group.preview) < REVIEW_PREVIEW:
+            group.preview.append({
+                "id": sug.transaction_id,
+                "date": day,
+                "description": description,
+                "original_description": original,
+                "amount": amount,
+                "currency": currency,
+                "type": kind,
+            })
         group.total += abs(amount_primary if amount_primary is not None else amount or 0)
         if group.clean_name is None and sug.clean_name:
             group.clean_name = sug.clean_name
@@ -303,6 +321,7 @@ async def review_queue(
                 "new_category": g.new_category,
                 "is_person": g.key.startswith(PERSON_PREFIX),
                 "transaction_ids": g.tx_ids,
+                "transactions": g.preview,
             }
             for g in page
         ],
@@ -674,6 +693,9 @@ async def undo(
     Undoing a person's change (accept, create-category, apply-to-similar)
     takes back what it taught the memory, once per store and category, and
     reopens the suggestion it accepted, so the store is back in review.
+    Undoing a person's clear gives the store back the pick the clear took
+    (R27-U), once per store and category; the AI's cached decision the
+    clear dropped stays dropped.
 
     Undoing a pipeline decision (`ai`, `memory`) drops the model's cached
     decision for the store and leaves the row a pending suggestion with the
@@ -686,10 +708,20 @@ async def undo(
     """
     restorable: list[CategorizationEvent] = []
     automatic: list[CategorizationEvent] = []
+    cleared: list[CategorizationEvent] = []
     if event_ids is not None or run_id is not None:
         query = select(CategorizationEvent).where(
             CategorizationEvent.workspace_id == workspace_id,
-            CategorizationEvent.source.in_(("user", *REVIEWED_ON_UNDO)),
+            or_(
+                CategorizationEvent.source.in_(("user", *REVIEWED_ON_UNDO)),
+                # A person's clear (`events.cleared_by_person` reads the same).
+                and_(
+                    CategorizationEvent.source == "none",
+                    CategorizationEvent.user_id.is_not(None),
+                    CategorizationEvent.new_category_id.is_(None),
+                    CategorizationEvent.previous_category_id.is_not(None),
+                ),
+            ),
             CategorizationEvent.undone_at.is_(None),
         )
         if event_ids is not None:
@@ -697,7 +729,12 @@ async def undo(
         if run_id is not None:
             query = query.where(CategorizationEvent.run_id == run_id, changes_category())
         for ev in (await session.execute(query)).scalars().all():
-            (restorable if ev.source == "user" else automatic).append(ev)
+            if ev.source == "user":
+                restorable.append(ev)
+            elif ev.source == "none":
+                cleared.append(ev)
+            else:
+                automatic.append(ev)
 
     result = await events.undo(
         session, workspace_id, event_ids=event_ids, run_id=run_id, user_id=user_id,
@@ -710,26 +747,27 @@ async def undo(
     undone = [ev for ev in automatic if ev.undone_at is not None]
     if undone:
         await _back_to_review(session, workspace_id, undone)
+    given_back = [ev for ev in cleared if ev.undone_at is not None]
+    if given_back:
+        await _give_back(session, workspace_id, given_back)
     return result
 
 
-async def _keys_for(
-    session: AsyncSession, txs: list[Transaction]
-) -> dict[uuid.UUID, str]:
-    """Transaction id -> stored store key, the payees loaded per chunk
-    (`memory.key_for_transaction` costs a query per row)."""
-    payee_ids = list({tx.payee_id for tx in txs if tx.payee_id is not None})
-    payees: dict[uuid.UUID, tuple[str, str | None]] = {}
-    for chunk in _chunks(payee_ids):
-        rows = await session.execute(
-            select(Payee.id, Payee.name, Payee.source).where(Payee.id.in_(chunk))
-        )
-        payees.update((pid, (name, source)) for pid, name, source in rows.all())
-    keys: dict[uuid.UUID, str] = {}
-    for tx in txs:
-        name, source = payees.get(tx.payee_id, (None, None)) if tx.payee_id else (None, None)
-        keys[tx.id] = stored_key(merchant_key(tx.description, payee_name=name, payee_source=source))
-    return keys
+async def _give_back(
+    session: AsyncSession, workspace_id: uuid.UUID, uncleared: list[CategorizationEvent]
+) -> None:
+    """The picks undone clears had taken back, once per store and category."""
+    txs = await _load_transactions(
+        session, workspace_id, list(dict.fromkeys(ev.transaction_id for ev in uncleared))
+    )
+    store_keys = await memory.keys_for(session, txs)
+    picks: dict[tuple[str, uuid.UUID], None] = {}
+    for ev in uncleared:
+        key = store_keys.get(ev.transaction_id)
+        if key is not None and ev.previous_category_id is not None:
+            picks[(key, ev.previous_category_id)] = None
+    for key, category_id in picks:
+        await memory.learn_choice(session, workspace_id, key, category_id)
 
 
 async def _back_to_review(
@@ -754,7 +792,7 @@ async def _back_to_review(
                 )
             ).scalars().all()
         )
-    store_keys = await _keys_for(session, list(txs.values()))
+    store_keys = await memory.keys_for(session, list(txs.values()))
     keys: dict[str, None] = {}
     payload: list[dict[str, Any]] = []
     now = _now()
@@ -805,7 +843,7 @@ async def _take_back(
             else:
                 accepted.setdefault(sug.transaction_id, sug)
     txs = {tx.id: tx for tx in await _load_transactions(session, workspace_id, tx_ids)}
-    store_keys = await _keys_for(session, list(txs.values()))
+    store_keys = await memory.keys_for(session, list(txs.values()))
 
     taught: dict[tuple[str, uuid.UUID], None] = {}
     for ev in restored:

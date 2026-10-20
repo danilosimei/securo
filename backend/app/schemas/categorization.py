@@ -124,6 +124,19 @@ class NewCategory(BaseModel):
     name: str
 
 
+class ReviewTransaction(BaseModel):
+    id: uuid.UUID
+    date: _Date
+    description: str
+    #: As the bank sent it, when the description was rewritten since.
+    original_description: Optional[str] = None
+    #: Unmasked: the frontend masks it.
+    amount: Decimal
+    currency: str
+    #: `debit` or `credit`.
+    type: str
+
+
 class ReviewGroup(BaseModel):
     merchant_key: str
     clean_name: Optional[str] = None
@@ -135,6 +148,8 @@ class ReviewGroup(BaseModel):
     new_category: Optional[NewCategory] = None
     is_person: bool
     transaction_ids: list[uuid.UUID]
+    #: The first rows of `transaction_ids` (at most `review.REVIEW_PREVIEW`).
+    transactions: list[ReviewTransaction] = Field(default_factory=list)
 
 
 class NewCategoryProposal(BaseModel):

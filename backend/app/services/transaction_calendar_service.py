@@ -370,6 +370,7 @@ def _actual_item(
         is_transfer=is_transfer,
         is_ignored=ignored,
         exclude_from_pnl=bool(tx.exclude_from_pnl),
+        category_source=tx.category_source,
     )
 
 
