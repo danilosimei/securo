@@ -590,3 +590,34 @@ async def test_a_trigger_leaves_an_old_batch_to_the_beat(session, test_workspace
     assert result == {"status": "skipped", "reason": "busy"}
     old = await _reload(session, old.id)
     assert (old.status, old.detail) == ("processing_batch", {"rerun": True})
+
+
+@pytest.mark.asyncio
+async def test_request_run_under_a_held_lock_never_returns_a_stale_run(postgres_sessions):
+    """A run a dead worker left busy is not "the run in progress": the
+    request waits for the lock, expires it and queues a new one."""
+    import asyncio
+
+    from app.services.categorization import review
+    from app.tasks.categorization_tasks import lock_workspace
+    from tests.test_categorization_models import _seed_pg
+
+    async with postgres_sessions() as setup:
+        ws, _category, _txn = await _seed_pg(setup)
+        stale = _run(ws, "running", age=timedelta(hours=7))
+        setup.add(stale)
+        await setup.commit()
+
+    async with postgres_sessions() as holder, postgres_sessions() as session:
+        await lock_workspace(holder, ws)
+        request = asyncio.ensure_future(review.request_run(session, ws))
+        await asyncio.sleep(0.3)
+        assert not request.done()
+        await holder.commit()
+        run, created = await asyncio.wait_for(request, timeout=5)
+        await session.commit()
+
+    assert created is True and run.id != stale.id
+    async with postgres_sessions() as session:
+        expired = await session.get(CategorizationRun, stale.id)
+        assert expired is not None and (expired.status, expired.error) == ("failed", "abandoned")

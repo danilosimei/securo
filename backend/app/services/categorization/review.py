@@ -1007,10 +1007,13 @@ async def request_run(
     """The busy `classify` run, or a new queued manual one; (run, created).
 
     Takes the workspace lock the worker takes, so two clicks do not queue
-    two runs; abandoned runs are expired first so they cannot block forever.
-    A run sending its batch holds that lock across the network call: when
-    it is taken, the busy run is returned without waiting for it.
+    two runs; abandoned runs are expired first so they cannot block forever
+    (a run waiting on its batch is left to the beat, which collects it
+    first). When another transaction holds the lock, a busy run still
+    within `STALE_AFTER` is returned without waiting for it.
     """
+    from sqlalchemy import or_
+
     from app.tasks import categorization_tasks as tasks
 
     busy_query = (
@@ -1024,11 +1027,17 @@ async def request_run(
         .limit(1)
     )
     if not await tasks.try_lock_workspace(session, workspace_id):
-        busy = (await session.execute(busy_query)).scalar_one_or_none()
+        now = _now()
+        fresh = or_(*(
+            and_(CategorizationRun.status == status, CategorizationRun.created_at >= now - age)
+            for status, age in tasks.STALE_AFTER.items()
+        ))
+        busy = (await session.execute(busy_query.where(fresh))).scalar_one_or_none()
         if busy is not None:
             return busy, False
-        # Held by something that is not a busy classification (a claim
-        # about to commit, an organizer run): short, so wait for it.
+        # No live classification to show: wait for the holder. Every holder
+        # is short (a claim, an organizer claim, a batch being applied):
+        # sending or reading a batch happens outside this lock.
         await tasks.lock_workspace(session, workspace_id)
     await tasks.expire_stale_runs(session, workspace_id)
     busy = (await session.execute(busy_query)).scalar_one_or_none()
