@@ -8,11 +8,12 @@
             in `processing_batch` and `collect_batch` (from `poll_batches`)
             applies it when it ends
       -> per store: p >= threshold -> rows become `ai` (event with confidence,
-         reason, model, run) + the decision is cached in the memory;
-         otherwise -> a pending suggestion (c, alt, p, r, clean name, new
-         category); no answer, a refusal or a cut-off answer -> a suggestion
-         with no category (`UNDECIDED_REASON`), which keeps the rows from
-         being paid for again.
+         reason, model, run; a guess it confirms too) + the decision is
+         cached in the memory; otherwise -> a pending suggestion (c, alt, p,
+         r, clean name, new category); no answer, a refusal or a cut-off
+         answer -> a suggestion with no category (`UNDECIDED_REASON`), which
+         keeps the rows from being paid for again. A redistribution after a
+         split applies any child of the family and never suggests.
 
 The run was committed between the memory phase and this one, so a person
 may have touched the rows while Claude answered: every row is re-read
@@ -321,6 +322,28 @@ def _person_disagrees(rows: list[Transaction], category_id: uuid.UUID | None) ->
     )
 
 
+def _applied_category(
+    answer: _Answer | None,
+    rows: list[Transaction],
+    threshold: int,
+    allowed_category_ids: set[uuid.UUID] | None,
+) -> uuid.UUID | None:
+    """The category an answer applies to its store's rows, or None (a
+    suggestion, or nothing in a redistribution).
+
+    A classification applies at or above `threshold`, unless a person filed
+    a row of the store elsewhere meanwhile. A redistribution applies any
+    child of the split family: the person approved the split.
+    """
+    if answer is None or answer.category_id is None:
+        return None
+    if allowed_category_ids is not None:
+        return answer.category_id if answer.category_id in allowed_category_ids else None
+    if answer.confidence < threshold or _person_disagrees(rows, answer.category_id):
+        return None
+    return answer.category_id
+
+
 def _keeps_key(tx: Transaction, key: str, name: str, source: str) -> bool:
     return merchant_key(tx.description, payee_name=name, payee_source=source) == key
 
@@ -423,13 +446,20 @@ async def apply_results(
     filed a row of the store elsewhere meanwhile; below it, or without a
     category, the rows get a pending suggestion. Each row is checked again
     as it is now (`_revisable`, no newer pending question); a row decided
-    here closes its model-less suggestion.
+    here closes its model-less suggestion. A decision that confirms the
+    category a guess (`none`/`provider`) already holds is applied all the
+    same: the row becomes `ai` (the event records the confirmation), so it
+    is settled and never paid for again.
 
     With `allowed_category_ids` (a redistribution after a split) the rows
     are the split category's, whatever their origin: a row moves while it
     is still in that family (`_redistributable`), a person's earlier choice
     does not hold the store back, and the store's memory follows the rows
-    to the chosen child.
+    to the chosen child. The person approved the split, so a child of the
+    family is applied whatever the confidence (the event keeps it, and it
+    can be undone); no category leaves the rows in the first child, with no
+    suggestion: Review hides a person's rows, and a waiting row would be
+    skipped by every later redistribution.
     """
     assignable = await get_assignable_category_ids(session, workspace_id)
     answers: dict[str, _Answer] = {}
@@ -460,19 +490,16 @@ async def apply_results(
         ]
         stats.skipped += len(set(group.tx_ids)) - len(open_rows)
         answer = answers.get(item_id)
+        category_id = _applied_category(answer, rows, threshold, allowed_category_ids)
 
-        if (
-            answer is not None
-            and answer.category_id is not None
-            and answer.confidence >= threshold
-            and (
-                allowed_category_ids is not None
-                or not _person_disagrees(rows, answer.category_id)
-            )
-        ):
-            category_id = answer.category_id
-            changing = [tx for tx in open_rows if tx.category_id != category_id]
-            # Already right: keeps its origin.
+        if answer is not None and category_id is not None:
+            # A guess the model confirms becomes its decision; a row already
+            # settled at that category (by the pipeline or a person) keeps
+            # its origin.
+            changing = [
+                tx for tx in open_rows
+                if tx.category_id != category_id or tx.category_source in AUTO_APPLY_SOURCES
+            ]
             stats.skipped += len(open_rows) - len(changing)
             payees = await _payees_for(session, workspace_id, group.key, answer.clean_name, changing)
             for tx in changing:
@@ -501,6 +528,10 @@ async def apply_results(
                 )
             continue
 
+        if allowed_category_ids is not None:
+            # Undecided in a redistribution: the rows stay in the first child.
+            stats.skipped += len(open_rows)
+            continue
         for tx in open_rows:
             suggestions.append(_suggestion(workspace_id, run, group.key, tx, answer, now))
             decided.append(tx.id)

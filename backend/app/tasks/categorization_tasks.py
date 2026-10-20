@@ -9,9 +9,11 @@ no trigger is lost. Only `classify` runs block classification: an organizer
 run (`organize` / `redistribute`) touches the category tree, not the rows,
 and runs alongside.
 
-`poll_batches` (beat, every 5 minutes) collects the Message Batches of runs
-waiting in `processing_batch` and applies them (`classifier.collect_batch`),
-then calls `requeue_if_requested` for each run it closes.
+`poll_batches` (beat, every 5 minutes) first expires the runs of any kind
+a dead worker left busy (`expire_stale_runs`), then collects the Message
+Batches of runs waiting in `processing_batch` and applies them
+(`classifier.collect_batch`), then calls `requeue_if_requested` for each run
+it closes.
 
 `organize_workspace` executes a queued organizer run: `organize` (Opus
 proposes a new tree) or `redistribute` (after an approved split, the old
@@ -53,6 +55,8 @@ STALE_AFTER = {
     "processing_batch": timedelta(hours=30),
 }
 ABANDONED_ERROR = "abandoned"
+#: Run kinds `expire_stale_runs` frees.
+RUN_KINDS = ("classify", *organizer.ORGANIZER_KINDS)
 #: `detail` flag: a trigger arrived while the run was busy.
 RERUN_FLAG = "rerun"
 #: First key of the Postgres advisory lock that serializes claims per
@@ -203,10 +207,15 @@ async def _poll(session_maker: Any) -> dict:
     """One pass over the runs waiting on a batch; each in its own transaction.
 
     A run whose collection fails (API down, rate limit) stays waiting and is
-    retried on the next pass; one that never ends is expired as abandoned.
+    retried on the next pass; one that never ends (or any run left busy) is
+    expired as abandoned first.
     """
     summary = {"collected": 0, "pending": 0, "failed": 0}
     async with session_maker() as session:
+        # Runs a dead worker left busy are freed here too, so a stuck
+        # organizer run does not wait for the next request of its workspace.
+        await expire_stale_runs(session)
+        await session.commit()
         waiting = (
             await session.execute(
                 select(CategorizationRun.id, CategorizationRun.workspace_id)
@@ -256,14 +265,20 @@ async def lock_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> None
     await session.execute(select(func.pg_advisory_xact_lock(LOCK_NAMESPACE, key)))
 
 
-async def expire_stale_runs(session: AsyncSession, workspace_id: uuid.UUID) -> None:
+async def expire_stale_runs(session: AsyncSession, workspace_id: uuid.UUID | None = None) -> None:
+    """Mark failed (`abandoned`) the runs a dead worker left busy past
+    `STALE_AFTER`: classifications and organizer runs alike, of one
+    workspace or (None, from `poll_batches`) of all. The one rule for every
+    path that frees a workspace: a trigger, an organizer request, the beat.
+    """
     now = datetime.now(timezone.utc)
+    scope = [CategorizationRun.workspace_id == workspace_id] if workspace_id is not None else []
     for status, age in STALE_AFTER.items():
         await session.execute(
             update(CategorizationRun)
             .where(
-                CategorizationRun.workspace_id == workspace_id,
-                CategorizationRun.kind == "classify",
+                *scope,
+                CategorizationRun.kind.in_(RUN_KINDS),
                 CategorizationRun.status == status,
                 CategorizationRun.created_at < now - age,
             )

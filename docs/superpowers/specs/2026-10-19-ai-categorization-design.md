@@ -226,7 +226,9 @@ Ordem de grandeza: backlog atual ≈ 300–500 lojas → menos de US$ 0,01; uso 
   **reaproveita o id da categoria antiga como uma das filhas** (renomeada e movida) e cria as demais.
   Orçamentos, regras e recorrentes que apontam para o id antigo continuam válidos. As transações da
   categoria são redistribuídas pelo Claude entre as filhas — inclusive as `user`, porque o usuário
-  aprovou dividir aquela categoria — com eventos e desfazer.
+  aprovou dividir aquela categoria — com eventos e desfazer. Por isso a filha escolhida é aplicada
+  qualquer que seja a confiança (o evento guarda a confiança); sem categoria, a transação fica na
+  primeira filha, sem sugestão. Uma redistribuição que para no teto mensal pode ser tentada de novo.
 - `merge`: usa o `delete_category(transfer_to_id=...)` existente (já move transações, recorrentes,
   regras e soma orçamentos), agora instrumentado com eventos.
 - `move_category`/`rename`: `PATCH` existente.

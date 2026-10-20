@@ -370,3 +370,28 @@ async def test_sync_enqueues_when_pending_row_is_posted(
     )).scalar_one()
     assert tx.status == "posted"
     categorization_enqueue.assert_called_once_with(test_workspace.id, "ingest")
+
+
+@pytest.mark.asyncio
+async def test_poll_expires_stale_runs_of_every_kind(session, test_workspace):
+    """The periodic pass frees what a dead worker left busy, organizer runs
+    included: a stuck redistribution must not wait for the next request."""
+    from app.tasks.categorization_tasks import _poll
+
+    stale = [
+        _run(test_workspace.id, "running", age=timedelta(hours=7), kind="redistribute"),
+        _run(test_workspace.id, "processing_batch", age=timedelta(hours=31), kind="redistribute"),
+        _run(test_workspace.id, "queued", age=timedelta(hours=7), kind="organize"),
+        _run(test_workspace.id, "processing_batch", age=timedelta(hours=31), kind="classify"),
+    ]
+    fresh = _run(test_workspace.id, "running", age=timedelta(hours=1), kind="redistribute")
+    session.add_all([*stale, fresh])
+    await session.commit()
+
+    await _poll(_session_maker(session))
+
+    for run in stale:
+        run = await _reload(session, run.id)
+        assert (run.status, run.error) == ("failed", "abandoned"), run.kind
+        assert run.finished_at is not None
+    assert (await _reload(session, fresh.id)).status == "running"

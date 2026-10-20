@@ -1059,17 +1059,64 @@ async def test_unusable_answer_is_logged_without_contents(
 
 @pytest.mark.asyncio
 async def test_ai_payee_is_not_created_when_no_row_takes_it(
+    session, test_user, test_workspace, test_account, cats
+):
+    # The model agrees with what a person chose meanwhile: the decision
+    # stands, but no row changes, so no payee is created for nobody.
+    tx = _tx(
+        session, test_user, test_account, "IFOOD *REST 8812",
+        source="user", category_id=cats["Alimentação"],
+    )
+    run = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="classify", trigger="manual",
+        status="running", stats={}, detail={},
+    )
+    session.add(run)
+    await session.commit()
+    group = pipeline.MerchantGroup(
+        key="IFOOD", tx_ids=[tx.id], samples=[], count=1, median_amount=Decimal(0),
+        type="debit", recurring=False, account_type=None,
+    )
+    index = build_category_index(await _all(session, Category), [])
+
+    stats = await apply_results(
+        session, test_workspace.id, run, {"i1": group},
+        [{"k": "i1", **out(index.to_short(cats["Alimentação"]), n="iFood")}],
+        index=index, threshold=90, model=CLASSIFIER_MODEL,
+    )
+
+    assert stats.applied == 0
+    assert await _all(session, Payee) == []
+
+
+@pytest.mark.asyncio
+async def test_confirmed_provider_category_is_a_decision_and_not_paid_again(
     session, test_user, test_workspace, test_account, cats, ai_connection, wire
 ):
-    # A provider guess that already agrees keeps its origin: nothing changes,
-    # so no payee is created for nobody.
-    _tx(
-        session, test_user, test_account, "IFOOD *REST 8812",
-        source="provider", category_id=cats["Alimentação"],
-    )
+    """Claude agreeing with the bank's guess settles the row as `ai` (the
+    event records the confirmation), so forgetting the cached decision
+    (a tree change) does not send the row to Claude again."""
+    from app.services.categorization.memory import forget_ai_decisions
+
+    tx = _tx(session, test_user, test_account, "IFOOD *REST 8812",
+             source="provider", category_id=cats["Alimentação"])
     await session.commit()
-    wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"], n="iFood"))))
+    first = wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"], p=96))))
+    run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+    await session.commit()
 
+    first.messages.create.assert_awaited_once()
+    tx = await _reload(session, tx)
+    assert (tx.category_id, tx.category_source) == (cats["Alimentação"], "ai")
+    [event] = await _all(session, CategorizationEvent)
+    assert (event.previous_source, event.previous_category_id, event.new_category_id) == (
+        "provider", cats["Alimentação"], cats["Alimentação"],
+    )
+    assert (event.source, event.confidence, event.run_id) == ("ai", 96, run.id)
+
+    await forget_ai_decisions(session, test_workspace.id)
+    await session.commit()
+    again = wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"], p=96))))
     await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
-
-    assert await _all(session, Payee) == []
+    await session.commit()
+    again.messages.create.assert_not_awaited()

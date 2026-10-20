@@ -10,8 +10,14 @@ becomes a pending suggestion for the person.
 
 A pass has two phases so the caller can commit between them:
 `prepare_run` (candidates, memory) and `complete_run` (classifier or
-suggestions); `run_categorization` chains both. Nothing here commits: the
-caller (the Celery task) owns the transaction.
+suggestions); `run_categorization` chains both. The phases themselves
+never commit: the caller (the Celery task) commits after `prepare_run`, so
+no row stays locked while the model answers, and again after
+`complete_run`. The one exception is inside the classifier seam:
+`classifier.classify` commits right after each paid Messages call, so its
+cost reaches the monthly cap even if applying the answer then fails and the
+task rolls back -- which also commits whatever `complete_run` had pending
+at that point (nothing but the run row, by construction).
 """
 from __future__ import annotations
 
@@ -358,10 +364,12 @@ async def memory_pass(
 
     A consistent memory applies as `memory`; a cached model decision at or
     above the workspace threshold applies as `ai`. Only rows in
-    `AUTO_APPLY_SOURCES` change; one already at the settled category is left
-    alone (a provider guess that agrees keeps its origin). A settled store
-    is consumed even when nothing changes. `stats["memory"]` /
-    `stats["applied"]` count the rows changed.
+    `AUTO_APPLY_SOURCES` change. One already at the settled category is
+    settled all the same (a provider guess the memory confirms becomes
+    `memory`, the event recording the confirmation): left a guess, it would
+    stay a candidate and, once the memory changes, be paid for again. A
+    settled store is consumed even when nothing changes. `stats["memory"]`
+    / `stats["applied"]` count the rows written.
     """
     if not groups:
         return {}
@@ -377,10 +385,7 @@ async def memory_pass(
             remaining[key] = group
             continue
         for cand in group.candidates:
-            if (
-                cand.current_source in AUTO_APPLY_SOURCES
-                and cand.current_category_id != decision.category_id
-            ):
+            if cand.current_source in AUTO_APPLY_SOURCES:
                 plan[cand.tx_id] = decision
 
     staged: list[StagedChange] = []

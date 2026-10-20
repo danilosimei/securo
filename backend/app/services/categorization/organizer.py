@@ -40,7 +40,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import and_, exists, select, update
+from sqlalchemy import and_, exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.app_clock import app_today
@@ -101,7 +101,6 @@ REASON_LENGTH = 120
 #: A busy organizer run of the workspace (a new request returns it).
 BUSY_STATUSES = ("queued", "running")
 ORGANIZER_KINDS = ("organize", "redistribute")
-ABANDONED_ERROR = "abandoned"
 #: Friendly text for each way a run can end without a proposal.
 MESSAGES = {
     "no_ai_connection": "Conecte uma chave da Anthropic nas configurações para usar o organizador.",
@@ -113,9 +112,12 @@ MESSAGES = {
 }
 #: An op whose categories changed since the proposal was made.
 STALE_MESSAGE = "As categorias mudaram desde a proposta — gere outra."
-#: Redistribution runs that ended without moving the rows (failed,
-#: abandoned, never enqueued) and may be retried.
-RETRYABLE_STATUSES = ("failed",)
+#: Redistribution runs that ended without moving (all) the rows and may be
+#: retried: failed (abandoned, never enqueued, an error) or capped by the
+#: monthly cap. A capped run left part of the split's rows in the first
+#: child; those already hold a category, so no suggestion asks about them
+#: and only a new redistribution moves them.
+RETRYABLE_STATUSES = ("failed", "capped")
 _SHORT_RE = re.compile(r"^[cgi]\d+$")
 _CENT = Decimal("0.01")
 
@@ -1007,25 +1009,6 @@ async def redistribute(
 # --- runs for the API ------------------------------------------------------------
 
 
-async def expire_stale_runs(session: AsyncSession, workspace_id: uuid.UUID) -> None:
-    """Organizer runs a dead worker left busy stop blocking the workspace."""
-    from app.tasks import categorization_tasks as tasks
-
-    now = _now()
-    for status, age in tasks.STALE_AFTER.items():
-        await session.execute(
-            update(CategorizationRun)
-            .where(
-                CategorizationRun.workspace_id == workspace_id,
-                CategorizationRun.kind.in_(ORGANIZER_KINDS),
-                CategorizationRun.status == status,
-                CategorizationRun.created_at < now - age,
-            )
-            .values(status="failed", error=ABANDONED_ERROR, finished_at=now)
-            .execution_options(synchronize_session=False)
-        )
-
-
 async def request_run(
     session: AsyncSession, workspace_id: uuid.UUID
 ) -> tuple[CategorizationRun, bool]:
@@ -1033,7 +1016,8 @@ async def request_run(
     from app.tasks import categorization_tasks as tasks
 
     await tasks.lock_workspace(session, workspace_id)
-    await expire_stale_runs(session, workspace_id)
+    # The same expiry the beat runs (`poll_batches`), for this workspace.
+    await tasks.expire_stale_runs(session, workspace_id)
     busy = (
         await session.execute(
             select(CategorizationRun)
@@ -1512,8 +1496,10 @@ async def retry_redistribution(
     session: AsyncSession, workspace_id: uuid.UUID, run_id: uuid.UUID | None, op_id: str
 ) -> dict[str, Any]:
     """Queue again the redistribution of an applied split whose run ended
-    without moving the rows (failed, abandoned or never enqueued); returns
-    {"op", "redistribute_run_id"}. The caller commits, then enqueues."""
+    without moving the rows (failed, abandoned, never enqueued, or capped by
+    the monthly cap); returns {"op", "redistribute_run_id"}. The caller
+    commits, then enqueues. The retry takes the split's rows still in the
+    first child; the ones already moved stay where they went."""
     run, op = await _locked_op(session, workspace_id, run_id, op_id, pending=False)
     previous_id = (op.get("result") or {}).get("redistribute_run_id")
     if op.get("op") != "split_category" or op.get("status") != "applied" or not previous_id:
@@ -1522,7 +1508,7 @@ async def retry_redistribution(
     if previous is None or previous.workspace_id != workspace_id:
         raise OpConflict("A redistribuição desta divisão não existe mais.")
     if previous.status not in RETRYABLE_STATUSES:
-        raise OpConflict("A redistribuição desta divisão não falhou.")
+        raise OpConflict("A redistribuição desta divisão não falhou nem parou no teto.")
     keep = ("source_category_id", "allowed_category_ids", "source_tx_ids", "organize_run_id", "op_id")
     retry = _redistribution(
         workspace_id,

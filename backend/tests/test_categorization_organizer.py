@@ -1358,3 +1358,122 @@ async def test_with_redistributions_ignores_other_workspace_runs(session, test_u
     ]
     shown = await organizer.with_redistributions(session, test_workspace.id, ops)
     assert [op["redistribution"] for op in shown] == [None, mine, None, None]
+
+
+@pytest.mark.asyncio
+async def test_api_retry_capped_redistribution(
+    client, auth_headers, session, test_user, test_workspace, organizer_enqueue
+):
+    """A redistribution stopped by the monthly cap left rows in the first
+    child; they already hold a category, so only a retry moves them."""
+    outros = _group(session, test_user, test_workspace, "Outros")
+    lazer = _cat(session, test_user, test_workspace, "Lazer", outros)
+    await _organize_run(
+        session, test_workspace,
+        [_op("o1", "split_category", target="c1", name="Lazer", children=["Cinema", "Shows"])],
+        {"c1": lazer.id},
+    )
+    resp = await client.post(f"{API}/organizer/ops/o1/apply", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    first = await _fresh(session, CategorizationRun, uuid.UUID(resp.json()["redistribute_run"]["id"]))
+    first.status = "capped"
+    await session.commit()
+    organizer_enqueue.reset_mock()
+
+    resp = await client.post(f"{API}/organizer/ops/o1/retry", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    retry_id = uuid.UUID(resp.json()["redistribute_run"]["id"])
+    assert retry_id != first.id
+    organizer_enqueue.assert_called_once_with(test_workspace.id, retry_id)
+    retry = await _fresh(session, CategorizationRun, retry_id)
+    assert retry.detail["retry_of"] == str(first.id)
+
+
+async def _redistribution_setup(session, test_user, test_workspace):
+    from app.agents.models.connection import LlmConnection
+    from app.agents.services.crypto import encrypt
+
+    session.add(LlmConnection(
+        id=uuid.uuid4(), user_id=test_user.id, name="a", kind="anthropic",
+        api_key_encrypted=encrypt("sk-ant-test"), is_default=True, extra={},
+    ))
+    lazer = _group(session, test_user, test_workspace, "Lazer")
+    family = {
+        name: _cat(session, test_user, test_workspace, name, lazer)
+        for name in ("Assinaturas", "Ingressos", "Cinema")
+    }
+    return family
+
+
+def _redistribute_run(ws, family):
+    return CategorizationRun(
+        id=uuid.uuid4(), workspace_id=ws.id, kind="redistribute",
+        trigger="manual", status="running", stats={},
+        detail={
+            "source_category_id": str(family["Assinaturas"].id),
+            "allowed_category_ids": [str(c.id) for c in family.values()],
+        },
+    )
+
+
+def _answering(decide):
+    def create(**params):
+        context = params["system"][1]["text"]
+        shorts = {label.split(" › ")[-1]: short for short, label in _SHORT_RE.findall(context)}
+        out = []
+        for item in json.loads(params["messages"][0]["content"]):
+            c, p = decide(item["s"][0])
+            out.append({"k": item["k"], "n": None, "r": "ok",
+                        "c": shorts[c] if c else None, "alt": None, "p": p, "new": None})
+        return SimpleNamespace(
+            content=[SimpleNamespace(type="text", text=json.dumps({"items": out}))],
+            stop_reason="end_turn",
+            usage=SimpleNamespace(input_tokens=10, output_tokens=10,
+                                  cache_creation_input_tokens=0, cache_read_input_tokens=0),
+        )
+
+    return create
+
+
+@pytest.mark.asyncio
+async def test_redistribution_applies_low_confidence_choice_and_never_asks(
+    session, test_user, test_workspace, test_account, monkeypatch
+):
+    """The person approved the split: a family category below the threshold
+    still moves the row (as `ai`, with its confidence, undoable). A pending
+    suggestion would hide the person's own rows in the first child forever
+    (Review hides protected rows, the next redistribution skips waiting ones)."""
+    from app.models.categorization import CategorizationSuggestion
+
+    family = await _redistribution_setup(session, test_user, test_workspace)
+    low = _tx(session, test_user, test_account, "INGRESSO.COM",
+              category=family["Assinaturas"], source="user")
+    unsure = _tx(session, test_user, test_account, "LOJA XPTO",
+                 category=family["Assinaturas"], source="user")
+    run = _redistribute_run(test_workspace, family)
+    session.add(run)
+    await session.commit()
+
+    def decide(sample):
+        return ("Ingressos", 55) if "INGRESSO" in sample else (None, 20)
+
+    monkeypatch.setattr(organizer, "resolve_client",
+                        AsyncMock(return_value=_fake_client(create=_answering(decide))))
+    await organizer.redistribute(session, test_workspace.id, run)
+    await session.commit()
+
+    low = await _fresh(session, Transaction, low.id)
+    assert (low.category_id, low.category_source) == (family["Ingressos"].id, "ai")
+    event = (
+        await session.execute(
+            select(CategorizationEvent).where(CategorizationEvent.transaction_id == low.id)
+        )
+    ).scalar_one()
+    assert (event.confidence, event.run_id, event.previous_source) == (55, run.id, "user")
+    # No category: the row stays in the first child, with no question about it.
+    unsure = await _fresh(session, Transaction, unsure.id)
+    assert (unsure.category_id, unsure.category_source) == (family["Assinaturas"].id, "user")
+    assert (await session.execute(select(CategorizationSuggestion))).scalars().all() == []
+    run = await _fresh(session, CategorizationRun, run.id)
+    assert (run.status, run.stats["applied"], run.stats["suggested"]) == ("done", 1, 0)

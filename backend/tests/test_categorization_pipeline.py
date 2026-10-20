@@ -213,10 +213,12 @@ async def test_memory_pass_applies_consistent_memory_as_memory_source(
     assert set(rest) == {"LOJA SEM MEMORIA"}
     assert (blank.category_id, blank.category_source) == (food, "memory")
     assert (guessed.category_id, guessed.category_source) == (food, "memory")
-    assert (same.category_id, same.category_source) == (food, "provider")
+    # A provider guess the memory confirms is settled too (as `memory`), so
+    # it is not a candidate again once the memory changes.
+    assert (same.category_id, same.category_source) == (food, "memory")
     assert (other.category_id, other.category_source) == (None, "none")
     evs = await _events(session)
-    assert {e.transaction_id for e in evs} == {blank.id, guessed.id}
+    assert {e.transaction_id for e in evs} == {blank.id, guessed.id, same.id}
     assert {e.source for e in evs} == {"memory"}
     assert {e.run_id for e in evs} == {run.id}
 
