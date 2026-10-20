@@ -14,6 +14,9 @@ interface CategorizationOriginBadgeProps {
   reason?: string | null
   /** Icon only, for dense rows (mobile). */
   compact?: boolean
+  /** The pending seal links to Revisar; false inside a row that is itself
+   *  a button (a link cannot nest there). */
+  link?: boolean
 }
 
 /**
@@ -25,6 +28,7 @@ export function CategorizationOriginBadge({
   pending = false,
   reason,
   compact = false,
+  link = true,
 }: CategorizationOriginBadgeProps) {
   const { t } = useTranslation()
 
@@ -37,6 +41,20 @@ export function CategorizationOriginBadge({
 
   if (pending) {
     const label = t('categorization.origin.review')
+    const tone =
+      'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300'
+    if (!link) {
+      return (
+        <span
+          title={reason || t('categorization.origin.reviewTooltip')}
+          aria-label={t('categorization.origin.reviewAria')}
+          className={cn(base, tone)}
+        >
+          <HelpCircle className={icon} />
+          {!compact && label}
+        </span>
+      )
+    }
     return (
       <Link
         to="/categorization?tab=review"
@@ -45,7 +63,8 @@ export function CategorizationOriginBadge({
         aria-label={t('categorization.origin.reviewAria')}
         className={cn(
           base,
-          'border-amber-200 bg-amber-50 text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/70',
+          tone,
+          'transition-colors hover:bg-amber-100 dark:hover:bg-amber-950/70',
         )}
       >
         <HelpCircle className={icon} />

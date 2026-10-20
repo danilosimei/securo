@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 
 import { ReviewTab } from '@/components/categorization/review-tab'
 import { renderWithProviders, t } from '@/test/utils'
-import type { NewCategoryProposal, ReviewGroup } from '@/types'
+import type { NewCategoryProposal, ReviewGroup, ReviewTransaction } from '@/types'
 
 const api = vi.hoisted(() => ({
   categorization: {
@@ -15,7 +15,6 @@ const api = vi.hoisted(() => ({
   },
   categories: { list: vi.fn() },
   categoryGroups: { list: vi.fn() },
-  transactions: { get: vi.fn() },
 }))
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }))
 const workspace = vi.hoisted(() => ({ canWrite: true, canManage: true }))
@@ -64,9 +63,20 @@ function group(overrides: Partial<ReviewGroup> & { merchant_key: string }): Revi
     new_category: null,
     is_person: false,
     transaction_ids: [`${overrides.merchant_key}-tx`],
+    transactions: [],
     ...overrides,
   }
 }
+
+const reviewTx = (id: string, original: string | null): ReviewTransaction => ({
+  id,
+  date: '2026-10-01',
+  description: `desc ${id}`,
+  original_description: original,
+  amount: '25.50',
+  currency: 'BRL',
+  type: 'debit',
+})
 
 const ifood = group({
   merchant_key: 'IFOOD',
@@ -75,6 +85,7 @@ const ifood = group({
   total: '340.50',
   suggestion: { category_id: 'c1', alt_category_id: 'c2', confidence: 70, reason: 'Food delivery app' },
   transaction_ids: ['t1', 't2'],
+  transactions: [reviewTx('t1', 'IFOOD *ORIGINAL t1'), reviewTx('t2', 'IFOOD *ORIGINAL t2')],
 })
 const uber = group({
   merchant_key: 'UBER',
@@ -82,6 +93,8 @@ const uber = group({
   count: 5,
   total: '120.00',
   suggestion: { category_id: 'c3', alt_category_id: null, confidence: 60, reason: 'Ride hailing' },
+  transaction_ids: ['UBER-tx', 'UBER-tx2'],
+  transactions: [reviewTx('UBER-tx', null)],
 })
 const maria = group({
   merchant_key: 'PIX:MARIA SILVA',
@@ -244,8 +257,37 @@ describe('ReviewTab', () => {
     expect(api.categorization.dismiss).not.toHaveBeenCalled()
 
     unmount()
-    expect(api.categorization.dismiss).toHaveBeenCalledWith('UBER')
+    expect(api.categorization.dismiss).toHaveBeenCalledWith('UBER', { keepalive: true })
     expect(toast.dismiss).toHaveBeenCalled()
+  })
+
+  it('fechar a página envia o ignorar pendente com keepalive', async () => {
+    const { user } = await renderTab()
+    await user.click(within(row('Uber')).getByRole('button', { name: t('categorization.review.ignore') }))
+
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'))
+    })
+    // keepalive: the request outlives the tab that is closing.
+    expect(api.categorization.dismiss).toHaveBeenCalledWith('UBER', { keepalive: true })
+    expect(api.categorization.dismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('Tab percorre os botões só da loja atual', async () => {
+    const { user } = await renderTab()
+    const tabbable = (el: HTMLElement) =>
+      within(el)
+        .getAllByRole('button')
+        .filter((b) => b.tabIndex >= 0)
+    // The current row's answers are reachable; another row's are not.
+    expect(tabbable(row('iFood')).length).toBeGreaterThan(0)
+    expect(tabbable(row('Uber'))).toEqual([])
+
+    act(() => row('iFood').focus())
+    await user.keyboard('{ArrowDown}')
+    expect(row('Uber')).toHaveFocus()
+    expect(tabbable(row('iFood'))).toEqual([])
+    expect(tabbable(row('Uber')).length).toBeGreaterThan(0)
   })
 
   it('aceitar com o mouse leva o foco para a próxima loja', async () => {
@@ -262,14 +304,6 @@ describe('ReviewTab', () => {
   })
 
   it('Enter expande e lista as transações da loja', async () => {
-    api.transactions.get.mockImplementation(async (id: string) => ({
-      id,
-      date: '2026-10-01',
-      description: `desc ${id}`,
-      original_description: `IFOOD *ORIGINAL ${id}`,
-      amount: -25.5,
-      currency: 'BRL',
-    }))
     const { user } = await renderTab()
     act(() => row('iFood').focus())
     await user.keyboard('{Enter}')
@@ -285,14 +319,14 @@ describe('ReviewTab', () => {
   })
 
   it('o nome da loja é um botão que abre e fecha', async () => {
-    api.transactions.get.mockResolvedValue({
-      id: 'x', date: '2026-10-01', description: 'd', original_description: 'UBER TRIP', amount: -5, currency: 'BRL',
-    })
     const { user } = await renderTab()
     const disclosure = within(row('Uber')).getByRole('button', { name: 'Uber' })
     await user.click(disclosure)
     expect(disclosure).toHaveAttribute('aria-expanded', 'true')
-    expect(await screen.findByText('UBER TRIP')).toBeInTheDocument()
+    // No original description: the current one.
+    expect(await screen.findByText('desc UBER-tx')).toBeInTheDocument()
+    // The rows the queue did not carry are counted, not fetched.
+    expect(screen.getByText(t('categorization.review.more', { count: 1 }))).toBeInTheDocument()
     await user.click(disclosure)
     expect(disclosure).toHaveAttribute('aria-expanded', 'false')
   })

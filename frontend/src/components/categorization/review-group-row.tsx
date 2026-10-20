@@ -3,14 +3,13 @@
  *
  *  The row itself is the keyboard target (roving tabindex, driven by
  *  `ReviewTab`); the buttons inside stay ordinary buttons so a mouse, a
- *  touch screen and a screen reader all reach the same answers. */
+ *  touch screen and a screen reader all reach the same answers. Only the
+ *  current row's buttons are Tab stops: the shortcuts and the arrows serve
+ *  that row, so Tab need not walk every button of every store. */
 import { useId } from 'react'
-import { useQueries } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ChevronRight, FolderPlus, X } from 'lucide-react'
-import { transactions as transactionsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { CategoryIcon } from '@/components/category-icon'
 import { CategorySelect } from '@/components/category-select'
 import { formatCurrency } from '@/lib/format'
@@ -18,15 +17,12 @@ import { useDateLocale, useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { cn } from '@/lib/utils'
 import { storeName } from '@/lib/categorization-review'
-import type { Category, CategoryGroup, ReviewGroup, Transaction } from '@/types'
+import type { Category, CategoryGroup, ReviewGroup, ReviewTransaction } from '@/types'
 
 export interface CategoryInfo {
   category: Category
   groupName: string | null
 }
-
-/** Transactions fetched when a row opens; the rest are counted, not listed. */
-const MAX_EXPANDED = 10
 
 function categoryPath(info: CategoryInfo) {
   return info.groupName ? `${info.groupName} › ${info.category.name}` : info.category.name
@@ -48,10 +44,12 @@ export function Kbd({ className, ...props }: React.ComponentProps<'kbd'>) {
 function SuggestionButton({
   info,
   shortcut,
+  tabIndex,
   onClick,
 }: {
   info: CategoryInfo
   shortcut: string
+  tabIndex: number
   onClick: () => void
 }) {
   return (
@@ -59,6 +57,7 @@ function SuggestionButton({
       variant="outline"
       size="sm"
       className="col-span-2 h-8 w-full justify-start gap-1.5 px-2.5 sm:w-auto sm:max-w-[15rem]"
+      tabIndex={tabIndex}
       title={categoryPath(info)}
       aria-label={categoryPath(info)}
       aria-keyshortcuts={shortcut}
@@ -127,6 +126,8 @@ export function ReviewGroupRow({
   const listId = useId()
 
   const name = storeName(group)
+  // The buttons inside are Tab stops only on the current row.
+  const inner = current ? 0 : -1
   const guess = group.suggestion?.category_id ? catalog.get(group.suggestion.category_id) : undefined
   const altId = group.suggestion?.alt_category_id
   const alt = altId && altId !== group.suggestion?.category_id ? catalog.get(altId) : undefined
@@ -167,6 +168,7 @@ export function ReviewGroupRow({
           <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
             <button
               type="button"
+              tabIndex={inner}
               aria-expanded={open}
               aria-controls={listId}
               onClick={(e) => {
@@ -219,6 +221,7 @@ export function ReviewGroupRow({
               <SuggestionButton
                 info={guess}
                 shortcut="1"
+                tabIndex={inner}
                 onClick={() => onAccept(guess.category.id)}
               />
             )}
@@ -226,6 +229,7 @@ export function ReviewGroupRow({
               <SuggestionButton
                 info={alt}
                 shortcut="2"
+                tabIndex={inner}
                 onClick={() => onAccept(alt.category.id)}
               />
             )}
@@ -234,6 +238,7 @@ export function ReviewGroupRow({
                 variant="outline"
                 size="sm"
                 className="col-span-2 h-8 w-full justify-start gap-1.5 px-2.5 sm:w-auto sm:max-w-[15rem]"
+                tabIndex={inner}
                 title={newCategoryPath}
                 onClick={onCreateCategory}
               >
@@ -250,6 +255,7 @@ export function ReviewGroupRow({
               groups={categoryGroups}
               placeholder={t('categorization.review.other')}
               creatable
+              tabIndex={inner}
               className="h-8 w-full px-2.5 text-xs sm:w-32"
               contentProps={{ className: 'w-72 p-0 overflow-hidden', align: 'end' }}
             />
@@ -257,6 +263,7 @@ export function ReviewGroupRow({
               variant="ghost"
               size="sm"
               className="h-8 w-full gap-1.5 text-muted-foreground sm:w-8 sm:px-0"
+              tabIndex={inner}
               aria-label={t('categorization.review.ignore')}
               aria-keyshortcuts="x"
               title={t('categorization.review.ignoreHint')}
@@ -269,70 +276,61 @@ export function ReviewGroupRow({
         )}
       </div>
 
-      {open && <GroupTransactions id={listId} ids={group.transaction_ids} />}
+      {open && (
+        <GroupTransactions
+          id={listId}
+          transactions={group.transactions}
+          more={group.transaction_ids.length - group.transactions.length}
+        />
+      )}
     </li>
   )
 }
 
-/** The store's transactions as the bank sent them, fetched one by one: the
- *  queue carries only their ids, and the list endpoint has no id filter. */
-function GroupTransactions({ id, ids }: { id: string; ids: string[] }) {
+/** The store's first transactions as the bank sent them, carried by the
+ *  queue itself (no request per row); the others are only counted. */
+function GroupTransactions({
+  id,
+  transactions,
+  more,
+}: {
+  id: string
+  transactions: ReviewTransaction[]
+  more: number
+}) {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
   const dateLocale = useDateLocale()
   const { mask } = usePrivacyMode()
-  const shown = ids.slice(0, MAX_EXPANDED)
-  const results = useQueries({
-    queries: shown.map((id) => ({
-      queryKey: ['categorization', 'review-transaction', id],
-      queryFn: () => transactionsApi.get(id),
-      staleTime: 60_000,
-    })),
-  })
 
   const showDate = (iso: string) =>
     new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString(dateLocale)
-  const amount = (tx: Transaction) =>
+  const amount = (tx: ReviewTransaction) =>
     `${tx.type === 'credit' ? '+' : '−'}${formatCurrency(Math.abs(Number(tx.amount)), tx.currency, locale)}`
 
   return (
     <div id={id} className="mt-2.5 cursor-default sm:ml-5" onClick={(e) => e.stopPropagation()}>
       <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-muted/30 text-xs">
-        {results.map((result, i) => {
-          const tx = result.data
-          return (
-            <li key={shown[i]} className="flex items-center gap-3 px-3 py-2">
-              {tx ? (
-                <>
-                  <span className="w-20 shrink-0 tabular-nums text-muted-foreground">{showDate(tx.date)}</span>
-                  <span className="min-w-0 flex-1 truncate text-foreground" title={tx.original_description ?? tx.description}>
-                    {tx.original_description ?? tx.description}
-                  </span>
-                  <span
-                    className={cn(
-                      'shrink-0 font-medium tabular-nums',
-                      tx.type === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground',
-                    )}
-                  >
-                    {mask(amount(tx))}
-                  </span>
-                </>
-              ) : result.isError ? (
-                <span className="text-muted-foreground">{t('common.error')}</span>
-              ) : (
-                <>
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-3 flex-1" />
-                  <Skeleton className="h-3 w-14" />
-                </>
+        {transactions.map((tx) => (
+          <li key={tx.id} className="flex items-center gap-3 px-3 py-2">
+            <span className="w-20 shrink-0 tabular-nums text-muted-foreground">{showDate(tx.date)}</span>
+            <span className="min-w-0 flex-1 truncate text-foreground" title={tx.original_description ?? tx.description}>
+              {tx.original_description ?? tx.description}
+            </span>
+            <span
+              className={cn(
+                'shrink-0 font-medium tabular-nums',
+                tx.type === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground',
               )}
-            </li>
-          )
-        })}
+            >
+              {mask(amount(tx))}
+            </span>
+          </li>
+        ))}
       </ul>
-      {ids.length > shown.length && (
+      {more > 0 && (
         <p className="mt-1.5 text-xs text-muted-foreground">
-          {t('categorization.review.more', { count: ids.length - shown.length })}
+          {t('categorization.review.more', { count: more })}
         </p>
       )}
     </div>

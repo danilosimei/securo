@@ -334,9 +334,10 @@ export function ReviewTab() {
       queue.clear()
       if (keys.length === 0) return
       for (const key of keys) toast.dismiss(dismissToastId(key))
-      void Promise.allSettled(keys.map((key) => categorizationApi.dismiss(key))).then(() =>
-        invalidateCategorizationQueries(queryClient),
-      )
+      // keepalive: a closing tab would otherwise drop the request.
+      void Promise.allSettled(
+        keys.map((key) => categorizationApi.dismiss(key, { keepalive: true })),
+      ).then(() => invalidateCategorizationQueries(queryClient))
     }
     window.addEventListener('pagehide', flush)
     return () => {

@@ -40,6 +40,15 @@ describe('CategorizationOriginBadge', () => {
     expect(screen.getByRole('link')).toBeInTheDocument()
   })
 
+  it('pending without a link stays a seal, for rows that are buttons themselves', () => {
+    renderWithProviders(<CategorizationOriginBadge source="ai" pending link={false} />)
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(t('categorization.origin.reviewAria'))).toHaveAttribute(
+      'title',
+      t('categorization.origin.reviewTooltip'),
+    )
+  })
+
   it('uses the reason as the tooltip when given', () => {
     renderWithProviders(<CategorizationOriginBadge source="ai" reason="parece mercado" />)
     expect(screen.getByText(t('categorization.origin.ai')).closest('[title]')).toHaveAttribute('title', 'parece mercado')

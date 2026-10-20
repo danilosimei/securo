@@ -2317,8 +2317,17 @@ export const categorization = {
     const { data } = await api.post('/categorization/review/accept', payload)
     return data
   },
-  dismiss: async (merchantKey: string): Promise<{ dismissed: number }> => {
-    const { data } = await api.post('/categorization/review/dismiss', { merchant_key: merchantKey })
+  /** `keepalive`: sent through fetch so it outlives a closing tab (the
+   *  interceptors still add the auth and workspace headers). */
+  dismiss: async (
+    merchantKey: string,
+    { keepalive = false }: { keepalive?: boolean } = {},
+  ): Promise<{ dismissed: number }> => {
+    const { data } = await api.post(
+      '/categorization/review/dismiss',
+      { merchant_key: merchantKey },
+      keepalive ? { adapter: 'fetch', fetchOptions: { keepalive: true } } : undefined,
+    )
     return data
   },
   createCategory: async (payload: CreateCategoryRequest): Promise<CreateCategoryResult> => {

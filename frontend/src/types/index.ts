@@ -670,6 +670,10 @@ export interface TransactionCalendarItem {
   is_transfer: boolean
   is_ignored: boolean
   exclude_from_pnl: boolean
+  /** Who decided the category (actual rows only). */
+  category_source?: CategorySource | null
+  /** A categorization suggestion for this row waits for review. */
+  categorization_pending?: boolean
 }
 
 export interface TransactionCalendarDay {
@@ -1847,6 +1851,18 @@ export interface ReviewNewCategory {
   name: string
 }
 
+/** One of a store's first rows, carried by the review queue. */
+export interface ReviewTransaction {
+  id: string
+  date: string
+  description: string
+  original_description: string | null
+  /** Unmasked: mask it with `mask(formatCurrency(...))`. */
+  amount: number | string
+  currency: string
+  type: 'debit' | 'credit'
+}
+
 export interface ReviewGroup {
   merchant_key: string
   clean_name: string | null
@@ -1858,6 +1874,8 @@ export interface ReviewGroup {
   new_category: ReviewNewCategory | null
   is_person: boolean
   transaction_ids: string[]
+  /** The first rows of `transaction_ids`; the rest are only counted. */
+  transactions: ReviewTransaction[]
 }
 
 export interface NewCategoryProposal {
