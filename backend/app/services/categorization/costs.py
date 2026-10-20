@@ -1,12 +1,14 @@
-"""What categorization costs: the month's spend against the monthly cap.
+"""What categorization costs: per-call pricing and the month's spend against the cap.
 
-Runs are the ledger (`CategorizationRun.cost_usd`); a month is the
+`cost_usd` prices one Claude response; runs are the ledger (`CategorizationRun.cost_usd`); a month is the
 workspace's calendar month, so the cap resets at its local midnight.
 Nothing here commits.
 """
 from __future__ import annotations
 
+import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -15,6 +17,53 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.app_clock import get_workspace_timezone
 from app.models.categorization import CategorizationRun
+
+logger = logging.getLogger(__name__)
+
+_MTOK = Decimal(1_000_000)
+_CACHE_WRITE_FACTOR = Decimal("1.25")
+_BATCH_FACTOR = Decimal("0.5")
+_QUANTUM = Decimal("0.000001")
+
+
+@dataclass(frozen=True)
+class ModelPrice:
+    """US$ per million tokens."""
+
+    input: Decimal
+    output: Decimal
+    cache_read: Decimal
+
+
+PRICES: dict[str, ModelPrice] = {
+    "claude-haiku-5-5": ModelPrice(Decimal("0.10"), Decimal("0.50"), Decimal("0.01")),
+    "claude-opus-5-5": ModelPrice(Decimal("4.00"), Decimal("20.00"), Decimal("0.20")),
+}
+
+
+def cost_usd(model: str, usage, *, batch: bool) -> Decimal:
+    """US$ for one response's `usage`; Batches cost half of everything.
+
+    Cache writes cost 1.25x the input price. Missing counters count as 0 and
+    an unknown model costs 0 (logged), so a new model never breaks a run.
+    """
+    price = PRICES.get(model)
+    if price is None:
+        logger.warning("No price for model %r; counting its cost as 0", model)
+        return Decimal(0)
+
+    def tokens(name: str) -> Decimal:
+        return Decimal(getattr(usage, name, None) or 0)
+
+    total = (
+        tokens("input_tokens") * price.input
+        + tokens("output_tokens") * price.output
+        + tokens("cache_creation_input_tokens") * _CACHE_WRITE_FACTOR * price.input
+        + tokens("cache_read_input_tokens") * price.cache_read
+    ) / _MTOK
+    if batch:
+        total *= _BATCH_FACTOR
+    return total.quantize(_QUANTUM)
 
 
 def _month_bounds(now: datetime) -> tuple[datetime, datetime]:
