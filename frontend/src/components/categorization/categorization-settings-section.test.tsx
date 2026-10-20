@@ -152,14 +152,27 @@ describe('CategorizationSettingsSection', () => {
     expect(scroll).not.toHaveBeenCalled()
   })
 
-  it('locks the controls while a save is pending', async () => {
+  it('keeps the controls focusable while a save is pending, ignoring new input', async () => {
     let resolve!: (v: unknown) => void
     api.categorization.updateSettings.mockReturnValue(new Promise((r) => { resolve = r }))
     const { user } = renderWithProviders(<CategorizationSettingsSection />)
     await user.click(await screen.findByRole('switch'))
-    await waitFor(() => expect(screen.getByRole('switch')).toBeDisabled())
-    expect(screen.getByTestId('categorization-threshold-95')).toBeDisabled()
+    await waitFor(() => expect(document.getElementById('categorization')).toHaveAttribute('aria-busy', 'true'))
+    expect(screen.getByRole('switch')).not.toBeDisabled()
+    expect(screen.getByLabelText(/cap|teto/i)).toHaveAttribute('readonly')
+    await user.click(screen.getByRole('switch'))
+    expect(api.categorization.updateSettings).toHaveBeenCalledTimes(1)
     resolve({ ...base, enabled: false })
-    await waitFor(() => expect(screen.getByRole('switch')).not.toBeDisabled())
+    await waitFor(() => expect(document.getElementById('categorization')).toHaveAttribute('aria-busy', 'false'))
+  })
+
+  it('gives the typed cap back when the save fails', async () => {
+    api.categorization.updateSettings.mockRejectedValue(new Error('500'))
+    const { user } = renderWithProviders(<CategorizationSettingsSection />)
+    const input = await screen.findByLabelText(/cap|teto/i)
+    await user.clear(input)
+    await user.type(input, '2,5{Enter}')
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByLabelText(/cap|teto/i)).toHaveValue('2,5'))
   })
 })

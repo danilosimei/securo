@@ -47,7 +47,10 @@ describe('formatRelative', () => {
   it('falls back to a calendar date past a week', () => {
     const result = formatRelative(ago(60 * 24 * 30))
     expect(result).not.toMatch(/ago|now|yesterday/)
-    expect(result).toMatch(/May/)
+    // formatRelative uses the machine locale, so compare with the same call.
+    expect(result).toBe(
+      new Date(ago(60 * 24 * 30)).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    )
   })
 
   it('returns an empty string for an unparseable timestamp', () => {
