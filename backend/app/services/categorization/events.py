@@ -11,8 +11,10 @@ Every write of `Transaction.category_id` goes through this module, so
 - `record_moves`: a set-based category merge that keeps each row's origin.
 
 A person clearing a category (`source="user"` with no category) is noted
-as `none` (R27): the row is a guess again, open to review and to the
-pipeline, and the event still names the person (`user_id`).
+as `none` (R27): the row is a guess again, open to review, and the event
+still names the person (`user_id`). While that clear is the row's latest
+standing event (`cleared_by_person`), the pipeline only suggests a
+category for it, never files it on its own.
 
 Nothing here commits: the caller owns the transaction, like
 `reconciliation_history_service.record`.
@@ -27,7 +29,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import insert as sa_insert
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,7 +45,7 @@ REVIEWABLE_SOURCES: frozenset[str] = frozenset({"none", "provider", "memory", "a
 #: `reason` of the events `record_moves` writes. Their previous category is
 #: the deleted one (nulled by the FK), so `undo` cannot restore them.
 CATEGORY_MERGE_REASON = "category_merge"
-#: Rows per `IN (...)` when `undo` loads what it checks.
+#: Rows per `IN (...)` when `undo` (or `cleared_by_person`) loads what it checks.
 UNDO_CHUNK = 1000
 
 
@@ -108,6 +110,49 @@ def changes_category() -> Any:
     return CategorizationEvent.previous_category_id.is_distinct_from(
         CategorizationEvent.new_category_id
     )
+
+
+async def cleared_by_person(session: AsyncSession, tx_ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    """The rows of `tx_ids` whose latest standing event (not undone, not an
+    undo) is a person clearing the category (R27): one query per chunk.
+
+    Callers pass the rows that are still empty guesses (no category, `none`).
+    """
+    cleared: set[uuid.UUID] = set()
+    for start in range(0, len(tx_ids), UNDO_CHUNK):
+        ranked = (
+            select(
+                CategorizationEvent.transaction_id,
+                CategorizationEvent.source,
+                CategorizationEvent.user_id,
+                CategorizationEvent.new_category_id,
+                func.row_number()
+                .over(
+                    partition_by=CategorizationEvent.transaction_id,
+                    order_by=(CategorizationEvent.created_at.desc(), CategorizationEvent.id.desc()),
+                )
+                .label("rank"),
+            )
+            .where(
+                CategorizationEvent.transaction_id.in_(tx_ids[start:start + UNDO_CHUNK]),
+                CategorizationEvent.undone_at.is_(None),
+                CategorizationEvent.source != "undo",
+            )
+            .subquery()
+        )
+        cleared.update(
+            (
+                await session.execute(
+                    select(ranked.c.transaction_id).where(
+                        ranked.c.rank == 1,
+                        ranked.c.source == "none",
+                        ranked.c.user_id.is_not(None),
+                        ranked.c.new_category_id.is_(None),
+                    )
+                )
+            ).scalars().all()
+        )
+    return cleared
 
 
 def _now() -> datetime:

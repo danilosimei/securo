@@ -9,7 +9,8 @@
             applies it when it ends
       -> per store: p >= threshold -> rows become `ai` (event with confidence,
          reason, model, run; a guess it confirms too) + the decision is
-         cached in the memory; otherwise -> a pending suggestion (c, alt, p,
+         cached in the memory; a row the person cleared only gets it as a
+         suggestion (R27); otherwise -> a pending suggestion (c, alt, p,
          r, clean name, new category); no answer, a refusal or a cut-off
          answer -> a suggestion with no category (`UNDECIDED_REASON`), which
          keeps the rows from being paid for again. A redistribution after a
@@ -63,6 +64,7 @@ from app.services.categorization.events import (
     PROTECTED_SOURCES,
     UNSET,
     StagedChange,
+    cleared_by_person,
     stage_change,
     write_staged,
 )
@@ -450,7 +452,8 @@ async def apply_results(
     here closes its model-less suggestion. A decision that confirms the
     category a guess (`none`/`provider`) already holds is applied all the
     same: the row becomes `ai` (the event records the confirmation), so it
-    is settled and never paid for again.
+    is settled and never paid for again. A row the person cleared (R27) is
+    never applied: it gets the decision as a pending suggestion.
 
     With `allowed_category_ids` (a redistribution after a split) the rows
     are the split category's, whatever their origin: a row moves while it
@@ -472,6 +475,16 @@ async def apply_results(
     tx_ids = list(dict.fromkeys(i for g in groups_by_item.values() for i in g.tx_ids))
     current = await _load_rows(session, workspace_id, tx_ids)
     waiting = await _waiting(session, workspace_id, tx_ids)
+    # Checked on the rows as they are now: a person may have cleared one
+    # while the model answered. A split family's rows hold a category.
+    cleared = (
+        await cleared_by_person(session, [
+            tx.id for tx in current.values()
+            if tx.category_id is None and tx.category_source == "none"
+        ])
+        if allowed_category_ids is None
+        else set()
+    )
 
     stats = ApplyStats()
     staged: list[StagedChange] = []
@@ -496,12 +509,18 @@ async def apply_results(
         if answer is not None and category_id is not None:
             # A guess the model confirms becomes its decision; a row already
             # settled at that category (by the pipeline or a person) keeps
-            # its origin.
+            # its origin; a row the person cleared is only asked about.
+            held = [tx for tx in open_rows if tx.id in cleared]
             changing = [
                 tx for tx in open_rows
-                if tx.category_id != category_id or tx.category_source in AUTO_APPLY_SOURCES
+                if tx.id not in cleared
+                and (tx.category_id != category_id or tx.category_source in AUTO_APPLY_SOURCES)
             ]
-            stats.skipped += len(open_rows) - len(changing)
+            stats.skipped += len(open_rows) - len(changing) - len(held)
+            for tx in held:
+                suggestions.append(_suggestion(workspace_id, run, group.key, tx, answer, now))
+                decided.append(tx.id)
+            stats.suggested += len(held)
             payees = await _payees_for(session, workspace_id, group.key, answer.clean_name, changing)
             for tx in changing:
                 change = stage_change(

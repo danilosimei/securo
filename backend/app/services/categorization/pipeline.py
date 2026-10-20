@@ -43,6 +43,7 @@ from app.models.transaction import Transaction
 from app.services.categorization.events import (
     REVIEWABLE_SOURCES,
     StagedChange,
+    cleared_by_person,
     stage_change,
     write_staged,
 )
@@ -97,6 +98,8 @@ class Candidate:
     date: date
     current_category_id: uuid.UUID | None
     current_source: str = "none"
+    #: The person cleared this row's category (R27): only suggested, never applied.
+    cleared: bool = False
 
 
 @dataclass
@@ -202,7 +205,7 @@ async def collect_candidates(
     `revisit_no_ai` (a model is available), a pending suggestion made
     without one does not keep its row out: the model may decide it now.
     One the model itself left undecided still does, so the same row is not
-    paid for twice.
+    paid for twice. Rows a person cleared are flagged (`cleared`).
     """
     blocking = [CategorizationSuggestion.status == "pending"]
     if revisit_no_ai:
@@ -244,7 +247,7 @@ async def collect_candidates(
         .order_by(Transaction.date, Transaction.id)
     )
     dismissed = await _dismissed_at(session, workspace_id)
-    candidates: list[Candidate] = []
+    kept: list[tuple[Any, str]] = []
     for row in rows.all():
         key = merchant_key(row.description, payee_name=row.payee_name, payee_source=row.payee_source)
         dismissed_at = dismissed.get(stored_key(key))
@@ -252,6 +255,12 @@ async def collect_candidates(
             row.created_at is None or _utc(row.created_at) <= dismissed_at
         ):
             continue
+        kept.append((row, key))
+    cleared = await cleared_by_person(session, [
+        row.id for row, _ in kept if row.category_id is None and row.category_source == "none"
+    ])
+    candidates: list[Candidate] = []
+    for row, key in kept:
         candidates.append(
             Candidate(
                 tx_id=row.id,
@@ -264,6 +273,7 @@ async def collect_candidates(
                 date=row.date,
                 current_category_id=row.category_id,
                 current_source=row.category_source,
+                cleared=row.id in cleared,
             )
         )
     return candidates
@@ -368,9 +378,12 @@ async def memory_pass(
     settled all the same (a provider guess the memory confirms becomes
     `memory`, the event recording the confirmation): left a guess, it would
     stay a candidate and, once the memory changes, be paid for again. A
-    settled store is consumed even when nothing changes. `stats["memory"]`
+    settled store is consumed even when nothing changes. A row the person
+    cleared (R27) is not changed: it gets a pending suggestion with the
+    settled category, and is not sent to the model either. `stats["memory"]`
     / `stats["applied"]` count the rows whose category changed,
-    `stats["confirmed"]` the ones settled at the category they held.
+    `stats["confirmed"]` the ones settled at the category they held,
+    `stats["suggested"]` the cleared rows queued.
     """
     if not groups:
         return {}
@@ -379,6 +392,7 @@ async def memory_pass(
     assignable = await get_assignable_category_ids(session, workspace_id)
 
     plan: dict[uuid.UUID, _Decision] = {}
+    held: dict[uuid.UUID, str] = {}  # cleared row -> its store
     remaining: dict[str, MerchantGroup] = {}
     for key, group in groups.items():
         decision = _decide(hits.get(key), settings.auto_apply_threshold, assignable)
@@ -388,8 +402,12 @@ async def memory_pass(
         for cand in group.candidates:
             if cand.current_source in AUTO_APPLY_SOURCES:
                 plan[cand.tx_id] = decision
+                if cand.cleared:
+                    held[cand.tx_id] = key
 
     staged: list[StagedChange] = []
+    suggestions: list[dict[str, Any]] = []
+    now = datetime.now(timezone.utc)
     for ids in _chunks(list(plan)):
         txs = await session.execute(
             select(Transaction).where(
@@ -401,6 +419,20 @@ async def memory_pass(
             if tx.category_source not in AUTO_APPLY_SOURCES:
                 continue
             decision = plan[tx.id]
+            if tx.id in held:
+                suggestions.append({
+                    "id": uuid.uuid4(),
+                    "workspace_id": workspace_id,
+                    "transaction_id": tx.id,
+                    "run_id": run_id,
+                    "merchant_key": stored_key(held[tx.id]),
+                    "status": "pending",
+                    "category_id": decision.category_id,
+                    "confidence": decision.confidence,
+                    "reason": decision.reason,
+                    "created_at": now,
+                })
+                continue
             change = stage_change(
                 tx,
                 source=decision.source,
@@ -412,9 +444,16 @@ async def memory_pass(
             if change is not None:
                 staged.append(change)
     await write_staged(session, staged)
-    await supersede_no_ai(session, workspace_id, [change.tx.id for change in staged])
+    await supersede_no_ai(
+        session, workspace_id,
+        [change.tx.id for change in staged] + [row["transaction_id"] for row in suggestions],
+    )
+    if suggestions:
+        await session.execute(sa_insert(CategorizationSuggestion), suggestions)
 
     if stats is not None:
+        if suggestions:
+            stats["suggested"] = stats.get("suggested", 0) + len(suggestions)
         for change in staged:
             if change.previous_category_id == change.new_category_id:
                 counter = "confirmed"

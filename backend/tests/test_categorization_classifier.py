@@ -1140,3 +1140,39 @@ async def test_classifier_counts_confirmations_apart(
     assert (await _reload(session, guessed)).category_source == "ai"
     assert (run.stats["applied"], run.stats["confirmed"], run.stats["skipped"]) == (1, 1, 0)
 
+
+async def _clear(session, tx, user):
+    """The person empties the row's category (R27: `none`, the event names them)."""
+    from app.services.categorization.events import record_change
+
+    await session.flush()
+    await record_change(session, tx, source="user", new_category_id=None, user_id=user.id)
+
+
+@pytest.mark.asyncio
+async def test_classifier_only_suggests_for_a_row_the_person_cleared(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    """R27: at or above the threshold the store's other rows are applied,
+    but a row the person cleared gets a pending suggestion with the answer."""
+    blank = _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    cleared = _tx(session, test_user, test_account, "IFOOD*CLUB 4410",
+                  source="user", category_id=cats["Lazer"])
+    await _clear(session, cleared, test_user)
+    await session.commit()
+    wire(fake_client(answer(
+        lambda item, ids: out(ids["Alimentação"], p=96, r="delivery", n="iFood")
+    )))
+
+    run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    blank = await _reload(session, blank)
+    cleared = await _reload(session, cleared)
+    assert (blank.category_id, blank.category_source) == (cats["Alimentação"], "ai")
+    assert (cleared.category_id, cleared.category_source, cleared.payee_id) == (None, "none", None)
+    [sug] = await _all(session, CategorizationSuggestion)
+    assert (sug.transaction_id, sug.status, sug.category_id) == (
+        cleared.id, "pending", cats["Alimentação"],
+    )
+    assert (sug.confidence, sug.reason, sug.clean_name, sug.run_id) == (96, "delivery", "iFood", run.id)
+    assert (run.stats["applied"], run.stats["suggested"], run.stats["skipped"]) == (1, 1, 0)

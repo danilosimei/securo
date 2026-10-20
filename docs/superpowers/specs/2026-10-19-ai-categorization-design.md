@@ -147,6 +147,10 @@ gravam `category_id`:
 proteção (corrige o bug que hoje apaga categoria e notas manuais, `rule_service.py:1488-1491` —
 necessário porque a feature dá a esse botão um papel maior).
 
+**Limpar a categoria** (a pessoa deixa a transação sem categoria) grava origem `none`, com o evento
+em nome dela: a transação volta a ser revisável, mas, enquanto essa limpeza for o último evento de
+pé, memória e Claude só sugerem a categoria (vai para Revisar), nunca a aplicam sozinhos.
+
 **Desfazer** restaura `previous_*` e grava evento `undo`; em lote por `run_id` ou seleção. Uma
 confirmação (o pipeline assume um palpite na categoria que ele já tinha) não conta como aplicada
 nem é desfeita pelo lote.

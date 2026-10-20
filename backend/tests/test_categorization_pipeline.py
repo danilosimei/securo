@@ -686,3 +686,81 @@ async def test_run_counts_memory_confirmations_apart(
         "suggested": 0, "skipped": 0,
     }
 
+
+async def _clear(session, tx, user):
+    """The person empties the row's category (R27: `none`, the event names them)."""
+    from app.services.categorization.events import record_change
+
+    await session.flush()
+    await record_change(session, tx, source="user", new_category_id=None, user_id=user.id)
+
+
+@pytest.mark.asyncio
+async def test_memory_only_suggests_for_a_row_the_person_cleared(
+    session, test_user, test_workspace, test_account, test_categories, monkeypatch
+):
+    """R27: a row the person cleared is never re-filed on its own. Its store
+    is settled for the other rows, and the cleared row waits in Revisar with
+    the memory's category -- without going to the model."""
+    food, transport = test_categories[0].id, test_categories[1].id
+    # Five picks: the re-categorized row below teaches the memory one more.
+    for _ in range(5):
+        await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", food)
+    blank = _tx(session, test_user, test_account, "PADARIA PAO QUENTE")
+    cleared = _tx(
+        session, test_user, test_account, "PADARIA PAO QUENTE", source="user", category_id=food,
+    )
+    recategorized = _tx(
+        session, test_user, test_account, "PADARIA PAO QUENTE", source="user", category_id=food,
+    )
+    await _clear(session, cleared, test_user)
+    await _clear(session, recategorized, test_user)
+    from app.services.categorization.events import record_change
+
+    await record_change(
+        session, recategorized, source="user", new_category_id=transport, user_id=test_user.id,
+    )
+    await session.commit()
+    seen: dict[str, set[str]] = {}
+
+    async def fake_classifier(session_, workspace_id, groups, run_):
+        seen["keys"] = set(groups)
+
+    monkeypatch.setattr(pipeline, "ai_classifier", fake_classifier)
+
+    run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    assert seen["keys"] == set()
+    assert (blank.category_id, blank.category_source) == (food, "memory")
+    assert (cleared.category_id, cleared.category_source) == (None, "none")
+    assert (recategorized.category_id, recategorized.category_source) == (transport, "user")
+    [sug] = await _suggestions(session)
+    assert (sug.transaction_id, sug.status, sug.category_id) == (cleared.id, "pending", food)
+    assert (sug.merchant_key, sug.run_id) == ("PADARIA PAO QUENTE", run.id)
+    assert (run.stats["memory"], run.stats["suggested"], run.stats["skipped"]) == (1, 1, 0)
+
+    # It now waits for the person: the next run leaves it alone.
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=False)
+    assert len(await _suggestions(session)) == 1
+    assert (cleared.category_id, cleared.category_source) == (None, "none")
+
+
+@pytest.mark.asyncio
+async def test_cached_ai_decision_only_suggests_for_a_cleared_row(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    food = test_categories[0].id
+    await remember_ai_decision(session, test_workspace.id, "IFOOD", food, 95, "iFood")
+    cleared = _tx(session, test_user, test_account, "IFOOD *REST 8812", source="user", category_id=food)
+    await _clear(session, cleared, test_user)
+    await session.commit()
+    groups = group_by_key(await collect_candidates(session, test_workspace.id))
+    stats: dict = {}
+
+    rest = await memory_pass(session, test_workspace.id, groups, None, stats=stats)
+
+    assert rest == {}
+    assert (cleared.category_id, cleared.category_source) == (None, "none")
+    [sug] = await _suggestions(session)
+    assert (sug.transaction_id, sug.category_id, sug.confidence) == (cleared.id, food, 95)
+    assert stats == {"suggested": 1}
