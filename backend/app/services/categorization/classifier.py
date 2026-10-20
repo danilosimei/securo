@@ -136,6 +136,9 @@ BATCH_DETAIL = "batch"
 #: (never sent, or their request ended without one). Its retry sends only
 #: these, so the rows the model left with no category are not paid again.
 UNSENT_DETAIL = "unsent_tx_ids"
+#: `error` of a redistribution whose batch ended with requests unanswered
+#: (not capped): retryable, and the retry sends only `UNSENT_DETAIL`.
+INCOMPLETE_ERROR = "batch_incomplete"
 #: Ids per `IN (...)`.
 ID_CHUNK = 1000
 #: Run kinds that may wait on a Message Batch (a redistribution after a
@@ -715,10 +718,11 @@ def _unsent(
     groups: Sequence[MerchantGroup], allowed_category_ids: set[uuid.UUID] | None
 ) -> dict[str, Any]:
     """The `run.detail` patch of a capped run: a redistribution's rows left
-    out (see `UNSENT_DETAIL`); nothing for a classification."""
-    if allowed_category_ids is None:
+    out (see `UNSENT_DETAIL`); nothing for a classification or no row."""
+    tx_ids = [str(tx_id) for group in groups for tx_id in group.tx_ids]
+    if allowed_category_ids is None or not tx_ids:
         return {}
-    return {UNSENT_DETAIL: [str(tx_id) for group in groups for tx_id in group.tx_ids]}
+    return {UNSENT_DETAIL: tx_ids}
 
 
 async def _merge_detail(
@@ -800,10 +804,10 @@ async def classify(
             # (this run included), so a run stops as soon as the cap is near.
             spent = await committed_spend(session, workspace_id)
             if spent + estimate_cost(plan.params, batch=False) > cap:
-                run.status = "capped"
                 left = _groups_of(plans[position:])
                 if unsent := _unsent(list(left.values()), allowed_category_ids):
                     await _merge_detail(session, run, unsent)
+                run.status = "capped"
                 stats["suggested"] = stats.get("suggested", 0) + await suggest_without_ai(
                     session, workspace_id, left, run.id
                 )
@@ -841,15 +845,18 @@ async def _submit_batch(
     """Send the chunks that fit under the cap as one Message Batch; the rest
     become model-less suggestions and the run ends `capped`.
 
-    The workspace lock is taken first, before the batch is created and
-    before this run's row is written: a trigger arriving meanwhile holds
-    that lock while it marks this row (`_mark_busy_run`), so taking the
-    lock after an UPDATE of the row would deadlock against it. Held until
-    the task commits; triggers wait for it, none is lost.
+    The workspace's spend lock is taken first and held until the task
+    commits: two batches of one workspace are sent one at a time, so each
+    sees the other's estimate in `committed_spend`. It is not the workspace
+    lock, so a trigger or a POST /run does not wait for `create_batch` (a
+    network call). The workspace lock is taken after it, before this run's
+    row is written: a trigger holds that lock while it marks this row
+    (`_mark_busy_run`), so taking it after an UPDATE of the row would
+    deadlock against it.
     """
     from app.tasks import categorization_tasks as tasks
 
-    await tasks.lock_workspace(session, workspace_id)
+    await tasks.lock_spend(session, workspace_id)
     spent = await committed_spend(session, workspace_id)
     total = spent
     sent: list[_Plan] = []
@@ -862,6 +869,7 @@ async def _submit_batch(
     left = plans[len(sent):]
     unsent = _unsent(list(_groups_of(left).values()), allowed_category_ids)
     if not sent:
+        await tasks.lock_workspace(session, workspace_id)
         run.status = "capped"
         if unsent:
             await _merge_detail(session, run, unsent)
@@ -875,6 +883,7 @@ async def _submit_batch(
         for position, plan in enumerate(sent)
     ]
     batch_id = await create_batch(client, requests)
+    await tasks.lock_workspace(session, workspace_id)
     run.model = CLASSIFIER_MODEL
     run.is_batch = True
     run.batch_id = batch_id
@@ -942,47 +951,51 @@ async def collect_batch(session: AsyncSession, run_id: uuid.UUID) -> str:
     or nothing to apply it with: the run is closed as failed, its rows are
     picked up by the next run) or "gone" (the run is no longer waiting).
     A request that errored, expired or was canceled leaves its stores as
-    undecided suggestions. Holds the workspace lock until the caller commits.
+    undecided suggestions. The batch is read from the API first; the
+    workspace lock is taken only to apply it, and held until the caller
+    commits.
     """
     from app.tasks import categorization_tasks as tasks
 
-    workspace_id = await session.scalar(
-        select(CategorizationRun.workspace_id).where(CategorizationRun.id == run_id)
-    )
-    if workspace_id is None:
+    run = await session.get(CategorizationRun, run_id, populate_existing=True)
+    if run is None or run.status != "processing_batch" or not run.batch_id:
         return "gone"
+    workspace_id, batch_id = run.workspace_id, run.batch_id
+    settings = await get_settings(session, workspace_id)
+    has_detail = isinstance((run.detail or {}).get(BATCH_DETAIL), dict)
+    client = await resolve_client(session, settings) if has_detail else None
+    results: list[tuple[str, Any, str | None]] = []
+    if client is not None:
+        try:
+            if await batch_status(client, batch_id) != "ended":
+                return "pending"
+            results = [entry async for entry in batch_results(client, batch_id)]
+        finally:
+            await client.close()
     # Two overlapping polls must not apply the same batch twice: the second
     # waits here, then finds the run closed. Taken before any row lock, in
     # the order `_claim` takes it, so the two cannot deadlock.
     await tasks.lock_workspace(session, workspace_id)
     run = await session.get(CategorizationRun, run_id, populate_existing=True)
-    if run is None or run.status != "processing_batch" or not run.batch_id:
+    if run is None or run.status != "processing_batch" or run.batch_id != batch_id:
         return "gone"
     info = (run.detail or {}).get(BATCH_DETAIL)
-    settings = await get_settings(session, run.workspace_id)
-    client = await resolve_client(session, settings) if isinstance(info, dict) else None
     if client is None or not isinstance(info, dict):
         run.status = "failed"
         run.error = "no_ai_connection" if isinstance(info, dict) else "batch_detail_missing"
         run.finished_at = datetime.now(timezone.utc)
         await session.flush()
         return "failed"
-    try:
-        return await _collect(session, run, info, client, settings.auto_apply_threshold)
-    finally:
-        await client.close()
+    return await _collect(session, run, info, results, settings.auto_apply_threshold)
 
 
 async def _collect(
     session: AsyncSession,
     run: CategorizationRun,
     info: dict[str, Any],
-    client: AsyncAnthropic,
+    results: list[tuple[str, Any, str | None]],
     threshold: int,
 ) -> str:
-    batch_id = run.batch_id or ""
-    if await batch_status(client, batch_id) != "ended":
-        return "pending"
     index = CategoryIndex(
         tuple((short, uuid.UUID(raw), "") for short, raw in info.get("index", []))
     )
@@ -995,7 +1008,7 @@ async def _collect(
     stats = dict(run.stats or {})
     done: set[int] = set()
     unanswered: list[MerchantGroup] = []
-    async for custom_id, message, error in batch_results(client, batch_id):
+    for custom_id, message, error in results:
         position = _chunk_position(custom_id, run, len(chunks))
         if position is None or position in done:
             continue
@@ -1033,8 +1046,11 @@ async def _collect(
     run.status = "capped" if info.get("capped") else "done"
     run.finished_at = datetime.now(timezone.utc)
     patch: dict[str, Any] = {}
-    more = _unsent(unanswered, allowed).get(UNSENT_DETAIL)
-    if run.status == "capped" and more:
+    # Only a redistribution has rows to name: they stay in the first child,
+    # where nothing else asks about them, so the run must stay retryable.
+    if more := _unsent(unanswered, allowed).get(UNSENT_DETAIL):
+        if run.status == "done":
+            run.status, run.error = "failed", INCOMPLETE_ERROR
         stored = (run.detail or {}).get(UNSENT_DETAIL)
         patch[UNSENT_DETAIL] = [*(stored if isinstance(stored, list) else []), *more]
     await _merge_detail(session, run, patch, drop=(BATCH_DETAIL,))

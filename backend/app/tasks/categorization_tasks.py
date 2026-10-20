@@ -63,6 +63,9 @@ RERUN_FLAG = "rerun"
 #: First key of the Postgres advisory lock that serializes claims per
 #: workspace ("CATG"); the second is taken from the workspace id.
 LOCK_NAMESPACE = 0x43415447
+#: First key of the lock that serializes the batches a workspace sends
+#: ("CATS"), apart from the workspace lock (see `classifier._submit_batch`).
+SPEND_LOCK_NAMESPACE = 0x43415453
 
 
 def enqueue_categorization(
@@ -280,6 +283,17 @@ async def try_lock_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> 
         await session.scalar(
             select(func.pg_try_advisory_xact_lock(LOCK_NAMESPACE, _lock_key(workspace_id)))
         )
+    )
+
+
+async def lock_spend(session: AsyncSession, workspace_id: uuid.UUID) -> None:
+    """Serialize, until commit, the batch submissions of one workspace
+    (Postgres only), without holding the workspace lock."""
+    connection = await session.connection()
+    if connection.dialect.name != "postgresql":
+        return
+    await session.execute(
+        select(func.pg_advisory_xact_lock(SPEND_LOCK_NAMESPACE, _lock_key(workspace_id)))
     )
 
 

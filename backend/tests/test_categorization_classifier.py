@@ -1182,3 +1182,118 @@ async def test_classifier_only_suggests_for_a_row_the_person_cleared(
     )
     assert (sug.confidence, sug.reason, sug.clean_name, sug.run_id) == (96, "delivery", "iFood", run.id)
     assert (run.stats["applied"], run.stats["suggested"], run.stats["skipped"]) == (1, 1, 0)
+
+
+def _groups(count):
+    return {
+        name: pipeline.MerchantGroup(
+            key=name, tx_ids=[uuid.uuid4()], samples=[name], count=1,
+            median_amount=Decimal("10"), type="debit", recurring=False, account_type=None,
+        )
+        for name in _names(count)
+    }
+
+
+async def _pg_redistribution(postgres_sessions, status):
+    from tests.test_categorization_models import _seed_pg
+
+    async with postgres_sessions() as setup:
+        ws, category, _txn = await _seed_pg(setup)
+        run = CategorizationRun(
+            id=uuid.uuid4(), workspace_id=ws, kind="redistribute", trigger="manual",
+            status=status, stats={}, detail={},
+        )
+        setup.add(run)
+        await setup.commit()
+        return ws, category.id, run.id
+
+
+@pytest.mark.asyncio
+async def test_sending_a_redistribution_batch_does_not_hold_the_workspace(postgres_sessions):
+    """The batch is created (a network call) without the workspace lock:
+    asking for a classification meanwhile does not wait for the API."""
+    import asyncio
+
+    from app.services.categorization import review
+
+    ws, category_id, run_id = await _pg_redistribution(postgres_sessions, "running")
+    sending, release = asyncio.Event(), asyncio.Event()
+    client = fake_client()
+
+    async def create(**_):
+        sending.set()
+        await release.wait()
+        return SimpleNamespace(id="batch_slow")
+
+    client.messages.batches.create = AsyncMock(side_effect=create)
+
+    async def send():
+        async with postgres_sessions() as session:
+            run = await session.get(CategorizationRun, run_id)
+            assert run is not None
+            await classifier.classify(
+                session, ws, _groups(120), run, client=client,
+                allowed_category_ids={category_id},
+            )
+            await session.commit()
+
+    sender = asyncio.ensure_future(send())
+    try:
+        await asyncio.wait_for(sending.wait(), timeout=10)
+        async with postgres_sessions() as session:
+            queued, created = await asyncio.wait_for(review.request_run(session, ws), timeout=5)
+            await session.commit()
+        assert created is True and queued.kind == "classify"
+    finally:
+        release.set()
+        await sender
+    async with postgres_sessions() as session:
+        run = await session.get(CategorizationRun, run_id)
+        assert run is not None and (run.status, run.batch_id) == ("processing_batch", "batch_slow")
+
+
+@pytest.mark.asyncio
+async def test_reading_a_batch_does_not_hold_the_workspace(postgres_sessions, monkeypatch):
+    import asyncio
+
+    from app.services.categorization import review
+
+    ws, category_id, run_id = await _pg_redistribution(postgres_sessions, "processing_batch")
+    async with postgres_sessions() as session:
+        run = await session.get(CategorizationRun, run_id)
+        assert run is not None
+        run.batch_id = "batch_slow"
+        run.detail = {"batch": {
+            "chunks": [], "rows": {}, "index": [], "allowed": [str(category_id)],
+            "capped": False, "estimated_cost_usd": "0",
+        }}
+        await session.commit()
+    reading, release = asyncio.Event(), asyncio.Event()
+
+    async def results(_id):
+        reading.set()
+        await release.wait()
+        for entry in ():
+            yield entry
+
+    client = fake_client(status="ended")
+    client.messages.batches.results = AsyncMock(side_effect=results)
+    monkeypatch.setattr(classifier, "resolve_client", AsyncMock(return_value=client))
+
+    async def collect():
+        async with postgres_sessions() as session:
+            outcome = await classifier.collect_batch(session, run_id)
+            await session.commit()
+            return outcome
+
+    collector = asyncio.ensure_future(collect())
+    try:
+        await asyncio.wait_for(reading.wait(), timeout=10)
+        async with postgres_sessions() as session:
+            _queued, created = await asyncio.wait_for(review.request_run(session, ws), timeout=5)
+            await session.commit()
+        assert created is True
+    finally:
+        release.set()
+        outcome = await collector
+    assert outcome == "collected"

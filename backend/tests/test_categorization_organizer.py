@@ -1586,12 +1586,22 @@ async def test_retry_of_a_capped_redistribution_sends_only_the_unsent_rows(
     assert retry.detail["source_tx_ids"] == unsent
     assert "unsent_tx_ids" not in retry.detail
 
-    # A failed run sent nothing it can vouch for: its whole snapshot is retried.
-    retry.status = "failed"
-    retry.detail = {**retry.detail, "unsent_tx_ids": []}
+    # A run given up (abandoned) vouches for nothing: its whole snapshot is retried...
+    snapshot = [*unsent, str(uuid.uuid4())]
+    retry.status, retry.error = "failed", "abandoned"
+    retry.detail = {**retry.detail, "source_tx_ids": snapshot, "unsent_tx_ids": unsent}
     await session.commit()
     again = await organizer.retry_redistribution(session, test_workspace.id, run.id, "o1")
-    assert (await _fresh(session, CategorizationRun, again["redistribute_run_id"])).detail[
+    await session.commit()
+    again = await _fresh(session, CategorizationRun, again["redistribute_run_id"])
+    assert again.detail["source_tx_ids"] == snapshot
+
+    # ...a batch that ended with requests unanswered, only their rows.
+    again.status, again.error = "failed", classifier.INCOMPLETE_ERROR
+    again.detail = {**again.detail, "unsent_tx_ids": unsent}
+    await session.commit()
+    third = await organizer.retry_redistribution(session, test_workspace.id, run.id, "o1")
+    assert (await _fresh(session, CategorizationRun, third["redistribute_run_id"])).detail[
         "source_tx_ids"
     ] == unsent
 
@@ -1737,3 +1747,66 @@ async def test_concurrent_apply_of_one_op_applies_it_once_postgres(postgres_sess
         assert (await session.get(Category, category_id)).name == "Comida"
         run = await session.get(CategorizationRun, run_id)
         assert [op["status"] for op in run.detail["ops"]] == ["applied"]
+
+
+@pytest.mark.asyncio
+async def test_batch_redistribution_with_unanswered_requests_is_retryable(
+    session, test_user, test_workspace, test_account, monkeypatch, categorization_enqueue
+):
+    """Not capped, but a request ended without an answer: its rows stayed in
+    the first child, so the run ends failed (retryable) naming only them."""
+    from app.tasks import categorization_tasks
+    from tests.test_categorization_classifier import _names
+
+    family = await _redistribution_setup(session, test_user, test_workspace)
+    for name in _names(120):
+        _tx(session, test_user, test_account, name, category=family["Assinaturas"], source="user")
+    run = _redistribute_run(test_workspace, family)
+    session.add(run)
+    await session.commit()
+    client = _fake_client()
+    client.messages.batches.create = AsyncMock(return_value=SimpleNamespace(id="batch_r"))
+    monkeypatch.setattr(organizer, "resolve_client", AsyncMock(return_value=client))
+
+    await organizer.redistribute(session, test_workspace.id, run)
+    await session.commit()
+
+    run = await _fresh(session, CategorizationRun, run.id)
+    assert run.status == "processing_batch" and run.detail["batch"]["capped"] is False
+    assert "unsent_tx_ids" not in run.detail
+    chunks = run.detail["batch"]["chunks"]
+    rows = run.detail["batch"]["rows"]
+    [call] = client.messages.batches.create.await_args_list
+    answered_params = call.kwargs["requests"][1]["params"]
+    unsure = [
+        {"k": item["k"], "n": None, "r": "ok", "c": None, "alt": None, "p": 10, "new": None}
+        for item in json.loads(answered_params["messages"][0]["content"])
+    ]
+    answered = SimpleNamespace(
+        custom_id=classifier.batch_custom_id(run, 1),
+        result=SimpleNamespace(type="succeeded", message=SimpleNamespace(
+            content=[SimpleNamespace(type="text", text=json.dumps({"items": unsure}))],
+            stop_reason="end_turn",
+            usage=SimpleNamespace(input_tokens=1, output_tokens=1,
+                                  cache_creation_input_tokens=0, cache_read_input_tokens=0),
+        )),
+    )
+    expired = SimpleNamespace(
+        custom_id=classifier.batch_custom_id(run, 0), result=SimpleNamespace(type="expired"),
+    )
+
+    async def results(_id):
+        yield expired
+        yield answered
+
+    client.messages.batches.retrieve = AsyncMock(
+        return_value=SimpleNamespace(processing_status="ended")
+    )
+    client.messages.batches.results = AsyncMock(side_effect=results)
+    monkeypatch.setattr(classifier, "resolve_client", AsyncMock(return_value=client))
+    await categorization_tasks._poll(lambda: session)
+
+    run = await _fresh(session, CategorizationRun, run.id)
+    assert (run.status, run.error) == ("failed", classifier.INCOMPLETE_ERROR)
+    assert run.finished_at is not None
+    assert set(run.detail["unsent_tx_ids"]) == {tx for key in chunks[0].values() for tx in rows[key]}
