@@ -3065,7 +3065,7 @@
       "applied_one": "Applied to {{count}} transaction",
       "applied_other": "Applied to {{count}} transactions",
       "undone": "Undone",
-      "dismissed": "Ignored {{name}}",
+      "dismissed": "Ignored: {{name}}",
       "whoIs": "Who is {{name}}?",
       "whoIsUnknown": "Who received this Pix?",
       "pix": "Pix",
@@ -3087,7 +3087,11 @@
         "navigate": "move",
         "expand": "open",
         "ignore": "ignore"
-      }
+      },
+      "applying": "Applying…",
+      "partialFailure_one": "{{count}} store was not applied: {{error}}",
+      "partialFailure_other": "{{count}} stores were not applied: {{error}}",
+      "keysHint": "Click a store or press Tab for shortcuts"
     }
   }
 }

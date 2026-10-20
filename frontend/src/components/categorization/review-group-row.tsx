@@ -4,6 +4,7 @@
  *  The row itself is the keyboard target (roving tabindex, driven by
  *  `ReviewTab`); the buttons inside stay ordinary buttons so a mouse, a
  *  touch screen and a screen reader all reach the same answers. */
+import { useId } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ChevronRight, FolderPlus, X } from 'lucide-react'
@@ -31,14 +32,16 @@ function categoryPath(info: CategoryInfo) {
   return info.groupName ? `${info.groupName} › ${info.category.name}` : info.category.name
 }
 
-function Kbd({ children }: { children: React.ReactNode }) {
+/** A key cap, shared by the row buttons and the shortcuts legend. */
+export function Kbd({ className, ...props }: React.ComponentProps<'kbd'>) {
   return (
     <kbd
-      aria-hidden="true"
-      className="hidden sm:inline-flex h-4 min-w-4 items-center justify-center rounded border border-border bg-muted px-1 font-mono text-[10px] font-medium leading-none text-muted-foreground"
-    >
-      {children}
-    </kbd>
+      className={cn(
+        'inline-flex h-4 min-w-4 items-center justify-center rounded border border-border bg-muted px-1 font-mono text-[10px] font-medium leading-none text-muted-foreground',
+        className,
+      )}
+      {...props}
+    />
   )
 }
 
@@ -55,7 +58,7 @@ function SuggestionButton({
     <Button
       variant="outline"
       size="sm"
-      className="h-8 w-full justify-start gap-1.5 px-2.5 sm:w-auto sm:max-w-[15rem]"
+      className="col-span-2 h-8 w-full justify-start gap-1.5 px-2.5 sm:w-auto sm:max-w-[15rem]"
       title={categoryPath(info)}
       aria-label={categoryPath(info)}
       aria-keyshortcuts={shortcut}
@@ -66,7 +69,9 @@ function SuggestionButton({
         {info.groupName && <span className="text-muted-foreground">{info.groupName} › </span>}
         {info.category.name}
       </span>
-      <Kbd>{shortcut}</Kbd>
+      <Kbd aria-hidden="true" className="ml-auto hidden sm:inline-flex">
+        {shortcut}
+      </Kbd>
     </Button>
   )
 }
@@ -81,6 +86,10 @@ interface ReviewGroupRowProps {
   open: boolean
   /** Holds the roving tabindex: the row Tab lands on. */
   current: boolean
+  /** Being applied by "accept all": dimmed and inert until it settles. */
+  busy: boolean
+  /** The shortcuts legend, read out as the row's description. */
+  describedBy?: string
   currency: string
   /** Offer the row's own new-category proposal (none bigger covers it). */
   offerNewCategory: boolean
@@ -101,6 +110,8 @@ export function ReviewGroupRow({
   canWrite,
   open,
   current,
+  busy,
+  describedBy,
   currency,
   offerNewCategory,
   rowRef,
@@ -113,6 +124,7 @@ export function ReviewGroupRow({
   const { t } = useTranslation()
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
+  const listId = useId()
 
   const name = storeName(group)
   const guess = group.suggestion?.category_id ? catalog.get(group.suggestion.category_id) : undefined
@@ -138,29 +150,45 @@ export function ReviewGroupRow({
       data-review-row=""
       data-index={index}
       tabIndex={current ? 0 : -1}
-      aria-expanded={open}
+      aria-describedby={describedBy}
+      aria-busy={busy || undefined}
       aria-keyshortcuts={canWrite ? '1 2 x Enter ArrowUp ArrowDown' : 'Enter ArrowUp ArrowDown'}
       onFocus={(e) => {
         if (e.target === e.currentTarget) onFocusRow()
       }}
       onClick={onToggle}
-      className="cursor-pointer px-4 py-3 outline-none transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:shadow-[inset_3px_0_0_var(--color-primary)] sm:px-5"
+      className={cn(
+        'cursor-pointer px-4 py-3 outline-none transition-[background-color,opacity] hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:shadow-[inset_3px_0_0_var(--color-primary)] sm:px-5',
+        busy && 'pointer-events-none opacity-50',
+      )}
     >
       <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-            <ChevronRight
-              size={14}
-              aria-hidden="true"
-              className={cn('shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')}
-            />
-            <span className="truncate">{name ?? t('categorization.review.whoIsUnknown')}</span>
+          <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={listId}
+              onClick={(e) => {
+                // The row toggles on click too; this one must not toggle twice.
+                e.stopPropagation()
+                onToggle()
+              }}
+              className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <ChevronRight
+                size={14}
+                aria-hidden="true"
+                className={cn('shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')}
+              />
+              <span className="truncate">{name ?? t('categorization.review.whoIsUnknown')}</span>
+            </button>
             {group.is_person && (
               <span className="shrink-0 rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700 dark:bg-teal-950 dark:text-teal-300">
                 {t('categorization.review.pix')}
               </span>
             )}
-          </p>
+          </div>
           <p className="mt-0.5 pl-5 text-xs text-muted-foreground">
             {t('categorization.review.txCount', { count: group.count })}
             {' · '}
@@ -183,7 +211,8 @@ export function ReviewGroupRow({
 
         {canWrite && (
           <div
-            className="grid grid-cols-1 gap-1.5 pl-5 sm:flex sm:shrink-0 sm:items-center sm:pl-0"
+            // Phone: suggestions full width, then "Other…" and "Ignore" side by side.
+            className="grid grid-cols-2 gap-1.5 pl-5 sm:flex sm:shrink-0 sm:items-center sm:pl-0"
             onClick={(e) => e.stopPropagation()}
           >
             {guess && (
@@ -204,7 +233,7 @@ export function ReviewGroupRow({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 w-full justify-start gap-1.5 px-2.5 sm:w-auto sm:max-w-[15rem]"
+                className="col-span-2 h-8 w-full justify-start gap-1.5 px-2.5 sm:w-auto sm:max-w-[15rem]"
                 title={newCategoryPath}
                 onClick={onCreateCategory}
               >
@@ -240,14 +269,14 @@ export function ReviewGroupRow({
         )}
       </div>
 
-      {open && <GroupTransactions ids={group.transaction_ids} />}
+      {open && <GroupTransactions id={listId} ids={group.transaction_ids} />}
     </li>
   )
 }
 
 /** The store's transactions as the bank sent them, fetched one by one: the
  *  queue carries only their ids, and the list endpoint has no id filter. */
-function GroupTransactions({ ids }: { ids: string[] }) {
+function GroupTransactions({ id, ids }: { id: string; ids: string[] }) {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
   const dateLocale = useDateLocale()
@@ -267,7 +296,7 @@ function GroupTransactions({ ids }: { ids: string[] }) {
     `${tx.type === 'credit' ? '+' : '−'}${formatCurrency(Math.abs(Number(tx.amount)), tx.currency, locale)}`
 
   return (
-    <div className="mt-2.5 cursor-default sm:ml-5" onClick={(e) => e.stopPropagation()}>
+    <div id={id} className="mt-2.5 cursor-default sm:ml-5" onClick={(e) => e.stopPropagation()}>
       <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-muted/30 text-xs">
         {results.map((result, i) => {
           const tx = result.data

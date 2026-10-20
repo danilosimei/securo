@@ -2907,7 +2907,7 @@
       "applied_one": "Aplicado a {{count}} transação",
       "applied_other": "Aplicado a {{count}} transações",
       "undone": "Desfeito",
-      "dismissed": "{{name}} ignorada",
+      "dismissed": "Ignorado: {{name}}",
       "whoIs": "Quem é {{name}}?",
       "whoIsUnknown": "Quem recebeu este Pix?",
       "pix": "Pix",
@@ -2929,7 +2929,11 @@
         "navigate": "navegar",
         "expand": "abrir",
         "ignore": "ignorar"
-      }
+      },
+      "applying": "Aplicando…",
+      "partialFailure_one": "{{count}} loja não foi aplicada: {{error}}",
+      "partialFailure_other": "{{count}} lojas não foram aplicadas: {{error}}",
+      "keysHint": "Clique numa loja ou use Tab para atalhos"
     }
   }
 }

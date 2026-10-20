@@ -17,7 +17,7 @@ const api = vi.hoisted(() => ({
   categoryGroups: { list: vi.fn() },
   transactions: { get: vi.fn() },
 }))
-const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }))
 const workspace = vi.hoisted(() => ({ canWrite: true, canManage: true }))
 
 vi.mock('@/lib/api', () => api)
@@ -127,8 +127,8 @@ const row = (name: string) => screen.getByText(name).closest('[data-review-row]'
 async function renderTab() {
   const utils = renderWithProviders(<ReviewTab />)
   await screen.findByText('iFood')
-  // The category labels need the category queries too.
-  await screen.findByRole('button', { name: /Food › Restaurants/ })
+  // The rows wait for the categories: the buttons are there with the first row.
+  screen.getByRole('button', { name: /Food › Restaurants/ })
   return utils
 }
 
@@ -194,7 +194,7 @@ describe('ReviewTab', () => {
     await waitFor(() => expect(row('Maria Silva')).toHaveFocus())
   })
 
-  it('atalho 2 aceita a alternativa e x ignora', async () => {
+  it('atalho 2 aceita a alternativa e x ignora quando o toast fecha', async () => {
     const { user } = await renderTab()
     act(() => row('iFood').focus())
     await user.keyboard('2')
@@ -202,9 +202,63 @@ describe('ReviewTab', () => {
       expect.objectContaining({ merchant_key: 'IFOOD', category_id: 'c2' }),
     )
     await waitFor(() => expect(row('Uber')).toHaveFocus())
+    toast.success.mockClear()
 
     await user.keyboard('x')
+    expect(screen.queryByText('Uber')).not.toBeInTheDocument()
+    expect(row('Maria Silva')).toHaveFocus()
+    // Nothing is sent while the toast can still take it back.
+    expect(api.categorization.dismiss).not.toHaveBeenCalled()
+    expect(toast.success).toHaveBeenCalledWith(
+      t('categorization.review.dismissed', { name: 'Uber' }),
+      expect.objectContaining({ action: expect.objectContaining({ label: t('common.undo') }) }),
+    )
+
+    const options = toast.success.mock.calls[0][1] as { onAutoClose: () => void; onDismiss: () => void }
+    await act(async () => options.onAutoClose())
     expect(api.categorization.dismiss).toHaveBeenCalledWith('UBER')
+    // A second close callback does not send it twice.
+    await act(async () => options.onDismiss())
+    expect(api.categorization.dismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('desfazer o ignorar devolve a linha sem chamar a API', async () => {
+    const { user } = await renderTab()
+    await user.click(within(row('Uber')).getByRole('button', { name: t('categorization.review.ignore') }))
+    expect(screen.queryByText('Uber')).not.toBeInTheDocument()
+
+    const options = toast.success.mock.calls[0][1] as {
+      action: { onClick: () => void }
+      onDismiss: () => void
+    }
+    act(() => options.action.onClick())
+    expect(await screen.findByText('Uber')).toBeInTheDocument()
+    // The toast closing afterwards must not send the undone answer.
+    await act(async () => options.onDismiss())
+    expect(api.categorization.dismiss).not.toHaveBeenCalled()
+  })
+
+  it('sair da aba envia o ignorar pendente', async () => {
+    const { user, unmount } = await renderTab()
+    await user.click(within(row('Uber')).getByRole('button', { name: t('categorization.review.ignore') }))
+    expect(api.categorization.dismiss).not.toHaveBeenCalled()
+
+    unmount()
+    expect(api.categorization.dismiss).toHaveBeenCalledWith('UBER')
+    expect(toast.dismiss).toHaveBeenCalled()
+  })
+
+  it('aceitar com o mouse leva o foco para a próxima loja', async () => {
+    const { user } = await renderTab()
+    await user.click(within(row('iFood')).getByRole('button', { name: /Food › Restaurants/ }))
+    await waitFor(() => expect(row('Uber')).toHaveFocus())
+  })
+
+  it('Tab entra na lista pela loja atual', async () => {
+    const { user } = await renderTab()
+    act(() => screen.getByRole('button', { name: t('categorization.review.acceptAll') }).focus())
+    await user.tab()
+    expect(row('iFood')).toHaveFocus()
   })
 
   it('Enter expande e lista as transações da loja', async () => {
@@ -222,7 +276,25 @@ describe('ReviewTab', () => {
 
     expect(await screen.findByText('IFOOD *ORIGINAL t1')).toBeInTheDocument()
     expect(screen.getByText('IFOOD *ORIGINAL t2')).toBeInTheDocument()
-    expect(row('iFood')).toHaveAttribute('aria-expanded', 'true')
+    const disclosure = within(row('iFood')).getByRole('button', { name: 'iFood' })
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true')
+    expect(document.getElementById(disclosure.getAttribute('aria-controls')!)).toHaveTextContent(
+      'IFOOD *ORIGINAL t1',
+    )
+    expect(row('iFood')).not.toHaveAttribute('aria-expanded')
+  })
+
+  it('o nome da loja é um botão que abre e fecha', async () => {
+    api.transactions.get.mockResolvedValue({
+      id: 'x', date: '2026-10-01', description: 'd', original_description: 'UBER TRIP', amount: -5, currency: 'BRL',
+    })
+    const { user } = await renderTab()
+    const disclosure = within(row('Uber')).getByRole('button', { name: 'Uber' })
+    await user.click(disclosure)
+    expect(disclosure).toHaveAttribute('aria-expanded', 'true')
+    expect(await screen.findByText('UBER TRIP')).toBeInTheDocument()
+    await user.click(disclosure)
+    expect(disclosure).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('atalhos não disparam dentro do campo de busca do seletor', async () => {
@@ -246,12 +318,29 @@ describe('ReviewTab', () => {
   })
 
   it('aceitar todas pede confirmação e desfaz tudo de uma vez', async () => {
+    // Hold the answers, to see the list while they are on their way.
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const answer = api.categorization.accept.getMockImplementation()!
+    api.categorization.accept.mockImplementation(async (body: { merchant_key: string }) => {
+      await gate
+      return answer(body)
+    })
     const { user } = await renderTab()
     await user.click(screen.getByRole('button', { name: t('categorization.review.acceptAll') }))
     expect(api.categorization.accept).not.toHaveBeenCalled()
 
     // Maria has no suggestion: only the two stores with one are counted.
     await user.click(screen.getByRole('button', { name: t('categorization.review.confirmAll', { count: 2 }) }))
+
+    const applying = await screen.findByRole('button', { name: t('categorization.review.applying') })
+    expect(applying).toBeDisabled()
+    expect(screen.getByText('iFood')).toBeInTheDocument()
+    expect(row('iFood')).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByText(t('categorization.review.empty'))).not.toBeInTheDocument()
+    await act(async () => release())
 
     await waitFor(() => expect(api.categorization.accept).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1))
@@ -268,6 +357,49 @@ describe('ReviewTab', () => {
     expect(api.categorization.undo).toHaveBeenCalledTimes(1)
     const ids = api.categorization.undo.mock.calls[0][0].event_ids
     expect([...ids].sort()).toEqual(['IFOOD-e1', 'IFOOD-e2', 'UBER-e1', 'UBER-e2'])
+  })
+
+  it('aceitar todas com falha parcial: as que falharam voltam e o desfazer cobre só as aplicadas', async () => {
+    const answer = api.categorization.accept.getMockImplementation()!
+    api.categorization.accept.mockImplementation(async (body: { merchant_key: string }) => {
+      if (body.merchant_key === 'UBER') {
+        throw { response: { status: 404, data: { detail: 'Category not found' } } }
+      }
+      return answer(body)
+    })
+    const { user } = await renderTab()
+    await user.click(screen.getByRole('button', { name: t('categorization.review.acceptAll') }))
+    await user.click(screen.getByRole('button', { name: t('categorization.review.confirmAll', { count: 2 }) }))
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        t('categorization.review.partialFailure', { count: 1, error: 'Category not found' }),
+      ),
+    )
+    expect(toast.success).toHaveBeenCalledWith(
+      t('categorization.review.applied', { count: 12 }),
+      expect.anything(),
+    )
+    await waitFor(() => expect(screen.queryByText('iFood')).not.toBeInTheDocument())
+    expect(screen.getByText('Uber')).toBeInTheDocument()
+
+    const options = toast.success.mock.calls[0][1] as { action: { onClick: () => void } }
+    await act(async () => options.action.onClick())
+    expect(api.categorization.undo).toHaveBeenCalledWith({ event_ids: ['IFOOD-e1', 'IFOOD-e2'] })
+  })
+
+  it('desfazer envia os event_ids em lotes de até 5000', async () => {
+    const many = Array.from({ length: 5001 }, (_, i) => `e${i}`)
+    api.categorization.accept.mockResolvedValueOnce({ applied: 5001, event_ids: many, event_run_id: null })
+    const { user } = await renderTab()
+    await user.click(within(row('iFood')).getByRole('button', { name: /Food › Restaurants/ }))
+    await waitFor(() => expect(toast.success).toHaveBeenCalled())
+
+    const options = toast.success.mock.calls[0][1] as { action: { onClick: () => void } }
+    await act(async () => options.action.onClick())
+    expect(api.categorization.undo).toHaveBeenCalledTimes(2)
+    expect(api.categorization.undo.mock.calls[0][0].event_ids).toHaveLength(5000)
+    expect(api.categorization.undo.mock.calls[1][0].event_ids).toEqual(['e5000'])
   })
 
   it('a confirmação de aceitar todas expira', async () => {
