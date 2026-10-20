@@ -1,30 +1,6 @@
 /** Grouping helpers for the "Applied" audit list. */
 import type { AppliedEvent } from '@/types'
 
-/** Openers that say how the money moved, not who it went to. */
-const GENERIC_FIRST_WORDS = new Set(['pix', 'ted', 'doc', 'compra', 'pagamento', 'pagto', 'transferencia', 'debito', 'credito'])
-
-function titleCase(text: string) {
-  return text.replace(/(^|\s)\p{L}/gu, (m) => m.toUpperCase())
-}
-
-/** A store key and a readable name from a raw bank description:
- *  "IFOOD *PEDIDO 8812" and "IFOOD *PEDIDO 9001" land together. */
-export function storeFromDescription(description: string): { key: string; name: string } {
-  const words = description
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[^a-z\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-  if (words.length === 0) return { key: description.trim().toLowerCase(), name: description.trim() }
-  let take = GENERIC_FIRST_WORDS.has(words[0]) ? 3 : words[0].length < 3 ? 2 : 1
-  take = Math.min(take, words.length)
-  const picked = words.slice(0, take).join(' ')
-  return { key: picked, name: titleCase(picked) }
-}
-
 export interface StoreBucket {
   key: string
   name: string
@@ -38,7 +14,7 @@ export interface DayBucket {
   date: Date
   stores: StoreBucket[]
   count: number
-  runs: { runId: string; at: Date }[]
+  runs: { runId: string; at: Date; eventIds: string[] }[]
 }
 
 function dayKey(d: Date) {
@@ -59,18 +35,19 @@ export function groupApplied(events: AppliedEvent[]): DayBucket[] {
       bucket = { day, date: new Date(at.getFullYear(), at.getMonth(), at.getDate(), 12), stores: [], count: 0, runs: [] }
       days.set(day, bucket)
     }
-    const store = storeFromDescription(event.transaction.description)
-    const storeId = `${day}|${store.key}|${event.new_category_id ?? ''}`
+    const storeId = `${day}|${event.merchant_key}|${event.new_category_id ?? ''}`
     let group = stores.get(storeId)
     if (!group) {
-      group = { key: storeId, name: store.name, categoryId: event.new_category_id, events: [] }
+      group = { key: storeId, name: event.store_name, categoryId: event.new_category_id, events: [] }
       stores.set(storeId, group)
       bucket.stores.push(group)
     }
     group.events.push(event)
     bucket.count += 1
-    if (event.run_id && !bucket.runs.some((r) => r.runId === event.run_id)) {
-      bucket.runs.push({ runId: event.run_id, at })
+    if (event.run_id) {
+      const run = bucket.runs.find((r) => r.runId === event.run_id)
+      if (run) run.eventIds.push(event.event_id)
+      else bucket.runs.push({ runId: event.run_id, at, eventIds: [event.event_id] })
     }
   }
   return [...days.values()]

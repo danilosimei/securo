@@ -830,3 +830,34 @@ async def test_transactions_filter_by_category_source(client, auth_headers, sess
     bad = await client.get("/api/transactions?category_source=bogus", headers=auth_headers)
     assert bad.status_code == 422
 
+
+
+@pytest.mark.asyncio
+async def test_applied_exposes_store_key_and_name(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    payee = Payee(id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_account.workspace_id,
+                  name="Padaria Estrela", source="sync")
+    session.add(payee)
+    await session.flush()
+    now = datetime.now(timezone.utc)
+    with_payee = _tx(session, test_user, test_account, "COMPRA NO DEBITO PADARIA ESTRELA", category_id=food,
+                     source="rule", payee_id=payee.id)
+    other = _tx(session, test_user, test_account, "COMPRA NO DEBITO MERCADO SOL", category_id=food, source="rule")
+    hashed = _tx(session, test_user, test_account, "Transferencia enviada|123.456.789-09", category_id=food, source="rule")
+    await session.flush()
+    _event(session, with_payee, source="rule", new=food, created_at=now)
+    _event(session, other, source="rule", new=food, created_at=now - timedelta(minutes=1))
+    _event(session, hashed, source="rule", new=food, created_at=now - timedelta(minutes=2))
+    await session.commit()
+
+    items = (await client.get(f"{API}/applied", headers=auth_headers)).json()["items"]
+    by_desc = {i["transaction"]["description"]: i for i in items}
+    padaria = by_desc["COMPRA NO DEBITO PADARIA ESTRELA"]
+    mercado = by_desc["COMPRA NO DEBITO MERCADO SOL"]
+    assert padaria["store_name"] == "Padaria Estrela"
+    assert padaria["merchant_key"].startswith("P:")
+    assert mercado["merchant_key"] != padaria["merchant_key"]
+    assert mercado["store_name"] == "Mercado Sol"
+    pix = by_desc["Transferencia enviada|123.456.789-09"]
+    assert pix["merchant_key"].startswith("PIX:#")
+    assert "123" not in pix["store_name"] and "789" not in pix["store_name"]

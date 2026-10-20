@@ -11,7 +11,7 @@ const api = vi.hoisted(() => ({
   categoryGroups: { list: vi.fn() },
   transactions: { update: vi.fn() },
 }))
-const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }))
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), dismiss: vi.fn() }))
 const workspace = vi.hoisted(() => ({ canWrite: true, canManage: true }))
 
 vi.mock('@/lib/api', () => api)
@@ -45,6 +45,7 @@ const yesterday = new Date(now.getTime() - 24 * 3600 * 1000)
 
 function ev(n: number, overrides: Partial<AppliedEvent> & { description?: string } = {}): AppliedEvent {
   const { description, ...rest } = overrides
+  const uber = description?.startsWith('UBER')
   return {
     event_id: `e${n}`,
     run_id: 'run1',
@@ -55,6 +56,8 @@ function ev(n: number, overrides: Partial<AppliedEvent> & { description?: string
     confidence: 95,
     reason: 'Food delivery app',
     created_at: now.toISOString(),
+    merchant_key: uber ? 'UBER' : 'IFOOD',
+    store_name: uber ? 'Uber' : 'iFood',
     ...rest,
   }
 }
@@ -152,8 +155,27 @@ describe('AppliedTab', () => {
   it('desfazer este lote usa o run_id', async () => {
     const { user } = await renderTab()
     const day = screen.getByText('Today').closest('section') as HTMLElement
+    await user.click(within(day).getByRole('button', { name: /Undo this batch \(3\)/ }))
+    await waitFor(() => expect(api.categorization.undo).toHaveBeenCalledWith({ event_ids: ['e1', 'e2', 'e3'] }))
+  })
+
+  it('so avisa o ignorado quando nada foi restaurado', async () => {
+    api.categorization.undo.mockResolvedValue({ restored: 0, skipped: 2 })
+    const { user } = await renderTab()
+    const day = screen.getByText('Today').closest('section') as HTMLElement
     await user.click(within(day).getByRole('button', { name: /Undo this batch/ }))
-    await waitFor(() => expect(api.categorization.undo).toHaveBeenCalledWith({ run_id: 'run1' }))
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith('2 skipped because you had already edited it'))
+  })
+
+  it('lojas diferentes com a mesma abertura nao se misturam', async () => {
+    items = [
+      ev(1, { description: 'COMPRA NO DEBITO PADARIA X', merchant_key: 'PADARIA X', store_name: 'Padaria X' }),
+      ev(2, { description: 'COMPRA NO DEBITO MERCADO Y', merchant_key: 'MERCADO Y', store_name: 'Mercado Y' }),
+    ]
+    total = 2
+    renderWithProviders(<AppliedTab />)
+    expect(await screen.findByRole('button', { name: /Padaria X/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Mercado Y/ })).toBeInTheDocument()
   })
 
   it('carregar mais pede a proxima pagina', async () => {

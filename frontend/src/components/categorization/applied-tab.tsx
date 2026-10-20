@@ -25,6 +25,7 @@ import { SectionCard, SectionHeader, Segmented } from '@/components/invoice-ui'
 import { CategoryIcon } from '@/components/category-icon'
 import { CategorySelect } from '@/components/category-select'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -149,11 +150,12 @@ export function AppliedTab() {
   }, [])
 
   const undo = useCallback(
-    async (payload: { event_ids: string[] } | { run_id: string }, involved: AppliedEvent[]) => {
-      if (!canWrite || busy) return
+    async (eventIds: string[]) => {
+      if (!canWrite || busy || eventIds.length === 0) return
+      const involved = eventIds.map((id) => byId.get(id)).filter((e): e is AppliedEvent => !!e)
       setBusy(true)
       try {
-        const result = await categorizationApi.undo(payload)
+        const result = await categorizationApi.undo({ event_ids: eventIds })
         const backToReview = involved.some((e) => BACK_TO_REVIEW.includes(e.source))
         const skipped = result.skipped > 0 ? t('categorization.applied.skipped', { count: result.skipped }) : undefined
         if (result.restored > 0) {
@@ -164,7 +166,7 @@ export function AppliedTab() {
             { description: skipped },
           )
         } else if (skipped) {
-          toast.success(skipped, {})
+          toast.info(skipped)
         }
         setSelected(new Set())
       } catch (err) {
@@ -174,7 +176,7 @@ export function AppliedTab() {
         invalidateCategorizationQueries(queryClient)
       }
     },
-    [busy, canWrite, queryClient, t],
+    [busy, byId, canWrite, queryClient, t],
   )
 
   const correct = useCallback(
@@ -314,29 +316,18 @@ export function AppliedTab() {
                     {dayLabel(day.date)}
                     <span className="ml-2 font-normal text-muted-foreground">{day.count}</span>
                   </h3>
-                  {canWrite &&
-                    day.runs.map((run) => (
-                      <Button
-                        key={run.runId}
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
-                        disabled={busy}
-                        onClick={() =>
-                          void undo(
-                            { run_id: run.runId },
-                            events.filter((e) => e.run_id === run.runId),
-                          )
-                        }
-                      >
-                        <Undo2 size={13} />
-                        {day.runs.length > 1
-                          ? t('categorization.applied.undoBatchAt', {
-                              time: run.at.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' }),
-                            })
-                          : t('categorization.applied.undoBatch')}
-                      </Button>
-                    ))}
+                  {canWrite && day.runs.length > 0 && (
+                    <BatchUndo
+                      runs={day.runs.map((run) => ({
+                        id: run.runId,
+                        count: run.eventIds.length,
+                        time: run.at.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' }),
+                        eventIds: run.eventIds,
+                      }))}
+                      busy={busy}
+                      onUndo={(ids) => void undo(ids)}
+                    />
+                  )}
                 </div>
                 <div className="divide-y divide-border">
                   {day.stores.map((store) => (
@@ -423,7 +414,7 @@ export function AppliedTab() {
                   size="sm"
                   className="h-9 gap-1.5"
                   disabled={busy}
-                  onClick={() => void undo({ event_ids: selectedEvents.map((e) => e.event_id) }, selectedEvents)}
+                  onClick={() => void undo(selectedEvents.map((e) => e.event_id))}
                 >
                   {busy ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
                   {t('categorization.applied.undoSelected')}
@@ -442,6 +433,53 @@ export function AppliedTab() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+interface BatchRun {
+  id: string
+  count: number
+  time: string
+  eventIds: string[]
+}
+
+/** One button per batch of the day; more than two fold into a menu. The
+ *  undo covers exactly the rows listed, and the label says how many. */
+function BatchUndo({ runs, busy, onUndo }: { runs: BatchRun[]; busy: boolean; onUndo: (ids: string[]) => void }) {
+  const { t } = useTranslation()
+  const label = (run: BatchRun) =>
+    runs.length > 1
+      ? t('categorization.applied.undoBatchAt', { time: run.time, count: run.count })
+      : t('categorization.applied.undoBatch', { count: run.count })
+  const cls = 'h-7 gap-1.5 px-2 text-xs text-muted-foreground'
+  if (runs.length > 2) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className={cls} disabled={busy}>
+            <Undo2 size={13} />
+            {t('categorization.applied.undoBatchMore')}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {runs.map((run) => (
+            <DropdownMenuItem key={run.id} onSelect={() => onUndo(run.eventIds)}>
+              {label(run)}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {runs.map((run) => (
+        <Button key={run.id} variant="ghost" size="sm" className={cls} disabled={busy} onClick={() => onUndo(run.eventIds)}>
+          <Undo2 size={13} />
+          {label(run)}
+        </Button>
+      ))}
     </div>
   )
 }

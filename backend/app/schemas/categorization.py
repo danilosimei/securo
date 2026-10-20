@@ -161,6 +161,10 @@ class AppliedEvent(BaseModel):
     confidence: Optional[int] = None
     reason: Optional[str] = None
     created_at: datetime
+    #: Grouping id of the store; never shown to people.
+    merchant_key: str
+    #: What to call the store on screen.
+    store_name: str
 
 
 class AppliedPage(BaseModel):

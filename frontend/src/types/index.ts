@@ -1913,6 +1913,10 @@ export interface AppliedEvent {
   confidence: number | null
   reason: string | null
   created_at: string
+  /** Grouping id of the store; never shown. */
+  merchant_key: string
+  /** What to call the store on screen. */
+  store_name: string
 }
 
 export interface AppliedPage {

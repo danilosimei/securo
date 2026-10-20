@@ -52,6 +52,7 @@ from app.services.categorization.merchant_key import (
     scrub_documents,
 )
 from app.services.categorization.pipeline import CHUNK, MAX_SAMPLES, stored_key
+from app.services.categorization.prompts import prompt_sample
 from app.services.categorization.settings import find_ai_connection, get_settings
 
 #: Origins of the changes the pipeline made on its own (the audit list).
@@ -504,6 +505,63 @@ async def create_category(
 # --- audit list, undo, provenance ---------------------------------------------
 
 
+def _readable_key(key: str) -> str:
+    """A store key as a person would write it: no prefix, title case."""
+    for prefix in (PAYEE_PREFIX, PERSON_PREFIX):
+        if key.startswith(prefix):
+            key = key[len(prefix):]
+            break
+    return key.strip().title()
+
+
+async def _store_labels(
+    session: AsyncSession, workspace_id: uuid.UUID, txs: list[Transaction]
+) -> dict[uuid.UUID, tuple[str, str]]:
+    """Transaction id -> (store key, display name), in two queries for the page.
+
+    The key only groups (never shown). The name is, in order: the latest
+    suggestion's clean name, the payee's name when the key came from it, the
+    readable key, and for a hashed Pix key or an unknown store the scrubbed
+    description (no documents, no account numbers).
+    """
+    if not txs:
+        return {}
+    payee_ids = {tx.payee_id for tx in txs if tx.payee_id is not None}
+    payees: dict[uuid.UUID, tuple[str, str | None]] = {}
+    if payee_ids:
+        payee_rows = await session.execute(
+            select(Payee.id, Payee.name, Payee.source).where(Payee.id.in_(payee_ids))
+        )
+        payees = {pid: (name, source) for pid, name, source in payee_rows.all()}
+    clean: dict[uuid.UUID, str] = {}
+    sug_rows = await session.execute(
+        select(CategorizationSuggestion.transaction_id, CategorizationSuggestion.clean_name)
+        .where(
+            CategorizationSuggestion.workspace_id == workspace_id,
+            CategorizationSuggestion.transaction_id.in_([tx.id for tx in txs]),
+            CategorizationSuggestion.clean_name.is_not(None),
+        )
+        .order_by(CategorizationSuggestion.created_at.desc(), CategorizationSuggestion.id)
+    )
+    for tx_id, name in sug_rows.all():
+        if name and name.strip():
+            clean.setdefault(tx_id, name.strip())
+    out: dict[uuid.UUID, tuple[str, str]] = {}
+    for tx in txs:
+        payee_name, payee_source = payees.get(tx.payee_id, (None, None)) if tx.payee_id else (None, None)
+        key = merchant_key(tx.description, payee_name=payee_name, payee_source=payee_source)
+        if tx.id in clean:
+            name = clean[tx.id]
+        elif key.startswith(PAYEE_PREFIX) and payee_name and payee_name.strip():
+            name = payee_name.strip()
+        elif key == UNKNOWN_KEY or key.startswith(f"{PERSON_PREFIX}#"):
+            name = prompt_sample(tx.description) or _readable_key(key)
+        else:
+            name = _readable_key(key)
+        out[tx.id] = (stored_key(key), name)
+    return out
+
+
 async def applied_events(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -542,6 +600,8 @@ async def applied_events(
         .limit(limit)
         .offset(offset)
     )
+    pairs = rows.all()
+    labels = await _store_labels(session, workspace_id, [tx for _, tx in pairs])
     items = [
         {
             "event_id": ev.id,
@@ -559,8 +619,10 @@ async def applied_events(
             "confidence": ev.confidence,
             "reason": ev.reason,
             "created_at": ev.created_at,
+            "merchant_key": labels[tx.id][0],
+            "store_name": labels[tx.id][1],
         }
-        for ev, tx in rows.all()
+        for ev, tx in pairs
     ]
     return items, total or 0
 
