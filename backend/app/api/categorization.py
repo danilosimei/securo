@@ -36,7 +36,7 @@ from app.schemas.categorization import (
     UndoRequest,
     UndoResultRead,
 )
-from app.services.categorization import events, review
+from app.services.categorization import review
 from app.services.categorization import settings as categorization_settings
 from app.tasks import categorization_tasks
 
@@ -162,7 +162,7 @@ async def undo_changes(
     ctx: WorkspaceContext = Depends(current_writable_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    result = await events.undo(
+    result = await review.undo(
         session,
         ctx.workspace.id,
         event_ids=data.event_ids,

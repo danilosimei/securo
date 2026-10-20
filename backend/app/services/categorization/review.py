@@ -36,7 +36,7 @@ from app.models.transaction import Transaction
 from app.schemas.category import CategoryCreate
 from app.schemas.category_group import CategoryGroupCreate
 from app.services import category_group_service, category_service
-from app.services.categorization import memory
+from app.services.categorization import events, memory
 from app.services.categorization.costs import month_spend
 from app.services.categorization.events import (
     PROTECTED_SOURCES,
@@ -50,7 +50,7 @@ from app.services.categorization.merchant_key import (
     sample_description,
     scrub_documents,
 )
-from app.services.categorization.pipeline import CHUNK, MAX_SAMPLES
+from app.services.categorization.pipeline import CHUNK, MAX_SAMPLES, stored_key
 from app.services.categorization.settings import find_ai_connection, get_settings
 
 #: Origins of the changes the pipeline made on its own (the audit list).
@@ -93,17 +93,31 @@ def _norm_name(text: str) -> str:
     return " ".join(_fold(text).split())
 
 
+def _open_row(workspace_id: uuid.UUID):
+    """Join a suggestion to its row, if nobody categorized that row by hand
+    since: a suggestion over a protected row is stale, not a question."""
+    return and_(
+        Transaction.id == CategorizationSuggestion.transaction_id,
+        Transaction.workspace_id == workspace_id,
+        Transaction.category_source.not_in(PROTECTED_SOURCES),
+    )
+
+
 # --- summary ----------------------------------------------------------------
 
 
 async def summary(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, Any]:
-    pending = CategorizationSuggestion.status == "pending"
     groups, txs = (
         await session.execute(
             select(
                 func.count(func.distinct(CategorizationSuggestion.merchant_key)),
                 func.count(func.distinct(CategorizationSuggestion.transaction_id)),
-            ).where(CategorizationSuggestion.workspace_id == workspace_id, pending)
+            )
+            .join(Transaction, _open_row(workspace_id))
+            .where(
+                CategorizationSuggestion.workspace_id == workspace_id,
+                CategorizationSuggestion.status == "pending",
+            )
         )
     ).one()
     applied = await session.scalar(
@@ -180,13 +194,7 @@ async def _pending_groups(session: AsyncSession, workspace_id: uuid.UUID) -> lis
             Transaction.amount,
             Transaction.amount_primary,
         )
-        .join(
-            Transaction,
-            and_(
-                Transaction.id == CategorizationSuggestion.transaction_id,
-                Transaction.workspace_id == workspace_id,
-            ),
-        )
+        .join(Transaction, _open_row(workspace_id))
         .where(
             CategorizationSuggestion.workspace_id == workspace_id,
             CategorizationSuggestion.status == "pending",
@@ -384,18 +392,19 @@ async def _accept_keys(
 ) -> Applied:
     """Accept stores' pending rows (or the chosen ones) under `category_id`.
 
-    Without an explicit selection, a row someone categorized by hand since
-    the suggestion was made keeps that choice; its suggestion is settled
-    all the same.
+    A row someone categorized by hand since the suggestion was made keeps
+    that choice, even when selected; its suggestion is settled all the same.
     """
     suggestions = await _pending_suggestions(session, workspace_id, keys)
     if transaction_ids is not None:
         wanted = set(transaction_ids)
         suggestions = [s for s in suggestions if s.transaction_id in wanted]
     tx_ids = list(dict.fromkeys(s.transaction_id for s in suggestions))
-    txs = await _load_transactions(session, workspace_id, tx_ids)
-    if transaction_ids is None:
-        txs = [tx for tx in txs if tx.category_source not in PROTECTED_SOURCES]
+    txs = [
+        tx
+        for tx in await _load_transactions(session, workspace_id, tx_ids)
+        if tx.category_source not in PROTECTED_SOURCES
+    ]
     result = await _apply_as_user(session, workspace_id, user_id, txs, category_id)
     for key in dict.fromkeys(s.merchant_key for s in suggestions):
         await memory.learn_choice(session, workspace_id, key, category_id)
@@ -436,7 +445,8 @@ async def _find_or_create_group(
         )
     ).scalars().all()
     for group in groups:
-        if _norm_name(group.name) == wanted:
+        # A hidden group would hide the category created in it.
+        if not group.is_hidden and _norm_name(group.name) == wanted:
             return group
     return await category_group_service.create_group(
         session, workspace_id, user_id, CategoryGroupCreate(name=name.strip())
@@ -454,7 +464,8 @@ async def create_category(
 ) -> tuple[uuid.UUID, Applied]:
     """Create a proposed category (and its group) and file the stores under it.
 
-    An existing group or category of the same (normalized) name is reused.
+    An existing visible group, or assignable category, of the same
+    (normalized) name is reused; a hidden one is not.
     The category services commit on their own; the rest is the caller's.
     """
     category_group = await _find_or_create_group(session, workspace_id, user_id, group)
@@ -467,7 +478,10 @@ async def create_category(
             )
         )
     ).scalars().all()
-    category = next((c for c in existing if _norm_name(c.name) == wanted), None)
+    assignable = await category_service.get_assignable_category_ids(session, workspace_id)
+    category = next(
+        (c for c in existing if c.id in assignable and _norm_name(c.name) == wanted), None
+    )
     if category is None:
         category = await category_service.create_category(
             session,
@@ -546,6 +560,101 @@ async def applied_events(
     return items, total or 0
 
 
+def _utc(value: datetime) -> datetime:
+    """SQLite hands back naive datetimes; they are UTC."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+async def undo(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    *,
+    event_ids: list[uuid.UUID] | None = None,
+    run_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None,
+) -> events.UndoResult:
+    """`events.undo`, plus what the person's decisions had settled.
+
+    Undoing a person's change (accept, create-category, apply-to-similar)
+    takes back what it taught the memory, once per store and category, and
+    reopens the suggestion it accepted, so the store is back in review.
+    """
+    restorable: list[CategorizationEvent] = []
+    if event_ids is not None or run_id is not None:
+        query = select(CategorizationEvent).where(
+            CategorizationEvent.workspace_id == workspace_id,
+            CategorizationEvent.source == "user",
+            CategorizationEvent.undone_at.is_(None),
+        )
+        if event_ids is not None:
+            query = query.where(CategorizationEvent.id.in_(event_ids))
+        if run_id is not None:
+            query = query.where(CategorizationEvent.run_id == run_id)
+        restorable = list((await session.execute(query)).scalars().all())
+
+    result = await events.undo(
+        session, workspace_id, event_ids=event_ids, run_id=run_id, user_id=user_id
+    )
+    # Same session, same identity map: `events.undo` stamped these objects.
+    restored = [ev for ev in restorable if ev.undone_at is not None]
+    if restored:
+        await _take_back(session, workspace_id, restored)
+    return result
+
+
+async def _take_back(
+    session: AsyncSession, workspace_id: uuid.UUID, restored: list[CategorizationEvent]
+) -> None:
+    tx_ids = list(dict.fromkeys(ev.transaction_id for ev in restored))
+    accepted: dict[uuid.UUID, CategorizationSuggestion] = {}
+    still_pending: set[uuid.UUID] = set()
+    for chunk in _chunks(tx_ids):
+        rows = await session.execute(
+            select(CategorizationSuggestion)
+            .where(
+                CategorizationSuggestion.workspace_id == workspace_id,
+                CategorizationSuggestion.transaction_id.in_(chunk),
+                CategorizationSuggestion.status.in_(("accepted", "pending")),
+            )
+            .order_by(CategorizationSuggestion.resolved_at.desc())
+        )
+        for sug in rows.scalars().all():
+            if sug.status == "pending":
+                still_pending.add(sug.transaction_id)
+            else:
+                accepted.setdefault(sug.transaction_id, sug)
+    txs = {tx.id: tx for tx in await _load_transactions(session, workspace_id, tx_ids)}
+
+    taught: dict[tuple[str, uuid.UUID], None] = {}
+    for ev in restored:
+        tx = txs.get(ev.transaction_id)
+        sug = accepted.get(ev.transaction_id)
+        # Only the suggestion this decision settled (accepted at or after it).
+        if sug is not None and (
+            sug.resolved_at is None or _utc(sug.resolved_at) < _utc(ev.created_at)
+        ):
+            sug = None
+        if sug is not None:
+            key = sug.merchant_key
+            if (
+                tx is not None
+                and tx.category_source not in PROTECTED_SOURCES
+                and tx.id not in still_pending
+            ):
+                sug.status = "pending"
+                sug.resolved_at = None
+                still_pending.add(tx.id)
+        elif tx is not None:
+            key = stored_key(await memory.key_for_transaction(session, tx))
+        else:
+            continue
+        if ev.new_category_id is not None:
+            taught[(key, ev.new_category_id)] = None
+    for key, category_id in taught:
+        await memory.unlearn_choice(session, workspace_id, key, category_id)
+    await session.flush()
+
+
 async def get_transaction(
     session: AsyncSession, workspace_id: uuid.UUID, tx_id: uuid.UUID
 ) -> Transaction:
@@ -585,9 +694,14 @@ async def provenance(
 async def similar(
     session: AsyncSession, workspace_id: uuid.UUID, tx_id: uuid.UUID
 ) -> tuple[Transaction, str, list[uuid.UUID]]:
-    """Rows of the same store, not protected, filed elsewhere than the reference."""
+    """Rows of the same store, not protected, filed elsewhere than the reference.
+
+    A row with no merchant identity (`UNKNOWN`) has no "same store": none.
+    """
     ref = await get_transaction(session, workspace_id, tx_id)
     key = await memory.key_for_transaction(session, ref)
+    if key == UNKNOWN_KEY:
+        return ref, key, []
     rows = await session.execute(
         select(
             Transaction.id,
@@ -622,9 +736,13 @@ async def apply_similar(
 ) -> Applied:
     """File the similar rows under the reference's category, as the person.
 
-    The reference's own change already taught the memory: nothing more.
+    One decision about the store: the memory learns it once (the reference's
+    category may have come from the model, a rule or the bank, never from
+    the person's hook), and the rows themselves are derived.
     """
-    ref, _, ids = await similar(session, workspace_id, tx_id)
+    ref, key, ids = await similar(session, workspace_id, tx_id)
+    if key == UNKNOWN_KEY:
+        raise NoSafePattern("sem padrão seguro para esta transação")
     if ref.category_id is None:
         raise ValueError("A transação de referência não tem categoria")
     txs = [
@@ -632,7 +750,10 @@ async def apply_similar(
         for tx in await _load_transactions(session, workspace_id, ids)
         if tx.category_source not in PROTECTED_SOURCES
     ]
-    return await _apply_as_user(session, workspace_id, user_id, txs, ref.category_id)
+    result = await _apply_as_user(session, workspace_id, user_id, txs, ref.category_id)
+    if result.applied:
+        await memory.learn_choice(session, workspace_id, stored_key(key), ref.category_id)
+    return result
 
 
 async def rule_draft(
@@ -641,18 +762,21 @@ async def rule_draft(
     """A rule for this store, from its merchant key (no model involved).
 
     `description contains <key>` with the "P:" / "PIX:" prefix stripped. A
-    payee key whose name is not in the description falls back to the payee
-    itself; a person key made from a document hash never becomes a pattern
+    payee or person key whose name is not in the description falls back to
+    the payee itself; a person key made from a document hash never becomes a pattern
     (it would match nothing, or leak the document): the payee, or nothing.
     """
     tx = await get_transaction(session, workspace_id, tx_id)
     key = await memory.key_for_transaction(session, tx)
     payee_name = None
-    if tx.payee_id is not None:
-        payee_name = await session.scalar(select(Payee.name).where(Payee.id == tx.payee_id))
     by_payee = None
     if tx.payee_id is not None:
-        by_payee = {"field": "payee_id", "op": "equals", "value": str(tx.payee_id)}
+        payee_name = await session.scalar(
+            select(Payee.name).where(Payee.id == tx.payee_id, Payee.workspace_id == workspace_id)
+        )
+        if payee_name is not None:
+            by_payee = {"field": "payee_id", "op": "equals", "value": str(tx.payee_id)}
+    description = _fold(tx.description or "")
 
     if key.startswith(HASHED_PERSON_PREFIX) or key == UNKNOWN_KEY:
         if by_payee is None:
@@ -662,13 +786,23 @@ async def rule_draft(
     elif key.startswith(PAYEE_PREFIX):
         value = key[len(PAYEE_PREFIX):].strip()
         name = value
-        if (value and value in _fold(tx.description or "")) or by_payee is None:
+        if (value and value in description) or by_payee is None:
             condition = {"field": "description", "op": "contains", "value": value}
         else:
             condition = by_payee
+    elif key.startswith(PERSON_PREFIX):
+        # The name may come from the payee, not the description: then only
+        # the payee identifies the person.
+        value = key[len(PERSON_PREFIX):].strip()
+        name = value
+        if value and value in description:
+            condition = {"field": "description", "op": "contains", "value": value}
+        elif by_payee is not None:
+            condition = by_payee
+        else:
+            raise NoSafePattern("sem padrão seguro para esta transação")
     else:
-        value = key[len(PERSON_PREFIX):] if key.startswith(PERSON_PREFIX) else key
-        value = value.strip()
+        value = key.strip()
         name = value
         condition = {"field": "description", "op": "contains", "value": value}
 

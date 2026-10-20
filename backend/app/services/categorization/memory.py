@@ -111,6 +111,39 @@ async def learn_choice(
     await session.flush()
 
 
+async def unlearn_choice(
+    session: AsyncSession, workspace_id: uuid.UUID, key: str, category_id: uuid.UUID
+) -> None:
+    """Take back one pick for a store (an undone decision); never below zero.
+
+    An entry that reaches zero is removed. The AI's cached decision, already
+    dropped when the pick was learned, is not brought back.
+    """
+    row = (
+        await session.execute(
+            select(MerchantMemory).where(
+                MerchantMemory.workspace_id == workspace_id, MerchantMemory.merchant_key == key
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return
+    counts = dict(row.counts or {})
+    entry = str(category_id)
+    try:
+        current = int(counts.get(entry, 0) or 0)
+    except (TypeError, ValueError):
+        current = 0
+    if current > 1:
+        counts[entry] = current - 1
+    else:
+        counts.pop(entry, None)
+    row.counts = counts  # reassigned: in-place JSON mutation is not tracked
+    if row.last_user_category_id == category_id and entry not in counts:
+        row.last_user_category_id = None
+    await session.flush()
+
+
 async def lookup(
     session: AsyncSession, workspace_id: uuid.UUID, keys: list[str]
 ) -> dict[str, MemoryHit]:

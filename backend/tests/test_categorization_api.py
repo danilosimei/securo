@@ -314,6 +314,32 @@ async def test_accept_learns_memory_and_marks_user(client, auth_headers, session
     undo = await client.post(f"{API}/undo", headers=auth_headers, json={"event_ids": body["event_ids"]})
     assert undo.json() == {"restored": 3, "skipped": 0}
 
+    # Undo takes the decision back: the store is in review again, the memory forgets.
+    for sug in sugs:
+        fresh = await _fresh(session, CategorizationSuggestion, sug.id)
+        assert (fresh.status, fresh.resolved_at) == ("pending", None)
+    review = (await client.get(f"{API}/review", headers=auth_headers)).json()
+    padaria = next(g for g in review["groups"] if g["merchant_key"] == "PADARIA")
+    assert padaria["count"] == 3
+    await session.refresh(memory)
+    assert memory.counts == {}
+
+
+@pytest.mark.asyncio
+async def test_undo_after_similar_apply_unlearns(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    ref = _tx(session, test_user, test_account, "IFOOD 1", source="ai", category_id=food)
+    other = _tx(session, test_user, test_account, "IFOOD 2", source="none")
+    await session.commit()
+    applied = (await client.post(f"{API}/similar/apply", headers=auth_headers, json={"transaction_id": str(ref.id)})).json()
+    memory = (await session.execute(select(MerchantMemory).where(MerchantMemory.merchant_key == "IFOOD"))).scalar_one()
+    assert memory.counts == {str(food): 1}
+    undo = await client.post(f"{API}/undo", headers=auth_headers, json={"event_ids": applied["event_ids"]})
+    assert undo.json() == {"restored": 1, "skipped": 0}
+    await session.refresh(memory)
+    assert memory.counts == {}
+    assert (await _fresh(session, Transaction, other.id)).category_source == "none"
+
 
 @pytest.mark.asyncio
 async def test_accept_only_selected_transactions(client, auth_headers, session, test_user, test_account, test_categories):
@@ -351,6 +377,42 @@ async def test_accept_keeps_rows_categorized_by_hand_since(client, auth_headers,
     assert resp.json()["applied"] == 1
     assert (await _fresh(session, Transaction, manual.id)).category_id == transport
     assert (await _fresh(session, CategorizationSuggestion, sm.id)).status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_accept_never_overrides_a_hand_choice_even_when_selected(client, auth_headers, session, test_user, test_account, test_categories):
+    food, transport = test_categories[0].id, test_categories[1].id
+    manual = _tx(session, test_user, test_account, "PADARIA", source="user", category_id=transport)
+    await session.flush()
+    sm = _suggest(session, manual, "PADARIA", category_id=food)
+    await session.commit()
+
+    resp = await client.post(
+        f"{API}/review/accept", headers=auth_headers,
+        json={"merchant_key": "PADARIA", "category_id": str(food), "transaction_ids": [str(manual.id)]},
+    )
+    assert resp.json()["applied"] == 0
+    fresh = await _fresh(session, Transaction, manual.id)
+    assert (fresh.category_id, fresh.category_source) == (transport, "user")
+    assert (await _fresh(session, CategorizationSuggestion, sm.id)).status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_review_and_summary_ignore_suggestions_over_protected_rows(client, auth_headers, session, test_user, test_account, test_categories):
+    open_tx = _tx(session, test_user, test_account, "PADARIA")
+    manual = _tx(session, test_user, test_account, "PADARIA", source="user", category_id=test_categories[1].id)
+    legacy = _tx(session, test_user, test_account, "POSTO", source="legacy", category_id=test_categories[1].id)
+    await session.flush()
+    _suggest(session, open_tx, "PADARIA")
+    _suggest(session, manual, "PADARIA")
+    _suggest(session, legacy, "POSTO")
+    await session.commit()
+
+    review = (await client.get(f"{API}/review", headers=auth_headers)).json()
+    assert [(g["merchant_key"], g["count"]) for g in review["groups"]] == [("PADARIA", 1)]
+    assert review["groups"][0]["transaction_ids"] == [str(open_tx.id)]
+    summary = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+    assert (summary["pending_groups"], summary["pending_transactions"]) == (1, 1)
 
 
 @pytest.mark.asyncio
@@ -421,6 +483,16 @@ async def test_create_category_applies_to_stores(client, auth_headers, session, 
     )).scalar_one()
     await session.refresh(other)
     assert other.ai_confidence is None
+
+    # A hidden category of the same name is not reused: a new one is made.
+    category.is_hidden = True
+    await session.commit()
+    hidden_reuse = await client.post(
+        f"{API}/review/create-category", headers=auth_headers,
+        json={"group": "Pets", "name": "Veterinário", "merchant_keys": []},
+    )
+    assert hidden_reuse.status_code == 200, hidden_reuse.text
+    assert hidden_reuse.json()["category_id"] != str(category.id)
 
     # Same group again: reused, not duplicated.
     again = await client.post(
@@ -552,11 +624,24 @@ async def test_similar_excludes_protected(client, auth_headers, session, test_us
     assert (await _fresh(session, Transaction, protected.id)).category_id == transport
     assert (await _fresh(session, Transaction, legacy.id)).category_id == transport
     assert (await _fresh(session, Transaction, same.id)).category_source == "ai"
-    # The reference choice already taught the memory: the bulk adds nothing.
+    # One decision about the store, learned once (not once per row).
     memory = (await session.execute(
         select(MerchantMemory).where(MerchantMemory.merchant_key == "IFOOD")
     )).scalar_one_or_none()
-    assert memory is None
+    assert memory is not None
+    assert memory.counts == {str(food): 1}
+
+
+@pytest.mark.asyncio
+async def test_similar_has_no_store_without_merchant_identity(client, auth_headers, session, test_user, test_account, test_categories):
+    ref = _tx(session, test_user, test_account, "NULL", source="user", category_id=test_categories[0].id)
+    _tx(session, test_user, test_account, "NULL", source="none")
+    await session.commit()
+    resp = await client.post(f"{API}/similar", headers=auth_headers, json={"transaction_id": str(ref.id)})
+    assert resp.json() == {"merchant_key": "UNKNOWN", "count": 0, "transaction_ids": []}
+    apply = await client.post(f"{API}/similar/apply", headers=auth_headers, json={"transaction_id": str(ref.id)})
+    assert apply.status_code == 422
+    assert "padrão seguro" in apply.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -598,6 +683,22 @@ async def test_rule_draft_never_uses_hashed_person_key(client, auth_headers, ses
     body = (await client.get(f"{API}/rule-draft/{with_payee.id}", headers=auth_headers)).json()
     assert body["conditions"] == [{"field": "payee_id", "op": "equals", "value": str(payee.id)}]
     assert "123" not in body["name"]
+
+
+@pytest.mark.asyncio
+async def test_rule_draft_person_name_not_in_description(client, auth_headers, session, test_user, test_account, test_categories):
+    plain = _tx(session, test_user, test_account, "Transferencia enviada|MARIA SILVA-COSTA", category_id=test_categories[0].id)
+    payee = Payee(id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_account.workspace_id,
+                  name="Maria", source="description")
+    session.add(payee)
+    await session.flush()
+    with_payee = _tx(session, test_user, test_account, "Transferencia enviada|MARIA SILVA-COSTA",
+                     category_id=test_categories[0].id, payee_id=payee.id)
+    await session.commit()
+
+    assert (await client.get(f"{API}/rule-draft/{plain.id}", headers=auth_headers)).status_code == 422
+    body = (await client.get(f"{API}/rule-draft/{with_payee.id}", headers=auth_headers)).json()
+    assert body["conditions"] == [{"field": "payee_id", "op": "equals", "value": str(payee.id)}]
 
 
 @pytest.mark.asyncio
