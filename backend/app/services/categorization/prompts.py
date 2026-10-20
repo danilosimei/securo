@@ -181,7 +181,10 @@ class CategoryIndex:
 
 
 def build_category_index(
-    categories: Iterable[Category], groups: Iterable[CategoryGroup]
+    categories: Iterable[Category],
+    groups: Iterable[CategoryGroup],
+    *,
+    allowed_category_ids: set[uuid.UUID] | None = None,
 ) -> CategoryIndex:
     """Short ids over the assignable categories, ordered by group position,
     group name, then category name (ungrouped ones last).
@@ -189,11 +192,15 @@ def build_category_index(
     "Assignable" matches `category_service.get_assignable_category_ids`: a
     category hidden directly or through its group is left out. Categories
     that only move money (`treat_as_transfer`) stay, marked TRANSFER_MARK.
+    `allowed_category_ids` narrows the index further (a split category's
+    rows are redistributed only among its children).
     """
     by_group = {g.id: g for g in groups}
     ranked: list[tuple[tuple[Any, ...], uuid.UUID, str]] = []
     for cat in categories:
         if cat.is_hidden:
+            continue
+        if allowed_category_ids is not None and cat.id not in allowed_category_ids:
             continue
         name = _one_line(cat.name)
         grp = by_group.get(cat.group_id) if cat.group_id is not None else None

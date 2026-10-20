@@ -26,6 +26,9 @@ from app.schemas.categorization import (
     CreateCategoryResult,
     DismissRequest,
     DismissResult,
+    OrganizerApplyResult,
+    OrganizerOp,
+    OrganizerRead,
     Provenance,
     ReviewQueue,
     RuleDraft,
@@ -36,7 +39,8 @@ from app.schemas.categorization import (
     UndoRequest,
     UndoResultRead,
 )
-from app.services.categorization import review
+from app.models.categorization import CategorizationRun
+from app.services.categorization import organizer, review
 from app.services.categorization import settings as categorization_settings
 from app.tasks import categorization_tasks
 
@@ -277,3 +281,92 @@ async def run_categorization(
             detail="Não foi possível iniciar a categorização agora; tente de novo em instantes.",
         )
     return run
+
+
+# --- organizer ----------------------------------------------------------------------
+
+
+def _organizer_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, organizer.NotFound):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+
+
+@router.get("/organizer", response_model=OrganizerRead)
+async def get_organizer(
+    ctx: WorkspaceContext = Depends(current_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """The latest organize run with its proposed ops."""
+    return organizer.view(await organizer.latest_run(session, ctx.workspace.id))
+
+
+@router.post("/organizer/run", response_model=RunRead, status_code=status.HTTP_202_ACCEPTED)
+async def run_organizer(
+    response: Response,
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Queue an organizer run; one already busy is returned instead."""
+    # Restructures the tree and spends the owner's key: an owner/manager call.
+    ctx.require_owner()
+    run, created = await organizer.request_run(session, ctx.workspace.id)
+    await session.commit()
+    if not created:
+        response.status_code = status.HTTP_200_OK
+        return run
+    if not categorization_tasks.enqueue_organizer(ctx.workspace.id, run.id):
+        await review.mark_enqueue_failed(session, run)
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível iniciar o organizador agora; tente de novo em instantes.",
+        )
+    return run
+
+
+@router.post("/organizer/ops/{op_id}/apply", response_model=OrganizerApplyResult)
+async def apply_organizer_op(
+    op_id: str,
+    run_id: Optional[uuid.UUID] = Query(None, description="Organize run; the latest by default"),
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Apply one proposed op. A split queues the redistribution of its rows."""
+    ctx.require_owner()
+    try:
+        result = await organizer.apply_op(session, ctx.workspace.id, run_id, op_id, ctx.user_id)
+    except (organizer.NotFound, organizer.OpConflict) as exc:
+        await session.rollback()
+        raise _organizer_error(exc)
+    await session.commit()
+    redistribution = None
+    if result["redistribute_run_id"] is not None:
+        redistribution = await session.get(CategorizationRun, result["redistribute_run_id"])
+        if redistribution is not None and not categorization_tasks.enqueue_organizer(
+            ctx.workspace.id, redistribution.id
+        ):
+            # The op stays applied; the run shows why its rows did not move.
+            await review.mark_enqueue_failed(session, redistribution)
+            await session.commit()
+    return OrganizerApplyResult(
+        op=OrganizerOp.model_validate(result["op"]),
+        redistribute_run=RunRead.model_validate(redistribution) if redistribution else None,
+    )
+
+
+@router.post("/organizer/ops/{op_id}/reject", response_model=OrganizerOp)
+async def reject_organizer_op(
+    op_id: str,
+    run_id: Optional[uuid.UUID] = Query(None, description="Organize run; the latest by default"),
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    ctx.require_owner()
+    try:
+        op = await organizer.reject_op(session, ctx.workspace.id, run_id, op_id)
+    except (organizer.NotFound, organizer.OpConflict) as exc:
+        await session.rollback()
+        raise _organizer_error(exc)
+    await session.commit()
+    return op

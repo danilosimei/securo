@@ -50,6 +50,49 @@ class RunRequest(BaseModel):
     scope: Literal["backlog"] = "backlog"
 
 
+class OrganizerImpact(BaseModel):
+    """What an op touches in the last 12 months (recomputed, not the model's)."""
+
+    tx: int = 0
+    total: float = 0.0
+
+
+class OrganizerOp(BaseModel):
+    """One proposed change to the category tree.
+
+    `target`/`group`/`into` are the proposal's short ids (or a new group's
+    name); `labels` carries the readable names to show instead.
+    """
+
+    id: str
+    op: str
+    target: Optional[str] = None
+    group: Optional[str] = None
+    name: Optional[str] = None
+    children: list[str] = Field(default_factory=list)
+    into: Optional[str] = None
+    why: str = ""
+    impact: OrganizerImpact = Field(default_factory=OrganizerImpact)
+    labels: dict[str, Any] = Field(default_factory=dict)
+    status: Literal["pending", "applied", "rejected"] = "pending"
+    decided_at: Optional[datetime] = None
+    result: Optional[dict[str, Any]] = None
+
+
+class OrganizerRead(BaseModel):
+    """The latest organize run, its ops and, when it has no proposal, why."""
+
+    run: Optional[RunRead] = None
+    ops: list[OrganizerOp] = Field(default_factory=list)
+    message: Optional[str] = None
+
+
+class OrganizerApplyResult(BaseModel):
+    op: OrganizerOp
+    #: The redistribution a split queued, to follow by polling.
+    redistribute_run: Optional[RunRead] = None
+
+
 class LastRun(BaseModel):
     id: uuid.UUID
     status: str

@@ -82,10 +82,16 @@ async def create_group(
     workspace_id: uuid.UUID,
     user_id: uuid.UUID,
     data: CategoryGroupCreate,
+    *,
+    commit: bool = True,
 ) -> CategoryGroup:
+    """Create a group; `commit=False` only flushes (the caller's transaction)."""
     group = CategoryGroup(user_id=user_id, workspace_id=workspace_id, **data.model_dump())
     session.add(group)
-    await session.commit()
+    if commit:
+        await session.commit()
+    else:
+        await session.flush()
     created = await get_group(session, group.id, workspace_id)
     if created is None:
         raise RuntimeError("Failed to reload created category group")
@@ -93,8 +99,14 @@ async def create_group(
 
 
 async def update_group(
-    session: AsyncSession, group_id: uuid.UUID, workspace_id: uuid.UUID, data: CategoryGroupUpdate
+    session: AsyncSession,
+    group_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    data: CategoryGroupUpdate,
+    *,
+    commit: bool = True,
 ) -> Optional[CategoryGroup]:
+    """Update a group; `commit=False` only flushes (the caller's transaction)."""
     group = await get_group(session, group_id, workspace_id)
     if not group:
         return None
@@ -106,7 +118,10 @@ async def update_group(
     for key, value in changes.items():
         setattr(group, key, value)
 
-    await session.commit()
+    if commit:
+        await session.commit()
+    else:
+        await session.flush()
     return await get_group(session, group_id, workspace_id)
 
 

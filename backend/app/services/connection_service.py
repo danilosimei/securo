@@ -18,7 +18,9 @@ from app.models.asset_group import AssetGroup
 from app.models.asset_value import AssetValue
 from app.models.bank_connection import BankConnection
 from app.models.account import Account
+from app.models.categorization import CategorizationSettings
 from app.models.category import Category
+from app.models.category_group import CategoryGroup
 from app.models.institution import Institution
 from app.models.goal import Goal
 from app.models.collection import collection_asset_groups
@@ -824,6 +826,35 @@ async def _upsert_asset_value_for_today(
         )
 
 
+async def _mapped_provider_category(
+    session: AsyncSession, workspace_id: uuid.UUID, app_name: str
+) -> Optional[uuid.UUID]:
+    """The category id stored for `app_name` (`provider_category_map`), when it
+    is still an assignable category of this workspace; None otherwise."""
+    stored = await session.scalar(
+        select(CategorizationSettings.provider_category_map).where(
+            CategorizationSettings.workspace_id == workspace_id
+        )
+    )
+    raw = (stored or {}).get(app_name) if isinstance(stored, dict) else None
+    try:
+        category_id = uuid.UUID(str(raw)) if raw else None
+    except ValueError:
+        return None
+    if category_id is None:
+        return None
+    return await session.scalar(
+        select(Category.id)
+        .outerjoin(CategoryGroup, Category.group_id == CategoryGroup.id)
+        .where(
+            Category.id == category_id,
+            Category.workspace_id == workspace_id,
+            Category.is_hidden.is_(False),
+            or_(Category.group_id.is_(None), CategoryGroup.is_hidden.is_(False)),
+        )
+    )
+
+
 async def _match_pluggy_category(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -842,6 +873,11 @@ async def _match_pluggy_category(
         app_name = PLUGGY_CATEGORY_MAP.get(pluggy_category.split(" - ")[0])
     if not app_name:
         return None
+    # The organizer may rename or move categories: the id it resolved for
+    # this name comes first, so a renamed category keeps receiving it.
+    mapped = await _mapped_provider_category(session, workspace_id, app_name)
+    if mapped is not None:
+        return mapped
     # Scope to the connection's workspace: a user in multiple workspaces owns
     # the same default category names in each, so a user_id-only lookup returns
     # several rows. `.first()` is belt-and-suspenders — a category match must

@@ -89,6 +89,15 @@ async def create_message(client: AsyncAnthropic, params: dict[str, Any]) -> Mess
         raise _translate(exc) from exc
 
 
+async def create_beta_message(client: AsyncAnthropic, params: dict[str, Any]) -> Any:
+    """One non-streaming call on the beta Messages API (needed for `betas` and
+    `fallbacks`, which the SDK only takes there); raises `LLMError` subclasses."""
+    try:
+        return await client.beta.messages.create(**params)
+    except anthropic.APIError as exc:
+        raise _translate(exc) from exc
+
+
 async def create_batch(client: AsyncAnthropic, requests: list[Request]) -> str:
     """Submit a Message Batch; returns its id."""
     try:

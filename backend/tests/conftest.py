@@ -210,6 +210,13 @@ def categorization_enqueue():
         yield enqueue
 
 
+@pytest.fixture(autouse=True)
+def organizer_enqueue():
+    """The organizer's routes enqueue its task; tests never reach a broker."""
+    with patch("app.tasks.categorization_tasks.enqueue_organizer") as enqueue:
+        yield enqueue
+
+
 async def override_get_async_session() -> AsyncGenerator[AsyncSession, None]:
     from app.core.app_clock import use_timezone
 

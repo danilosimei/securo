@@ -65,7 +65,7 @@ from app.services.categorization.events import (
     stage_change,
     write_staged,
 )
-from app.services.categorization.memory import lookup, remember_ai_decision
+from app.services.categorization.memory import lookup, remember_ai_decision, repoint_store
 from app.services.categorization.merchant_key import merchant_key, scrub_documents
 from app.services.categorization.pipeline import (
     AUTO_APPLY_SOURCES,
@@ -95,6 +95,7 @@ from app.services.category_service import get_assignable_category_ids
 from app.services.payee_service import _same_name_as, get_or_create_payee
 
 __all__ = [
+    "BATCH_KINDS",
     "SUPERSEDED_REASON",
     "UNDECIDED_REASON",
     "ApplyStats",
@@ -127,6 +128,9 @@ CHARS_PER_TOKEN = 4
 BATCH_DETAIL = "batch"
 #: Ids per `IN (...)`.
 ID_CHUNK = 1000
+#: Run kinds that may wait on a Message Batch (a redistribution after a
+#: split goes through the same path as a classification).
+BATCH_KINDS = ("classify", "redistribute")
 #: Message Batches accept only `^[a-zA-Z0-9_-]{1,64}$` as `custom_id`:
 #: `<run id hex>-<chunk position>`.
 CUSTOM_ID_SEPARATOR = "-"
@@ -297,6 +301,19 @@ def _revisable(tx: Transaction) -> bool:
     return tx.category_source in PIPELINE_SOURCES and tx.category_id is None
 
 
+def _redistributable(tx: Transaction, family: set[uuid.UUID]) -> bool:
+    """A row of a split category still waiting to be redistributed: counted,
+    unpaired, and still in the split's family -- whoever filed it (the
+    person approved splitting that category, so `user` rows move too)."""
+    return (
+        tx.status == "posted"
+        and tx.transfer_pair_id is None
+        and not tx.is_ignored
+        and tx.source != "opening_balance"
+        and tx.category_id in family
+    )
+
+
 def _person_disagrees(rows: list[Transaction], category_id: uuid.UUID | None) -> bool:
     """A person filed a row of the store elsewhere while the model answered."""
     return any(
@@ -395,6 +412,7 @@ async def apply_results(
     index: CategoryIndex,
     threshold: int,
     model: str,
+    allowed_category_ids: set[uuid.UUID] | None = None,
 ) -> ApplyStats:
     """Write one answer: `groups_by_item` maps the request's item ids to stores.
 
@@ -406,6 +424,12 @@ async def apply_results(
     category, the rows get a pending suggestion. Each row is checked again
     as it is now (`_revisable`, no newer pending question); a row decided
     here closes its model-less suggestion.
+
+    With `allowed_category_ids` (a redistribution after a split) the rows
+    are the split category's, whatever their origin: a row moves while it
+    is still in that family (`_redistributable`), a person's earlier choice
+    does not hold the store back, and the store's memory follows the rows
+    to the chosen child.
     """
     assignable = await get_assignable_category_ids(session, workspace_id)
     answers: dict[str, _Answer] = {}
@@ -425,7 +449,15 @@ async def apply_results(
     now = datetime.now(timezone.utc)
     for item_id, group in groups_by_item.items():
         rows = [current[i] for i in dict.fromkeys(group.tx_ids) if i in current]
-        open_rows = [tx for tx in rows if _revisable(tx) and tx.id not in waiting]
+        open_rows = [
+            tx for tx in rows
+            if (
+                _revisable(tx)
+                if allowed_category_ids is None
+                else _redistributable(tx, allowed_category_ids)
+            )
+            and tx.id not in waiting
+        ]
         stats.skipped += len(set(group.tx_ids)) - len(open_rows)
         answer = answers.get(item_id)
 
@@ -433,7 +465,10 @@ async def apply_results(
             answer is not None
             and answer.category_id is not None
             and answer.confidence >= threshold
-            and not _person_disagrees(rows, answer.category_id)
+            and (
+                allowed_category_ids is not None
+                or not _person_disagrees(rows, answer.category_id)
+            )
         ):
             category_id = answer.category_id
             changing = [tx for tx in open_rows if tx.category_id != category_id]
@@ -459,6 +494,11 @@ async def apply_results(
                 session, workspace_id, stored_key(group.key), category_id,
                 answer.confidence, answer.clean_name,
             )
+            if allowed_category_ids is not None:
+                await repoint_store(
+                    session, workspace_id, stored_key(group.key), category_id,
+                    from_ids=allowed_category_ids,
+                )
             continue
 
         for tx in open_rows:
@@ -500,7 +540,7 @@ async def committed_spend(session: AsyncSession, workspace_id: uuid.UUID) -> Dec
         await session.execute(
             select(CategorizationRun.detail).where(
                 CategorizationRun.workspace_id == workspace_id,
-                CategorizationRun.kind == "classify",
+                CategorizationRun.kind.in_(BATCH_KINDS),
                 CategorizationRun.status == "processing_batch",
             )
         )
@@ -541,6 +581,7 @@ async def _apply_message(
     index: CategoryIndex,
     threshold: int,
     position: int,
+    allowed_category_ids: set[uuid.UUID] | None = None,
 ) -> ApplyStats:
     items = _items(message)
     if items is None:
@@ -552,10 +593,15 @@ async def _apply_message(
     return await apply_results(
         session, workspace_id, run, groups_by_item, items or [],
         index=index, threshold=threshold, model=CLASSIFIER_MODEL,
+        allowed_category_ids=allowed_category_ids,
     )
 
 
-async def _category_index(session: AsyncSession, workspace_id: uuid.UUID) -> CategoryIndex:
+async def _category_index(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    allowed_category_ids: set[uuid.UUID] | None = None,
+) -> CategoryIndex:
     categories = (
         await session.execute(select(Category).where(Category.workspace_id == workspace_id))
     ).scalars().all()
@@ -564,7 +610,7 @@ async def _category_index(session: AsyncSession, workspace_id: uuid.UUID) -> Cat
             select(CategoryGroup).where(CategoryGroup.workspace_id == workspace_id)
         )
     ).scalars().all()
-    return build_category_index(categories, groups)
+    return build_category_index(categories, groups, allowed_category_ids=allowed_category_ids)
 
 
 async def _history(
@@ -631,12 +677,15 @@ async def classify(
     run: CategorizationRun,
     *,
     client: AsyncAnthropic,
+    allowed_category_ids: set[uuid.UUID] | None = None,
 ) -> None:
     """Decide `groups` with Claude, within the workspace's monthly cap.
 
     Owns the run's counters from here (`run.stats` already holds the memory
     phase's). Leaves the run `running` (the pipeline closes it), `capped`,
     or `processing_batch`. API errors propagate: the task records them.
+    `allowed_category_ids` restricts the choice to those categories and
+    applies the answer as a redistribution (see `apply_results`).
     """
     stats = dict(run.stats or {})
     if not groups:
@@ -644,7 +693,7 @@ async def classify(
         run.stats = stats
         return
     settings = await get_settings(session, workspace_id)
-    index = await _category_index(session, workspace_id)
+    index = await _category_index(session, workspace_id, allowed_category_ids)
     memory_rows = list(
         (
             await session.execute(
@@ -664,7 +713,10 @@ async def classify(
     threshold = settings.auto_apply_threshold
 
     if len(ordered) > SYNC_LIMIT:
-        await _submit_batch(session, workspace_id, run, plans, stats, client=client, index=index, cap=cap)
+        await _submit_batch(
+            session, workspace_id, run, plans, stats,
+            client=client, index=index, cap=cap, allowed_category_ids=allowed_category_ids,
+        )
     else:
         for position, plan in enumerate(plans):
             # Checked before every call against what the month already spent
@@ -687,6 +739,7 @@ async def classify(
             _count(stats, await _apply_message(
                 session, workspace_id, run, plan.groups_by_item, message,
                 index=index, threshold=threshold, position=position,
+                allowed_category_ids=allowed_category_ids,
             ))
     close_stats(stats)
     run.stats = stats
@@ -702,6 +755,7 @@ async def _submit_batch(
     client: AsyncAnthropic,
     index: CategoryIndex,
     cap: Decimal,
+    allowed_category_ids: set[uuid.UUID] | None = None,
 ) -> None:
     """Send the chunks that fit under the cap as one Message Batch; the rest
     become model-less suggestions and the run ends `capped`.
@@ -753,6 +807,12 @@ async def _submit_batch(
                 for group in plan.groups_by_item.values()
             },
             "index": [[short, str(category_id)] for short, category_id, _ in index.entries],
+            # A redistribution's family, so the collection applies it the same way.
+            "allowed": (
+                sorted(str(i) for i in allowed_category_ids)
+                if allowed_category_ids is not None
+                else None
+            ),
             "capped": bool(left),
             # Counted by `committed_spend` while the batch is in flight.
             "estimated_cost_usd": str(total - spent),
@@ -843,6 +903,10 @@ async def _collect(
     )
     chunks: list[dict[str, str]] = info.get("chunks", [])
     rows: dict[str, list[str]] = info.get("rows", {})
+    raw_allowed = info.get("allowed")
+    allowed = (
+        {uuid.UUID(raw) for raw in raw_allowed} if isinstance(raw_allowed, list) else None
+    )
     stats = dict(run.stats or {})
     done: set[int] = set()
     async for custom_id, message, error in batch_results(client, batch_id):
@@ -858,12 +922,14 @@ async def _collect(
             result = await apply_results(
                 session, run.workspace_id, run, groups, [],
                 index=index, threshold=threshold, model=CLASSIFIER_MODEL,
+                allowed_category_ids=allowed,
             )
         else:
             _account(run, getattr(message, "usage", None), batch=True)
             result = await _apply_message(
                 session, run.workspace_id, run, groups, message,
                 index=index, threshold=threshold, position=position,
+                allowed_category_ids=allowed,
             )
         _count(stats, result)
     for position, chunk in enumerate(chunks):
@@ -871,6 +937,7 @@ async def _collect(
             _count(stats, await apply_results(
                 session, run.workspace_id, run, _stored_groups(chunk, rows), [],
                 index=index, threshold=threshold, model=CLASSIFIER_MODEL,
+                allowed_category_ids=allowed,
             ))
     close_stats(stats)
     run.stats = stats

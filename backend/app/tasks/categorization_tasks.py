@@ -12,6 +12,11 @@ and runs alongside.
 `poll_batches` (beat, every 5 minutes) collects the Message Batches of runs
 waiting in `processing_batch` and applies them (`classifier.collect_batch`),
 then calls `requeue_if_requested` for each run it closes.
+
+`organize_workspace` executes a queued organizer run: `organize` (Opus
+proposes a new tree) or `redistribute` (after an approved split, the old
+category's rows are re-filed among its children; a large one waits on a
+Message Batch that `poll_batches` collects like a classification's).
 """
 from __future__ import annotations
 
@@ -28,7 +33,7 @@ from sqlalchemy.pool import NullPool
 from app.core.app_clock import use_timezone
 from app.core.config import get_settings
 from app.models.categorization import CategorizationRun
-from app.services.categorization import classifier, pipeline
+from app.services.categorization import classifier, organizer, pipeline
 from app.services.categorization.settings import get_settings as get_categorization_settings
 from app.worker import celery_app
 
@@ -36,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 CATEGORIZE_TASK = "app.tasks.categorization_tasks.categorize_workspace"
 POLL_BATCHES_TASK = "app.tasks.categorization_tasks.poll_batches"
+ORGANIZE_TASK = "app.tasks.categorization_tasks.organize_workspace"
 #: A `classify` run in one of these states owns the workspace.
 BUSY_STATUSES = ("queued", "running", "processing_batch")
 #: Busy runs older than this were abandoned (a worker died mid-run); they
@@ -77,6 +83,21 @@ def enqueue_categorization(
     return True
 
 
+def enqueue_organizer(workspace_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+    """Ask the worker to execute a queued organizer run; True when sent.
+
+    Never raises: the caller marks the run failed when this returns False.
+    """
+    try:
+        celery_app.send_task(ORGANIZE_TASK, args=[str(workspace_id), str(run_id)])
+    except Exception:  # noqa: BLE001 - reported to the caller
+        logger.warning(
+            "could not enqueue the organizer for workspace %s", workspace_id, exc_info=True
+        )
+        return False
+    return True
+
+
 @celery_app.task(name=CATEGORIZE_TASK)
 def categorize_workspace(workspace_id: str, trigger: str, run_id: str | None = None) -> dict:
     """Celery entry point: one pipeline pass, in a fresh event loop."""
@@ -87,6 +108,12 @@ def categorize_workspace(workspace_id: str, trigger: str, run_id: str | None = N
 def poll_batches() -> dict:
     """Collect the finished Message Batches of runs waiting on one."""
     return asyncio.run(_poll_celery())
+
+
+@celery_app.task(name=ORGANIZE_TASK)
+def organize_workspace(workspace_id: str, run_id: str) -> dict:
+    """Celery entry point: one organizer run, in a fresh event loop."""
+    return asyncio.run(_organize_celery(workspace_id, run_id))
 
 
 def _fresh_engine() -> Any:
@@ -107,6 +134,60 @@ async def _categorize_celery(workspace_id: str, trigger: str, run_id: str | None
         )
     finally:
         await engine.dispose()
+
+
+async def _organize_celery(workspace_id: str, run_id: str) -> dict:
+    engine = _fresh_engine()
+    session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        return await _organize(session_maker, uuid.UUID(workspace_id), uuid.UUID(run_id))
+    finally:
+        await engine.dispose()
+
+
+async def _organize(session_maker: Any, workspace_id: uuid.UUID, run_id: uuid.UUID) -> dict:
+    async with session_maker() as session:
+        async with use_timezone(session, workspace_id, fresh=True):
+            return await _organize_in(session, workspace_id, run_id)
+
+
+async def _organize_in(session: AsyncSession, workspace_id: uuid.UUID, run_id: uuid.UUID) -> dict:
+    await lock_workspace(session, workspace_id)
+    claimed = await session.execute(
+        update(CategorizationRun)
+        .where(
+            CategorizationRun.id == run_id,
+            CategorizationRun.workspace_id == workspace_id,
+            CategorizationRun.kind.in_(organizer.ORGANIZER_KINDS),
+            CategorizationRun.status == "queued",
+        )
+        .values(status="running")
+        .execution_options(synchronize_session=False)
+    )
+    # Committed before the work: the run shows as busy and the lock is freed.
+    await session.commit()
+    if getattr(claimed, "rowcount", 0) != 1:
+        return {"status": "skipped", "reason": "run not queued"}
+    run = await session.get(CategorizationRun, run_id, populate_existing=True)
+    if run is None:
+        return {"status": "skipped", "reason": "run not queued"}
+    try:
+        if run.kind == "organize":
+            await organizer.organize(session, workspace_id, run)
+        else:
+            await organizer.redistribute(session, workspace_id, run)
+        await session.commit()
+    except Exception as exc:  # noqa: BLE001 - recorded on the run
+        logger.exception("organizer run %s failed", run_id)
+        await session.rollback()
+        failed = await session.get(CategorizationRun, run_id, populate_existing=True)
+        if failed is not None:
+            failed.status = "failed"
+            failed.error = type(exc).__name__
+            failed.finished_at = datetime.now(timezone.utc)
+            await session.commit()
+        return {"status": "failed", "run_id": str(run_id)}
+    return {"status": run.status, "run_id": str(run.id)}
 
 
 async def _poll_celery() -> dict:
@@ -130,7 +211,7 @@ async def _poll(session_maker: Any) -> dict:
             await session.execute(
                 select(CategorizationRun.id, CategorizationRun.workspace_id)
                 .where(
-                    CategorizationRun.kind == "classify",
+                    CategorizationRun.kind.in_(classifier.BATCH_KINDS),
                     CategorizationRun.status == "processing_batch",
                 )
                 .order_by(CategorizationRun.created_at, CategorizationRun.id)

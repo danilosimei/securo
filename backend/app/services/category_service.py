@@ -35,6 +35,25 @@ class CategoryTransferError(ValueError):
     """Raised when the destination given for a deletion cannot take the references."""
 
 
+class CategoryGroupNotFoundError(ValueError):
+    """Raised when a category is filed under a group of another workspace (or none)."""
+
+
+async def _check_group(
+    session: AsyncSession, workspace_id: uuid.UUID, group_id: Optional[uuid.UUID]
+) -> None:
+    """A category may only sit in a group of its own workspace."""
+    if group_id is None:
+        return
+    found = await session.scalar(
+        select(CategoryGroup.id).where(
+            CategoryGroup.id == group_id, CategoryGroup.workspace_id == workspace_id
+        )
+    )
+    if found is None:
+        raise CategoryGroupNotFoundError("Category group not found in this workspace.")
+
+
 async def create_default_categories(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -151,10 +170,21 @@ async def create_category(
     workspace_id: uuid.UUID,
     user_id: uuid.UUID,
     data: CategoryCreate,
+    *,
+    commit: bool = True,
 ) -> Category:
+    """Create a category; `commit=False` only flushes (the caller's transaction).
+
+    Raises CategoryGroupNotFoundError when `group_id` is not a group of the
+    workspace.
+    """
+    await _check_group(session, workspace_id, data.group_id)
     category = Category(user_id=user_id, workspace_id=workspace_id, **data.model_dump())
     session.add(category)
-    await session.commit()
+    if commit:
+        await session.commit()
+    else:
+        await session.flush()
     await session.refresh(category)
     return category
 
@@ -210,12 +240,15 @@ async def update_category(
     data: CategoryUpdate,
     *,
     deactivate_rules: bool = False,
+    commit: bool = True,
 ) -> Optional[Category]:
     """Update a category, optionally retiring the rules that assign it.
 
     `deactivate_rules` only applies when the category is being hidden: the
     rules that filed transactions under it would otherwise stay listed as
-    active while the engine skips their categorization.
+    active while the engine skips their categorization. `commit=False` only
+    flushes. Raises CategoryGroupNotFoundError when the new `group_id` is
+    not a group of the workspace.
     """
     category = await get_category(session, category_id, workspace_id)
     if not category:
@@ -224,6 +257,8 @@ async def update_category(
     changes = data.model_dump(exclude_unset=True)
     if changes.get("is_hidden") is True and not category.is_system:
         raise CategoryVisibilityError("Only system categories can be hidden")
+    if "group_id" in changes:
+        await _check_group(session, workspace_id, changes["group_id"])
 
     for key, value in changes.items():
         setattr(category, key, value)
@@ -231,7 +266,10 @@ async def update_category(
     if deactivate_rules and changes.get("is_hidden") is True:
         await deactivate_rules_assigning_category(session, workspace_id, category_id)
 
-    await session.commit()
+    if commit:
+        await session.commit()
+    else:
+        await session.flush()
     await session.refresh(category)
     return category
 
@@ -409,6 +447,7 @@ async def delete_category(
     *,
     transfer_to_id: Optional[uuid.UUID] = None,
     user_id: Optional[uuid.UUID] = None,
+    commit: bool = True,
 ) -> bool:
     """Delete a category, optionally moving what it holds to another one.
 
@@ -416,6 +455,8 @@ async def delete_category(
     the category. With one, the transactions, budgets, recurring entries and
     rules are moved first, in the same transaction as the deletion, so the
     history survives and nothing is left pointing at an id that is gone.
+    `commit=False` deletes inside a savepoint and leaves the commit (or the
+    rollback) to the caller.
     """
     category = await get_category(session, category_id, workspace_id)
     if not category:
@@ -438,6 +479,17 @@ async def delete_category(
                 "Choose another category to move its entries to."
             )
         await categorization_memory.move_category(session, workspace_id, category_id, None)
+
+    if not commit:
+        try:
+            async with session.begin_nested():
+                await session.delete(category)
+                await session.flush()
+        except IntegrityError as exc:
+            raise CategoryInUseError(
+                "Category is still in use and cannot be deleted. Remove its references first."
+            ) from exc
+        return True
 
     try:
         await session.delete(category)

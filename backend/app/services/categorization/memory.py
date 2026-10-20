@@ -246,6 +246,49 @@ async def move_category(
     await session.flush()
 
 
+async def repoint_store(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    key: str,
+    to_category_id: uuid.UUID,
+    *,
+    from_ids: set[uuid.UUID] | None = None,
+) -> None:
+    """Move a store's recorded choices to another category.
+
+    Used when an approved reorganization moves the store's rows (a split's
+    redistribution, a new category that takes the store): otherwise the
+    memory would keep filing the store's next rows where they no longer
+    belong. Only the choices for `from_ids` move (all of them when None),
+    summed into `to_category_id`. A store the memory never saw is left
+    alone.
+    """
+    row = (
+        await session.execute(
+            select(MerchantMemory).where(
+                MerchantMemory.workspace_id == workspace_id, MerchantMemory.merchant_key == key
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return
+    target = str(to_category_id)
+    counts: dict[str, int] = {}
+    for raw_id, raw_count in (row.counts or {}).items():
+        try:
+            count = int(raw_count or 0)
+            moves = from_ids is None or uuid.UUID(raw_id) in from_ids
+        except (TypeError, ValueError):
+            continue
+        entry = target if moves else raw_id
+        counts[entry] = counts.get(entry, 0) + count
+    row.counts = counts  # reassigned: in-place JSON mutation is not tracked
+    last = row.last_user_category_id
+    if last is not None and (from_ids is None or last in from_ids):
+        row.last_user_category_id = to_category_id
+    await session.flush()
+
+
 async def on_user_choice(
     session: AsyncSession,
     workspace_id: uuid.UUID,
