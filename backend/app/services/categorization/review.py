@@ -1008,23 +1008,30 @@ async def request_run(
 
     Takes the workspace lock the worker takes, so two clicks do not queue
     two runs; abandoned runs are expired first so they cannot block forever.
+    A run sending its batch holds that lock across the network call: when
+    it is taken, the busy run is returned without waiting for it.
     """
     from app.tasks import categorization_tasks as tasks
 
-    await tasks.lock_workspace(session, workspace_id)
-    await tasks.expire_stale_runs(session, workspace_id)
-    busy = (
-        await session.execute(
-            select(CategorizationRun)
-            .where(
-                CategorizationRun.workspace_id == workspace_id,
-                CategorizationRun.kind == "classify",
-                CategorizationRun.status.in_(tasks.BUSY_STATUSES),
-            )
-            .order_by(CategorizationRun.created_at.desc())
-            .limit(1)
+    busy_query = (
+        select(CategorizationRun)
+        .where(
+            CategorizationRun.workspace_id == workspace_id,
+            CategorizationRun.kind == "classify",
+            CategorizationRun.status.in_(tasks.BUSY_STATUSES),
         )
-    ).scalar_one_or_none()
+        .order_by(CategorizationRun.created_at.desc())
+        .limit(1)
+    )
+    if not await tasks.try_lock_workspace(session, workspace_id):
+        busy = (await session.execute(busy_query)).scalar_one_or_none()
+        if busy is not None:
+            return busy, False
+        # Held by something that is not a busy classification (a claim
+        # about to commit, an organizer run): short, so wait for it.
+        await tasks.lock_workspace(session, workspace_id)
+    await tasks.expire_stale_runs(session, workspace_id)
+    busy = (await session.execute(busy_query)).scalar_one_or_none()
     if busy is not None:
         return busy, False
     run = CategorizationRun(

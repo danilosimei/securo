@@ -263,8 +263,24 @@ async def lock_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> None
     connection = await session.connection()
     if connection.dialect.name != "postgresql":
         return
-    key = int.from_bytes(workspace_id.bytes[:4], "big", signed=True)
-    await session.execute(select(func.pg_advisory_xact_lock(LOCK_NAMESPACE, key)))
+    await session.execute(select(func.pg_advisory_xact_lock(LOCK_NAMESPACE, _lock_key(workspace_id))))
+
+
+async def try_lock_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> bool:
+    """`lock_workspace` without waiting: False when another transaction
+    holds it (True off Postgres, where there is no lock)."""
+    connection = await session.connection()
+    if connection.dialect.name != "postgresql":
+        return True
+    return bool(
+        await session.scalar(
+            select(func.pg_try_advisory_xact_lock(LOCK_NAMESPACE, _lock_key(workspace_id)))
+        )
+    )
+
+
+def _lock_key(workspace_id: uuid.UUID) -> int:
+    return int.from_bytes(workspace_id.bytes[:4], "big", signed=True)
 
 
 async def expire_stale_runs(

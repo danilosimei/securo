@@ -437,3 +437,59 @@ async def test_poll_requeues_the_trigger_an_expired_run_carried(
 
     categorization_enqueue.assert_called_once_with(test_workspace.id, "ingest")
     assert (await _reload(session, stale.id)).detail == {}
+
+
+@pytest.mark.asyncio
+async def test_try_lock_is_free_off_postgres(session, test_workspace):
+    from app.tasks.categorization_tasks import try_lock_workspace
+
+    assert await try_lock_workspace(session, test_workspace.id) is True
+
+
+@pytest.mark.asyncio
+async def test_request_run_does_not_wait_on_a_held_lock_when_a_run_is_busy(postgres_sessions):
+    """A batch being sent holds the workspace lock across a network call: a
+    click on "run now" returns the busy run instead of waiting for it."""
+    import asyncio
+
+    from app.services.categorization import review
+    from app.tasks.categorization_tasks import lock_workspace
+    from tests.test_categorization_models import _seed_pg
+
+    async with postgres_sessions() as setup:
+        ws, _category, _txn = await _seed_pg(setup)
+        busy = _run(ws, "running")
+        setup.add(busy)
+        await setup.commit()
+
+    async with postgres_sessions() as holder, postgres_sessions() as session:
+        await lock_workspace(holder, ws)
+        run, created = await asyncio.wait_for(review.request_run(session, ws), timeout=5)
+        await holder.rollback()
+
+    assert (run.id, created) == (busy.id, False)
+
+
+@pytest.mark.asyncio
+async def test_request_run_waits_for_the_lock_when_nothing_is_busy(postgres_sessions):
+    import asyncio
+
+    from app.services.categorization import review
+    from app.tasks.categorization_tasks import lock_workspace
+    from tests.test_categorization_models import _seed_pg
+
+    async with postgres_sessions() as setup:
+        ws, _category, _txn = await _seed_pg(setup)
+        await setup.commit()
+
+    async with postgres_sessions() as holder, postgres_sessions() as session:
+        await lock_workspace(holder, ws)
+        request = asyncio.ensure_future(review.request_run(session, ws))
+        await asyncio.sleep(0.3)
+        assert not request.done()
+        await holder.commit()
+        run, created = await asyncio.wait_for(request, timeout=5)
+        await session.commit()
+
+    assert created is True
+    assert (run.kind, run.status, run.trigger) == ("classify", "queued", "manual")
