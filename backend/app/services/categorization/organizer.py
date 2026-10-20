@@ -984,7 +984,7 @@ async def redistribute(
     groups = group_by_key(candidates)
     run.stats = {
         "candidates": len(candidates), "groups": len(groups),
-        "memory": 0, "applied": 0, "suggested": 0, "skipped": 0,
+        "memory": 0, "confirmed": 0, "applied": 0, "suggested": 0, "skipped": 0,
     }
     if not groups:
         _finish(run, "done")

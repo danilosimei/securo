@@ -41,6 +41,7 @@ from app.services.categorization import events, memory
 from app.services.categorization.costs import month_spend
 from app.services.categorization.events import (
     PROTECTED_SOURCES,
+    changes_category,
     record_changes_bulk,
 )
 from app.services.categorization.merchant_key import (
@@ -153,6 +154,7 @@ async def summary(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, A
             CategorizationEvent.source.in_(AUTO_SOURCES),
             CategorizationEvent.undone_at.is_(None),
             CategorizationEvent.created_at >= _now() - APPLIED_WINDOW,
+            changes_category(),
         )
     )
     last = (
@@ -596,11 +598,15 @@ async def applied_events(
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Changes the pipeline made on its own and nobody undid, newest first."""
+    """Changes the pipeline made on its own and nobody undid, newest first.
+
+    Confirmations (the category did not change) are no change to check.
+    """
     filters = [
         CategorizationEvent.workspace_id == workspace_id,
         CategorizationEvent.source.in_(sources),
         CategorizationEvent.undone_at.is_(None),
+        changes_category(),
     ]
     if min_confidence is not None:
         filters.append(CategorizationEvent.confidence >= min_confidence)
@@ -673,6 +679,10 @@ async def undo(
     decision for the store and leaves the row a pending suggestion with the
     undone category as the alternative, so it goes to Revisar instead of
     being re-applied (or paid for again) by the next run.
+
+    Undoing a run ("Desfazer este lote") takes back only what it changed: a
+    guess it confirmed at the same category stays settled, out of review.
+    An undo by event ids reverts whatever it names.
     """
     restorable: list[CategorizationEvent] = []
     automatic: list[CategorizationEvent] = []
@@ -685,12 +695,13 @@ async def undo(
         if event_ids is not None:
             query = query.where(CategorizationEvent.id.in_(event_ids))
         if run_id is not None:
-            query = query.where(CategorizationEvent.run_id == run_id)
+            query = query.where(CategorizationEvent.run_id == run_id, changes_category())
         for ev in (await session.execute(query)).scalars().all():
             (restorable if ev.source == "user" else automatic).append(ev)
 
     result = await events.undo(
-        session, workspace_id, event_ids=event_ids, run_id=run_id, user_id=user_id
+        session, workspace_id, event_ids=event_ids, run_id=run_id, user_id=user_id,
+        changes_only=run_id is not None,
     )
     # Same session, same identity map: `events.undo` stamped these objects.
     restored = [ev for ev in restorable if ev.undone_at is not None]

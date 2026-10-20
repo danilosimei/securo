@@ -1120,3 +1120,23 @@ async def test_confirmed_provider_category_is_a_decision_and_not_paid_again(
     await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
     await session.commit()
     again.messages.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_classifier_counts_confirmations_apart(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    """Claude agreeing with a guess's category settles it as `ai`, counted
+    as `confirmed`: only real changes are `applied`."""
+    blank = _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    guessed = _tx(session, test_user, test_account, "IFOOD*CLUB 4410",
+                  source="provider", category_id=cats["Alimentação"])
+    await session.commit()
+    wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"], p=96))))
+
+    run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    assert (await _reload(session, blank)).category_source == "ai"
+    assert (await _reload(session, guessed)).category_source == "ai"
+    assert (run.stats["applied"], run.stats["confirmed"], run.stats["skipped"]) == (1, 1, 0)
+

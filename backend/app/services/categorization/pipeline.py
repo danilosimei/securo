@@ -369,7 +369,8 @@ async def memory_pass(
     `memory`, the event recording the confirmation): left a guess, it would
     stay a candidate and, once the memory changes, be paid for again. A
     settled store is consumed even when nothing changes. `stats["memory"]`
-    / `stats["applied"]` count the rows written.
+    / `stats["applied"]` count the rows whose category changed,
+    `stats["confirmed"]` the ones settled at the category they held.
     """
     if not groups:
         return {}
@@ -415,7 +416,10 @@ async def memory_pass(
 
     if stats is not None:
         for change in staged:
-            counter = "memory" if change.source == "memory" else "applied"
+            if change.previous_category_id == change.new_category_id:
+                counter = "confirmed"
+            else:
+                counter = "memory" if change.source == "memory" else "applied"
             stats[counter] = stats.get(counter, 0) + 1
     return remaining
 
@@ -503,6 +507,7 @@ def close_stats(stats: dict[str, Any]) -> None:
         0,
         stats.get("candidates", 0)
         - stats.get("memory", 0)
+        - stats.get("confirmed", 0)
         - stats.get("applied", 0)
         - stats.get("suggested", 0),
     )
@@ -591,6 +596,7 @@ async def prepare_run(
         "candidates": len(candidates),
         "groups": len(groups),
         "memory": 0,
+        "confirmed": 0,
         "applied": 0,
         "suggested": 0,
         "skipped": 0,

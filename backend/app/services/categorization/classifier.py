@@ -139,10 +139,11 @@ CUSTOM_ID_SEPARATOR = "-"
 
 @dataclass
 class ApplyStats:
-    """Rows changed, rows queued with a proposal, rows left (moved on since,
-    already right, or undecided)."""
+    """Rows changed, guesses settled at the category they held, rows queued
+    with a proposal, rows left (moved on since, already right, or undecided)."""
 
     applied: int = 0
+    confirmed: int = 0
     suggested: int = 0
     skipped: int = 0
 
@@ -516,7 +517,10 @@ async def apply_results(
                 if change is not None:
                     staged.append(change)
                     decided.append(tx.id)
-                    stats.applied += 1
+                    if change.previous_category_id == category_id:
+                        stats.confirmed += 1
+                    else:
+                        stats.applied += 1
             await remember_ai_decision(
                 session, workspace_id, stored_key(group.key), category_id,
                 answer.confidence, answer.clean_name,
@@ -599,6 +603,7 @@ def _account(run: CategorizationRun, usage: Any, *, batch: bool) -> None:
 
 def _count(stats: dict[str, Any], result: ApplyStats) -> None:
     stats["applied"] = stats.get("applied", 0) + result.applied
+    stats["confirmed"] = stats.get("confirmed", 0) + result.confirmed
     stats["suggested"] = stats.get("suggested", 0) + result.suggested
 
 

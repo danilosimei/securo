@@ -101,6 +101,15 @@ def _origin(source: str, new_category_id: uuid.UUID | None) -> str:
     return "none" if source == "user" and new_category_id is None else source
 
 
+def changes_category() -> Any:
+    """The events that moved a row's category. The others are confirmations:
+    the pipeline settling a guess at the category it already held (maybe
+    setting a payee), nothing a person would check or take back."""
+    return CategorizationEvent.previous_category_id.is_distinct_from(
+        CategorizationEvent.new_category_id
+    )
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -409,6 +418,7 @@ async def undo(
     event_ids: list[uuid.UUID] | None = None,
     run_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None,
+    changes_only: bool = False,
 ) -> UndoResult:
     """Revert events, unless the transaction moved on since.
 
@@ -416,6 +426,8 @@ async def undo(
     transaction (a person may have corrected it), when it was already undone,
     when it is itself an undo, or when it records a category merge (its
     previous category was deleted). Newest first, so chained events unwind.
+    `changes_only` leaves confirmations (`changes_category`) out altogether:
+    neither reverted nor counted.
     """
     if event_ids is None and run_id is None:
         return UndoResult(0, 0)
@@ -425,6 +437,8 @@ async def undo(
         query = query.where(CategorizationEvent.id.in_(event_ids))
     if run_id is not None:
         query = query.where(CategorizationEvent.run_id == run_id)
+    if changes_only:
+        query = query.where(changes_category())
     targets: list[Any] = list(
         (await session.execute(query.order_by(CategorizationEvent.created_at.desc()))).scalars().all()
     )

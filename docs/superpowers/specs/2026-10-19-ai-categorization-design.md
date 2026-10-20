@@ -147,7 +147,9 @@ gravam `category_id`:
 proteção (corrige o bug que hoje apaga categoria e notas manuais, `rule_service.py:1488-1491` —
 necessário porque a feature dá a esse botão um papel maior).
 
-**Desfazer** restaura `previous_*` e grava evento `undo`; em lote por `run_id` ou seleção.
+**Desfazer** restaura `previous_*` e grava evento `undo`; em lote por `run_id` ou seleção. Uma
+confirmação (o pipeline assume um palpite na categoria que ele já tinha) não conta como aplicada
+nem é desfeita pelo lote.
 
 ## 7. Claude — categorizador
 

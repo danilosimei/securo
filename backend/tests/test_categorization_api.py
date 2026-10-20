@@ -1009,3 +1009,74 @@ async def test_undo_of_a_big_batch_takes_a_fixed_number_of_queries(
 
     small, big = await batch(3), await batch(40)
     assert big == small
+
+
+@pytest.mark.asyncio
+async def test_summary_and_applied_leave_confirmations_out(
+    client, auth_headers, session, test_user, test_account, test_categories
+):
+    """A confirmation (the pipeline settling a guess at the category it
+    already held) changed nothing the person would check or undo."""
+    food, transport = test_categories[0].id, test_categories[1].id
+    filed = _tx(session, test_user, test_account, "A", source="ai", category_id=food)
+    moved = _tx(session, test_user, test_account, "B", source="memory", category_id=food)
+    confirmed = _tx(session, test_user, test_account, "C", source="ai", category_id=food)
+    await session.flush()
+    now = datetime.now(timezone.utc)
+    real = _event(session, filed, new=food, created_at=now)
+    other = _event(session, moved, source="memory", previous=transport, new=food,
+                   created_at=now - timedelta(minutes=1))
+    confirmation = _event(session, confirmed, previous=food, new=food)
+    confirmation.previous_source = "provider"
+    await session.commit()
+
+    summary = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+    assert summary["applied_last_7d"] == 2
+    body = (await client.get(f"{API}/applied", headers=auth_headers)).json()
+    assert body["total"] == 2
+    assert [i["event_id"] for i in body["items"]] == [str(real.id), str(other.id)]
+
+
+@pytest.mark.asyncio
+async def test_undo_run_leaves_its_confirmations_standing(
+    client, auth_headers, session, test_user, test_account, test_categories
+):
+    """"Desfazer este lote" takes back what the run changed; a guess it only
+    confirmed stays settled and does not go back to Revisar."""
+    food = test_categories[0].id
+    run = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_account.workspace_id, kind="classify",
+        trigger="manual", status="done", stats={}, detail={},
+    )
+    session.add(run)
+    changed = _tx(session, test_user, test_account, "LOJA A", source="ai", category_id=food)
+    confirmed = _tx(session, test_user, test_account, "LOJA B", source="ai", category_id=food)
+    await session.flush()
+    _event(session, changed, new=food, run_id=run.id)
+    confirmation = _event(session, confirmed, previous=food, new=food, run_id=run.id)
+    confirmation.previous_source = "provider"
+    await session.commit()
+
+    resp = await client.post(f"{API}/undo", headers=auth_headers, json={"run_id": str(run.id)})
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"restored": 1, "skipped": 0}
+    fresh = await _fresh(session, Transaction, changed.id)
+    assert (fresh.category_id, fresh.category_source) == (None, "none")
+    fresh = await _fresh(session, Transaction, confirmed.id)
+    assert (fresh.category_id, fresh.category_source) == (food, "ai")
+    assert (await _fresh(session, CategorizationEvent, confirmation.id)).undone_at is None
+    pending = (await session.execute(
+        select(CategorizationSuggestion.transaction_id).where(
+            CategorizationSuggestion.status == "pending"
+        )
+    )).scalars().all()
+    assert pending == [changed.id]
+
+    # Undoing the confirmation itself, by id, still works as before.
+    resp = await client.post(
+        f"{API}/undo", headers=auth_headers, json={"event_ids": [str(confirmation.id)]}
+    )
+    assert resp.json() == {"restored": 1, "skipped": 0}
+    fresh = await _fresh(session, Transaction, confirmed.id)
+    assert (fresh.category_id, fresh.category_source) == (food, "provider")

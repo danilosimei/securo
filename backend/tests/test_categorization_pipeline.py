@@ -316,7 +316,8 @@ async def test_run_without_ai_creates_pending_suggestions(
     assert bread.category_source == "memory"
     assert guessed.category_source == "provider"  # categorized guess: nothing to ask without AI
     assert run.stats == {
-        "candidates": 4, "groups": 3, "memory": 1, "applied": 0, "suggested": 2, "skipped": 1,
+        "candidates": 4, "groups": 3, "memory": 1, "confirmed": 0, "applied": 0, "suggested": 2,
+        "skipped": 1,
     }
     settings = await get_settings(session, test_workspace.id)
     assert settings.last_run_at is not None
@@ -501,7 +502,8 @@ async def test_run_categorization_postgres(postgres_sessions):
 
     again = await _categorize(postgres_sessions, ws, "ingest", None)
     assert again["stats"] == {
-        "candidates": 1, "groups": 1, "memory": 0, "applied": 0, "suggested": 0, "skipped": 1,
+        "candidates": 1, "groups": 1, "memory": 0, "confirmed": 0, "applied": 0, "suggested": 0,
+        "skipped": 1,
     }
 
 
@@ -658,3 +660,29 @@ async def test_memory_pointing_at_deleted_category_postgres(postgres_sessions):
     async with postgres_sessions() as session:
         bread = await session.get(Transaction, bread_id)
         assert bread is not None and bread.category_id is None
+
+
+@pytest.mark.asyncio
+async def test_run_counts_memory_confirmations_apart(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """A guess the memory settles at the category it already held is a
+    confirmation: `confirmed`, not `memory` (the "last run" line counts
+    `memory` + `applied` as changes)."""
+    food = test_categories[0].id
+    await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", food)
+    await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", food)
+    blank = _tx(session, test_user, test_account, "PADARIA PAO QUENTE")
+    same = _tx(
+        session, test_user, test_account, "PADARIA PAO QUENTE", source="provider", category_id=food,
+    )
+    await session.commit()
+
+    run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=False)
+
+    assert (blank.category_source, same.category_source) == ("memory", "memory")
+    assert run.stats == {
+        "candidates": 2, "groups": 1, "memory": 1, "confirmed": 1, "applied": 0,
+        "suggested": 0, "skipped": 0,
+    }
+
