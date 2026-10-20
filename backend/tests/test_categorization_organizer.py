@@ -1265,6 +1265,40 @@ async def test_api_retry_failed_redistribution(
 
 
 @pytest.mark.asyncio
+async def test_api_get_shows_each_split_redistribution(
+    client, auth_headers, session, test_user, test_workspace, organizer_enqueue
+):
+    """The tab follows (and offers to retry) a split's redistribution by
+    polling GET /organizer, so each applied split carries its run."""
+    outros = _group(session, test_user, test_workspace, "Outros")
+    lazer = _cat(session, test_user, test_workspace, "Lazer", outros)
+    await _organize_run(
+        session, test_workspace,
+        [_op("o1", "split_category", target="c1", name="Lazer", children=["Cinema", "Shows"]),
+         _op("o2", "rename", target="c1", name="X")],
+        {"c1": lazer.id},
+    )
+    body = (await client.get(f"{API}/organizer", headers=auth_headers)).json()
+    assert [op["redistribution"] for op in body["ops"]] == [None, None]
+
+    resp = await client.post(f"{API}/organizer/ops/o1/apply", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    redistribution_id = uuid.UUID(resp.json()["redistribute_run"]["id"])
+    body = (await client.get(f"{API}/organizer", headers=auth_headers)).json()
+    first, second = body["ops"]
+    assert first["redistribution"]["id"] == str(redistribution_id)
+    assert first["redistribution"]["status"] == "queued"
+    assert second["redistribution"] is None
+
+    redistribution = await _fresh(session, CategorizationRun, redistribution_id)
+    redistribution.status, redistribution.error = "failed", "no_ai_connection"
+    await session.commit()
+    body = (await client.get(f"{API}/organizer", headers=auth_headers)).json()
+    assert body["ops"][0]["redistribution"]["status"] == "failed"
+    assert body["ops"][0]["redistribution"]["error"] == "no_ai_connection"
+
+
+@pytest.mark.asyncio
 async def test_unknown_served_model_is_priced_at_priciest_opus(
     session, test_workspace, monkeypatch
 ):

@@ -77,6 +77,8 @@ class OrganizerOp(BaseModel):
     status: Literal["pending", "applied", "rejected"] = "pending"
     decided_at: Optional[datetime] = None
     result: Optional[dict[str, Any]] = None
+    #: An applied split's redistribution run (latest attempt), on GET only.
+    redistribution: Optional[RunRead] = None
 
 
 class OrganizerRead(BaseModel):

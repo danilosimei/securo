@@ -1080,6 +1080,37 @@ def view(run: CategorizationRun | None) -> dict[str, Any]:
     return {"run": run, "ops": detail.get("ops", []), "message": detail.get("message")}
 
 
+async def with_redistributions(
+    session: AsyncSession, workspace_id: uuid.UUID, ops: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The ops, each applied split with its (latest) redistribution run, so
+    the tab can follow it and offer a retry when it failed."""
+    wanted: dict[str, uuid.UUID] = {}
+    for op in ops:
+        raw = (op.get("result") or {}).get("redistribute_run_id")
+        try:
+            wanted[op["id"]] = uuid.UUID(str(raw))
+        except (TypeError, ValueError):
+            continue
+    runs: dict[uuid.UUID, CategorizationRun] = {}
+    if wanted:
+        runs = {
+            run.id: run
+            for run in (
+                await session.execute(
+                    select(CategorizationRun).where(
+                        CategorizationRun.workspace_id == workspace_id,
+                        CategorizationRun.id.in_(set(wanted.values())),
+                    )
+                )
+            ).scalars()
+        }
+    return [
+        {**op, "redistribution": runs.get(wanted[op["id"]]) if op["id"] in wanted else None}
+        for op in ops
+    ]
+
+
 # --- the Pluggy map --------------------------------------------------------------
 
 
@@ -1540,4 +1571,5 @@ __all__ = [
     "retry_redistribution",
     "sync_provider_map",
     "view",
+    "with_redistributions",
 ]

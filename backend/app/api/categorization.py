@@ -297,8 +297,11 @@ async def get_organizer(
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """The latest organize run with its proposed ops."""
-    return organizer.view(await organizer.latest_run(session, ctx.workspace.id))
+    """The latest organize run with its proposed ops (each applied split with
+    its redistribution run)."""
+    view = organizer.view(await organizer.latest_run(session, ctx.workspace.id))
+    view["ops"] = await organizer.with_redistributions(session, ctx.workspace.id, view["ops"])
+    return view
 
 
 @router.post("/organizer/run", response_model=RunRead, status_code=status.HTTP_202_ACCEPTED)
