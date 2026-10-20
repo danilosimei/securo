@@ -833,6 +833,25 @@ async def test_transactions_filter_by_category_source(client, auth_headers, sess
 
 
 @pytest.mark.asyncio
+async def test_transactions_flag_pending_categorization(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    waiting = _tx(session, test_user, test_account, "A")
+    resolved = _tx(session, test_user, test_account, "B")
+    plain = _tx(session, test_user, test_account, "C", source="ai", category_id=food)
+    await session.flush()
+    _suggest(session, waiting, "A", category_id=food)
+    done = _suggest(session, resolved, "B", category_id=food)
+    done.status = "dismissed"
+    await session.commit()
+
+    items = (await client.get("/api/transactions?limit=50", headers=auth_headers)).json()["items"]
+    flags = {i["id"]: i["categorization_pending"] for i in items}
+    assert flags[str(waiting.id)] is True
+    assert flags[str(resolved.id)] is False
+    assert flags[str(plain.id)] is False
+
+
+@pytest.mark.asyncio
 async def test_applied_exposes_store_key_and_name(client, auth_headers, session, test_user, test_account, test_categories):
     food = test_categories[0].id
     payee = Payee(id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_account.workspace_id,

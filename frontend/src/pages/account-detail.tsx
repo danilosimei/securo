@@ -19,6 +19,7 @@ import { ArrowLeft, ArrowLeftRight, CalendarClock, ChevronLeft, ChevronRight, Cl
 import { MobileTransactionRow } from '@/components/mobile-transaction-row'
 import { transactionDescription } from '@/lib/transaction-description'
 import { CategoryIcon } from '@/components/category-icon'
+import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
 import { ProjectedTransactionBadge } from '@/components/projected-transaction-badge'
 import { TransactionDialog, type TransactionSavePayload } from '@/components/transaction-dialog'
 import { extractApiError } from '@/lib/api-errors'
@@ -1662,6 +1663,10 @@ export default function AccountDetailPage() {
                                 {tx.installment_number}/{tx.total_installments}
                               </span>
                             )}
+                            <CategorizationOriginBadge
+                              source={tx.category_source}
+                              pending={!!tx.categorization_pending}
+                            />
                             {shouldShowPendingBadge(tx) && (
                               <span
                                 title={t('transactions.pending')}

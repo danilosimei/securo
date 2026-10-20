@@ -55,6 +55,7 @@ import { useSidebarState } from '@/contexts/sidebar-state-context'
 import { cn } from '@/lib/utils'
 import { LinkTransferDialog } from '@/components/link-transfer-dialog'
 import { BulkAddToGroupDialog, type BulkAddToGroupSubmission } from '@/components/bulk-add-to-group-dialog'
+import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
 import { TransactionsFilterBar } from '@/components/transactions-filter-bar'
 import { TransactionCalendarView } from '@/components/transaction-calendar-view'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
@@ -158,6 +159,10 @@ export default function TransactionsPage() {
   const [filterGroupId, setFilterGroupId] = useState<string>(searchParams.get('group_id') ?? '')
   const [filterType, setFilterType] = useState<string>(searchParams.get('type') ?? '')
   const [filterStatus, setFilterStatus] = useState<string>(searchParams.get('status') ?? '')
+  const [filterCategorySource, setFilterCategorySource] = useState<string[]>(() => {
+    const raw = searchParams.get('category_source')
+    return raw ? raw.split(',').filter(Boolean) : []
+  })
   // Hiding ignored rows is a reading preference, not a query someone re-picks
   // every visit, so it outlives the page the way page size and columns do. The
   // URL still wins when present, so a shared link shows what its sender saw.
@@ -248,6 +253,8 @@ export default function TransactionsPage() {
     setFilterGroupId(searchParams.get('group_id') ?? '')
     setFilterType(searchParams.get('type') ?? '')
     setFilterStatus(searchParams.get('status') ?? '')
+    const urlCategorySource = searchParams.get('category_source')
+    setFilterCategorySource(urlCategorySource ? urlCategorySource.split(',').filter(Boolean) : [])
     const urlHideIgnored = searchParams.get('hide_ignored')
     if (urlHideIgnored !== null) setHideIgnored(urlHideIgnored === 'true')
     const categories = searchParams.get('category_id');
@@ -285,6 +292,7 @@ export default function TransactionsPage() {
         ['group_id', filterGroupId],
         ['type', filterType],
         ['status', filterStatus],
+        ['category_source', filterCategorySource.join(',')],
         ['category_id', filterCategoryIds.join(',')],
         ['uncategorized', filterUncategorized ? '1' : ''],
         ['account_id', filterAccountIds.join(',')],
@@ -310,6 +318,7 @@ export default function TransactionsPage() {
     filterGroupId,
     filterType,
     filterStatus,
+    filterCategorySource,
     filterCategoryIds,
     filterUncategorized,
     filterAccountIds,
@@ -334,7 +343,7 @@ export default function TransactionsPage() {
     setSelectedIds(new Set())
     setLastSelectedId(null)
     setBulkCategory('')
-  }, [page, filterAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterType, filterStatus, filterFrom, filterTo, filterMinAmount, filterMaxAmount, searchQuery])
+  }, [page, filterAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterType, filterStatus, filterCategorySource, filterFrom, filterTo, filterMinAmount, filterMaxAmount, searchQuery])
 
   useEffect(() => {
     if (viewMode === 'calendar') {
@@ -384,7 +393,7 @@ export default function TransactionsPage() {
     && activeAccountIds !== null && activeAccountIds.length === 0
 
   const { data, isLoading } = useQuery({
-    queryKey: ['transactions', page, limit, effectiveAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterGroupId, filterType, filterStatus, filterFrom, filterTo, filterMinAmount, filterMaxAmount, hideIgnored, searchQuery, tagFilters, isMobile ? 'date' : grid.sortBy, isMobile ? 'desc' : grid.sortDir],
+    queryKey: ['transactions', page, limit, effectiveAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterGroupId, filterType, filterStatus, filterCategorySource, filterFrom, filterTo, filterMinAmount, filterMaxAmount, hideIgnored, searchQuery, tagFilters, isMobile ? 'date' : grid.sortBy, isMobile ? 'desc' : grid.sortDir],
     enabled: !noAccounts,
     queryFn: () =>
       transactions.list({
@@ -396,6 +405,7 @@ export default function TransactionsPage() {
         group_id: filterGroupId || undefined,
         type: filterType || undefined,
         status: filterStatus || undefined,
+        category_source: filterCategorySource.length > 0 ? filterCategorySource.join(',') : undefined,
         uncategorized: filterUncategorized ? true : undefined,
         from: filterFrom || undefined,
         to: filterTo || undefined,
@@ -1108,6 +1118,10 @@ export default function TransactionsPage() {
                 is not a fact yet. It lived only in a tab on the rules
                 page, which meant you found out a question existed by
                 going somewhere you had no reason to go. */}
+            <CategorizationOriginBadge
+              source={tx.category_source}
+              pending={!!tx.categorization_pending}
+            />
             {suggestionsByTransaction.get(tx.id) && (
               <Link
                 to="/rules?tab=queue"
@@ -1413,6 +1427,8 @@ export default function TransactionsPage() {
         onTypeChange={(v) => { setFilterType(v); setPage(1) }}
         filterStatus={filterStatus}
         onStatusChange={(v) => { setFilterStatus(v); setPage(1) }}
+        filterCategorySource={filterCategorySource}
+        onCategorySourceChange={(v) => { setFilterCategorySource(v); setPage(1) }}
         hideIgnored={hideIgnored}
         onHideIgnoredChange={handleHideIgnoredChange}
         filterFrom={filterFrom}
@@ -1431,6 +1447,7 @@ export default function TransactionsPage() {
           setFilterGroupId('')
           setFilterType('')
           setFilterStatus('')
+          setFilterCategorySource([])
           setFilterMinAmount('')
           setFilterMaxAmount('')
           handleHideIgnoredChange(false)

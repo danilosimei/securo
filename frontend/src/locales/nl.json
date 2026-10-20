@@ -2980,6 +2980,20 @@
       "loadMore": "Load more",
       "showing": "Showing {{shown}} of {{total}}",
       "loadError": "Could not load the applied categorizations"
+    },
+    "origin": {
+      "ai": "AI",
+      "memory": "Memory",
+      "rule": "Rule",
+      "review": "Review",
+      "aiTooltip": "Categorized by AI · open the transaction to see why",
+      "memoryTooltip": "Categorized from your earlier choices for this merchant",
+      "ruleTooltip": "Categorized by one of your rules",
+      "reviewTooltip": "A category suggestion is waiting for your review",
+      "filter": "Origin",
+      "filterUser": "You",
+      "filterProvider": "Bank",
+      "filterNone": "No category"
     }
   }
 }

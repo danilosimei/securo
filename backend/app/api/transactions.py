@@ -55,6 +55,31 @@ async def _attach_invoice_links(session, ctx, items: list) -> None:
         ]
 
 
+async def _attach_pending_categorization(session, ctx, items: list) -> None:
+    """Flag the rows of this page that have a suggestion waiting for review.
+
+    A single `IN` query for the whole page, never one per row.
+    """
+    if not items:
+        return
+    from sqlalchemy import select
+
+    from app.models.categorization import CategorizationSuggestion
+
+    rows = await session.execute(
+        select(CategorizationSuggestion.transaction_id)
+        .where(
+            CategorizationSuggestion.workspace_id == ctx.workspace.id,
+            CategorizationSuggestion.status == "pending",
+            CategorizationSuggestion.transaction_id.in_([item.id for item in items]),
+        )
+        .distinct()
+    )
+    pending = set(rows.scalars().all())
+    for item in items:
+        item.categorization_pending = item.id in pending
+
+
 def _tag_fx_fallback(tx: TransactionRead, primary_currency: str) -> TransactionRead:
     """Set fx_fallback=True when a cross-currency tx isn't backed by a real rate.
 
@@ -179,6 +204,7 @@ async def list_transactions(
     primary_currency = ctx.user.primary_currency
     items = [_tag_fx_fallback(TransactionRead.model_validate(tx, from_attributes=True), primary_currency) for tx in transactions]
     await _attach_invoice_links(session, ctx, items)
+    await _attach_pending_categorization(session, ctx, items)
     summary_out = (
         TransactionsSummary(**summary, currency=primary_currency)
         if summary is not None

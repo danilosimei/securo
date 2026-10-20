@@ -2982,6 +2982,20 @@
       "loadMore": "Carregar mais",
       "showing": "Mostrando {{shown}} de {{total}}",
       "loadError": "Não foi possível carregar as categorizações aplicadas"
+    },
+    "origin": {
+      "ai": "IA",
+      "memory": "Memória",
+      "rule": "Regra",
+      "review": "Revisar",
+      "aiTooltip": "Categorizado pela IA · abra o lançamento para ver o motivo",
+      "memoryTooltip": "Categorizado pelas suas escolhas anteriores para esta loja",
+      "ruleTooltip": "Categorizado por uma das suas regras",
+      "reviewTooltip": "Há uma sugestão de categoria esperando sua revisão",
+      "filter": "Origem",
+      "filterUser": "Você",
+      "filterProvider": "Banco",
+      "filterNone": "Sem categoria"
     }
   }
 }

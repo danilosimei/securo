@@ -164,6 +164,9 @@ class TransactionRead(TransactionBase):
     category: Optional[CategoryRead] = None
     #: Who set the category (`user`, `ai`, `memory`, `rule`, `provider`, ...).
     category_source: str = "none"
+    #: True while a categorization suggestion for this row waits for review.
+    #: Filled by the list endpoint in one query for the page; false elsewhere.
+    categorization_pending: bool = False
     #: Every invoice this transaction settles. A list because one
     #: payment can settle several — a payout net of fees is the
     #: ordinary case, not the exotic one.

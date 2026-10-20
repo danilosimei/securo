@@ -13,6 +13,7 @@ import {
   ListChecks,
   ListFilter,
   Search,
+  Sparkles,
   Store,
   Tag,
   Users,
@@ -70,6 +71,9 @@ interface TransactionsFilterBarProps {
   onTypeChange: (value: string) => void
   filterStatus: string
   onStatusChange: (value: string) => void
+  /** Who chose the category (ai, memory, rule, user, provider, none). */
+  filterCategorySource?: string[]
+  onCategorySourceChange?: (value: string[]) => void
   hideIgnored: boolean
   onHideIgnoredChange: (value: boolean) => void
   filterFrom: string
@@ -89,6 +93,15 @@ interface TransactionsFilterBarProps {
   payees: Payee[]
   groups: Group[]
 }
+
+const CATEGORY_SOURCE_OPTIONS = [
+  { value: 'ai', labelKey: 'categorization.origin.ai' },
+  { value: 'memory', labelKey: 'categorization.origin.memory' },
+  { value: 'rule', labelKey: 'categorization.origin.rule' },
+  { value: 'user', labelKey: 'categorization.origin.filterUser' },
+  { value: 'provider', labelKey: 'categorization.origin.filterProvider' },
+  { value: 'none', labelKey: 'categorization.origin.filterNone' },
+] as const
 
 function toggleInArray(arr: string[], id: string): string[] {
   return arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]
@@ -113,6 +126,8 @@ export function TransactionsFilterBar({
   onTypeChange,
   filterStatus,
   onStatusChange,
+  filterCategorySource = [],
+  onCategorySourceChange,
   hideIgnored,
   onHideIgnoredChange,
   filterFrom,
@@ -209,6 +224,7 @@ export function TransactionsFilterBar({
     !!filterGroupId ||
     !!filterType ||
     !!filterStatus ||
+    filterCategorySource.length > 0 ||
     hideIgnored ||
     !!filterFrom ||
     !!filterTo ||
@@ -231,6 +247,14 @@ export function TransactionsFilterBar({
       : filterStatus === 'posted'
         ? t('transactions.statusPosted')
         : ''
+
+  const categorySourceLabel = filterCategorySource
+    .map((value) => {
+      const option = CATEGORY_SOURCE_OPTIONS.find((o) => o.value === value)
+      return option ? t(option.labelKey) : ''
+    })
+    .filter(Boolean)
+    .join(', ')
 
   const dateLabel = useMemo(() => {
     if (!filterFrom && !filterTo) return null
@@ -808,6 +832,38 @@ export function TransactionsFilterBar({
                   </DropdownMenuPortal>
                 </DropdownMenuSub>
 
+                {/* Origin of the category (multi-select) */}
+                {onCategorySourceChange && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="gap-2 text-[13px]">
+                      <Sparkles size={14} className="text-muted-foreground" />
+                      <span className="flex-1">{t('categorization.origin.filter')}</span>
+                      {categorySourceLabel && (
+                        <span className="max-w-[90px] truncate text-[11px] text-muted-foreground">
+                          {categorySourceLabel}
+                        </span>
+                      )}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
+                      <DropdownMenuSubContent sideOffset={8} className="w-[200px] p-1">
+                        {CATEGORY_SOURCE_OPTIONS.map((opt) => (
+                          <DropdownMenuCheckboxItem
+                            key={opt.value}
+                            checked={filterCategorySource.includes(opt.value)}
+                            onSelect={(e) => e.preventDefault()}
+                            onCheckedChange={() =>
+                              onCategorySourceChange(toggleInArray(filterCategorySource, opt.value))
+                            }
+                            className="text-[13px]"
+                          >
+                            {t(opt.labelKey)}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                  </DropdownMenuSub>
+                )}
+
                 {/* Ignored rows: a visibility switch rather than a filter
                     value, so it reads as one line instead of a submenu. */}
                 <DropdownMenuItem
@@ -1017,6 +1073,7 @@ export function TransactionsFilterBar({
           !!selectedPayee ||
           !!typeLabel ||
           !!statusLabel ||
+          !!categorySourceLabel ||
           !!dateLabel ||
           !!amountLabel) && (
           <div className="flex flex-wrap items-center gap-1 border-t border-border/60 px-2 py-1.5">
@@ -1083,6 +1140,14 @@ export function TransactionsFilterBar({
                 label={t('transactions.status')}
                 value={statusLabel}
                 onRemove={() => onStatusChange('')}
+              />
+            )}
+            {categorySourceLabel && onCategorySourceChange && (
+              <FilterChip
+                icon={<Sparkles size={12} />}
+                label={t('categorization.origin.filter')}
+                value={categorySourceLabel}
+                onRemove={() => onCategorySourceChange([])}
               />
             )}
             {hideIgnored && (

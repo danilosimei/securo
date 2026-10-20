@@ -266,6 +266,8 @@ export interface Transaction {
   source: string
   /** Who decided the category: the pipeline or the user. */
   category_source?: CategorySource
+  /** A categorization suggestion for this row waits for review. */
+  categorization_pending?: boolean
   status: 'posted' | 'pending'
   payee: string | null
   payee_id: string | null

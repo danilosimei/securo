@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { transactions as transactionsApi, dashboard, admin } from '@/lib/api'
 import { AlertTriangle, Clock, Info, Paperclip, X } from 'lucide-react'
 import { CategoryIcon } from '@/components/category-icon'
+import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
 import { ProjectedTransactionBadge } from '@/components/projected-transaction-badge'
 import { sumDrillDownTotals } from '@/lib/drill-down-totals'
 import { hasOpenDialog, isInsideOverlayLayer } from '@/lib/overlay-layers'
@@ -262,6 +263,13 @@ export function TransactionDrillDown({
                       <p className="text-sm font-medium text-foreground truncate">{item.description}</p>
                       {item.isProjected && (
                         <ProjectedTransactionBadge />
+                      )}
+                      {item.transaction && (
+                        <CategorizationOriginBadge
+                          source={item.transaction.category_source}
+                          pending={!!item.transaction.categorization_pending}
+                          compact
+                        />
                       )}
                       {item.isPending && (
                         <Tooltip>

@@ -545,6 +545,8 @@ export const transactions = {
     max_amount?: number
     sort_by?: string
     sort_dir?: 'asc' | 'desc'
+    /** Comma-separated origins: ai,memory,rule,user,provider,none. */
+    category_source?: string
   }): Promise<PaginatedTransactions> => {
     const { data } = await api.get('/transactions', {
       params,
