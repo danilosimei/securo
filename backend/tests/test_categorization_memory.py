@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Callable
 
 import pytest
 from sqlalchemy import select
@@ -88,14 +89,17 @@ async def test_ai_events_do_not_feed_memory(session, test_workspace, test_transa
 
 
 @pytest.mark.asyncio
-async def test_learn_choice_clears_ai_cache(session, test_workspace, test_categories):
+async def test_learn_choice_clears_ai_cache_but_keeps_the_store_name(
+    session, test_workspace, test_categories
+):
+    """The clean name describes the store, not a category decision (T17-1b)."""
     ai, user = test_categories[0].id, test_categories[1].id
     await remember_ai_decision(session, test_workspace.id, "loja", ai, 95, "Loja")
     hit = (await lookup(session, test_workspace.id, ["loja"]))["loja"]
     assert (hit.ai_category_id, hit.ai_confidence, hit.ai_clean_name) == (ai, 95, "Loja")
     await learn_choice(session, test_workspace.id, "loja", user)
     hit = (await lookup(session, test_workspace.id, ["loja"]))["loja"]
-    assert (hit.ai_category_id, hit.ai_confidence, hit.ai_clean_name) == (None, None, None)
+    assert (hit.ai_category_id, hit.ai_confidence, hit.ai_clean_name) == (None, None, "Loja")
 
 
 @pytest.mark.asyncio
@@ -109,6 +113,7 @@ async def test_forget_ai_decisions(session, test_workspace, test_categories):
     await forget_ai_decisions(session, test_workspace.id)
     hits = await lookup(session, test_workspace.id, ["b"])
     assert hits["b"].ai_category_id is None
+    assert (hits["b"].ai_confidence, hits["b"].ai_clean_name) == (None, "b")
 
 
 @pytest.mark.asyncio
@@ -144,43 +149,47 @@ async def test_lookup_empty_keys(session, test_workspace):
     assert await lookup(session, test_workspace.id, []) == {}
 
 
-@pytest.mark.asyncio
-async def test_get_or_create_survives_lost_race(session, test_workspace, test_categories):
-    from unittest.mock import patch
+async def test_get_or_create_survives_lost_race_postgres(postgres_sessions):
+    """Another writer creates the store's row right after this session looked
+    for it: the real unique-key IntegrityError, absorbed by the savepoint."""
+    from sqlalchemy import event
+    from sqlalchemy.util import await_only
 
-    a, b = test_categories[0].id, test_categories[1].id
-    existing = MerchantMemory(
-        id=uuid.uuid4(), workspace_id=test_workspace.id, merchant_key="corrida",
-        counts={str(a): 1},
-    )
-    session.add(existing)
-    await session.flush()
+    from tests.test_categorization_models import _seed_pg
 
-    real_execute = session.execute
-    calls = {"n": 0}
+    async with postgres_sessions() as setup:
+        ws, category, _txn = await _seed_pg(setup)
+        await setup.commit()
+        a = category.id
 
-    class _Empty:
-        def scalar_one_or_none(self):
-            return None
+    async def other_writer() -> uuid.UUID:
+        async with postgres_sessions() as other:
+            row = MerchantMemory(
+                id=uuid.uuid4(), workspace_id=ws, merchant_key="corrida", counts={str(a): 1},
+            )
+            other.add(row)
+            await other.commit()
+            return row.id
 
-    async def racy_execute(stmt, *args, **kwargs):
-        calls["n"] += 1
-        if calls["n"] == 1:  # first select "misses" the row another writer just made
-            return _Empty()
-        return await real_execute(stmt, *args, **kwargs)
+    async with postgres_sessions() as session:
+        connection = await session.connection()
+        raced: list[uuid.UUID] = []
 
-    with patch.object(session, "execute", racy_execute):
-        await learn_choice(session, test_workspace.id, "corrida", b)
-    assert calls["n"] >= 2
+        def race(_conn, _cursor, statement, *_args):
+            text = statement.lstrip().upper()
+            if not raced and text.startswith("SELECT") and "MERCHANT_MEMORY" in text:
+                raced.append(await_only(other_writer()))
 
-    calls["n"] = 0
-    with patch.object(session, "execute", racy_execute):
-        await remember_ai_decision(session, test_workspace.id, "corrida", a, 91, "Corrida")
+        event.listen(connection.sync_connection, "after_cursor_execute", race)
+        try:
+            await learn_choice(session, ws, "corrida", a)
+        finally:
+            event.remove(connection.sync_connection, "after_cursor_execute", race)
+        await session.commit()
 
-    rows = (await session.execute(select(MerchantMemory))).scalars().all()
-    assert len(rows) == 1
-    assert rows[0].id == existing.id
-    assert rows[0].ai_category_id == a and rows[0].ai_confidence == 91
+        rows = (await session.execute(select(MerchantMemory))).scalars().all()
+        assert [r.id for r in rows] == raced
+        assert rows[0].counts == {str(a): 2}
 
 
 @pytest.mark.asyncio
@@ -203,3 +212,237 @@ async def test_failing_learner_keeps_user_change_and_session(
     assert tx.category_id == target and tx.category_source == "user"
     await learn_choice(session, test_workspace.id, "ok", target)  # session still usable
     assert (await lookup(session, test_workspace.id, ["ok"]))["ok"].distribution == {str(target): 1}
+
+
+# ---------------------------------------------------------------------------
+# Debt batch B1: corrupt counts, set-based moves, chunked forgets, clears
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_corrupt_counts_entries_are_dropped(session, test_workspace, test_categories):
+    """One bad JSON entry must not fail the whole run (T5-1)."""
+    from app.services.categorization.memory import move_category
+
+    a, b = test_categories[0].id, test_categories[1].id
+    session.add(MerchantMemory(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, merchant_key="loja",
+        counts={str(a): 2, "not-a-uuid": 3, str(b): "x", str(uuid.uuid4()): None},
+    ))
+    await session.flush()
+
+    hit = (await lookup(session, test_workspace.id, ["loja"]))["loja"]
+    assert (hit.category_id, hit.consistent, hit.distribution) == (a, True, {str(a): 2})
+
+    await learn_choice(session, test_workspace.id, "loja", a)
+    await move_category(session, test_workspace.id, a, b)
+    row = (await session.execute(select(MerchantMemory))).scalar_one()
+    assert row.counts == {str(b): 3}
+
+
+@pytest.mark.asyncio
+async def test_move_category_loads_only_the_rows_that_mention_it(
+    session, test_workspace, test_categories
+):
+    """Filtered in SQL, not by loading every row of the workspace (T6-4)."""
+    from sqlalchemy import event as sqlalchemy_event
+
+    from app.services.categorization.memory import move_category
+
+    gone, other, target = (c.id for c in test_categories)
+    ws = test_workspace.id
+    rows = {
+        "counts": MerchantMemory(merchant_key="counts", counts={str(gone): 2}),
+        "last": MerchantMemory(merchant_key="last", counts={}, last_user_category_id=gone),
+        "ai": MerchantMemory(merchant_key="ai", counts={}, ai_category_id=gone, ai_confidence=95),
+        "unrelated": MerchantMemory(merchant_key="unrelated", counts={str(other): 4}),
+    }
+    for row in rows.values():
+        row.id = uuid.uuid4()
+        row.workspace_id = ws
+        session.add(row)
+    await session.commit()
+    session.expunge_all()
+    loaded: set[str] = set()
+
+    def record(_session, instance):
+        if isinstance(instance, MerchantMemory):
+            loaded.add(instance.merchant_key)
+
+    sqlalchemy_event.listen(session.sync_session, "loaded_as_persistent", record)
+    try:
+        await move_category(session, ws, gone, target)
+    finally:
+        sqlalchemy_event.remove(session.sync_session, "loaded_as_persistent", record)
+
+    assert loaded == {"counts", "last", "ai"}
+    fresh = {
+        r.merchant_key: r for r in (await session.execute(
+            select(MerchantMemory).execution_options(populate_existing=True)
+        )).scalars().all()
+    }
+    assert fresh["counts"].counts == {str(target): 2}
+    assert fresh["last"].last_user_category_id == target
+    assert fresh["ai"].ai_category_id == target
+    assert fresh["unrelated"].counts == {str(other): 4}
+
+
+async def test_move_category_filters_in_sql_on_postgres(postgres_sessions):
+    """The JSONB `counts` cast to text matches on PostgreSQL too."""
+    from app.services.categorization.memory import move_category
+    from tests.test_categorization_models import _seed_pg
+
+    async with postgres_sessions() as session:
+        ws, gone, _txn = await _seed_pg(session)
+        kept = str(uuid.uuid4())
+        session.add_all([
+            MerchantMemory(id=uuid.uuid4(), workspace_id=ws, merchant_key="loja",
+                           counts={str(gone.id): 2}),
+            MerchantMemory(id=uuid.uuid4(), workspace_id=ws, merchant_key="outra",
+                           counts={kept: 1}),
+        ])
+        await session.commit()
+
+        await move_category(session, ws, gone.id, None)
+        await session.commit()
+
+        rows = {
+            r.merchant_key: r.counts for r in (await session.execute(
+                select(MerchantMemory).execution_options(populate_existing=True)
+            )).scalars().all()
+        }
+        assert rows == {"loja": {}, "outra": {kept: 1}}
+
+
+@pytest.mark.asyncio
+async def test_move_category_deleting_keeps_the_store_name(session, test_workspace, test_categories):
+    from app.services.categorization.memory import move_category
+
+    gone = test_categories[0].id
+    await remember_ai_decision(session, test_workspace.id, "loja", gone, 95, "Loja")
+    await move_category(session, test_workspace.id, gone, None)
+    hit = (await lookup(session, test_workspace.id, ["loja"]))["loja"]
+    assert (hit.ai_category_id, hit.ai_confidence, hit.ai_clean_name) == (None, None, "Loja")
+
+
+def _statements(connection, prefix: str) -> tuple[list[str], Callable[[], None]]:
+    """Record the statements starting with `prefix` run on `connection`."""
+    from sqlalchemy import event
+
+    seen: list[str] = []
+
+    def record(_conn, _cursor, statement, *_args):
+        if statement.lstrip().upper().startswith(prefix):
+            seen.append(statement)
+
+    event.listen(connection.sync_connection, "before_cursor_execute", record)
+    return seen, lambda: event.remove(connection.sync_connection, "before_cursor_execute", record)
+
+
+@pytest.mark.asyncio
+async def test_forget_ai_decisions_chunks_its_keys(session, test_workspace, test_categories):
+    """asyncpg caps a statement at 32767 parameters (T10-3b)."""
+    c = test_categories[0].id
+    keys = [f"k{i}" for i in range(2500)]
+    for key in ("k0", "k1500", "k2499", "outside"):
+        await remember_ai_decision(session, test_workspace.id, key, c, 90, key)
+
+    updates, stop = _statements(await session.connection(), "UPDATE MERCHANT_MEMORY")
+    try:
+        await forget_ai_decisions(session, test_workspace.id, keys)
+    finally:
+        stop()
+
+    assert len(updates) == 3
+    hits = await lookup(session, test_workspace.id, ["k0", "k1500", "k2499", "outside"])
+    assert [hits[k].ai_category_id for k in ("k0", "k1500", "k2499")] == [None, None, None]
+    assert hits["outside"].ai_category_id == c
+
+
+@pytest.mark.asyncio
+async def test_keys_for_matches_key_for_transaction_with_one_payee_query(
+    session, test_user, test_workspace, test_transactions
+):
+    from app.services.categorization.memory import keys_for
+
+    payee = Payee(id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id,
+                  name="Padaria Estrela", source="sync")
+    session.add(payee)
+    await session.flush()
+    test_transactions[0].payee_id = payee.id
+    test_transactions[1].payee_id = payee.id
+    test_transactions[2].description = "LOJA " + "X" * 300
+    await session.flush()
+    expected = {tx.id: (await key_for_transaction(session, tx))[:255] for tx in test_transactions}
+
+    selects, stop = _statements(await session.connection(), "SELECT")
+    try:
+        keys = await keys_for(session, test_transactions)
+    finally:
+        stop()
+
+    assert keys == expected
+    assert len(selects) == 1
+
+
+@pytest.mark.asyncio
+async def test_clear_hook_registered_once():
+    from app.services.categorization import memory
+
+    assert events.user_clear_hooks.count(memory.on_user_clear) == 1
+
+
+@pytest.mark.asyncio
+async def test_person_clear_takes_back_one_pick_and_the_ai_cache(
+    session, test_user, test_workspace, test_transactions, test_categories
+):
+    """R27-U: a person who removes a store's category takes that choice back
+    out of the memory (one pick) and drops the store's cached AI decision."""
+    tx = test_transactions[4]  # NETFLIX, no category
+    food, transport = test_categories[0].id, test_categories[1].id
+    key = await key_for_transaction(session, tx)
+    await learn_choice(session, test_workspace.id, key, food)
+    await transaction_service.update_transaction(
+        session, tx.id, test_workspace.id, test_user.id, TransactionUpdate(category_id=food)
+    )
+    await remember_ai_decision(session, test_workspace.id, key, transport, 95, "Netflix")
+    assert (await lookup(session, test_workspace.id, [key]))[key].distribution == {str(food): 2}
+
+    await transaction_service.update_transaction(
+        session, tx.id, test_workspace.id, test_user.id, TransactionUpdate(category_id=None)
+    )
+
+    hit = (await lookup(session, test_workspace.id, [key]))[key]
+    assert hit.distribution == {str(food): 1}
+    assert (hit.ai_category_id, hit.ai_confidence, hit.ai_clean_name) == (None, None, "Netflix")
+
+
+@pytest.mark.asyncio
+async def test_clearing_a_store_never_taught_leaves_the_memory_alone(
+    session, test_user, test_workspace, test_transactions
+):
+    tx = test_transactions[1]  # IFOOD, categorized by the fixture, never taught
+    await transaction_service.update_transaction(
+        session, tx.id, test_workspace.id, test_user.id, TransactionUpdate(category_id=None)
+    )
+    assert (await session.execute(select(MerchantMemory))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_failing_unlearner_keeps_the_clear_and_session(
+    session, test_user, test_workspace, test_transactions, test_categories
+):
+    from unittest.mock import patch
+
+    tx = test_transactions[1]
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("unlearner failed")
+
+    with patch("app.services.categorization.memory.unlearn_choice", boom):
+        await transaction_service.update_transaction(
+            session, tx.id, test_workspace.id, test_user.id, TransactionUpdate(category_id=None)
+        )
+    await session.refresh(tx)
+    assert (tx.category_id, tx.category_source) == (None, "none")
+    await learn_choice(session, test_workspace.id, "ok", test_categories[0].id)  # still usable

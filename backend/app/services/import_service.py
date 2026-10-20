@@ -5,7 +5,7 @@ import re
 import uuid
 import warnings
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from bs4 import XMLParsedAsHTMLWarning
@@ -1076,6 +1076,15 @@ async def import_transactions(
         await session.flush()
         if category_id is not None:
             _stage(incoming, category_id, category_source)
+        elif txn_data.force_uncategorized:
+            # "Leave uncategorized" is the person's choice (R27): noted as
+            # their clear, so the pipeline only ever suggests a category. No
+            # category changes, so `stage_change` would note nothing.
+            staged.append(StagedChange(
+                tx=incoming, source="none", previous_category_id=None,
+                previous_source="none", new_category_id=None,
+                created_at=datetime.now(timezone.utc), user_id=user_id,
+            ))
         if should_detect_duplicates and not txn_data.external_id:
             matched_existing_ids.add(incoming.id)
         if recurring_link is not None:

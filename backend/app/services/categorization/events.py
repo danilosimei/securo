@@ -14,7 +14,9 @@ A person clearing a category (`source="user"` with no category) is noted
 as `none` (R27): the row is a guess again, open to review, and the event
 still names the person (`user_id`). While that clear is the row's latest
 standing event (`cleared_by_person`), the pipeline only suggests a
-category for it, never files it on its own.
+category for it, never files it on its own. The clear also runs the
+user-clear hooks (R27-U), so the memory stops reinforcing the category the
+person took away.
 
 Nothing here commits: the caller owns the transaction, like
 `reconciliation_history_service.record`.
@@ -62,6 +64,11 @@ UserChoiceHook = Callable[[AsyncSession, uuid.UUID, Transaction, uuid.UUID | Non
 #: Async callbacks run as `(session, workspace_id, tx, new_category_id)` when a
 #: person picks a category. The memory learner registers itself here.
 user_choice_hooks: list[UserChoiceHook] = []
+
+UserClearHook = Callable[[AsyncSession, uuid.UUID, Transaction, uuid.UUID], Awaitable[None]]
+#: Async callbacks run as `(session, workspace_id, tx, previous_category_id)`
+#: when a person clears a category (R27-U). The memory registers itself here.
+user_clear_hooks: list[UserClearHook] = []
 
 
 @dataclass
@@ -164,14 +171,41 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
-async def _run_user_hooks(
+async def run_user_hooks(
     session: AsyncSession, tx: Transaction, new_category_id: uuid.UUID | None
 ) -> None:
+    """Run the user-choice hooks for `tx`; a failing hook is logged, never raised.
+
+    `record_change` and `write_staged` call it for a person's own,
+    non-derived choice. A caller whose choice reached only derived rows (a
+    series edit that moved the siblings alone) calls it once itself.
+    """
     for hook in list(user_choice_hooks):
         try:
             await hook(session, tx.workspace_id, tx, new_category_id)
         except Exception:
             logger.exception("on_user_choice hook failed for transaction %s", tx.id)
+
+
+def _person_clear(
+    source: str,
+    user_id: uuid.UUID | None,
+    new_category_id: uuid.UUID | None,
+    derived: bool,
+) -> bool:
+    """A change that is a person emptying the category (the event
+    `cleared_by_person` reads), not one that follows another row's."""
+    return source == "none" and user_id is not None and new_category_id is None and not derived
+
+
+async def _run_clear_hooks(
+    session: AsyncSession, tx: Transaction, previous_category_id: uuid.UUID
+) -> None:
+    for hook in list(user_clear_hooks):
+        try:
+            await hook(session, tx.workspace_id, tx, previous_category_id)
+        except Exception:
+            logger.exception("on_user_clear hook failed for transaction %s", tx.id)
 
 
 async def record_change(
@@ -193,7 +227,8 @@ async def record_change(
     Returns None when nothing changes. Never raises on the event's account:
     the change to `tx` is applied even if writing the event fails. A
     `derived` change (one that only follows a person's choice made on
-    another row) is noted but does not run the user-choice hooks.
+    another row) is noted but does not run the user-choice (or user-clear)
+    hooks.
     """
     if source not in CATEGORY_SOURCES:
         logger.error("invalid category source %r for transaction %s", source, tx.id)
@@ -242,7 +277,11 @@ async def record_change(
         event = None
 
     if source == "user" and not derived:
-        await _run_user_hooks(session, tx, new_category_id)
+        await run_user_hooks(session, tx, new_category_id)
+    elif previous_category_id is not None and _person_clear(
+        source, user_id, new_category_id, derived
+    ):
+        await _run_clear_hooks(session, tx, previous_category_id)
     return event
 
 
@@ -335,7 +374,11 @@ async def write_staged(session: AsyncSession, staged: list[StagedChange]) -> int
         logger.exception("could not record %d categorization events", len(payload))
     for change in staged:
         if change.source == "user" and not change.derived:
-            await _run_user_hooks(session, change.tx, change.new_category_id)
+            await run_user_hooks(session, change.tx, change.new_category_id)
+        elif change.previous_category_id is not None and _person_clear(
+            change.source, change.user_id, change.new_category_id, change.derived
+        ):
+            await _run_clear_hooks(session, change.tx, change.previous_category_id)
     return len(staged)
 
 
@@ -472,7 +515,8 @@ async def undo(
     when it is itself an undo, or when it records a category merge (its
     previous category was deleted). Newest first, so chained events unwind.
     `changes_only` leaves confirmations (`changes_category`) out altogether:
-    neither reverted nor counted.
+    neither reverted nor counted. A confirmation left out still counts as a
+    later standing event for the same row.
     """
     if event_ids is None and run_id is None:
         return UndoResult(0, 0)

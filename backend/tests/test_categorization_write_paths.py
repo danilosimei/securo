@@ -939,3 +939,199 @@ async def test_bulk_clear_marks_none_but_records_the_person(
         assert (fresh.category_id, fresh.category_source) == (None, "none")
         [event] = await _events(session, row.id)
         assert (event.source, event.user_id) == ("none", test_user.id)
+
+
+# ---------------------------------------------------------------------------
+# Debt batch B1: one pick per store, siblings, import clears, real savepoint
+# ---------------------------------------------------------------------------
+
+
+def _manual_tx(session, user, account, description, category_id=None, source="none"):
+    tx = Transaction(
+        id=uuid.uuid4(), user_id=user.id, account_id=account.id, description=description,
+        amount=Decimal("10"), date=date(2026, 9, 10), type="debit", source="manual",
+        category_id=category_id, category_source=source,
+    )
+    session.add(tx)
+    return tx
+
+
+async def _memory_counts(session) -> dict[str, dict]:
+    from app.models.categorization import MerchantMemory
+
+    rows = (await session.execute(
+        select(MerchantMemory).execution_options(populate_existing=True)
+    )).scalars().all()
+    return {row.merchant_key: dict(row.counts or {}) for row in rows}
+
+
+@pytest.mark.asyncio
+async def test_bulk_categorize_teaches_one_pick_per_store(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """T7-3: fifty rows of one store selected together are one choice."""
+    food, transport = test_categories[0].id, test_categories[1].id
+    bread = [_manual_tx(session, test_user, test_account, "PADARIA SOL") for _ in range(3)]
+    settled = _manual_tx(session, test_user, test_account, "PADARIA SOL", food, "ai")
+    taxi = _manual_tx(session, test_user, test_account, "TAXI LUZ")
+    await session.commit()
+
+    matched = await transaction_service.bulk_update_category(
+        session, test_workspace.id, [t.id for t in [*bread, settled, taxi]], food,
+        user_id=test_user.id,
+    )
+
+    assert matched == 5
+    assert await _memory_counts(session) == {"PADARIA SOL": {str(food): 1}, "TAXI LUZ": {str(food): 1}}
+    for tx in [*bread, settled, taxi]:
+        row = await _reload(session, tx.id)
+        assert (row.category_id, row.category_source) == (food, "user")
+
+    # A store that already had the category in every row teaches nothing.
+    await transaction_service.bulk_update_category(
+        session, test_workspace.id, [t.id for t in bread], food, user_id=test_user.id,
+    )
+    assert (await _memory_counts(session))["PADARIA SOL"] == {str(food): 1}
+    await transaction_service.bulk_update_category(
+        session, test_workspace.id, [t.id for t in bread], transport, user_id=test_user.id,
+    )
+    assert (await _memory_counts(session))["PADARIA SOL"] == {str(food): 1, str(transport): 1}
+
+
+@pytest.mark.asyncio
+async def test_bulk_clear_takes_back_one_pick_per_store_and_the_ai_cache(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """R27-U in bulk: once per store (and category it held), not per row."""
+    from app.services.categorization import memory
+
+    food = test_categories[0].id
+    for _ in range(3):
+        await memory.learn_choice(session, test_workspace.id, "PADARIA SOL", food)
+    await memory.remember_ai_decision(session, test_workspace.id, "PADARIA SOL", food, 95, "Sol")
+    bread = [_manual_tx(session, test_user, test_account, "PADARIA SOL", food, "user") for _ in range(4)]
+    empty = _manual_tx(session, test_user, test_account, "PADARIA SOL")
+    await session.commit()
+
+    await transaction_service.bulk_update_category(
+        session, test_workspace.id, [t.id for t in [*bread, empty]], None, user_id=test_user.id,
+    )
+
+    assert await _memory_counts(session) == {"PADARIA SOL": {str(food): 2}}
+    hit = (await memory.lookup(session, test_workspace.id, ["PADARIA SOL"]))["PADARIA SOL"]
+    assert (hit.ai_category_id, hit.ai_clean_name) == (None, "Sol")
+    assert await _events(session, empty.id) == []
+
+
+@pytest.mark.asyncio
+async def test_failing_bulk_learner_keeps_the_rows_and_the_session(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    food = test_categories[0].id
+    tx = _manual_tx(session, test_user, test_account, "PADARIA SOL")
+    await session.commit()
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("learner failed")
+
+    with patch("app.services.categorization.memory.learn_choice", boom):
+        await transaction_service.bulk_update_category(
+            session, test_workspace.id, [tx.id], food, user_id=test_user.id,
+        )
+    row = await _reload(session, tx.id)
+    assert (row.category_id, row.category_source) == (food, "user")
+    assert [e.source for e in await _events(session, tx.id)] == ["user"]
+
+
+@pytest.mark.asyncio
+async def test_series_edit_that_only_moves_siblings_still_teaches_the_choice(
+    session, test_user, test_workspace, test_account, test_categories, monkeypatch
+):
+    """X-1: the anchor already had the category; its siblings follow it, and
+    the memory learns the choice once, from the anchor."""
+    food, transport = test_categories[0].id, test_categories[1].id
+    calls: list[tuple[uuid.UUID, uuid.UUID | None]] = []
+
+    async def hook(_session, _workspace_id, tx, new_category_id):
+        calls.append((tx.id, new_category_id))
+
+    created = await transaction_service.create_installment_series(
+        session, test_workspace.id, test_user.id,
+        InstallmentSeriesCreate(
+            base=TransactionCreate(
+                account_id=test_account.id, description="SOFA", amount=Decimal("100"),
+                date=date(2026, 1, 10), type="debit", category_id=food,
+            ),
+            installments=3,
+        ),
+    )
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=transport),
+    )
+    monkeypatch.setattr(categorization_events, "user_choice_hooks", [hook])
+
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=transport, apply_to="all"),
+    )
+
+    assert calls == [(created[0].id, transport)]
+    for tx in created:
+        assert (await _reload(session, tx.id)).category_id == transport
+
+    # Nothing moved: nothing to learn.
+    calls.clear()
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=transport, apply_to="all"),
+    )
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_import_leave_uncategorized_is_a_persons_clear(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """F-3: "leave uncategorized" in the review table is the person's choice,
+    so the row is only suggested a category later (R27)."""
+    await _make_rule(
+        session, test_user, [{"op": "set_category", "value": str(test_categories[0].id)}],
+        value="LOJA VAZIA",
+    )
+    await import_transactions(
+        session, test_workspace.id, test_user.id, test_account.id,
+        [TransactionImport(
+            description="LOJA VAZIA", amount=Decimal("30"), date=date(2026, 1, 5),
+            type="debit", force_uncategorized=True,
+        )],
+        "csv",
+    )
+    tx = (await session.execute(
+        select(Transaction).where(Transaction.description == "LOJA VAZIA")
+    )).scalar_one()
+    assert (tx.category_id, tx.category_source) == (None, "none")
+    [event] = await _events(session, tx.id)
+    assert (event.source, event.user_id) == ("none", test_user.id)
+    assert (event.previous_category_id, event.new_category_id) == (None, None)
+    assert await categorization_events.cleared_by_person(session, [tx.id]) == {tx.id}
+
+
+async def test_record_changes_bulk_survives_a_real_failing_event_insert_postgres(postgres_sessions):
+    """T3-3: a run that does not exist trips the events' FK inside the
+    savepoint; the rows keep their change and the session stays usable."""
+    from tests.test_categorization_models import _seed_pg
+
+    async with postgres_sessions() as session:
+        ws, category, txn = await _seed_pg(session)
+        await session.commit()
+
+        changed = await categorization_events.record_changes_bulk(
+            session, ws, [(txn, category.id, "ai")], run_id=uuid.uuid4(),
+        )
+        assert changed == 1
+        await session.commit()
+
+        row = await _reload(session, txn.id)
+        assert (row.category_id, row.category_source) == (category.id, "ai")
+        assert await _events(session, txn.id) == []

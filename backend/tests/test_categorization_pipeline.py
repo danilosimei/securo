@@ -703,8 +703,9 @@ async def test_memory_only_suggests_for_a_row_the_person_cleared(
     is settled for the other rows, and the cleared row waits in Revisar with
     the memory's category -- without going to the model."""
     food, transport = test_categories[0].id, test_categories[1].id
-    # Five picks: the re-categorized row below teaches the memory one more.
-    for _ in range(5):
+    # Seven picks: each clear below takes one back (R27-U) and the
+    # re-categorized row teaches the memory one more, so 5 of 6 stay food.
+    for _ in range(7):
         await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", food)
     blank = _tx(session, test_user, test_account, "PADARIA PAO QUENTE")
     cleared = _tx(
@@ -750,9 +751,11 @@ async def test_cached_ai_decision_only_suggests_for_a_cleared_row(
     session, test_user, test_workspace, test_account, test_categories
 ):
     food = test_categories[0].id
-    await remember_ai_decision(session, test_workspace.id, "IFOOD", food, 95, "iFood")
     cleared = _tx(session, test_user, test_account, "IFOOD *REST 8812", source="user", category_id=food)
     await _clear(session, cleared, test_user)
+    # The clear dropped the store's cached decision (R27-U); a later run
+    # cached a new one.
+    await remember_ai_decision(session, test_workspace.id, "IFOOD", food, 95, "iFood")
     await session.commit()
     groups = group_by_key(await collect_candidates(session, test_workspace.id))
     stats: dict = {}
@@ -764,3 +767,98 @@ async def test_cached_ai_decision_only_suggests_for_a_cleared_row(
     [sug] = await _suggestions(session)
     assert (sug.transaction_id, sug.category_id, sug.confidence) == (cleared.id, food, 95)
     assert stats == {"suggested": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_cleared_row_a_sync_refiled_is_settled_not_suggested(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """M5: once a sync gave the cleared row a provider category (between the
+    collection and the memory pass) it is an ordinary guess again."""
+    food, transport = test_categories[0].id, test_categories[1].id
+    for _ in range(3):  # the clear below takes one back (R27-U)
+        await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", food)
+    row = _tx(session, test_user, test_account, "PADARIA PAO QUENTE", source="user", category_id=food)
+    await _clear(session, row, test_user)
+    await session.commit()
+    groups = group_by_key(await collect_candidates(session, test_workspace.id))
+    assert [c.cleared for g in groups.values() for c in g.candidates] == [True]
+    row.category_id, row.category_source = transport, "provider"  # the sync, meanwhile
+    await session.flush()
+    stats: dict = {}
+
+    await memory_pass(session, test_workspace.id, groups, None, stats=stats)
+
+    assert (row.category_id, row.category_source) == (food, "memory")
+    assert await _suggestions(session) == []
+    assert stats == {"memory": 1}
+
+
+@pytest.mark.asyncio
+async def test_an_undone_clear_lets_the_memory_apply_again(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """M1a: a clear later undone no longer holds the row back."""
+    from app.services.categorization.events import undo
+
+    food, transport = test_categories[0].id, test_categories[1].id
+    for _ in range(2):
+        await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", food)
+    row = _tx(
+        session, test_user, test_account, "PADARIA PAO QUENTE", source="provider",
+        category_id=transport,
+    )
+    await _clear(session, row, test_user)
+    [clear] = await _events(session)
+    result = await undo(session, test_workspace.id, event_ids=[clear.id], user_id=test_user.id)
+    assert result.restored == 1
+    assert (row.category_id, row.category_source) == (transport, "provider")
+    await session.commit()
+
+    run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=False)
+
+    assert (row.category_id, row.category_source) == (food, "memory")
+    assert await _suggestions(session) == []
+    assert (run.stats["memory"], run.stats["suggested"]) == (1, 0)
+
+
+@pytest.mark.asyncio
+async def test_a_below_threshold_answer_for_a_cleared_row_is_an_ordinary_suggestion(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """M1b: under the threshold nothing applies anyway, so the cleared row
+    gets the same suggestion as any other row of the store."""
+    from app.models.category import Category
+    from app.services.categorization.classifier import apply_results
+    from app.services.categorization.prompts import CLASSIFIER_MODEL, build_category_index
+
+    food = test_categories[0].id
+    blank = _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    cleared = _tx(session, test_user, test_account, "IFOOD*CLUB 4410", source="user", category_id=food)
+    await _clear(session, cleared, test_user)
+    await session.commit()
+    groups = group_by_key(await collect_candidates(session, test_workspace.id))
+    [group] = groups.values()
+    index = build_category_index(
+        (await session.execute(select(Category))).scalars().all(), []
+    )
+    run = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="classify", trigger="manual",
+        status="running", stats={}, detail={},
+    )
+    session.add(run)
+    await session.flush()
+
+    stats = await apply_results(
+        session, test_workspace.id, run, {"i1": group},
+        [{"k": "i1", "c": index.to_short(food), "p": 60, "r": "talvez", "n": None,
+          "alt": None, "new": None}],
+        index=index, threshold=90, model=CLASSIFIER_MODEL,
+    )
+
+    assert (stats.applied, stats.suggested) == (0, 2)
+    for tx in (blank, cleared):
+        assert (tx.category_id, tx.category_source) == (None, "none")
+    sugs = {s.transaction_id: s for s in await _suggestions(session)}
+    assert set(sugs) == {blank.id, cleared.id}
+    assert {(s.category_id, s.confidence, s.reason) for s in sugs.values()} == {(food, 60, "talvez")}

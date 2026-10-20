@@ -24,10 +24,12 @@ from app.schemas.transaction import (
 )
 from app.schemas.transaction_split import TransactionSplitInput, TransactionSplitsInput
 from app.services import reconciliation_service, split_service
+from app.services.categorization import memory as categorization_memory
 from app.services.categorization.events import (
     StagedChange,
     record_change,
     record_changes_bulk,
+    run_user_hooks,
     stage_change,
     write_staged,
 )
@@ -1649,6 +1651,10 @@ async def update_transaction(
         scoped_update = {
             k: v for k, v in update_data.items() if k in installment_scoped_fields
         }
+    anchor_changes = (
+        "category_id" in update_data and update_data["category_id"] != transaction.category_id
+    )
+    categories_before = {row.id: row.category_id for row in rows}
 
     for row in rows:
         # The edited transaction itself reflects the full form payload; the
@@ -1674,6 +1680,15 @@ async def update_transaction(
             derived=not is_anchor,
         )
 
+    # The anchor already had the category and only its siblings moved: the
+    # siblings are derived, so the choice is taught once, from the anchor.
+    if (
+        not anchor_changes
+        and update_data.get("category_id") is not None
+        and any(row.category_id != categories_before[row.id] for row in rows)
+    ):
+        await run_user_hooks(session, transaction, transaction.category_id)
+
     # A changed parcel amount makes the stored series total stale, whatever
     # the scope was: "this" reprices one parcel, "future"/"all" reprice
     # several. Recompute from the rows themselves so the two always agree.
@@ -1697,7 +1712,8 @@ async def bulk_update_category(
     """Give the selected transactions one category, as a person's choice.
 
     Returns how many transactions matched (in the workspace), whether or not
-    their category actually changed.
+    their category actually changed. The memory learns (or, for a clear,
+    unlearns) once per store, not once per row.
     """
     await _ensure_category_in_workspace(session, workspace_id, category_id)
     rows = list(
@@ -1710,10 +1726,12 @@ async def bulk_update_category(
             )
         ).scalars().all()
     )
+    changed = [(tx, tx.category_id) for tx in rows if tx.category_id != category_id]
     await record_changes_bulk(
         session, workspace_id, [(tx, category_id, "user") for tx in rows],
-        user_id=user_id,
+        user_id=user_id, derived=True,
     )
+    await categorization_memory.on_bulk_choice(session, workspace_id, changed, category_id)
     await session.commit()
     return len(rows)
 

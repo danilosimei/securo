@@ -47,7 +47,7 @@ from app.services.categorization.events import (
     stage_change,
     write_staged,
 )
-from app.services.categorization.memory import MemoryHit, lookup
+from app.services.categorization.memory import CHUNK, MemoryHit, lookup, stored_key
 from app.services.categorization.merchant_key import merchant_key, sample_description
 from app.services.categorization.settings import find_ai_connection, get_settings
 from app.services.category_service import get_assignable_category_ids
@@ -80,10 +80,6 @@ FINISHED_STATUSES = ("done", "capped")
 #: a card purchase lands as `pending` and is promoted to `posted` days later
 #: keeping its `created_at`, and only posted rows are candidates.
 INGEST_LOOKBACK = timedelta(days=30)
-#: `merchant_key` column width on suggestions.
-KEY_WIDTH = 255
-#: Ids per `IN (...)` (asyncpg caps a statement at 32767 parameters).
-CHUNK = 1000
 
 
 @dataclass(frozen=True)
@@ -132,10 +128,6 @@ def _chunks(items: list[uuid.UUID], size: int = CHUNK) -> Iterator[list[uuid.UUI
 def _utc(value: datetime) -> datetime:
     """SQLite hands back naive datetimes; they are UTC."""
     return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-
-
-def stored_key(key: str) -> str:
-    return key[:KEY_WIDTH]
 
 
 async def _dismissed_at(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, datetime]:
@@ -380,7 +372,8 @@ async def memory_pass(
     stay a candidate and, once the memory changes, be paid for again. A
     settled store is consumed even when nothing changes. A row the person
     cleared (R27) is not changed: it gets a pending suggestion with the
-    settled category, and is not sent to the model either. `stats["memory"]`
+    settled category, and is not sent to the model either. One a sync filed
+    since it was collected is an ordinary guess again. `stats["memory"]`
     / `stats["applied"]` count the rows whose category changed,
     `stats["confirmed"]` the ones settled at the category they held,
     `stats["suggested"]` the cleared rows queued.
@@ -419,7 +412,8 @@ async def memory_pass(
             if tx.category_source not in AUTO_APPLY_SOURCES:
                 continue
             decision = plan[tx.id]
-            if tx.id in held:
+            # Still empty: a sync may have filed the row since it was collected.
+            if tx.id in held and tx.category_id is None:
                 suggestions.append({
                     "id": uuid.uuid4(),
                     "workspace_id": workspace_id,
