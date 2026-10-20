@@ -2146,7 +2146,8 @@
     "preview": "プレビュー",
     "download": "ダウンロード",
     "closePreview": "プレビューを閉じる",
-    "remove": "削除"
+    "remove": "削除",
+    "undo": "Undo"
   },
   "splitGroups": {
     "searchPlaceholder": "グループを検索...",
@@ -2887,6 +2888,44 @@
     "configure": "Configure",
     "settings": "Settings",
     "soon": "Coming soon",
-    "navWithPending": "{{name}}, {{count}} to review"
+    "navWithPending": "{{name}}, {{count}} to review",
+    "review": {
+      "title_one": "To review · {{count}} store",
+      "title_other": "To review · {{count}} stores",
+      "hint": "AI and memory were not sure about these. Your choice covers the whole store and is remembered.",
+      "txCount_one": "{{count}} transaction",
+      "txCount_other": "{{count}} transactions",
+      "other": "Other…",
+      "ignore": "Ignore",
+      "ignoreHint": "Ignore this store (keeps its current category)",
+      "acceptAll": "Accept all suggestions",
+      "confirmAll": "Confirm ({{count}})",
+      "applied_one": "Applied to {{count}} transaction",
+      "applied_other": "Applied to {{count}} transactions",
+      "undone": "Undone",
+      "dismissed": "Ignored {{name}}",
+      "whoIs": "Who is {{name}}?",
+      "whoIsUnknown": "Who received this Pix?",
+      "pix": "Pix",
+      "example": "e.g. {{text}}",
+      "proposal": "Create {{path}}?",
+      "createAndApply": "Create and apply",
+      "notNow": "Not now",
+      "created": "{{path}} created",
+      "newCategory": "New: {{path}}",
+      "empty": "All categorized",
+      "emptyHint": "New transactions land here when the AI is not sure",
+      "more_one": "and {{count}} more",
+      "more_other": "and {{count}} more",
+      "loadError": "Could not load the review queue",
+      "showing": "Showing {{shown}} of {{total}} stores",
+      "listLabel": "Stores to review",
+      "keys": {
+        "accept": "accept",
+        "navigate": "move",
+        "expand": "open",
+        "ignore": "ignore"
+      }
+    }
   }
 }

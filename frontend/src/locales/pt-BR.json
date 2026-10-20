@@ -2150,7 +2150,8 @@
     "preview": "Visualizar",
     "download": "Baixar",
     "closePreview": "Fechar visualização",
-    "remove": "Remover"
+    "remove": "Remover",
+    "undo": "Desfazer"
   },
   "splitGroups": {
     "searchPlaceholder": "Buscar grupos...",
@@ -2891,6 +2892,44 @@
     "configure": "Configurar",
     "settings": "Configurações",
     "soon": "Em breve",
-    "navWithPending": "{{name}}, {{count}} para revisar"
+    "navWithPending": "{{name}}, {{count}} para revisar",
+    "review": {
+      "title_one": "Para revisar · {{count}} loja",
+      "title_other": "Para revisar · {{count}} lojas",
+      "hint": "A IA e a memória ficaram em dúvida. Sua escolha vale para a loja toda e fica memorizada.",
+      "txCount_one": "{{count}} transação",
+      "txCount_other": "{{count}} transações",
+      "other": "Outra…",
+      "ignore": "Ignorar",
+      "ignoreHint": "Ignorar esta loja (mantém a categoria atual)",
+      "acceptAll": "Aceitar todas as sugestões",
+      "confirmAll": "Confirmar ({{count}})",
+      "applied_one": "Aplicado a {{count}} transação",
+      "applied_other": "Aplicado a {{count}} transações",
+      "undone": "Desfeito",
+      "dismissed": "{{name}} ignorada",
+      "whoIs": "Quem é {{name}}?",
+      "whoIsUnknown": "Quem recebeu este Pix?",
+      "pix": "Pix",
+      "example": "ex.: {{text}}",
+      "proposal": "Criar {{path}}?",
+      "createAndApply": "Criar e aplicar",
+      "notNow": "Agora não",
+      "created": "{{path}} criada",
+      "newCategory": "Nova: {{path}}",
+      "empty": "Tudo categorizado",
+      "emptyHint": "Novas transações chegam aqui quando a IA não tiver certeza",
+      "more_one": "e mais {{count}}",
+      "more_other": "e mais {{count}}",
+      "loadError": "Não foi possível carregar a fila de revisão",
+      "showing": "Mostrando {{shown}} de {{total}} lojas",
+      "listLabel": "Lojas para revisar",
+      "keys": {
+        "accept": "aceitar",
+        "navigate": "navegar",
+        "expand": "abrir",
+        "ignore": "ignorar"
+      }
+    }
   }
 }

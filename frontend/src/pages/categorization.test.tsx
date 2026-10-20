@@ -8,15 +8,21 @@ import { navItems } from '@/lib/nav-items'
 import { renderWithProviders, t } from '@/test/utils'
 
 const api = vi.hoisted(() => ({
-  categorization: { summary: vi.fn(), run: vi.fn() },
+  categorization: { summary: vi.fn(), run: vi.fn(), review: vi.fn() },
+  categories: { list: vi.fn() },
+  categoryGroups: { list: vi.fn() },
 }))
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
 const workspace = vi.hoisted(() => ({ canWrite: true, canManage: true }))
 
-vi.mock('@/lib/api', () => ({ categorization: api.categorization }))
+vi.mock('@/lib/api', () => api)
 vi.mock('sonner', () => ({ toast }))
-vi.mock('@/contexts/workspace-context', () => ({
+vi.mock('@/contexts/workspace-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/contexts/workspace-context')>()),
   useWorkspace: () => workspace,
+}))
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({ user: { preferences: { currency_display: 'BRL' } } }),
 }))
 vi.mock('@/hooks/use-display-locale', () => ({
   useDisplayLocale: () => 'en-US',
@@ -46,6 +52,9 @@ beforeEach(() => {
   workspace.canWrite = true
   workspace.canManage = true
   api.categorization.summary.mockResolvedValue(summary())
+  api.categorization.review.mockResolvedValue({ groups: [], total: 0, new_category_proposals: [] })
+  api.categories.list.mockResolvedValue([])
+  api.categoryGroups.list.mockResolvedValue([])
 })
 
 describe('CategorizationPage', () => {
