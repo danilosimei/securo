@@ -1329,3 +1329,32 @@ async def test_unknown_served_model_is_priced_at_priciest_opus(
     await session.commit()
     fallback = await _fresh(session, CategorizationRun, fallback.id)
     assert (fallback.model, fallback.cost_usd) == ("claude-opus-4-8", Decimal("0.017500"))
+
+
+@pytest.mark.asyncio
+async def test_with_redistributions_ignores_other_workspace_runs(session, test_user, test_workspace):
+    """A run id stored on an op never brings another workspace's run."""
+    other = Workspace(
+        id=uuid.uuid4(), name="Outro", kind="personal", created_by_user_id=test_user.id,
+        default_currency="BRL", locale="pt-BR",
+    )
+    session.add(other)
+    await session.flush()
+    foreign = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=other.id, kind="redistribute", trigger="manual",
+        status="failed", stats={}, detail={},
+    )
+    mine = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="redistribute", trigger="manual",
+        status="queued", stats={}, detail={},
+    )
+    session.add_all([foreign, mine])
+    await session.flush()
+    ops = [
+        {"id": "o1", "result": {"redistribute_run_id": str(foreign.id)}},
+        {"id": "o2", "result": {"redistribute_run_id": str(mine.id)}},
+        {"id": "o3", "result": {"redistribute_run_id": "not-a-uuid"}},
+        {"id": "o4", "result": None},
+    ]
+    shown = await organizer.with_redistributions(session, test_workspace.id, ops)
+    assert [op["redistribution"] for op in shown] == [None, mine, None, None]

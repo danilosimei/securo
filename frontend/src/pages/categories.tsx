@@ -344,8 +344,8 @@ export default function CategoriesPage() {
           action={
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" className="gap-1.5 h-8" asChild>
-                <Link to="/categorization?tab=organize">
-                  <WandSparkles size={13} /> {t('categories.organizeWithAi')}
+                <Link to="/categorization?tab=organize" aria-label={t('categories.organizeWithAi')}>
+                  <WandSparkles size={13} /> <span className="hidden sm:inline">{t('categories.organizeWithAi')}</span>
                 </Link>
               </Button>
               {canWrite && (

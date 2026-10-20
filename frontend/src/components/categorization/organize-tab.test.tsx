@@ -287,7 +287,92 @@ describe('OrganizeTab', () => {
     expect(card('o3')).toHaveAttribute('data-status', 'pending')
 
     await user.click(within(card('o3')).getByRole('button', { name: t('categorization.organize.newProposal') }))
+    // Pending ops would be discarded: confirm first.
+    const dialog = await screen.findByRole('dialog')
+    expect(api.categorization.runOrganizer).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: t('categorization.organize.newProposal') }))
     expect(api.categorization.runOrganizer).toHaveBeenCalled()
+  })
+
+  it('o erro de conflito some quando chega outra proposta', async () => {
+    api.categorization.applyOrganizerOp.mockRejectedValueOnce(conflict('Já existe uma categoria.'))
+    const { user, queryClient } = await renderProposal()
+    await user.click(within(card('o3')).getByRole('button', { name: t('categorization.organize.apply') }))
+    expect(await within(card('o3')).findByText('Já existe uma categoria.')).toBeInTheDocument()
+
+    view = { run: run('done', { id: 'run-2' }), ops: [games, merge, rename], message: null }
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: ['categorization', 'organizer'] })
+    })
+    await waitFor(() => expect(within(card('o3')).queryByText('Já existe uma categoria.')).toBeNull())
+  })
+
+  it('nova proposta com mudanças pendentes pede confirmação com o custo', async () => {
+    const { user } = await renderProposal()
+    await user.click(screen.getByRole('button', { name: t('categorization.organize.newProposal') }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(t('categorization.organize.newProposalDescription', { count: 3 }))).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: t('common.cancel') }))
+    expect(api.categorization.runOrganizer).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: t('categorization.organize.newProposal') }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: t('categorization.organize.newProposal') }))
+    expect(api.categorization.runOrganizer).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText(t('categorization.organize.running'))).toBeInTheDocument()
+  })
+
+  it('nova proposta sem pendências vai direto e mostra o custo no título', async () => {
+    view = { ...view, ops: view.ops.map((o) => ({ ...o, status: 'rejected' as const })) }
+    const { user } = await renderProposal()
+    const button = screen.getByRole('button', { name: t('categorization.organize.newProposal') })
+    expect(button).toHaveAttribute('title', t('categorization.organize.costNote'))
+    await user.click(button)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.categorization.runOrganizer).toHaveBeenCalledTimes(1)
+  })
+
+  it('erro ao carregar sem dados: cartão com tentar de novo', async () => {
+    api.categorization.organizer.mockRejectedValueOnce(new Error('network'))
+    const { user } = renderWithProviders(<OrganizeTab />)
+    expect(await screen.findByText(t('categorization.organize.loadError'))).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: t('categorization.organize.retry') }))
+    expect(await screen.findByTestId('organizer-op-o1')).toBeInTheDocument()
+    expect(api.categorization.organizer).toHaveBeenCalledTimes(2)
+  })
+
+  it('falha ao atualizar com dados: mantém a proposta e avisa discretamente', async () => {
+    const { queryClient } = await renderProposal()
+    api.categorization.organizer.mockRejectedValueOnce(new Error('network'))
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['categorization', 'organizer'] })
+    })
+    expect(await screen.findByText(t('categorization.organize.refreshError'))).toBeInTheDocument()
+    expect(card('o1')).toBeInTheDocument()
+    expect(screen.queryByText(t('categorization.organize.loadError'))).toBeNull()
+  })
+
+  it('a árvore continua simulando a op aplicada até as categorias recarregarem', async () => {
+    const { user } = await renderProposal()
+    // The category refetch never answers.
+    api.categories.list.mockImplementation(() => new Promise(() => {}))
+    await user.click(within(card('o3')).getByRole('button', { name: t('categorization.organize.apply') }))
+    await waitFor(() => expect(card('o3')).toHaveAttribute('data-status', 'applied'))
+    const tree = screen.getByTestId('organizer-tree')
+    expect(within(tree).getByText('Supermercado')).toBeInTheDocument()
+    expect(within(tree).getByText(t('categorization.organize.before', { name: 'Mercado' }))).toBeInTheDocument()
+  })
+
+  it('criar grupo avisa quando outras mudanças usam o grupo', async () => {
+    view = {
+      ...view,
+      ops: [
+        op({ id: 'o5', op: 'create_group', name: 'Bichos' }),
+        op({ id: 'o6', op: 'move_category', target: 'c4', group: 'Bichos', labels: { target: 'Mercado', group: 'Bichos' } }),
+        { ...games, id: 'o1' },
+      ],
+    }
+    await renderProposal()
+    expect(within(card('o5')).getByText(t('categorization.organize.effect.groupUsedLater'))).toBeInTheDocument()
   })
 
   it('aplicar todas: confirma as mesclagens uma vez e aplica em ordem', async () => {
@@ -333,7 +418,7 @@ describe('OrganizeTab', () => {
     // Failed later: the card offers a retry.
     view = {
       ...view,
-      ops: [games, { ...split, status: 'applied', redistribution: run('failed', { id: 'r1', kind: 'redistribute', error: 'no_ai_connection' }) }],
+      ops: [games, { ...split, status: 'applied', redistribution: run('failed', { id: 'r1', kind: 'redistribute', error: 'invalid_answer' }) }],
     }
     api.categorization.retryOrganizerOp.mockImplementation(async () => {
       const queued = run('queued', { id: 'r2', kind: 'redistribute' })
@@ -346,6 +431,28 @@ describe('OrganizeTab', () => {
     expect(api.categorization.retryOrganizerOp).toHaveBeenCalledWith('o4', 'run-1')
     expect(await within(card('o4')).findByText(t('categorization.organize.redistributing'))).toBeInTheDocument()
   }, 10000)
+
+  it('aplicar todas que para na primeira op ainda recarrega categorias e proposta', async () => {
+    api.categorization.applyOrganizerOp.mockRejectedValueOnce(conflict('As categorias mudaram desde a proposta — gere outra.'))
+    view = { ...view, ops: [games, rename] }
+    const { user, queryClient } = await renderProposal()
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    await user.click(screen.getByRole('button', { name: t('categorization.organize.applyAll', { count: 2 }) }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['categories'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['categorization'] })
+  })
+
+  it('redistribuição sem conexão Claude aponta para as configurações', async () => {
+    view = {
+      ...view,
+      ops: [games, { ...split, status: 'applied', redistribution: run('failed', { id: 'r1', kind: 'redistribute', error: 'no_ai_connection' }) }],
+    }
+    await renderProposal()
+    const link = within(card('o4')).getByRole('link', { name: t('categorization.organize.configure') })
+    expect(link).toHaveAttribute('href', '/workspace/settings#categorization')
+    expect(within(card('o4')).queryByRole('button', { name: t('categorization.organize.retry') })).toBeNull()
+  })
 
   it('a árvore prevista marca novas, renomeadas e mescladas', async () => {
     await renderProposal()

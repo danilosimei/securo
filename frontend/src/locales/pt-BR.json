@@ -3130,7 +3130,8 @@
         "merge": "Tudo o que está em {{from}} ({{transactions}}) passa para {{into}}, e {{from}} deixa de existir. Não dá para desfazer.",
         "split": "A IA redistribui {{transactions}} de {{name}} entre as novas categorias, inclusive as que você categorizou à mão. Dá para desfazer em Aplicadas.",
         "splitHeir": "{{first}} fica com o histórico, os orçamentos e as regras de {{name}}.",
-        "splitGroup": "No grupo {{group}}:"
+        "splitGroup": "No grupo {{group}}:",
+        "groupUsedLater": "Outras mudanças desta proposta também usam este grupo."
       },
       "redistributing": "Redistribuindo transações…",
       "redistributed": "Transações redistribuídas: {{applied}} aplicadas · {{review}} para revisar",
@@ -3149,7 +3150,11 @@
       "mergeConfirm": "Mesclar",
       "mergeAllDescription_one": "Aplicar todas inclui {{count}} mesclagem. As categorias mescladas deixam de existir e tudo o que está nelas passa para o destino.",
       "mergeAllDescription_other": "Aplicar todas inclui {{count}} mesclagens. As categorias mescladas deixam de existir e tudo o que está nelas passa para o destino.",
-      "applyAllConfirm": "Aplicar todas"
+      "applyAllConfirm": "Aplicar todas",
+      "newProposalTitle": "Gerar nova proposta?",
+      "newProposalDescription_one": "A proposta atual e a {{count}} mudança pendente serão descartadas · leva ~1 min · ~US$ 0,20",
+      "newProposalDescription_other": "A proposta atual e as {{count}} mudanças pendentes serão descartadas · leva ~1 min · ~US$ 0,20",
+      "refreshError": "Não foi possível atualizar a proposta; mostrando a última versão carregada."
     }
   }
 }

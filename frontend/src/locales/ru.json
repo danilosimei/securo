@@ -3145,7 +3145,8 @@
         "merge": "Everything in {{from}} ({{transactions}}) goes to {{into}} and {{from}} stops existing. This can't be undone.",
         "split": "AI redistributes {{transactions}} from {{name}} among the new categories, including the ones you categorized yourself. You can undo it in Applied.",
         "splitHeir": "{{first}} keeps the history, budgets and rules of {{name}}.",
-        "splitGroup": "In group {{group}}:"
+        "splitGroup": "In group {{group}}:",
+        "groupUsedLater": "Other changes in this proposal also use this group."
       },
       "redistributing": "Redistributing transactions…",
       "redistributed": "Transactions redistributed: {{applied}} applied · {{review}} to review",
@@ -3164,7 +3165,11 @@
       "mergeConfirm": "Merge",
       "mergeAllDescription_one": "Applying all includes {{count}} merge. Merged categories stop existing and everything in them goes to the destination.",
       "mergeAllDescription_other": "Applying all includes {{count}} merges. Merged categories stop existing and everything in them goes to the destination.",
-      "applyAllConfirm": "Apply all"
+      "applyAllConfirm": "Apply all",
+      "newProposalTitle": "Create a new proposal?",
+      "newProposalDescription_one": "The current proposal and its {{count}} pending change will be discarded · takes ~1 min · ~US$ 0.20",
+      "newProposalDescription_other": "The current proposal and its {{count}} pending changes will be discarded · takes ~1 min · ~US$ 0.20",
+      "refreshError": "Couldn't refresh the proposal; showing the last version loaded."
     }
   }
 }

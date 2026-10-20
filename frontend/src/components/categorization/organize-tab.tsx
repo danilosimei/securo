@@ -93,7 +93,26 @@ function opTitle(op: OrganizerOp, t: TFunction): string {
   }
 }
 
-type Confirm = { kind: 'one'; op: OrganizerOp } | { kind: 'all'; merges: OrganizerOp[] }
+type Confirm =
+  | { kind: 'one'; op: OrganizerOp }
+  | { kind: 'all'; merges: OrganizerOp[] }
+  | { kind: 'regenerate'; pending: number }
+
+const norm = (value: string) => value.normalize('NFC').trim().toLocaleLowerCase()
+
+/** A proposed group that later pending ops of the proposal put things in. */
+function groupUsedLater(op: OrganizerOp, ops: OrganizerOp[]): boolean {
+  if (op.op !== 'create_group' || !op.name) return false
+  const name = norm(op.name)
+  return ops
+    .slice(ops.indexOf(op) + 1)
+    .filter((o) => o.status === 'pending')
+    .some((o) => {
+      const ref =
+        o.op === 'split_category' ? o.name : o.op === 'create_category' || o.op === 'move_category' ? o.group : null
+      return !!ref && norm(ref) === name
+    })
+}
 
 export function OrganizeTab() {
   const { t } = useTranslation()
@@ -121,6 +140,23 @@ export function OrganizeTab() {
   const [starting, setStarting] = useState(false)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [highlight, setHighlight] = useState<string | null>(null)
+  // Conflict messages belong to the proposal they were raised on.
+  const [errorsRun, setErrorsRun] = useState(runId)
+  if (errorsRun !== runId) {
+    setErrorsRun(runId)
+    setErrors({})
+  }
+  // Ops applied here whose effect the category lists have not caught up
+  // with yet: the predicted tree keeps simulating them until they do.
+  const [appliedAt, setAppliedAt] = useState<Record<string, number>>({})
+  const treeSyncedAt = Math.min(categoriesQuery.dataUpdatedAt, groupsQuery.dataUpdatedAt)
+  const treeOps = useMemo(
+    () =>
+      ops.map((op) =>
+        op.status === 'applied' && (appliedAt[op.id] ?? 0) > treeSyncedAt ? { ...op, status: 'pending' as const } : op,
+      ),
+    [ops, appliedAt, treeSyncedAt],
+  )
 
   const replaceOp = (next: OrganizerOp, redistribution?: CategorizationRun | null) => {
     queryClient.setQueryData<OrganizerView>([...ORGANIZER_QUERY_KEY], (old) =>
@@ -176,8 +212,11 @@ export function OrganizeTab() {
     setBusyOp(op.id)
     try {
       const result = await categorizationApi.applyOrganizerOp(op.id, runId)
+      setAppliedAt((prev) => ({ ...prev, [op.id]: Date.now() }))
       replaceOp(result.op, result.redistribute_run)
       setError(op.id, null)
+      // The tree changed: refetch it now, not only at the end of a batch.
+      invalidateCategoryQueries(queryClient)
       return null
     } catch (error) {
       const message = extractApiError(error, t('categorization.organize.applyError'))
@@ -218,7 +257,8 @@ export function OrganizeTab() {
       toast.success(t('categorization.organize.allApplied', { count: done }))
     } finally {
       setApplyingAll(false)
-      if (done > 0) refreshAfterApply()
+      // Even a batch stopped at its first op: the tree may have moved under it.
+      refreshAfterApply()
     }
   }
 
@@ -263,12 +303,19 @@ export function OrganizeTab() {
     if (merges.length > 0) setConfirm({ kind: 'all', merges })
     else void applyAll()
   }
+  /** A new proposal costs money and replaces this one: confirm when it
+   *  still has decisions to make. */
+  const requestNewProposal = () => {
+    if (pending.length > 0) setConfirm({ kind: 'regenerate', pending: pending.length })
+    else void startRun()
+  }
   const confirmDialog = () => {
     const current = confirm
     setConfirm(null)
     if (!current) return
     if (current.kind === 'one') void apply(current.op)
-    else void applyAll()
+    else if (current.kind === 'all') void applyAll()
+    else void startRun()
   }
 
   let body: React.ReactNode
@@ -280,9 +327,14 @@ export function OrganizeTab() {
         <Skeleton className="mt-6 h-24 w-full" />
       </SectionCard>
     )
-  } else if (organizer.isError || !view) {
+  } else if (!view) {
     body = (
-      <StateCard icon={<AlertCircle size={20} className="text-rose-500" />} title={t('categorization.organize.loadError')} />
+      <StateCard icon={<AlertCircle size={20} className="text-rose-500" />} title={t('categorization.organize.loadError')}>
+        <Button variant="outline" onClick={() => void organizer.refetch()} disabled={organizer.isFetching} className="gap-2">
+          {organizer.isFetching ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+          {t('categorization.organize.retry')}
+        </Button>
+      </StateCard>
     )
   } else if (!run) {
     body = (
@@ -354,7 +406,7 @@ export function OrganizeTab() {
           className="order-2 lg:order-1"
           groups={groupsQuery.data ?? []}
           categories={categoriesQuery.data ?? []}
-          ops={ops}
+          ops={treeOps}
           highlight={highlight}
         />
         <SectionCard className="order-1 lg:order-2">
@@ -371,7 +423,14 @@ export function OrganizeTab() {
             action={
               canManage ? (
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={startRun} disabled={locked}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    onClick={requestNewProposal}
+                    disabled={locked}
+                    title={t('categorization.organize.costNote')}
+                  >
                     <RefreshCw size={13} className={starting ? 'animate-spin' : undefined} />
                     {t('categorization.organize.newProposal')}
                   </Button>
@@ -404,8 +463,9 @@ export function OrganizeTab() {
                 onApply={() => requestApply(op)}
                 onReject={() => reject(op)}
                 onRetry={() => retry(op)}
-                onRegenerate={startRun}
+                onRegenerate={requestNewProposal}
                 onHighlight={setHighlight}
+                groupUsedLater={groupUsedLater(op, ops)}
               />
             ))}
           </ul>
@@ -416,11 +476,32 @@ export function OrganizeTab() {
 
   return (
     <div data-testid="categorization-organize">
+      {organizer.isError && view && (
+        <div
+          role="status"
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/50 bg-amber-50/40 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/15 dark:text-amber-200"
+        >
+          <AlertCircle size={13} className="shrink-0" />
+          <span className="min-w-0 flex-1">{t('categorization.organize.refreshError')}</span>
+          <button
+            type="button"
+            className="font-medium underline-offset-2 hover:underline disabled:opacity-50"
+            onClick={() => void organizer.refetch()}
+            disabled={organizer.isFetching}
+          >
+            {t('categorization.organize.retry')}
+          </button>
+        </div>
+      )}
       {body}
       <Dialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{t('categorization.organize.mergeTitle')}</DialogTitle>
+            <DialogTitle>
+              {confirm?.kind === 'regenerate'
+                ? t('categorization.organize.newProposalTitle')
+                : t('categorization.organize.mergeTitle')}
+            </DialogTitle>
             <DialogDescription>
               {confirm?.kind === 'one'
                 ? t('categorization.organize.mergeDescription', {
@@ -428,9 +509,11 @@ export function OrganizeTab() {
                     into: confirm.op.labels?.into ?? confirm.op.into ?? '',
                     transactions: t('categorization.organize.transactions', { count: confirm.op.impact?.tx ?? 0 }),
                   })
-                : t('categorization.organize.mergeAllDescription', {
-                    count: confirm?.kind === 'all' ? confirm.merges.length : 0,
-                  })}
+                : confirm?.kind === 'regenerate'
+                  ? t('categorization.organize.newProposalDescription', { count: confirm.pending })
+                  : t('categorization.organize.mergeAllDescription', {
+                      count: confirm?.kind === 'all' ? confirm.merges.length : 0,
+                    })}
             </DialogDescription>
           </DialogHeader>
           {confirm?.kind === 'all' && (
@@ -446,10 +529,12 @@ export function OrganizeTab() {
             <Button variant="outline" onClick={() => setConfirm(null)}>
               {t('common.cancel')}
             </Button>
-            <Button variant="destructive" onClick={confirmDialog}>
+            <Button variant={confirm?.kind === 'regenerate' ? 'default' : 'destructive'} onClick={confirmDialog}>
               {confirm?.kind === 'all'
                 ? t('categorization.organize.applyAllConfirm')
-                : t('categorization.organize.mergeConfirm')}
+                : confirm?.kind === 'regenerate'
+                  ? t('categorization.organize.newProposal')
+                  : t('categorization.organize.mergeConfirm')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -507,6 +592,7 @@ function OpCard({
   onRetry,
   onRegenerate,
   onHighlight,
+  groupUsedLater = false,
 }: {
   op: OrganizerOp
   canManage: boolean
@@ -518,6 +604,7 @@ function OpCard({
   onRetry: () => void
   onRegenerate: () => void
   onHighlight: (opId: string | null) => void
+  groupUsedLater?: boolean
 }) {
   const { t } = useTranslation()
   const { user } = useAuth()
@@ -564,6 +651,9 @@ function OpCard({
             </p>
           )}
           <OpEffect op={op} />
+          {groupUsedLater && (
+            <p className="mt-1 text-xs text-muted-foreground">{t('categorization.organize.effect.groupUsedLater')}</p>
+          )}
           {op.op === 'split_category' && status === 'applied' && (
             <Redistribution op={op} canManage={canManage} busy={busy} locked={locked} onRetry={onRetry} />
           )}
@@ -715,7 +805,11 @@ function Redistribution({
     <div className={cn(box, 'text-rose-700 dark:text-rose-200')}>
       <AlertCircle className="h-3.5 w-3.5" />
       <span>{t('categorization.organize.redistributeFailed', { name: first })}</span>
-      {canManage && (
+      {canManage && run.error === 'no_ai_connection' ? (
+        <Button size="sm" variant="outline" className="h-7" asChild>
+          <Link to="/workspace/settings#categorization">{t('categorization.organize.configure')}</Link>
+        </Button>
+      ) : canManage && (
         <Button size="sm" variant="outline" className="h-7 gap-1.5" onClick={onRetry} disabled={locked}>
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           {t('categorization.organize.retry')}
