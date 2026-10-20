@@ -835,7 +835,8 @@ async def test_api_get_apply_reject(
 async def test_api_organizer_writes_need_manager(client, session, test_workspace, viewer_auth_headers):
     editor = await _member(session, client, test_workspace, "editor", "editor-org@example.com")
     assert (await client.get(f"{API}/organizer", headers=editor)).status_code == 200
-    for path in ("/organizer/run", "/organizer/ops/o1/apply", "/organizer/ops/o1/reject"):
+    for path in ("/organizer/run", "/organizer/ops/o1/apply", "/organizer/ops/o1/reject",
+                 "/organizer/ops/o1/retry"):
         assert (await client.post(f"{API}{path}", headers=editor)).status_code == 403
         assert (await client.post(f"{API}{path}", headers=viewer_auth_headers)).status_code == 403
 
@@ -1056,3 +1057,241 @@ async def test_organizer_end_to_end_postgres(postgres_sessions, monkeypatch):
         ).scalars().all()
         assert len(events) == 101
         assert {e.previous_source for e in events} == {"user"}
+
+
+# --- fix round 1: stale proposals, ignored categories, names, retry, pricing ----
+
+
+def test_schema_has_no_impact_and_prompt_states_split_floor():
+    op = ORGANIZER_SCHEMA["properties"]["ops"]["items"]
+    assert "impact" not in op["properties"]
+    assert "impact" not in op["required"]
+    assert "R$ 200 por filha" in organizer.ORGANIZER_INSTRUCTIONS
+    assert "ig: 1" in organizer.ORGANIZER_INSTRUCTIONS
+
+
+def test_filter_ops_respects_ignored_categories_and_repeated_names():
+    stats = _stats()
+    stats.categories["c9"] = CategoryStat(
+        name="Reembolsos", group="g2", tx=30, total=Decimal("3000"), ignored=True
+    )
+    stats.categories["c10"] = CategoryStat(name="Sobras", group=None, tx=1, total=Decimal("5"))
+    ops = [
+        # An ignored category is never split...
+        _op("o1", "split_category", target="c9", name="Reembolsos", children=["A", "B"]),
+        # ...nor merged with one that is not.
+        _op("o2", "merge", target="c10", into="c9"),
+        # The first child would repeat "Cinema" (c2) in g1.
+        _op("o3", "split_category", target="c1", name="Lazer", children=["Cinema", "Shows"]),
+        # Same split, a fresh first name: kept.
+        _op("o4", "split_category", target="c1", name="Lazer", children=["Jogos", "Shows"]),
+    ]
+    assert [op["id"] for op in filter_ops(ops, stats)] == ["o4"]
+
+
+@pytest.mark.asyncio
+async def test_organizer_input_marks_ignored_categories(session, test_user, test_workspace):
+    _cat(session, test_user, test_workspace, "Reembolsos", is_ignored=True)
+    _cat(session, test_user, test_workspace, "Mercado")
+    await session.commit()
+    prepared = await organizer.collect_input(session, test_workspace.id)
+    items = {c["name"]: c for c in json.loads(prepared.text)["ungrouped"]}
+    assert items["Reembolsos"]["ig"] == 1
+    assert "ig" not in items["Mercado"]
+    assert prepared.stats.categories[items["Reembolsos"]["c"]].ignored is True
+
+
+@pytest.mark.asyncio
+async def test_apply_refuses_category_hidden_after_proposal(
+    client, auth_headers, session, test_user, test_workspace
+):
+    group = _group(session, test_user, test_workspace, "Lazer")
+    lazer = _cat(session, test_user, test_workspace, "Lazer", group, is_system=True)
+    hidden_group = _group(session, test_user, test_workspace, "Velho")
+    run = await _organize_run(
+        session, test_workspace,
+        [_op("o1", "rename", target="c1", name="Diversão"),
+         _op("o2", "move_category", target="c1", group="g2")],
+        {"c1": lazer.id, "g2": hidden_group.id},
+    )
+    hidden_group.is_hidden = True
+    await session.commit()
+    lazer_id, run_id = lazer.id, run.id
+    # The group went out of circulation: moving into it is refused.
+    with pytest.raises(organizer.OpConflict, match="gere outra"):
+        await apply_op(session, test_workspace.id, run_id, "o2", test_user.id)
+    await session.rollback()
+
+    lazer = await _fresh(session, Category, lazer_id)
+    lazer.is_hidden = True
+    await session.commit()
+    resp = await client.post(f"{API}/organizer/ops/o1/apply", headers=auth_headers)
+    assert resp.status_code == 409, resp.text
+    assert "gere outra" in resp.json()["detail"]
+    assert (await _fresh(session, Category, lazer_id)).name == "Lazer"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flag", ["treat_as_transfer", "is_ignored"])
+async def test_merge_refuses_flag_changed_since_proposal(session, test_user, test_workspace, flag):
+    group = _group(session, test_user, test_workspace, "Casa")
+    a = _cat(session, test_user, test_workspace, "Contas", group)
+    b = _cat(session, test_user, test_workspace, "Luz", group)
+    _cat(session, test_user, test_workspace, "Água", group)
+    run = await _organize_run(
+        session, test_workspace, [_op("o1", "merge", target="c2", into="c1")],
+        {"c1": a.id, "c2": b.id},
+    )
+    setattr(b, flag, True)
+    await session.commit()
+    b_id, run_id, ws_id, user_id = b.id, run.id, test_workspace.id, test_user.id
+    with pytest.raises(organizer.OpConflict, match="gere outra"):
+        await apply_op(session, ws_id, run_id, "o1", user_id)
+    await session.rollback()
+    assert await _fresh(session, Category, b_id) is not None
+
+
+@pytest.mark.asyncio
+async def test_split_children_inherit_flags_and_refuse_repeated_name(
+    session, test_user, test_workspace
+):
+    lazer_group = _group(session, test_user, test_workspace, "Lazer")
+    _cat(session, test_user, test_workspace, "Cinema", lazer_group)
+    estornos = _cat(session, test_user, test_workspace, "Estornos", is_ignored=True,
+                    treat_as_transfer=True)
+    run = await _organize_run(
+        session, test_workspace,
+        [_op("o1", "split_category", target="c1", name="Lazer", children=["Cinema", "Shows"]),
+         _op("o2", "split_category", target="c1", name="Devoluções",
+             children=["Lojas", "Serviços"])],
+        {"c1": estornos.id},
+    )
+    run_id, ws_id, user_id = run.id, test_workspace.id, test_user.id
+    with pytest.raises(organizer.OpConflict, match="Cinema"):
+        await apply_op(session, ws_id, run_id, "o1", user_id)
+    await session.rollback()
+
+    result = await apply_op(session, ws_id, run_id, "o2", user_id)
+    await session.commit()
+    for raw in result["op"]["result"]["category_ids"]:
+        child = await _fresh(session, Category, uuid.UUID(raw))
+        assert (child.is_ignored, child.treat_as_transfer) == (True, True)
+
+
+@pytest.mark.asyncio
+async def test_split_redistributes_only_rows_it_had(
+    session, test_user, test_workspace, test_account, monkeypatch
+):
+    from app.agents.models.connection import LlmConnection
+    from app.agents.services.crypto import encrypt
+
+    session.add(LlmConnection(
+        id=uuid.uuid4(), user_id=test_user.id, name="a", kind="anthropic",
+        api_key_encrypted=encrypt("sk-ant-test"), is_default=True, extra={},
+    ))
+    outros = _group(session, test_user, test_workspace, "Outros")
+    lazer = _cat(session, test_user, test_workspace, "Lazer", outros)
+    _tx(session, test_user, test_account, "CINEMARK", category=lazer, source="user")
+    run = await _organize_run(
+        session, test_workspace,
+        [_op("o1", "split_category", target="c1", name="Lazer", children=["Cinema", "Shows"])],
+        {"c1": lazer.id},
+    )
+    result = await apply_op(session, test_workspace.id, run.id, "o1", test_user.id)
+    await session.commit()
+    # Merged into the category after the split: not part of it.
+    late = _tx(session, test_user, test_account, "BAR DO ZE", category=lazer, source="user")
+    await session.commit()
+
+    redistribution = await _fresh(session, CategorizationRun, result["redistribute_run_id"])
+    assert len(redistribution.detail["source_tx_ids"]) == 1
+    redistribution.status = "running"
+    await session.commit()
+    sent = []
+
+    def create(**params):
+        items = json.loads(params["messages"][0]["content"])
+        sent.extend(item["s"][0] for item in items)
+        return SimpleNamespace(
+            content=[SimpleNamespace(type="text", text=json.dumps({"items": []}))],
+            stop_reason="end_turn",
+            usage=SimpleNamespace(input_tokens=1, output_tokens=1,
+                                  cache_creation_input_tokens=0, cache_read_input_tokens=0),
+        )
+
+    monkeypatch.setattr(organizer, "resolve_client", AsyncMock(return_value=_fake_client(create=create)))
+    await organizer.redistribute(session, test_workspace.id, redistribution)
+    await session.commit()
+    assert sent == ["CINEMARK"]
+    assert (await _fresh(session, Transaction, late.id)).category_id == lazer.id
+
+
+@pytest.mark.asyncio
+async def test_api_retry_failed_redistribution(
+    client, auth_headers, session, test_user, test_workspace, organizer_enqueue
+):
+    outros = _group(session, test_user, test_workspace, "Outros")
+    lazer = _cat(session, test_user, test_workspace, "Lazer", outros)
+    run = await _organize_run(
+        session, test_workspace,
+        [_op("o1", "split_category", target="c1", name="Lazer", children=["Cinema", "Shows"]),
+         _op("o2", "rename", target="c1", name="X")],
+        {"c1": lazer.id},
+    )
+    # Pending ops and ops that are not splits have nothing to retry.
+    assert (await client.post(f"{API}/organizer/ops/o2/retry", headers=auth_headers)).status_code == 409
+    resp = await client.post(f"{API}/organizer/ops/o1/apply", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    first_id = uuid.UUID(resp.json()["redistribute_run"]["id"])
+    # Still queued: not retryable.
+    assert (await client.post(f"{API}/organizer/ops/o1/retry", headers=auth_headers)).status_code == 409
+
+    first = await _fresh(session, CategorizationRun, first_id)
+    first.status, first.error = "failed", "enqueue_failed"
+    await session.commit()
+    organizer_enqueue.reset_mock()
+    resp = await client.post(f"{API}/organizer/ops/o1/retry", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    retry_id = uuid.UUID(body["redistribute_run"]["id"])
+    assert retry_id != first_id and body["redistribute_run"]["status"] == "queued"
+    organizer_enqueue.assert_called_once_with(test_workspace.id, retry_id)
+    retry = await _fresh(session, CategorizationRun, retry_id)
+    assert retry.detail["retry_of"] == str(first_id)
+    assert retry.detail["source_category_id"] == str(lazer.id)
+    assert retry.detail["source_tx_ids"] == first.detail["source_tx_ids"]
+    run = await _fresh(session, CategorizationRun, run.id)
+    assert run.detail["ops"][0]["result"]["redistribute_run_id"] == str(retry_id)
+
+
+@pytest.mark.asyncio
+async def test_unknown_served_model_is_priced_at_priciest_opus(
+    session, test_workspace, monkeypatch
+):
+    run = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="organize",
+        trigger="manual", status="running", stats={}, detail={},
+    )
+    session.add(run)
+    await session.commit()
+    client = _fake_client(beta=lambda **_: _message({"ops": []}, model="claude-opus-9"))
+    monkeypatch.setattr(organizer, "resolve_client", AsyncMock(return_value=client))
+    await organizer.organize(session, test_workspace.id, run)
+    await session.commit()
+    run = await _fresh(session, CategorizationRun, run.id)
+    assert run.model == "claude-opus-9"
+    # 1000 in x $5 + 500 out x $25 per MTok.
+    assert run.cost_usd == Decimal("0.017500")
+
+    fallback = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="organize",
+        trigger="manual", status="running", stats={}, detail={},
+    )
+    session.add(fallback)
+    await session.commit()
+    client = _fake_client(beta=lambda **_: _message({"ops": []}, model="claude-opus-4-8"))
+    monkeypatch.setattr(organizer, "resolve_client", AsyncMock(return_value=client))
+    await organizer.organize(session, test_workspace.id, fallback)
+    await session.commit()
+    fallback = await _fresh(session, CategorizationRun, fallback.id)
+    assert (fallback.model, fallback.cost_usd) == ("claude-opus-4-8", Decimal("0.017500"))

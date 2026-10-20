@@ -355,6 +355,33 @@ async def apply_organizer_op(
     )
 
 
+@router.post("/organizer/ops/{op_id}/retry", response_model=OrganizerApplyResult)
+async def retry_organizer_redistribution(
+    op_id: str,
+    run_id: Optional[uuid.UUID] = Query(None, description="Organize run; the latest by default"),
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Queue again the redistribution of an applied split whose run failed."""
+    ctx.require_owner()
+    try:
+        result = await organizer.retry_redistribution(session, ctx.workspace.id, run_id, op_id)
+    except (organizer.NotFound, organizer.OpConflict) as exc:
+        await session.rollback()
+        raise _organizer_error(exc)
+    await session.commit()
+    redistribution = await session.get(CategorizationRun, result["redistribute_run_id"])
+    if redistribution is not None and not categorization_tasks.enqueue_organizer(
+        ctx.workspace.id, redistribution.id
+    ):
+        await review.mark_enqueue_failed(session, redistribution)
+        await session.commit()
+    return OrganizerApplyResult(
+        op=OrganizerOp.model_validate(result["op"]),
+        redistribute_run=RunRead.model_validate(redistribution) if redistribution else None,
+    )
+
+
 @router.post("/organizer/ops/{op_id}/reject", response_model=OrganizerOp)
 async def reject_organizer_op(
     op_id: str,

@@ -159,8 +159,12 @@ async def test_batch_results_yields_message_or_error_type():
     assert got == [("a", "MSG", None), ("b", None, "overloaded_error"), ("c", None, "expired")]
 
 
-def test_prices_cover_both_models():
-    assert set(costs.PRICES) == {"claude-haiku-5-5", "claude-opus-5-5"}
+def test_prices_cover_both_models_and_the_fallbacks():
+    assert set(costs.PRICES) == {
+        "claude-haiku-5-5", "claude-opus-5-5", "claude-opus-5", "claude-opus-4-8",
+    }
+    assert costs.PRICES["claude-opus-4-8"].output == costs.PRICES["claude-opus-5"].output == 25
+    assert costs.PRICES[costs.priciest_opus()].output == 25
 
 
 @pytest.mark.asyncio

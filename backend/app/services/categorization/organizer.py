@@ -59,7 +59,7 @@ from app.schemas.category_group import CategoryGroupCreate, CategoryGroupUpdate
 from app.services import category_group_service, category_service
 from app.services.categorization import classifier, memory
 from app.services.categorization.claude_client import create_beta_message, resolve_client
-from app.services.categorization.costs import PRICES, cost_usd
+from app.services.categorization.costs import PRICES, cost_usd, priciest_opus
 from app.services.categorization.events import StagedChange, stage_change, write_staged
 from app.services.categorization.merchant_key import merchant_key, scrub_documents
 from app.services.categorization.pipeline import (
@@ -111,6 +111,11 @@ MESSAGES = {
     "capped": "O teto mensal de gastos com IA foi atingido. Aumente o teto ou tente no mês que vem.",
     "categories_gone": "As categorias desta divisão não existem mais.",
 }
+#: An op whose categories changed since the proposal was made.
+STALE_MESSAGE = "As categorias mudaram desde a proposta — gere outra."
+#: Redistribution runs that ended without moving the rows (failed,
+#: abandoned, never enqueued) and may be retried.
+RETRYABLE_STATUSES = ("failed",)
 _SHORT_RE = re.compile(r"^[cgi]\d+$")
 _CENT = Decimal("0.01")
 
@@ -119,7 +124,7 @@ ORGANIZER_INSTRUCTIONS = """Você organiza a árvore de categorias de gastos de 
 ## Entrada (mensagem do usuário, JSON)
 - groups: grupos atuais, cada um com g (id do grupo), name e cats (as categorias do grupo).
 - ungrouped: categorias sem grupo.
-- Cada categoria tem c (id), name, q (quantas transações nos últimos 12 meses), v (total em reais nos últimos 12 meses) e, quando ela só movimenta dinheiro entre contas, t: 1.
+- Cada categoria tem c (id), name, q (quantas transações nos últimos 12 meses), v (total em reais nos últimos 12 meses); t: 1 quando ela só movimenta dinheiro entre contas; ig: 1 quando a pessoa a deixa fora dos relatórios.
 - stores: as lojas dos últimos 12 meses, das que mais movimentam para as que menos. Cada uma tem k (id da loja), n (nome), c (id da categoria atual ou null), q (transações), v (total em reais) e t ("d" saída de dinheiro, "c" entrada).
 
 ## Operações
@@ -130,18 +135,19 @@ Toda operação traz todos os campos; use null (ou [] em children) no que não s
 - move_category: muda a categoria de grupo. target = id da categoria; group = id de grupo existente ou nome de grupo novo.
 - merge: junta duas categorias. target = a categoria que deixa de existir; into = a categoria que fica com tudo.
 - split_category: transforma uma categoria em várias mais específicas dentro de um grupo. target = id da categoria; name = nome do grupo que recebe as filhas (um grupo existente ou novo; pode ser o nome atual da categoria); children = nomes das categorias filhas, de 2 a 6. A primeira filha herda o histórico, os orçamentos e as regras da categoria atual, então ponha nela o uso mais comum. As transações da categoria são redistribuídas entre as filhas depois.
-Campos comuns: id ("o1", "o2"... na ordem), why (motivo curto em português, até 20 palavras) e impact (tx: transações afetadas; total: valor em reais afetado).
+Campos comuns: id ("o1", "o2"... na ordem) e why (motivo curto em português, até 20 palavras).
 
 ## Regras
 1. Só dois níveis: grupo → categoria. Nunca ponha grupo dentro de grupo nem categoria dentro de categoria.
 2. Grupos amplos, categorias específicas. Todo grupo que uma operação tocar termina com 2 a 6 categorias.
 3. Reaproveite antes de criar: prefira renomear, mover ou juntar categorias que já existem.
-4. Categoria nova só com pelo menos 3 transações ou R$ 200 nos últimos 12 meses (some q e v das lojas que vão para ela). Numa divisão, a categoria atual precisa ter uso para todas as filhas.
+4. Categoria nova só com pelo menos 3 transações ou R$ 200 nos últimos 12 meses (some q e v das lojas que vão para ela). Numa divisão, pelo menos 3 transações ou R$ 200 por filha: a categoria dividida precisa de q ≥ 3 × filhas ou v ≥ 200 × filhas.
 5. Junte categorias quase vazias ou repetidas; divida as grandes e misturadas.
-6. Categorias com t: 1 só podem ser renomeadas ou mudar de grupo; nunca as junte com categorias de gasto ou de renda.
-7. Nomes curtos, em português, no estilo da árvore atual. Não use nome de loja como categoria ("Uber" não; "Transporte por app" sim).
-8. Menos é mais: proponha só o que deixa a árvore claramente melhor. Uma árvore que já está boa recebe poucas operações, ou nenhuma.
-9. Use somente ids que aparecem na entrada.
+6. Categorias com t: 1 ou ig: 1 só podem ser renomeadas ou mudar de grupo: nunca as divida e nunca as junte com uma categoria sem a mesma marca.
+7. A primeira filha de uma divisão não pode ter o nome de outra categoria do grupo de destino.
+8. Nomes curtos, em português, no estilo da árvore atual. Não use nome de loja como categoria ("Uber" não; "Transporte por app" sim).
+9. Menos é mais: proponha só o que deixa a árvore claramente melhor. Uma árvore que já está boa recebe poucas operações, ou nenhuma.
+10. Use somente ids que aparecem na entrada.
 
 Responda apenas no formato pedido."""
 
@@ -169,19 +175,9 @@ ORGANIZER_SCHEMA: dict[str, Any] = {
                     "children": {"type": "array", "items": {"type": "string"}},
                     "into": _nullable({"type": "string"}),
                     "why": {"type": "string"},
-                    "impact": {
-                        "type": "object",
-                        "properties": {
-                            "tx": {"type": "integer"},
-                            "total": {"type": "number"},
-                        },
-                        "required": ["tx", "total"],
-                        "additionalProperties": False,
-                    },
                 },
-                "required": [
-                    "id", "op", "target", "group", "name", "children", "into", "why", "impact",
-                ],
+                # No impact: it is recomputed from the real numbers anyway.
+                "required": ["id", "op", "target", "group", "name", "children", "into", "why"],
                 "additionalProperties": False,
             },
         },
@@ -209,6 +205,7 @@ class CategoryStat:
     tx: int = 0
     total: Decimal = Decimal(0)
     transfer: bool = False
+    ignored: bool = False
 
 
 @dataclass
@@ -362,11 +359,14 @@ async def collect_input(session: AsyncSession, workspace_id: uuid.UUID) -> Organ
             name=cat.name,
             group=group_short.get(cat.group_id) if cat.group_id is not None else None,
             tx=len(amounts), total=total, transfer=bool(cat.treat_as_transfer),
+            ignored=bool(cat.is_ignored),
         )
         item: dict[str, Any] = {"c": short, "name": _one_line(cat.name), "q": len(amounts),
                                 "v": _money(total)}
         if cat.treat_as_transfer:
             item["t"] = 1
+        if cat.is_ignored:
+            item["ig"] = 1
         return item
 
     tree = [
@@ -487,6 +487,7 @@ class _Sim:
     cat_group: dict[str, str | None]
     cat_name: dict[str, str]
     transfer: dict[str, bool]
+    ignored: dict[str, bool]
     group_name: dict[str, str]
     existing_groups: set[str]
     claimed: set[str] = field(default_factory=set)
@@ -499,6 +500,7 @@ class _Sim:
             cat_group={s: c.group for s, c in stats.categories.items()},
             cat_name={s: _norm(c.name) for s, c in stats.categories.items()},
             transfer={s: c.transfer for s, c in stats.categories.items()},
+            ignored={s: c.ignored for s, c in stats.categories.items()},
             group_name={s: _norm(name) for s, name in stats.groups.items()},
             existing_groups=set(stats.groups),
         )
@@ -578,6 +580,7 @@ def _step(sim: _Sim, position: int, op: dict[str, Any], stats: OrganizerStats) -
         sim.cat_group[new] = key
         sim.cat_name[new] = _norm(name)
         sim.transfer[new] = False
+        sim.ignored[new] = False
         sim.claimed.update(stores)
         sim.touch(key, position, +1)
         return True
@@ -621,6 +624,7 @@ def _step(sim: _Sim, position: int, op: dict[str, Any], stats: OrganizerStats) -
             or target not in sim.cat_group or into not in sim.cat_group
             or not _SHORT_RE.match(target) or not _SHORT_RE.match(into)
             or sim.transfer[target] != sim.transfer[into]
+            or sim.ignored[target] != sim.ignored[into]
         ):
             return False
         sim.touch(sim.cat_group.pop(target), position, -1)
@@ -632,6 +636,7 @@ def _step(sim: _Sim, position: int, op: dict[str, Any], stats: OrganizerStats) -
         target is None or name is None
         or target not in sim.cat_group or not _SHORT_RE.match(target)
         or sim.transfer[target]
+        or sim.ignored[target]
         or not GROUP_MIN <= len(children) <= GROUP_MAX
         or len({_norm(c) for c in children}) != len(children)
     ):
@@ -640,8 +645,10 @@ def _step(sim: _Sim, position: int, op: dict[str, Any], stats: OrganizerStats) -
     if usage is None or not _enough(usage.tx, usage.total, len(children)):
         return False
     key = sim.group_ref(name)
-    if key is _INVALID:
-        return False
+    if key is _INVALID or (
+        key in sim.group_name and sim.has_category_named(key, children[0], besides=target)
+    ):
+        return False  # unknown group, or the first child would repeat a name there
     sim.ensure_group(key, position)
     old = sim.cat_group[target]
     sim.cat_group[target] = None  # out of the way while the children are named
@@ -654,6 +661,7 @@ def _step(sim: _Sim, position: int, op: dict[str, Any], stats: OrganizerStats) -
         sim.cat_group[new] = key
         sim.cat_name[new] = _norm(child)
         sim.transfer[new] = False
+        sim.ignored[new] = False
         added += 1
     sim.cat_group[target] = key
     if old == key:
@@ -794,10 +802,12 @@ def _account(run: CategorizationRun, message: Any) -> None:
     def tokens(name: str) -> int:
         return int(getattr(usage, name, None) or 0)
 
-    # A server-side fallback may have served the answer: price what served it
-    # when known, the requested model otherwise.
+    # A server-side fallback may have served the answer: price what served it,
+    # and an unknown model at the priciest Opus rate (never under-counted).
     served = getattr(message, "model", None)
-    model = served if isinstance(served, str) and served in PRICES else ORGANIZER_MODEL
+    served = served if isinstance(served, str) and served else ORGANIZER_MODEL
+    run.model = served[:64]
+    model = served if served in PRICES else priciest_opus()
     run.input_tokens = (run.input_tokens or 0) + tokens("input_tokens")
     run.output_tokens = (run.output_tokens or 0) + tokens("output_tokens")
     run.cache_write_tokens = (run.cache_write_tokens or 0) + tokens("cache_creation_input_tokens")
@@ -875,10 +885,14 @@ async def organize(session: AsyncSession, workspace_id: uuid.UUID, run: Categori
 
 
 async def _family_candidates(
-    session: AsyncSession, workspace_id: uuid.UUID, category_id: uuid.UUID
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    category_id: uuid.UUID,
+    only: set[uuid.UUID] | None = None,
 ) -> list[Candidate]:
     """Counted rows of the split category, whoever filed them, minus the
-    ones already waiting on a question in Review."""
+    ones already waiting on a question in Review. With `only` (the rows the
+    category held when it was split), rows merged into it later stay put."""
     waiting = exists().where(
         CategorizationSuggestion.transaction_id == Transaction.id,
         CategorizationSuggestion.status == "pending",
@@ -921,6 +935,26 @@ async def _family_candidates(
             current_source=row.category_source,
         )
         for row in rows.all()
+        if only is None or row.id in only
+    ]
+
+
+async def _split_rows(
+    session: AsyncSession, workspace_id: uuid.UUID, category_id: uuid.UUID
+) -> list[str]:
+    """The ids of the rows a category holds as it is split."""
+    return [
+        str(tx_id)
+        for tx_id in (
+            await session.execute(
+                select(Transaction.id)
+                .where(
+                    Transaction.workspace_id == workspace_id,
+                    Transaction.category_id == category_id,
+                )
+                .order_by(Transaction.id)
+            )
+        ).scalars().all()
     ]
 
 
@@ -935,6 +969,8 @@ async def redistribute(
     try:
         source = uuid.UUID(str(detail["source_category_id"]))
         family = {uuid.UUID(str(raw)) for raw in detail["allowed_category_ids"]}
+        snapshot = detail.get("source_tx_ids")
+        only = {uuid.UUID(str(raw)) for raw in snapshot} if isinstance(snapshot, list) else None
     except (KeyError, TypeError, ValueError):
         _finish(run, "failed", "categories_gone")
         return
@@ -942,7 +978,7 @@ async def redistribute(
     if source not in family or len(family) < 2:
         _finish(run, "failed", "categories_gone")
         return
-    candidates = await _family_candidates(session, workspace_id, source)
+    candidates = await _family_candidates(session, workspace_id, source, only)
     groups = group_by_key(candidates)
     run.stats = {
         "candidates": len(candidates), "groups": len(groups),
@@ -1106,7 +1142,12 @@ async def _repoint_provider_map(
 
 
 async def _locked_op(
-    session: AsyncSession, workspace_id: uuid.UUID, run_id: uuid.UUID | None, op_id: str
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID | None,
+    op_id: str,
+    *,
+    pending: bool = True,
 ) -> tuple[CategorizationRun, dict[str, Any]]:
     from app.tasks import categorization_tasks as tasks
 
@@ -1132,7 +1173,7 @@ async def _locked_op(
         raise NotFound("Operação não encontrada.")
     if run.status != "done":
         raise OpConflict("A proposta ainda não está pronta.")
-    if op.get("status") != "pending":
+    if pending and op.get("status") != "pending":
         raise OpConflict("Esta operação já foi decidida.")
     return run, dict(op)
 
@@ -1158,6 +1199,12 @@ async def _category(
     )
     if category is None:
         raise OpConflict("Uma categoria desta operação não existe mais.")
+    # Hidden since the proposal (directly or through its group): the person
+    # took it out of circulation, so the op no longer means what it said.
+    if category.id not in await category_service.get_assignable_category_ids(
+        session, workspace_id
+    ):
+        raise OpConflict(STALE_MESSAGE)
     return category
 
 
@@ -1177,6 +1224,8 @@ async def _group(
         )
         if group is None:
             raise OpConflict("Um grupo desta operação não existe mais.")
+        if group.is_hidden:
+            raise OpConflict(STALE_MESSAGE)
         return group
     wanted = _norm(ref)
     for group in (
@@ -1202,8 +1251,15 @@ async def _category_in(
     name: str,
     *,
     besides: uuid.UUID | None = None,
+    like: Category | None = None,
 ) -> Category:
-    """An assignable category of that name in the group, or a new one."""
+    """An assignable category of that name in the group, or a new one.
+
+    With `like` (a split's original) the category also shares its
+    `treat_as_transfer` / `is_ignored` flags: one with other flags is not
+    reused, and a new one inherits them."""
+    transfer = bool(like.treat_as_transfer) if like is not None else False
+    ignored = bool(like.is_ignored) if like is not None else False
     assignable = await category_service.get_assignable_category_ids(session, workspace_id)
     wanted = _norm(name)
     for category in (
@@ -1213,11 +1269,52 @@ async def _category_in(
             .order_by(Category.id)
         )
     ).scalars().all():
-        if category.id != besides and category.id in assignable and _norm(category.name) == wanted:
+        if (
+            category.id != besides
+            and category.id in assignable
+            and _norm(category.name) == wanted
+            and (
+                like is None
+                or (bool(category.treat_as_transfer), bool(category.is_ignored))
+                == (transfer, ignored)
+            )
+        ):
             return category
     return await category_service.create_category(
         session, workspace_id, user_id,
-        CategoryCreate(name=name[:NAME_LENGTH], group_id=group.id), commit=False,
+        CategoryCreate(
+            name=name[:NAME_LENGTH], group_id=group.id,
+            treat_as_transfer=transfer, is_ignored=ignored,
+        ),
+        commit=False,
+    )
+
+
+async def _name_taken(
+    session: AsyncSession, workspace_id: uuid.UUID, group: CategoryGroup, name: str,
+    besides: uuid.UUID,
+) -> bool:
+    wanted = _norm(name)
+    return any(
+        _norm(other) == wanted
+        for other in (
+            await session.execute(
+                select(Category.name).where(
+                    Category.workspace_id == workspace_id,
+                    Category.group_id == group.id,
+                    Category.id != besides,
+                )
+            )
+        ).scalars().all()
+    )
+
+
+def _redistribution(
+    workspace_id: uuid.UUID, detail: dict[str, Any]
+) -> CategorizationRun:
+    return CategorizationRun(
+        id=uuid.uuid4(), workspace_id=workspace_id, kind="redistribute",
+        trigger="manual", status="queued", stats={}, created_at=_now(), detail=detail,
     )
 
 
@@ -1317,6 +1414,10 @@ async def apply_op(
         elif kind == "merge":
             target = await _category(session, workspace_id, run, op["target"])
             into = await _category(session, workspace_id, run, op["into"])
+            if (bool(target.treat_as_transfer), bool(target.is_ignored)) != (
+                bool(into.treat_as_transfer), bool(into.is_ignored)
+            ):
+                raise OpConflict(STALE_MESSAGE)
             await category_service.delete_category(
                 session, target.id, workspace_id,
                 transfer_to_id=into.id, user_id=user_id, commit=False,
@@ -1328,6 +1429,13 @@ async def apply_op(
             if len(children) < GROUP_MIN:
                 raise OpConflict("Uma divisão precisa de pelo menos duas categorias.")
             group = await _group(session, workspace_id, user_id, run, op["name"])
+            if await _name_taken(session, workspace_id, group, children[0], target.id):
+                raise OpConflict(
+                    f"Já existe uma categoria \"{children[0]}\" em \"{group.name}\"."
+                )
+            # Taken before anything moves: rows merged into the category later
+            # are not part of this split.
+            source_rows = await _split_rows(session, workspace_id, target.id)
             await category_service.update_category(
                 session, target.id, workspace_id,
                 CategoryUpdate(name=children[0], group_id=group.id), commit=False,
@@ -1335,20 +1443,17 @@ async def apply_op(
             family = [target.id]
             for name in children[1:]:
                 child = await _category_in(
-                    session, workspace_id, user_id, group, name, besides=target.id
+                    session, workspace_id, user_id, group, name, besides=target.id, like=target
                 )
                 if child.id not in family:
                     family.append(child.id)
-            redistribution = CategorizationRun(
-                id=uuid.uuid4(), workspace_id=workspace_id, kind="redistribute",
-                trigger="manual", status="queued", stats={}, created_at=_now(),
-                detail={
-                    "source_category_id": str(target.id),
-                    "allowed_category_ids": [str(i) for i in family],
-                    "organize_run_id": str(run.id),
-                    "op_id": op["id"],
-                },
-            )
+            redistribution = _redistribution(workspace_id, {
+                "source_category_id": str(target.id),
+                "allowed_category_ids": [str(i) for i in family],
+                "source_tx_ids": source_rows,
+                "organize_run_id": str(run.id),
+                "op_id": op["id"],
+            })
             session.add(redistribution)
             redistribute_run_id = redistribution.id
             result.update(
@@ -1370,6 +1475,34 @@ async def apply_op(
     _save_op(run, op)
     await session.flush()
     return {"op": op, "redistribute_run_id": redistribute_run_id}
+
+
+async def retry_redistribution(
+    session: AsyncSession, workspace_id: uuid.UUID, run_id: uuid.UUID | None, op_id: str
+) -> dict[str, Any]:
+    """Queue again the redistribution of an applied split whose run ended
+    without moving the rows (failed, abandoned or never enqueued); returns
+    {"op", "redistribute_run_id"}. The caller commits, then enqueues."""
+    run, op = await _locked_op(session, workspace_id, run_id, op_id, pending=False)
+    previous_id = (op.get("result") or {}).get("redistribute_run_id")
+    if op.get("op") != "split_category" or op.get("status") != "applied" or not previous_id:
+        raise OpConflict("Só uma divisão já aplicada tem redistribuição.")
+    previous = await session.get(CategorizationRun, uuid.UUID(str(previous_id)))
+    if previous is None or previous.workspace_id != workspace_id:
+        raise OpConflict("A redistribuição desta divisão não existe mais.")
+    if previous.status not in RETRYABLE_STATUSES:
+        raise OpConflict("A redistribuição desta divisão não falhou.")
+    keep = ("source_category_id", "allowed_category_ids", "source_tx_ids", "organize_run_id", "op_id")
+    retry = _redistribution(
+        workspace_id,
+        {k: v for k, v in (previous.detail or {}).items() if k in keep}
+        | {"retry_of": str(previous.id)},
+    )
+    session.add(retry)
+    op["result"] = {**(op.get("result") or {}), "redistribute_run_id": str(retry.id)}
+    _save_op(run, op)
+    await session.flush()
+    return {"op": op, "redistribute_run_id": retry.id}
 
 
 async def reject_op(
@@ -1404,6 +1537,7 @@ __all__ = [
     "redistribute",
     "reject_op",
     "request_run",
+    "retry_redistribution",
     "sync_provider_map",
     "view",
 ]

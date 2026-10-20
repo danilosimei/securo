@@ -38,7 +38,17 @@ class ModelPrice:
 PRICES: dict[str, ModelPrice] = {
     "claude-haiku-5-5": ModelPrice(Decimal("0.10"), Decimal("0.50"), Decimal("0.01")),
     "claude-opus-5-5": ModelPrice(Decimal("4.00"), Decimal("20.00"), Decimal("0.20")),
+    # Models the organizer's server-side fallback may answer with.
+    "claude-opus-5": ModelPrice(Decimal("5.00"), Decimal("25.00"), Decimal("0.50")),
+    "claude-opus-4-8": ModelPrice(Decimal("5.00"), Decimal("25.00"), Decimal("0.50")),
 }
+
+
+def priciest_opus() -> str:
+    """The known Opus model with the highest rates: what an unknown served
+    model is priced as, so a fallback is never under-counted."""
+    opus = [name for name in PRICES if "opus" in name]
+    return max(opus, key=lambda name: (PRICES[name].output, PRICES[name].input, name))
 
 
 def cost_usd(model: str, usage, *, batch: bool) -> Decimal:
