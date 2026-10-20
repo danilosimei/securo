@@ -14,6 +14,7 @@ from app.models.rule import Rule
 from app.models.transaction import Transaction
 from app.schemas.category import CategoryCreate, CategoryUpdate
 from app.services.categorization import events as categorization_events
+from app.services.categorization import memory as categorization_memory
 from app.services.category_defaults import (
     CATEGORY_TO_GROUP,
     DEFAULT_CATEGORIES,
@@ -388,6 +389,7 @@ async def _transfer_category_references(
     await categorization_events.record_moves(
         session, workspace_id, category_id, destination_id, user_id=user_id
     )
+    await categorization_memory.move_category(session, workspace_id, category_id, destination_id)
     await session.execute(
         sa_update(RecurringTransaction)
         .where(
@@ -435,6 +437,7 @@ async def delete_category(
                 "Category is still in use and cannot be deleted. "
                 "Choose another category to move its entries to."
             )
+        await categorization_memory.move_category(session, workspace_id, category_id, None)
 
     try:
         await session.delete(category)

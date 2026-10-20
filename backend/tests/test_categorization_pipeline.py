@@ -310,6 +310,7 @@ async def test_run_without_ai_creates_pending_suggestions(
     assert {s.status for s in sugg} == {"pending"}
     assert {s.category_id for s in sugg} == {None}
     assert {s.run_id for s in sugg} == {run.id}
+    assert {s.reason for s in sugg} == {pipeline.NO_AI_REASON}
     assert bread.category_source == "memory"
     assert guessed.category_source == "provider"  # categorized guess: nothing to ask without AI
     assert run.stats == {
@@ -500,3 +501,158 @@ async def test_run_categorization_postgres(postgres_sessions):
     assert again["stats"] == {
         "candidates": 1, "groups": 1, "memory": 0, "applied": 0, "suggested": 0, "skipped": 1,
     }
+
+
+@pytest.mark.asyncio
+async def test_memory_pass_leaves_rows_the_pipeline_already_settled(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    old_choice, new_choice = test_categories[0].id, test_categories[1].id
+    await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", new_choice)
+    await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", new_choice)
+    await remember_ai_decision(session, test_workspace.id, "IFOOD", new_choice, 99, "iFood")
+    by_memory = _tx(
+        session, test_user, test_account, "PADARIA PAO QUENTE", source="memory",
+        category_id=old_choice,
+    )
+    by_ai = _tx(
+        session, test_user, test_account, "IFOOD *REST 8812", source="ai", category_id=old_choice,
+    )
+    await session.commit()
+    groups = group_by_key(await collect_candidates(session, test_workspace.id))
+
+    rest = await memory_pass(session, test_workspace.id, groups, None)
+
+    assert rest == {}
+    assert (by_memory.category_id, by_memory.category_source) == (old_choice, "memory")
+    assert (by_ai.category_id, by_ai.category_source) == (old_choice, "ai")
+    assert await _events(session) == []
+
+
+@pytest.mark.asyncio
+async def test_memory_pass_ignores_hidden_or_missing_categories(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    hidden = test_categories[0]
+    hidden.is_hidden = True
+    await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", hidden.id)
+    await learn_choice(session, test_workspace.id, "PADARIA PAO QUENTE", hidden.id)
+    await remember_ai_decision(session, test_workspace.id, "IFOOD", uuid.uuid4(), 99, "iFood")
+    bread = _tx(session, test_user, test_account, "PADARIA PAO QUENTE")
+    ifood = _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    await session.commit()
+    groups = group_by_key(await collect_candidates(session, test_workspace.id))
+
+    rest = await memory_pass(session, test_workspace.id, groups, None)
+
+    assert set(rest) == {"PADARIA PAO QUENTE", "IFOOD"}
+    assert bread.category_id is None and ifood.category_id is None
+
+
+@pytest.mark.asyncio
+async def test_delete_category_moves_or_prunes_memory(
+    session, test_user, test_workspace, test_categories
+):
+    from app.models.categorization import MerchantMemory
+    from app.models.category import Category
+    from app.services import category_service
+
+    food, transport = test_categories[0].id, test_categories[1].id
+    for cat in (food, food, transport):
+        await learn_choice(session, test_workspace.id, "LOJA", cat)
+    await remember_ai_decision(session, test_workspace.id, "OUTRA", food, 95, "Outra")
+    spare = Category(
+        id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id, name="Spare",
+    )
+    session.add(spare)
+    await session.flush()
+    await learn_choice(session, test_workspace.id, "TERCEIRA", spare.id)
+    await session.commit()
+
+    assert await category_service.delete_category(
+        session, food, test_workspace.id, transfer_to_id=transport
+    )
+    assert await category_service.delete_category(session, spare.id, test_workspace.id)
+
+    rows = {
+        r.merchant_key: r
+        for r in (await session.execute(
+            select(MerchantMemory).execution_options(populate_existing=True)
+        )).scalars().all()
+    }
+    assert rows["LOJA"].counts == {str(transport): 3}
+    assert rows["OUTRA"].ai_category_id == transport
+    assert rows["TERCEIRA"].counts == {}
+    assert rows["TERCEIRA"].last_user_category_id is None
+
+
+@pytest.mark.asyncio
+async def test_ingest_looks_only_since_previous_run_but_manual_sees_all(
+    session, test_user, test_workspace, test_account
+):
+    now = datetime.now(timezone.utc)
+    session.add(CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="classify", trigger="ingest",
+        status="done", created_at=now - timedelta(days=1),
+    ))
+    old = _tx(session, test_user, test_account, "LOJA ANTIGA", created_at=now - timedelta(days=60))
+    recent = _tx(
+        session, test_user, test_account, "LOJA RECENTE", created_at=now - timedelta(days=10),
+    )
+    await session.commit()
+
+    since = await pipeline.ingest_since(session, test_workspace.id)
+    assert since is not None
+    cands = await collect_candidates(session, test_workspace.id, since=since)
+    assert {c.tx_id for c in cands} == {recent.id}
+
+    ingest = await run_categorization(session, test_workspace.id, trigger="ingest", use_ai=False)
+    assert ingest.stats["candidates"] == 1
+    manual = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=False)
+    assert manual.stats["candidates"] == 1  # `recent` already waits as a suggestion
+    assert {s.transaction_id for s in await _suggestions(session)} == {old.id, recent.id}
+
+
+@pytest.mark.asyncio
+async def test_ingest_since_is_none_before_first_finished_run(session, test_workspace):
+    session.add(CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="classify", trigger="ingest",
+        status="failed",
+    ))
+    await session.commit()
+    assert await pipeline.ingest_since(session, test_workspace.id) is None
+
+
+async def test_memory_pointing_at_deleted_category_postgres(postgres_sessions):
+    from app.models.account import Account
+    from app.models.categorization import MerchantMemory
+    from app.models.category import Category
+    from app.tasks.categorization_tasks import _categorize
+    from tests.test_admin_service import _make_user
+
+    async with postgres_sessions() as session:
+        user = await _make_user(session, f"gone_{uuid.uuid4().hex[:8]}@test.com")
+        account = Account(
+            id=uuid.uuid4(), user_id=user.id, name="Main", type="checking",
+            balance=Decimal("0"), currency="BRL",
+        )
+        session.add(account)
+        await session.flush()
+        ws = account.workspace_id
+        gone = uuid.uuid4()  # a category deleted behind the memory's back
+        session.add(MerchantMemory(
+            id=uuid.uuid4(), workspace_id=ws, merchant_key="PADARIA PAO QUENTE",
+            counts={str(gone): 5},
+        ))
+        session.add(Category(id=uuid.uuid4(), user_id=user.id, workspace_id=ws, name="Food"))
+        bread = _tx(session, user, account, "PADARIA PAO QUENTE")
+        await session.commit()
+        bread_id = bread.id
+
+    result = await _categorize(postgres_sessions, ws, "ingest", None)
+
+    assert result["status"] == "done"
+    assert result["stats"]["memory"] == 0 and result["stats"]["suggested"] == 1
+    async with postgres_sessions() as session:
+        bread = await session.get(Transaction, bread_id)
+        assert bread is not None and bread.category_id is None

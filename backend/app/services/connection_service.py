@@ -2066,6 +2066,9 @@ async def sync_connection(
         user_currency = user.primary_currency if user else get_settings().default_currency
         new_tx_ids: list[uuid.UUID] = []
         merged_count = 0
+        # Rows promoted from pending to posted become categorization
+        # candidates (only posted rows are), so they trigger a run too.
+        promoted_to_posted = False
         live_txn_external_ids: dict[uuid.UUID, set[str]] = {}
         accounts_data = await provider.get_accounts(credentials)
         incoming_external_ids = {acc.external_id for acc in accounts_data}
@@ -2252,6 +2255,7 @@ async def sync_connection(
                     _merge_sync_metadata(existing_tx, txn_data)
                     if existing_tx.status == "pending" and txn_data.status == "posted":
                         existing_tx.status = "posted"
+                        promoted_to_posted = True
                     # Self-heal bill linkage: a tx that pre-dates the bills
                     # feature (or whose bill we hadn't ingested last time)
                     # picks up bill_id + bank-truth effective_date on the
@@ -2299,6 +2303,7 @@ async def sync_connection(
                         # Posted truth wins: swap in the new id so subsequent
                         # syncs match by external_id and update raw_data.
                         synced_dup.status = "posted"
+                        promoted_to_posted = True
                         _merge_sync_metadata(
                             synced_dup,
                             txn_data,
@@ -2557,7 +2562,7 @@ async def sync_connection(
         else:
             connection.status = "active"
         await session.commit()
-        if new_tx_ids:
+        if new_tx_ids or promoted_to_posted:
             _enqueue_categorization(workspace_id)
         await session.refresh(connection)
         return connection, merged_count

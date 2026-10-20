@@ -176,6 +176,43 @@ async def forget_ai_decisions(
     await session.execute(stmt.execution_options(synchronize_session="fetch"))
 
 
+async def move_category(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    from_category_id: uuid.UUID,
+    to_category_id: uuid.UUID | None,
+) -> None:
+    """Re-point what the memory knows about a category that is going away.
+
+    `counts` is JSON with no foreign key behind it, so a merged or deleted
+    category would linger there. With a destination the choices move to it
+    (summed with any it already had); without one they are dropped. The
+    cached AI decision moves too, or is cleared.
+    """
+    old = str(from_category_id)
+    rows = (
+        await session.execute(
+            select(MerchantMemory).where(MerchantMemory.workspace_id == workspace_id)
+        )
+    ).scalars().all()
+    for row in rows:
+        counts = dict(row.counts or {})
+        if old in counts:
+            moved = counts.pop(old)
+            if to_category_id is not None:
+                new = str(to_category_id)
+                counts[new] = int(counts.get(new, 0)) + int(moved)
+            row.counts = counts  # reassigned: in-place JSON mutation is not tracked
+        if row.last_user_category_id == from_category_id:
+            row.last_user_category_id = to_category_id
+        if row.ai_category_id == from_category_id:
+            row.ai_category_id = to_category_id
+            if to_category_id is None:
+                row.ai_confidence = None
+                row.ai_clean_name = None
+    await session.flush()
+
+
 async def on_user_choice(
     session: AsyncSession,
     workspace_id: uuid.UUID,

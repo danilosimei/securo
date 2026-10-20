@@ -31,27 +31,31 @@ async def _reload(session, run_id):
     return await session.get(CategorizationRun, run_id, populate_existing=True)
 
 
-def _run(workspace_id, status, *, age=timedelta(0), trigger="ingest"):
+def _run(workspace_id, status, *, age=timedelta(0), trigger="ingest", kind="classify"):
     return CategorizationRun(
-        id=uuid.uuid4(), workspace_id=workspace_id, kind="classify", trigger=trigger,
-        status=status, created_at=datetime.now(timezone.utc) - age,
+        id=uuid.uuid4(), workspace_id=workspace_id, kind=kind, trigger=trigger,
+        status=status, created_at=datetime.now(timezone.utc) - age, detail={},
     )
 
 
 def test_enqueue_never_raises_when_broker_down():
     ws = uuid.uuid4()
     with patch.object(celery_app, "send_task", side_effect=OperationalError("down")) as send:
-        enqueue_categorization(ws)
+        assert enqueue_categorization(ws) is False
     send.assert_called_once()
     with patch.object(celery_app, "send_task", side_effect=RuntimeError("boom")):
-        enqueue_categorization(ws, "manual")
+        assert enqueue_categorization(ws, "manual") is False
 
 
 def test_enqueue_sends_task_with_workspace_and_trigger():
     ws = uuid.uuid4()
+    run_id = uuid.uuid4()
     with patch.object(celery_app, "send_task") as send:
-        enqueue_categorization(ws, "backlog")
-    send.assert_called_once_with(CATEGORIZE_TASK, args=[str(ws), "backlog", None])
+        assert enqueue_categorization(ws, "backlog") is True
+        assert enqueue_categorization(ws, "manual", run_id) is True
+    assert send.call_args_list[0].args == (CATEGORIZE_TASK,)
+    assert send.call_args_list[0].kwargs == {"args": [str(ws), "backlog", None]}
+    assert send.call_args_list[1].kwargs == {"args": [str(ws), "manual", str(run_id)]}
 
 
 def test_tasks_are_registered_and_scheduled():
@@ -67,16 +71,77 @@ def test_tasks_are_registered_and_scheduled():
 
 @pytest.mark.asyncio
 async def test_categorize_task_debounces(session, test_workspace):
-    session.add(_run(test_workspace.id, "running"))
+    busy = _run(test_workspace.id, "running")
+    session.add(busy)
     await session.commit()
 
     with patch.object(
-        categorization_tasks.pipeline, "run_categorization", new_callable=AsyncMock
+        categorization_tasks.pipeline, "prepare_run", new_callable=AsyncMock
     ) as run:
         result = await _categorize(_session_maker(session), test_workspace.id, "ingest", None)
 
     run.assert_not_awaited()
     assert result == {"status": "skipped", "reason": "busy"}
+    assert (await _reload(session, busy.id)).detail == {"rerun": True}
+
+
+@pytest.mark.asyncio
+async def test_organizer_run_does_not_block_classification(session, test_workspace):
+    session.add(_run(test_workspace.id, "running", kind="organize"))
+    await session.commit()
+
+    result = await _categorize(_session_maker(session), test_workspace.id, "ingest", None)
+
+    assert result["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_finished_run_requeues_trigger_received_while_busy(
+    session, test_workspace, categorization_enqueue
+):
+    queued = _run(test_workspace.id, "queued", trigger="manual")
+    session.add(queued)
+    await session.commit()
+    # A sync lands while the manual run waits: it marks the run, does not start.
+    skipped = await _categorize(_session_maker(session), test_workspace.id, "ingest", None)
+    assert skipped == {"status": "skipped", "reason": "busy"}
+    categorization_enqueue.assert_not_called()
+
+    result = await _categorize(_session_maker(session), test_workspace.id, "manual", queued.id)
+
+    assert result["status"] == "done"
+    categorization_enqueue.assert_called_once_with(test_workspace.id, "ingest")
+    assert (await _reload(session, queued.id)).detail == {}
+
+
+@pytest.mark.asyncio
+async def test_failed_run_also_requeues(session, test_workspace, categorization_enqueue):
+    async def fail_after_mark(session_, workspace_id, *, trigger, run):
+        # Another trigger arrives mid-run, then the run blows up.
+        assert await categorization_tasks._mark_busy_run(session_, workspace_id)
+        await session_.commit()
+        raise RuntimeError("boom")
+
+    with patch.object(categorization_tasks.pipeline, "prepare_run", side_effect=fail_after_mark):
+        result = await _categorize(_session_maker(session), test_workspace.id, "ingest", None)
+
+    assert result["status"] == "failed"
+    categorization_enqueue.assert_called_once_with(test_workspace.id, "ingest")
+
+
+@pytest.mark.asyncio
+async def test_requeue_if_requested_leaves_busy_and_unmarked_runs(session, test_workspace):
+    from app.tasks.categorization_tasks import requeue_if_requested
+
+    batch = _run(test_workspace.id, "processing_batch")
+    batch.detail = {"rerun": True}
+    done = _run(test_workspace.id, "done")
+    session.add_all([batch, done])
+    await session.commit()
+
+    assert await requeue_if_requested(session, batch.id) is False
+    assert await requeue_if_requested(session, done.id) is False
+    assert await requeue_if_requested(session, uuid.uuid4()) is False
 
 
 @pytest.mark.asyncio
@@ -86,7 +151,7 @@ async def test_categorize_task_debounces_on_queued_and_batch(session, test_works
         session.add(busy)
         await session.commit()
         with patch.object(
-            categorization_tasks.pipeline, "run_categorization", new_callable=AsyncMock
+            categorization_tasks.pipeline, "prepare_run", new_callable=AsyncMock
         ) as run:
             await _categorize(_session_maker(session), test_workspace.id, "ingest", None)
         run.assert_not_awaited()
@@ -165,7 +230,7 @@ async def test_categorize_task_skips_disabled_workspace_unless_manual(session, t
 @pytest.mark.asyncio
 async def test_categorize_task_marks_run_failed_on_error(session, test_workspace):
     with patch.object(
-        categorization_tasks.pipeline, "run_categorization",
+        categorization_tasks.pipeline, "prepare_run",
         new_callable=AsyncMock, side_effect=RuntimeError("boom"),
     ):
         result = await _categorize(_session_maker(session), test_workspace.id, "ingest", None)
@@ -217,12 +282,12 @@ def _provider(transactions):
     return provider
 
 
-def _provider_tx(external_id):
+def _provider_tx(external_id, status="posted"):
     from app.providers.base import TransactionData
 
     return TransactionData(
         external_id=external_id, description="RESTAURANTE", amount=Decimal("40"),
-        date=date.today(), type="debit", currency="BRL",
+        date=date.today(), type="debit", currency="BRL", status=status,
     )
 
 
@@ -270,4 +335,35 @@ async def test_sync_enqueues_categorization_only_when_rows_land(
     a, b, c = _provider_patches(_provider([_provider_tx("hook-sync-tx")]))
     with a, b, c:
         await sync_connection(session, conn.id, test_workspace.id, test_user.id)
+    categorization_enqueue.assert_called_once_with(test_workspace.id, "ingest")
+
+
+@pytest.mark.asyncio
+async def test_sync_enqueues_when_pending_row_is_posted(
+    session, test_user, test_workspace, categorization_enqueue
+):
+    from app.models.bank_connection import BankConnection
+    from app.services.connection_service import sync_connection
+
+    conn = BankConnection(
+        id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id, provider="test",
+        external_id="hook-promote", institution_name="Banco", credentials={"token": "fake"},
+        status="active",
+    )
+    session.add(conn)
+    await session.commit()
+    a, b, c = _provider_patches(_provider([_provider_tx("promo-tx", "pending")]))
+    with a, b, c:
+        await sync_connection(session, conn.id, test_workspace.id, test_user.id)
+    categorization_enqueue.reset_mock()
+
+    a, b, c = _provider_patches(_provider([_provider_tx("promo-tx", "posted")]))
+    with a, b, c:
+        await sync_connection(session, conn.id, test_workspace.id, test_user.id)
+
+    tx = (await session.execute(
+        select(Transaction).where(Transaction.external_id == "promo-tx")
+        .execution_options(populate_existing=True)
+    )).scalar_one()
+    assert tx.status == "posted"
     categorization_enqueue.assert_called_once_with(test_workspace.id, "ingest")
