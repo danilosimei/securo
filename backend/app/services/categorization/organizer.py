@@ -1499,7 +1499,8 @@ async def retry_redistribution(
     without moving the rows (failed, abandoned, never enqueued, or capped by
     the monthly cap); returns {"op", "redistribute_run_id"}. The caller
     commits, then enqueues. The retry takes the split's rows still in the
-    first child; the ones already moved stay where they went."""
+    first child; the ones already moved stay where they went, and after a
+    cap only the rows no answer covered (`classifier.UNSENT_DETAIL`)."""
     run, op = await _locked_op(session, workspace_id, run_id, op_id, pending=False)
     previous_id = (op.get("result") or {}).get("redistribute_run_id")
     if op.get("op") != "split_category" or op.get("status") != "applied" or not previous_id:
@@ -1510,11 +1511,13 @@ async def retry_redistribution(
     if previous.status not in RETRYABLE_STATUSES:
         raise OpConflict("A redistribuição desta divisão não falhou nem parou no teto.")
     keep = ("source_category_id", "allowed_category_ids", "source_tx_ids", "organize_run_id", "op_id")
-    retry = _redistribution(
-        workspace_id,
-        {k: v for k, v in (previous.detail or {}).items() if k in keep}
-        | {"retry_of": str(previous.id)},
-    )
+    stored = previous.detail or {}
+    detail = {k: v for k, v in stored.items() if k in keep} | {"retry_of": str(previous.id)}
+    unsent = stored.get(classifier.UNSENT_DETAIL)
+    if previous.status == "capped" and isinstance(unsent, list):
+        # What the capped run answered, even with no category, is not paid again.
+        detail["source_tx_ids"] = unsent
+    retry = _redistribution(workspace_id, detail)
     session.add(retry)
     op["result"] = {**(op.get("result") or {}), "redistribute_run_id": str(retry.id)}
     _save_op(run, op)

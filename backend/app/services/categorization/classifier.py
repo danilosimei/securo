@@ -132,6 +132,10 @@ NEW_CATEGORY_LENGTH = 100
 CHARS_PER_TOKEN = 4
 #: `run.detail` key holding what `collect_batch` needs to apply a batch.
 BATCH_DETAIL = "batch"
+#: `run.detail` key of a capped redistribution: the rows no answer covered
+#: (never sent, or their request ended without one). Its retry sends only
+#: these, so the rows the model left with no category are not paid again.
+UNSENT_DETAIL = "unsent_tx_ids"
 #: Ids per `IN (...)`.
 ID_CHUNK = 1000
 #: Run kinds that may wait on a Message Batch (a redistribution after a
@@ -707,6 +711,16 @@ def _groups_of(plans: Sequence[_Plan]) -> dict[str, MerchantGroup]:
     return {g.key: g for plan in plans for g in plan.groups_by_item.values()}
 
 
+def _unsent(
+    groups: Sequence[MerchantGroup], allowed_category_ids: set[uuid.UUID] | None
+) -> dict[str, Any]:
+    """The `run.detail` patch of a capped run: a redistribution's rows left
+    out (see `UNSENT_DETAIL`); nothing for a classification."""
+    if allowed_category_ids is None:
+        return {}
+    return {UNSENT_DETAIL: [str(tx_id) for group in groups for tx_id in group.tx_ids]}
+
+
 async def _merge_detail(
     session: AsyncSession,
     run: CategorizationRun,
@@ -787,8 +801,11 @@ async def classify(
             spent = await committed_spend(session, workspace_id)
             if spent + estimate_cost(plan.params, batch=False) > cap:
                 run.status = "capped"
+                left = _groups_of(plans[position:])
+                if unsent := _unsent(list(left.values()), allowed_category_ids):
+                    await _merge_detail(session, run, unsent)
                 stats["suggested"] = stats.get("suggested", 0) + await suggest_without_ai(
-                    session, workspace_id, _groups_of(plans[position:]), run.id
+                    session, workspace_id, left, run.id
                 )
                 break
             run.model = CLASSIFIER_MODEL
@@ -843,8 +860,11 @@ async def _submit_batch(
         total += estimate
         sent.append(plan)
     left = plans[len(sent):]
+    unsent = _unsent(list(_groups_of(left).values()), allowed_category_ids)
     if not sent:
         run.status = "capped"
+        if unsent:
+            await _merge_detail(session, run, unsent)
         stats["suggested"] = stats.get("suggested", 0) + await suggest_without_ai(
             session, workspace_id, _groups_of(plans), run.id
         )
@@ -880,7 +900,8 @@ async def _submit_batch(
             "capped": bool(left),
             # Counted by `committed_spend` while the batch is in flight.
             "estimated_cost_usd": str(total - spent),
-        }
+        },
+        **unsent,
     })
     if left:
         stats["suggested"] = stats.get("suggested", 0) + await suggest_without_ai(
@@ -973,6 +994,7 @@ async def _collect(
     )
     stats = dict(run.stats or {})
     done: set[int] = set()
+    unanswered: list[MerchantGroup] = []
     async for custom_id, message, error in batch_results(client, batch_id):
         position = _chunk_position(custom_id, run, len(chunks))
         if position is None or position in done:
@@ -980,6 +1002,7 @@ async def _collect(
         done.add(position)
         groups = _stored_groups(chunks[position], rows)
         if message is None:
+            unanswered.extend(groups.values())
             logger.warning(
                 "categorization run %s: batch request %s ended %s", run.id, position, error
             )
@@ -998,8 +1021,10 @@ async def _collect(
         _count(stats, result)
     for position, chunk in enumerate(chunks):
         if position not in done:
+            groups = _stored_groups(chunk, rows)
+            unanswered.extend(groups.values())
             _count(stats, await apply_results(
-                session, run.workspace_id, run, _stored_groups(chunk, rows), [],
+                session, run.workspace_id, run, groups, [],
                 index=index, threshold=threshold, model=CLASSIFIER_MODEL,
                 allowed_category_ids=allowed,
             ))
@@ -1007,7 +1032,12 @@ async def _collect(
     run.stats = stats
     run.status = "capped" if info.get("capped") else "done"
     run.finished_at = datetime.now(timezone.utc)
-    await _merge_detail(session, run, {}, drop=(BATCH_DETAIL,))
+    patch: dict[str, Any] = {}
+    more = _unsent(unanswered, allowed).get(UNSENT_DETAIL)
+    if run.status == "capped" and more:
+        stored = (run.detail or {}).get(UNSENT_DETAIL)
+        patch[UNSENT_DETAIL] = [*(stored if isinstance(stored, list) else []), *more]
+    await _merge_detail(session, run, patch, drop=(BATCH_DETAIL,))
     return "collected"
 
 

@@ -1477,3 +1477,120 @@ async def test_redistribution_applies_low_confidence_choice_and_never_asks(
     assert (await session.execute(select(CategorizationSuggestion))).scalars().all() == []
     run = await _fresh(session, CategorizationRun, run.id)
     assert (run.status, run.stats["applied"], run.stats["suggested"]) == ("done", 1, 0)
+
+
+@pytest.mark.asyncio
+async def test_capped_redistribution_records_the_rows_it_never_sent(
+    session, test_user, test_workspace, test_account, monkeypatch
+):
+    family = await _redistribution_setup(session, test_user, test_workspace)
+    rows = [
+        _tx(session, test_user, test_account, name, category=family["Assinaturas"], source="user")
+        for name in ("NETFLIX", "SPOTIFY")
+    ]
+    settings = await get_settings(session, test_workspace.id)
+    settings.monthly_cap_usd = Decimal("0")
+    run = _redistribute_run(test_workspace, family)
+    session.add(run)
+    await session.commit()
+    client = _fake_client(create=lambda **_: pytest.fail("must not call over the cap"))
+    monkeypatch.setattr(organizer, "resolve_client", AsyncMock(return_value=client))
+
+    await organizer.redistribute(session, test_workspace.id, run)
+    await session.commit()
+
+    run = await _fresh(session, CategorizationRun, run.id)
+    assert run.status == "capped"
+    assert sorted(run.detail["unsent_tx_ids"]) == sorted(str(t.id) for t in rows)
+
+
+@pytest.mark.asyncio
+async def test_capped_batch_redistribution_leaves_only_unanswered_rows_for_the_retry(
+    session, test_user, test_workspace, test_account, monkeypatch, categorization_enqueue
+):
+    """The rows the model answered with no category leave no trace; only the
+    rows never sent (or whose request ended without an answer) are retried."""
+    from app.tasks import categorization_tasks
+    from tests.test_categorization_classifier import _names
+
+    family = await _redistribution_setup(session, test_user, test_workspace)
+    txs = [
+        _tx(session, test_user, test_account, name, category=family["Assinaturas"], source="user")
+        for name in _names(120)
+    ]
+    run = _redistribute_run(test_workspace, family)
+    session.add(run)
+    await session.commit()
+    client = _fake_client()
+    client.messages.batches.create = AsyncMock(return_value=SimpleNamespace(id="batch_r"))
+    monkeypatch.setattr(organizer, "resolve_client", AsyncMock(return_value=client))
+    monkeypatch.setattr(classifier, "estimate_cost", lambda params, *, batch: Decimal("0.60"))
+
+    await organizer.redistribute(session, test_workspace.id, run)
+    await session.commit()
+
+    run = await _fresh(session, CategorizationRun, run.id)
+    assert run.status == "processing_batch" and run.detail["batch"]["capped"] is True
+    sent = {tx for ids in run.detail["batch"]["rows"].values() for tx in ids}
+    unsent = set(run.detail["unsent_tx_ids"])
+    assert len(sent) == 100 and len(unsent) == 20
+    assert sent | unsent == {str(t.id) for t in txs}
+
+    # The batch ends with its one request errored: those rows were never answered.
+    errored = SimpleNamespace(
+        custom_id=classifier.batch_custom_id(run, 0),
+        result=SimpleNamespace(
+            type="errored", error=SimpleNamespace(error=SimpleNamespace(type="overloaded_error"))
+        ),
+    )
+
+    async def results(_id):
+        yield errored
+
+    client.messages.batches.retrieve = AsyncMock(
+        return_value=SimpleNamespace(processing_status="ended")
+    )
+    client.messages.batches.results = AsyncMock(side_effect=results)
+    monkeypatch.setattr(classifier, "resolve_client", AsyncMock(return_value=client))
+    await categorization_tasks._poll(lambda: session)
+
+    run = await _fresh(session, CategorizationRun, run.id)
+    assert run.status == "capped" and "batch" not in run.detail
+    assert set(run.detail["unsent_tx_ids"]) == sent | unsent
+
+
+@pytest.mark.asyncio
+async def test_retry_of_a_capped_redistribution_sends_only_the_unsent_rows(
+    session, test_user, test_workspace
+):
+    outros = _group(session, test_user, test_workspace, "Outros")
+    lazer = _cat(session, test_user, test_workspace, "Lazer", outros)
+    run = await _organize_run(
+        session, test_workspace,
+        [_op("o1", "split_category", target="c1", name="Lazer", children=["Cinema", "Shows"])],
+        {"c1": lazer.id},
+    )
+    result = await apply_op(session, test_workspace.id, run.id, "o1", test_user.id)
+    await session.commit()
+    first = await _fresh(session, CategorizationRun, result["redistribute_run_id"])
+    unsent = [str(uuid.uuid4())]
+    first.status = "capped"
+    first.detail = {**first.detail, "source_tx_ids": [str(uuid.uuid4()), *unsent],
+                    "unsent_tx_ids": unsent}
+    await session.commit()
+
+    retried = await organizer.retry_redistribution(session, test_workspace.id, run.id, "o1")
+    await session.commit()
+
+    retry = await _fresh(session, CategorizationRun, retried["redistribute_run_id"])
+    assert retry.detail["source_tx_ids"] == unsent
+    assert "unsent_tx_ids" not in retry.detail
+
+    # A failed run sent nothing it can vouch for: its whole snapshot is retried.
+    retry.status = "failed"
+    retry.detail = {**retry.detail, "unsent_tx_ids": []}
+    await session.commit()
+    again = await organizer.retry_redistribution(session, test_workspace.id, run.id, "o1")
+    assert (await _fresh(session, CategorizationRun, again["redistribute_run_id"])).detail[
+        "source_tx_ids"
+    ] == unsent
