@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.categorization import CATEGORY_SOURCES, _in
+from app.models.categorization import CATEGORY_SOURCES, in_clause
 
 if TYPE_CHECKING:
     from app.models.account import Account
@@ -38,7 +38,7 @@ class Transaction(Base):
     __table_args__ = (
         Index("ix_transactions_workspace_category_source", "workspace_id", "category_source"),
         CheckConstraint(
-            _in("category_source", CATEGORY_SOURCES), name="ck_transaction_category_source"
+            in_clause("category_source", CATEGORY_SOURCES), name="ck_transaction_category_source"
         ),
     )
 

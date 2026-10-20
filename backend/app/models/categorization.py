@@ -48,7 +48,7 @@ CATEGORY_SOURCES = (
 EVENT_SOURCES = CATEGORY_SOURCES + ("undo",)
 
 
-def _in(column: str, values: tuple[str, ...]) -> str:
+def in_clause(column: str, values: tuple[str, ...]) -> str:
     """A CHECK clause; also used by `Transaction.category_source` (098)."""
     return f"{column} IN ({', '.join(repr(v) for v in values)})"
 
@@ -157,7 +157,7 @@ class CategorizationEvent(Base):
 
     __tablename__ = "categorization_events"
     __table_args__ = (
-        CheckConstraint(_in("source", EVENT_SOURCES), name="ck_categorization_event_source"),
+        CheckConstraint(in_clause("source", EVENT_SOURCES), name="ck_categorization_event_source"),
         Index("ix_categorization_events_workspace_created", "workspace_id", "created_at"),
         Index("ix_categorization_events_transaction_created", "transaction_id", "created_at"),
         Index("ix_categorization_events_run", "run_id"),
