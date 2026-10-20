@@ -1228,6 +1228,25 @@ async def test_failing_bulk_unlearner_keeps_the_clear_and_the_session(
 
 
 @pytest.mark.asyncio
+async def test_failing_store_grouping_keeps_the_bulk_edit(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    food = test_categories[0].id
+    tx = _manual_tx(session, test_user, test_account, "PADARIA SOL", None, "none")
+    await session.commit()
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("grouping failed")
+
+    with patch("app.services.categorization.memory.one_per_store", boom):
+        await transaction_service.bulk_update_category(
+            session, test_workspace.id, [tx.id], food, user_id=test_user.id,
+        )
+    row = await _reload(session, tx.id)
+    assert (row.category_id, row.category_source) == (food, "user")
+
+
+@pytest.mark.asyncio
 async def test_series_clear_that_only_empties_siblings_takes_the_pick_back_once(
     session, test_user, test_workspace, test_account, test_categories
 ):

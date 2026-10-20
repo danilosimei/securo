@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 from datetime import date
@@ -45,6 +46,8 @@ from app.services._query_filters import (
     reporting_date_col,
 )
 from app.services.recurring_transaction_service import _advance_date
+
+logger = logging.getLogger(__name__)
 
 
 async def _ensure_category_in_workspace(
@@ -1733,9 +1736,15 @@ async def _person_hooks_once_per_store(
     do not run as well."""
     if not changes:
         return
-    for tx, previous in await categorization_memory.one_per_store(
-        session, changes, by_previous=new_category_id is None
-    ):
+    try:
+        firsts = await categorization_memory.one_per_store(
+            session, changes, by_previous=new_category_id is None
+        )
+    except Exception:
+        # Same posture as the hooks: the memory is a hint, the edit stands.
+        logger.exception("could not group %d edited rows by store", len(changes))
+        return
+    for tx, previous in firsts:
         if new_category_id is not None:
             await run_user_hooks(session, tx, new_category_id)
         elif previous is not None:
