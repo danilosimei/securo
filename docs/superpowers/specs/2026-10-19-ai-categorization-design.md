@@ -184,7 +184,7 @@ para Revisar sem sugestão.
 | Tarefa | Modelo | Config | Por quê |
 |---|---|---|---|
 | Categorizar lojas | `claude-haiku-5-5` | thinking desligado, `effort: low` | Classificação curta; $0,10/$0,50 por MTok |
-| Padrão de regra a partir de correção | `claude-haiku-5-5` | idem | Tarefa pequena |
+| Padrão de regra a partir de correção | — (sem modelo) | `description contains <chave de loja>` | A chave de loja já é o padrão generalizado; custo zero (desvio do plano, ver §10) |
 | Organizador da árvore | `claude-opus-5-5` | adaptive, `effort: medium`, `fallbacks: "default"` (beta `server-side-fallback-2026-07-01`), chamada normal (fallbacks não funciona em Batches) | Raro, exige julgamento; ~US$ 0,20 por execução |
 
 **[decisão minha]** — o padrão do Claude seria Opus para tudo; Haiku no volume é escolha de custo
@@ -253,7 +253,7 @@ usuário já usa, e ação a um clique onde a dúvida aparece.
 | **Organizar** | Aba `?tab=organize`; também link no header de `/categories` | Árvore no estilo de `categories.tsx` (grupos colapsáveis); cada operação como `ProposalCard` (âmbar → verde ao aplicar) com impacto ("14 transações, R$ 820"); diff em linha (verde novo, riscado o que sai); mesclar usa o Dialog de confirmação no padrão de `payees.tsx` |
 | **Selo de origem** | Ao lado do título da transação em `transactions.tsx` (`renderDescriptionCell`), `mobile-transaction-row.tsx`, `account-detail.tsx`, drill-down e calendário | Componente novo `categorization-origin-badge.tsx` no molde de `projected-transaction-badge.tsx` (pill `text-[10px]` + ícone `h-3 w-3`): `Sparkles` IA (violeta), `Brain` memória, `Wand2`/`Cog` regra; pendente = âmbar com `Link` para Revisar. `Tooltip` com o motivo. Sem selo para `user`/`legacy` (menos ruído). Filtro "Origem" na barra de filtros de Transações |
 | **"Como chegou aqui"** | `transaction-dialog.tsx`, logo abaixo do `CategorySelect` | Caixa `bg-muted/50 border rounded-md` (padrão do banner de recorrente vinculada): original (descrição do banco, categoria anterior) × aplicado (categoria, nome limpo, quem decidiu, confiança, motivo, data) + botão "Desfazer". "Criar regra" continua no footer |
-| **Depois de corrigir** | Qualquer edição de categoria (Transações, conta, dashboard, drill-down) | Toast `sonner` com ações: "Aplicar às 8 parecidas" e "Criar regra". Regra abre o `RuleDialog` com `initialData` pré-preenchido pelo padrão generalizado do Claude (ex.: `contém IFOOD`) e prévia (`POST /rules/preview`). Padrão novo de toast com ação (inclui "Desfazer" após aceitar em lote) |
+| **Depois de corrigir** | Qualquer edição de categoria (Transações, conta, dashboard, drill-down) | Toast `sonner` com ações: "Aplicar às 8 parecidas" e "Criar regra". Regra abre o `RuleDialog` com `initialData` pré-preenchido pela chave de loja (`description contains <chave>`, ex.: `contém IFOOD`), sem chamada ao Claude — mesmo resultado, custo zero (desvio do plano) e prévia (`POST /rules/preview`). Padrão novo de toast com ação (inclui "Desfazer" após aceitar em lote) |
 | **Tela inicial** | Substitui o banner de não categorizadas (`dashboard.tsx` ~868-904) | Mesmo lugar e estados (âmbar/verde): "47 categorizadas automaticamente esta semana · 5 para revisar →" abre `/categorization`; `Skeleton` no carregamento |
 | **Configurações** | Seção nova em `workspace-settings.tsx` (protegida por `canManage`) | `ui/switch` (ligar/desligar), limite de confiança como `Segmented` (Conservador 95 · Equilibrado 90 · Agressivo 80), teto mensal (`Input` numérico em US$) com gasto do mês, conexão Claude usada |
 
