@@ -1,0 +1,731 @@
+"""The categorization API: review queue, audit list, undo, summary, settings, run."""
+import uuid
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+
+import pytest
+from sqlalchemy import select
+
+from app.agents.models.connection import LlmConnection
+from app.models.categorization import (
+    CategorizationEvent,
+    CategorizationRun,
+    CategorizationSettings,
+    CategorizationSuggestion,
+    MerchantMemory,
+)
+from app.models.category import Category
+from app.models.category_group import CategoryGroup
+from app.models.payee import Payee
+from app.models.transaction import Transaction
+from app.models.user import User
+from app.models.workspace import WorkspaceMember
+from app.services.categorization import costs
+from app.services.categorization.settings import find_ai_connection, get_settings
+
+API = "/api/categorization"
+
+
+def _tx(
+    session, user, account, description, *,
+    source="none", category_id=None, amount="10.00", day=date(2026, 9, 10),
+    payee_id=None, **extra,
+):
+    tx = Transaction(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        workspace_id=account.workspace_id,
+        account_id=account.id,
+        description=description,
+        amount=Decimal(amount),
+        currency="BRL",
+        date=day,
+        effective_date=day,
+        type=extra.pop("type", "debit"),
+        source="sync",
+        status="posted",
+        category_id=category_id,
+        category_source=source,
+        payee_id=payee_id,
+        created_at=datetime.now(timezone.utc),
+        **extra,
+    )
+    session.add(tx)
+    return tx
+
+
+def _suggest(session, tx, key, *, category_id=None, alt=None, confidence=70,
+             reason="parece mercado", clean_name=None, new_category=None):
+    sug = CategorizationSuggestion(
+        id=uuid.uuid4(),
+        workspace_id=tx.workspace_id,
+        transaction_id=tx.id,
+        merchant_key=key,
+        clean_name=clean_name,
+        category_id=category_id,
+        alt_category_id=alt,
+        confidence=confidence,
+        reason=reason,
+        new_category=new_category,
+        status="pending",
+        created_at=datetime.now(timezone.utc),
+    )
+    session.add(sug)
+    return sug
+
+
+def _event(session, tx, *, source="ai", previous=None, new=None, confidence=95,
+           run_id=None, created_at=None, reason="mercado"):
+    ev = CategorizationEvent(
+        id=uuid.uuid4(),
+        workspace_id=tx.workspace_id,
+        transaction_id=tx.id,
+        run_id=run_id,
+        source=source,
+        previous_source="none",
+        previous_category_id=previous,
+        new_category_id=new,
+        confidence=confidence,
+        reason=reason,
+        created_at=created_at or datetime.now(timezone.utc),
+    )
+    session.add(ev)
+    return ev
+
+
+async def _fresh(session, model, pk):
+    return await session.get(model, pk, populate_existing=True)
+
+
+async def _member(session, client, workspace, role, email):
+    import bcrypt
+
+    user = User(
+        id=uuid.uuid4(), email=email,
+        hashed_password=bcrypt.hashpw(b"pass12345", bcrypt.gensalt()).decode(),
+        is_active=True, is_superuser=False, is_verified=True,
+    )
+    session.add(user)
+    await session.flush()
+    session.add(WorkspaceMember(id=uuid.uuid4(), workspace_id=workspace.id, user_id=user.id, role=role))
+    await session.commit()
+    resp = await client.post(
+        "/api/auth/login", data={"username": email, "password": "pass12345"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == 200
+    return {"Authorization": f"Bearer {resp.json()['access_token']}", "X-Workspace-Id": str(workspace.id)}
+
+
+# --- costs / connection ------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_month_spend_sums_current_month_only(session, test_workspace):
+    now = datetime.now(timezone.utc)
+    for cost, created in (
+        ("0.10", now),
+        ("0.05", now),
+        ("0.70", now - timedelta(days=45)),
+    ):
+        session.add(CategorizationRun(
+            id=uuid.uuid4(), workspace_id=test_workspace.id, kind="classify",
+            trigger="ingest", status="done", cost_usd=Decimal(cost), created_at=created,
+            stats={}, detail={},
+        ))
+    await session.commit()
+    assert await costs.month_spend(session, test_workspace.id) == Decimal("0.15")
+
+
+@pytest.mark.asyncio
+async def test_month_spend_is_zero_without_runs(session, test_workspace):
+    assert await costs.month_spend(session, test_workspace.id) == Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_find_ai_connection(session, test_user, test_workspace):
+    settings = await get_settings(session, test_workspace.id)
+    assert await find_ai_connection(session, settings) is None
+
+    other_kind = LlmConnection(id=uuid.uuid4(), user_id=test_user.id, name="o", kind="ollama", is_default=True, extra={})
+    not_default = LlmConnection(id=uuid.uuid4(), user_id=test_user.id, name="a", kind="anthropic", is_default=False, extra={})
+    session.add_all([other_kind, not_default])
+    await session.flush()
+    assert await find_ai_connection(session, settings) is None
+
+    default = LlmConnection(id=uuid.uuid4(), user_id=test_user.id, name="b", kind="anthropic", is_default=True, extra={})
+    session.add(default)
+    await session.flush()
+    found = await find_ai_connection(session, settings)
+    assert found is not None and found.id == default.id
+
+    settings.llm_connection_id = not_default.id
+    await session.flush()
+    found = await find_ai_connection(session, settings)
+    assert found is not None and found.id == not_default.id
+
+
+# --- summary -----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_summary(client, auth_headers, session, test_user, test_account, test_categories):
+    a = _tx(session, test_user, test_account, "PADARIA")
+    b = _tx(session, test_user, test_account, "PADARIA")
+    c = _tx(session, test_user, test_account, "POSTO SHELL")
+    applied = _tx(session, test_user, test_account, "UBER", source="ai", category_id=test_categories[1].id)
+    await session.flush()
+    _suggest(session, a, "PADARIA")
+    _suggest(session, b, "PADARIA")
+    _suggest(session, c, "POSTO SHELL")
+    _event(session, applied, new=test_categories[1].id)
+    run = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_account.workspace_id, kind="classify",
+        trigger="ingest", status="done", cost_usd=Decimal("0.25"), stats={"applied": 1},
+        detail={}, finished_at=datetime.now(timezone.utc),
+    )
+    session.add(run)
+    await session.commit()
+
+    resp = await client.get(f"{API}/summary", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["pending_groups"] == 2
+    assert body["pending_transactions"] == 3
+    assert body["applied_last_7d"] == 1
+    assert body["last_run"]["id"] == str(run.id)
+    assert body["last_run"]["stats"] == {"applied": 1}
+    assert body["ai_available"] is False
+    assert Decimal(str(body["month_cost_usd"])) == Decimal("0.25")
+    assert Decimal(str(body["monthly_cap_usd"])) == Decimal("1.00")
+
+    session.add(LlmConnection(id=uuid.uuid4(), user_id=test_user.id, name="c", kind="anthropic", is_default=True, extra={}))
+    await session.commit()
+    assert (await client.get(f"{API}/summary", headers=auth_headers)).json()["ai_available"] is True
+
+
+# --- review ------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_review_groups_sorted_by_total(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    small = _tx(session, test_user, test_account, "PADARIA DO ZE", amount="5.00")
+    big1 = _tx(session, test_user, test_account, "MERCADO X 123", amount="100.00")
+    big2 = _tx(session, test_user, test_account, "MERCADO X 456", amount="50.00")
+    pix = _tx(session, test_user, test_account, "Transferencia enviada|MARIA SILVA", amount="20.00")
+    await session.flush()
+    _suggest(session, small, "PADARIA DO ZE", category_id=food)
+    _suggest(session, big1, "MERCADO X", category_id=food, alt=test_categories[1].id, confidence=80, clean_name="Mercado X")
+    _suggest(session, big2, "MERCADO X", category_id=food, alt=test_categories[1].id, confidence=80, clean_name="Mercado X")
+    _suggest(session, pix, "PIX:MARIA SILVA", category_id=None, confidence=None, reason="sem IA")
+    await session.commit()
+
+    resp = await client.get(f"{API}/review", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["total"] == 3
+    groups = body["groups"]
+    assert [g["merchant_key"] for g in groups] == ["MERCADO X", "PIX:MARIA SILVA", "PADARIA DO ZE"]
+    top = groups[0]
+    assert top["clean_name"] == "Mercado X"
+    assert top["count"] == 2
+    assert Decimal(str(top["total"])) == Decimal("150.00")
+    assert sorted(top["transaction_ids"]) == sorted([str(big1.id), str(big2.id)])
+    assert top["suggestion"] == {
+        "category_id": str(food), "alt_category_id": str(test_categories[1].id),
+        "confidence": 80, "reason": "parece mercado",
+    }
+    assert top["is_person"] is False
+    assert top["samples"]
+    assert groups[1]["is_person"] is True
+    assert groups[1]["suggestion"] is None
+    assert body["new_category_proposals"] == []
+
+    page = (await client.get(f"{API}/review?limit=1&offset=1", headers=auth_headers)).json()
+    assert [g["merchant_key"] for g in page["groups"]] == ["PIX:MARIA SILVA"]
+
+
+@pytest.mark.asyncio
+async def test_review_new_category_proposals_need_three_stores(client, auth_headers, session, test_user, test_account):
+    for i, (group, name) in enumerate((("Pets", "Veterinário"), ("pets ", "veterinario"), ("PETS", "Veterinario"))):
+        tx = _tx(session, test_user, test_account, f"VET {i}", amount="10.00")
+        await session.flush()
+        _suggest(session, tx, f"VET{i}", new_category={"group": group, "name": name})
+    lone = _tx(session, test_user, test_account, "ACADEMIA")
+    await session.flush()
+    _suggest(session, lone, "ACADEMIA", new_category={"group": "Saúde", "name": "Academia"})
+    await session.commit()
+
+    body = (await client.get(f"{API}/review", headers=auth_headers)).json()
+    proposals = body["new_category_proposals"]
+    assert len(proposals) == 1
+    assert proposals[0]["group"] == "Pets"
+    assert proposals[0]["name"] == "Veterinário"
+    assert sorted(proposals[0]["merchant_keys"]) == ["VET0", "VET1", "VET2"]
+    assert proposals[0]["count"] == 3
+    assert Decimal(str(proposals[0]["total"])) == Decimal("30.00")
+    vet = next(g for g in body["groups"] if g["merchant_key"] == "VET0")
+    assert vet["new_category"] == {"group": "Pets", "name": "Veterinário"}
+
+
+@pytest.mark.asyncio
+async def test_accept_learns_memory_and_marks_user(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    txs = [_tx(session, test_user, test_account, f"PADARIA {i}") for i in range(3)]
+    other = _tx(session, test_user, test_account, "OUTRA")
+    await session.flush()
+    sugs = [_suggest(session, tx, "PADARIA", category_id=food) for tx in txs]
+    other_sug = _suggest(session, other, "OUTRA", category_id=food)
+    await session.commit()
+
+    resp = await client.post(
+        f"{API}/review/accept", headers=auth_headers,
+        json={"merchant_key": "PADARIA", "category_id": str(food)},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["applied"] == 3
+    assert len(body["event_ids"]) == 3
+
+    for tx in txs:
+        fresh = await _fresh(session, Transaction, tx.id)
+        assert fresh.category_id == food
+        assert fresh.category_source == "user"
+    for sug in sugs:
+        fresh = await _fresh(session, CategorizationSuggestion, sug.id)
+        assert fresh.status == "accepted"
+        assert fresh.resolved_at is not None
+    assert (await _fresh(session, CategorizationSuggestion, other_sug.id)).status == "pending"
+
+    memory = (await session.execute(
+        select(MerchantMemory).where(MerchantMemory.merchant_key == "PADARIA")
+    )).scalar_one()
+    await session.refresh(memory)
+    # One decision, one count: not one per transaction.
+    assert memory.counts == {str(food): 1}
+
+    events = (await session.execute(
+        select(CategorizationEvent).where(CategorizationEvent.id.in_([uuid.UUID(e) for e in body["event_ids"]]))
+    )).scalars().all()
+    assert {e.source for e in events} == {"user"}
+    assert {e.user_id for e in events} == {test_user.id}
+
+    undo = await client.post(f"{API}/undo", headers=auth_headers, json={"event_ids": body["event_ids"]})
+    assert undo.json() == {"restored": 3, "skipped": 0}
+
+
+@pytest.mark.asyncio
+async def test_accept_only_selected_transactions(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    a = _tx(session, test_user, test_account, "PADARIA")
+    b = _tx(session, test_user, test_account, "PADARIA")
+    await session.flush()
+    _suggest(session, a, "PADARIA", category_id=food)
+    sb = _suggest(session, b, "PADARIA", category_id=food)
+    await session.commit()
+
+    resp = await client.post(
+        f"{API}/review/accept", headers=auth_headers,
+        json={"merchant_key": "PADARIA", "category_id": str(food), "transaction_ids": [str(a.id)]},
+    )
+    assert resp.json()["applied"] == 1
+    assert (await _fresh(session, Transaction, b.id)).category_id is None
+    assert (await _fresh(session, CategorizationSuggestion, sb.id)).status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_accept_keeps_rows_categorized_by_hand_since(client, auth_headers, session, test_user, test_account, test_categories):
+    food, transport = test_categories[0].id, test_categories[1].id
+    a = _tx(session, test_user, test_account, "PADARIA")
+    manual = _tx(session, test_user, test_account, "PADARIA", source="user", category_id=transport)
+    await session.flush()
+    _suggest(session, a, "PADARIA", category_id=food)
+    sm = _suggest(session, manual, "PADARIA", category_id=food)
+    await session.commit()
+
+    resp = await client.post(
+        f"{API}/review/accept", headers=auth_headers,
+        json={"merchant_key": "PADARIA", "category_id": str(food)},
+    )
+    assert resp.json()["applied"] == 1
+    assert (await _fresh(session, Transaction, manual.id)).category_id == transport
+    assert (await _fresh(session, CategorizationSuggestion, sm.id)).status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_accept_rejects_foreign_category(client, auth_headers, session, test_user, test_account):
+    tx = _tx(session, test_user, test_account, "PADARIA")
+    await session.flush()
+    _suggest(session, tx, "PADARIA")
+    await session.commit()
+    resp = await client.post(
+        f"{API}/review/accept", headers=auth_headers,
+        json={"merchant_key": "PADARIA", "category_id": str(uuid.uuid4())},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_dismiss(client, auth_headers, session, test_user, test_account):
+    tx = _tx(session, test_user, test_account, "PADARIA")
+    await session.flush()
+    sug = _suggest(session, tx, "PADARIA")
+    await session.commit()
+    resp = await client.post(f"{API}/review/dismiss", headers=auth_headers, json={"merchant_key": "PADARIA"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"dismissed": 1}
+    fresh = await _fresh(session, CategorizationSuggestion, sug.id)
+    assert fresh.status == "dismissed"
+    assert fresh.resolved_at is not None
+    assert (await _fresh(session, Transaction, tx.id)).category_source == "none"
+
+
+@pytest.mark.asyncio
+async def test_create_category_applies_to_stores(client, auth_headers, session, test_user, test_account, test_workspace):
+    txs = []
+    for key in ("VET1", "VET2"):
+        tx = _tx(session, test_user, test_account, key)
+        txs.append(tx)
+        await session.flush()
+        _suggest(session, tx, key, new_category={"group": "Pets", "name": "Veterinário"})
+    untouched = _tx(session, test_user, test_account, "OUTRA")
+    await session.flush()
+    _suggest(session, untouched, "OUTRA")
+    session.add(MerchantMemory(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, merchant_key="ELSEWHERE", counts={},
+        ai_category_id=None, ai_confidence=91, ai_clean_name="x",
+    ))
+    await session.commit()
+
+    resp = await client.post(
+        f"{API}/review/create-category", headers=auth_headers,
+        json={"group": "Pets", "name": "Veterinário", "merchant_keys": ["VET1", "VET2"]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["applied"] == 2
+    category = await _fresh(session, Category, uuid.UUID(body["category_id"]))
+    assert category.name == "Veterinário"
+    assert category.workspace_id == test_workspace.id
+    group = await _fresh(session, CategoryGroup, category.group_id)
+    assert group.name == "Pets"
+    assert group.workspace_id == test_workspace.id
+    for tx in txs:
+        fresh = await _fresh(session, Transaction, tx.id)
+        assert fresh.category_id == category.id
+        assert fresh.category_source == "user"
+    assert (await _fresh(session, Transaction, untouched.id)).category_id is None
+    other = (await session.execute(
+        select(MerchantMemory).where(MerchantMemory.merchant_key == "ELSEWHERE")
+    )).scalar_one()
+    await session.refresh(other)
+    assert other.ai_confidence is None
+
+    # Same group again: reused, not duplicated.
+    again = await client.post(
+        f"{API}/review/create-category", headers=auth_headers,
+        json={"group": "pets", "name": "Ração", "merchant_keys": []},
+    )
+    assert again.status_code == 200, again.text
+    groups = (await session.execute(
+        select(CategoryGroup).where(CategoryGroup.workspace_id == test_workspace.id, CategoryGroup.name.ilike("pets"))
+    )).scalars().all()
+    assert len(groups) == 1
+
+
+# --- applied / undo / provenance ----------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_applied_lists_automatic_events(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    t1 = _tx(session, test_user, test_account, "A", source="ai", category_id=food, amount="12.00")
+    t2 = _tx(session, test_user, test_account, "B", source="memory", category_id=food)
+    t3 = _tx(session, test_user, test_account, "C", source="user", category_id=food)
+    t4 = _tx(session, test_user, test_account, "D", source="ai", category_id=food)
+    await session.flush()
+    now = datetime.now(timezone.utc)
+    e1 = _event(session, t1, source="ai", new=food, confidence=95, created_at=now)
+    _event(session, t2, source="memory", new=food, confidence=None, created_at=now - timedelta(minutes=1))
+    _event(session, t3, source="user", new=food)
+    undone = _event(session, t4, source="ai", new=food)
+    undone.undone_at = now
+    await session.commit()
+
+    resp = await client.get(f"{API}/applied", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["total"] == 2
+    items = body["items"]
+    assert [i["source"] for i in items] == ["ai", "memory"]
+    first = items[0]
+    assert first["event_id"] == str(e1.id)
+    assert first["transaction"]["id"] == str(t1.id)
+    assert first["transaction"]["description"] == "A"
+    assert Decimal(str(first["transaction"]["amount"])) == Decimal("12.00")
+    assert first["transaction"]["currency"] == "BRL"
+    assert first["new_category_id"] == str(food)
+    assert first["confidence"] == 95
+    assert first["reason"] == "mercado"
+
+    only_ai = (await client.get(f"{API}/applied?source=ai&min_confidence=90", headers=auth_headers)).json()
+    assert [i["event_id"] for i in only_ai["items"]] == [str(e1.id)]
+    paged = (await client.get(f"{API}/applied?limit=1&offset=1", headers=auth_headers)).json()
+    assert [i["source"] for i in paged["items"]] == ["memory"]
+    assert (await client.get(f"{API}/applied?limit=500", headers=auth_headers)).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_undo_run_endpoint(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    run = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_account.workspace_id, kind="classify",
+        trigger="ingest", status="done", stats={}, detail={},
+    )
+    session.add(run)
+    t1 = _tx(session, test_user, test_account, "A", source="ai", category_id=food)
+    t2 = _tx(session, test_user, test_account, "B", source="ai", category_id=food)
+    await session.flush()
+    _event(session, t1, new=food, run_id=run.id)
+    _event(session, t2, new=food, run_id=run.id)
+    await session.commit()
+
+    resp = await client.post(f"{API}/undo", headers=auth_headers, json={"run_id": str(run.id)})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"restored": 2, "skipped": 0}
+    for tx in (t1, t2):
+        fresh = await _fresh(session, Transaction, tx.id)
+        assert fresh.category_id is None
+        assert fresh.category_source == "none"
+
+
+@pytest.mark.asyncio
+async def test_provenance(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    tx = _tx(session, test_user, test_account, "Padaria", source="ai", category_id=food,
+             original_description="PADARIA DO ZE 123")
+    await session.flush()
+    now = datetime.now(timezone.utc)
+    for i in range(6):
+        _event(session, tx, new=food, created_at=now - timedelta(minutes=10 - i), reason=f"r{i}")
+    await session.commit()
+
+    resp = await client.get(f"{API}/transactions/{tx.id}/provenance", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["current_source"] == "ai"
+    assert body["original_description"] == "PADARIA DO ZE 123"
+    assert [e["reason"] for e in body["events"]] == ["r5", "r4", "r3", "r2", "r1"]
+    assert (await client.get(f"{API}/transactions/{uuid.uuid4()}/provenance", headers=auth_headers)).status_code == 404
+
+
+# --- similar / rule draft -----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_similar_excludes_protected(client, auth_headers, session, test_user, test_account, test_categories):
+    food, transport = test_categories[0].id, test_categories[1].id
+    ref = _tx(session, test_user, test_account, "PG *IFOOD 111", source="user", category_id=food)
+    open1 = _tx(session, test_user, test_account, "IFOOD 222", source="provider", category_id=transport)
+    open2 = _tx(session, test_user, test_account, "IFOOD 333", source="none")
+    protected = _tx(session, test_user, test_account, "IFOOD 444", source="user", category_id=transport)
+    legacy = _tx(session, test_user, test_account, "IFOOD 555", source="legacy", category_id=transport)
+    same = _tx(session, test_user, test_account, "IFOOD 666", source="ai", category_id=food)
+    _tx(session, test_user, test_account, "UBER 777", source="none")
+    await session.commit()
+
+    resp = await client.post(f"{API}/similar", headers=auth_headers, json={"transaction_id": str(ref.id)})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["merchant_key"] == "IFOOD"
+    assert body["count"] == 2
+    assert sorted(body["transaction_ids"]) == sorted([str(open1.id), str(open2.id)])
+
+    applied = await client.post(f"{API}/similar/apply", headers=auth_headers, json={"transaction_id": str(ref.id)})
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["applied"] == 2
+    for tx in (open1, open2):
+        fresh = await _fresh(session, Transaction, tx.id)
+        assert fresh.category_id == food
+        assert fresh.category_source == "user"
+    assert (await _fresh(session, Transaction, protected.id)).category_id == transport
+    assert (await _fresh(session, Transaction, legacy.id)).category_id == transport
+    assert (await _fresh(session, Transaction, same.id)).category_source == "ai"
+    # The reference choice already taught the memory: the bulk adds nothing.
+    memory = (await session.execute(
+        select(MerchantMemory).where(MerchantMemory.merchant_key == "IFOOD")
+    )).scalar_one_or_none()
+    assert memory is None
+
+
+@pytest.mark.asyncio
+async def test_rule_draft_uses_merchant_key(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    tx = _tx(session, test_user, test_account, "PG *IFOOD 12345 SAO PAULO", source="user", category_id=food)
+    await session.commit()
+    resp = await client.get(f"{API}/rule-draft/{tx.id}", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["conditions"] == [{"field": "description", "op": "contains", "value": "IFOOD"}]
+    assert body["actions"] == [{"op": "set_category", "value": str(food)}]
+    assert body["name"]
+
+
+@pytest.mark.asyncio
+async def test_rule_draft_strips_person_prefix(client, auth_headers, session, test_user, test_account, test_categories):
+    tx = _tx(session, test_user, test_account, "Transferencia enviada|MARIA SILVA", category_id=test_categories[0].id)
+    await session.commit()
+    body = (await client.get(f"{API}/rule-draft/{tx.id}", headers=auth_headers)).json()
+    assert body["conditions"] == [{"field": "description", "op": "contains", "value": "MARIA SILVA"}]
+
+
+@pytest.mark.asyncio
+async def test_rule_draft_never_uses_hashed_person_key(client, auth_headers, session, test_user, test_account, test_categories):
+    plain = _tx(session, test_user, test_account, "Transferencia enviada|123.456.789-09", category_id=test_categories[0].id)
+    payee = Payee(id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_account.workspace_id,
+                  name="123.456.789-09", source="sync")
+    session.add(payee)
+    await session.flush()
+    with_payee = _tx(session, test_user, test_account, "Transferencia enviada|123.456.789-09",
+                     category_id=test_categories[0].id, payee_id=payee.id)
+    await session.commit()
+
+    resp = await client.get(f"{API}/rule-draft/{plain.id}", headers=auth_headers)
+    assert resp.status_code == 422
+    assert "padrão seguro" in resp.json()["detail"]
+
+    body = (await client.get(f"{API}/rule-draft/{with_payee.id}", headers=auth_headers)).json()
+    assert body["conditions"] == [{"field": "payee_id", "op": "equals", "value": str(payee.id)}]
+    assert "123" not in body["name"]
+
+
+@pytest.mark.asyncio
+async def test_rule_draft_payee_key_not_in_description_uses_payee(client, auth_headers, session, test_user, test_account, test_categories):
+    payee = Payee(id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_account.workspace_id,
+                  name="Amazon Servicos de Varejo LTDA", source="sync")
+    session.add(payee)
+    await session.flush()
+    tx = _tx(session, test_user, test_account, "AMZ PSJ", category_id=test_categories[0].id, payee_id=payee.id)
+    await session.commit()
+    body = (await client.get(f"{API}/rule-draft/{tx.id}", headers=auth_headers)).json()
+    assert body["conditions"] == [{"field": "payee_id", "op": "equals", "value": str(payee.id)}]
+
+
+# --- settings / run -----------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_settings_get_and_put(client, auth_headers, session, test_workspace):
+    resp = await client.get(f"{API}/settings", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["auto_apply_threshold"] == 90
+    assert resp.json()["enabled"] is True
+
+    put = await client.put(f"{API}/settings", headers=auth_headers, json={"auto_apply_threshold": 95, "monthly_cap_usd": "2.50"})
+    assert put.status_code == 200, put.text
+    assert put.json()["auto_apply_threshold"] == 95
+    row = (await session.execute(
+        select(CategorizationSettings).where(CategorizationSettings.workspace_id == test_workspace.id)
+    )).scalar_one()
+    await session.refresh(row)
+    assert row.auto_apply_threshold == 95
+    assert row.monthly_cap_usd == Decimal("2.50")
+
+    bad = await client.put(f"{API}/settings", headers=auth_headers, json={"llm_connection_id": str(uuid.uuid4())})
+    assert bad.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_put_settings_requires_manager_role(client, session, test_workspace):
+    editor = await _member(session, client, test_workspace, "editor", "editor-role@example.com")
+    assert (await client.get(f"{API}/settings", headers=editor)).status_code == 200
+    resp = await client.put(f"{API}/settings", headers=editor, json={"auto_apply_threshold": 95})
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_run_creates_queued_manual_run_and_enqueues(client, auth_headers, session, test_workspace, categorization_enqueue):
+    resp = await client.post(f"{API}/run", headers=auth_headers, json={"scope": "backlog"})
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    run = await _fresh(session, CategorizationRun, uuid.UUID(body["id"]))
+    assert (run.kind, run.trigger, run.status) == ("classify", "manual", "queued")
+    categorization_enqueue.assert_called_once_with(test_workspace.id, "manual", run_id=run.id)
+
+
+@pytest.mark.asyncio
+async def test_run_returns_busy_run(client, auth_headers, session, test_workspace, categorization_enqueue):
+    busy = CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="classify",
+        trigger="ingest", status="running", stats={}, detail={},
+    )
+    session.add(busy)
+    await session.commit()
+    resp = await client.post(f"{API}/run", headers=auth_headers, json={"scope": "backlog"})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["id"] == str(busy.id)
+    categorization_enqueue.assert_not_called()
+    runs = (await session.execute(select(CategorizationRun))).scalars().all()
+    assert len(runs) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_marks_failed_when_enqueue_fails(client, auth_headers, session, categorization_enqueue):
+    categorization_enqueue.return_value = False
+    resp = await client.post(f"{API}/run", headers=auth_headers, json={"scope": "backlog"})
+    assert resp.status_code == 503
+    run = (await session.execute(select(CategorizationRun))).scalar_one()
+    await session.refresh(run)
+    assert run.status == "failed"
+    assert run.error == "enqueue_failed"
+    assert run.finished_at is not None
+
+
+# --- permissions ----------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method,path,body", [
+    ("post", "/review/accept", {"merchant_key": "X", "category_id": str(uuid.uuid4())}),
+    ("post", "/review/dismiss", {"merchant_key": "X"}),
+    ("post", "/review/create-category", {"group": "G", "name": "N", "merchant_keys": []}),
+    ("post", "/undo", {"event_ids": []}),
+    ("post", "/similar", {"transaction_id": str(uuid.uuid4())}),
+    ("post", "/similar/apply", {"transaction_id": str(uuid.uuid4())}),
+    ("put", "/settings", {"enabled": False}),
+    ("post", "/run", {"scope": "backlog"}),
+])
+async def test_viewer_cannot_write(client, viewer_auth_headers, method, path, body):
+    resp = await client.request(method.upper(), f"{API}{path}", headers=viewer_auth_headers, json=body)
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_viewer_can_read(client, viewer_auth_headers):
+    for path in ("/summary", "/review", "/applied", "/settings"):
+        assert (await client.get(f"{API}{path}", headers=viewer_auth_headers)).status_code == 200
+
+
+# --- transactions list ------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_transactions_filter_by_category_source(client, auth_headers, session, test_user, test_account, test_categories):
+    food = test_categories[0].id
+    ai = _tx(session, test_user, test_account, "A", source="ai", category_id=food)
+    mem = _tx(session, test_user, test_account, "B", source="memory", category_id=food)
+    _tx(session, test_user, test_account, "C", source="user", category_id=food)
+    await session.commit()
+
+    resp = await client.get("/api/transactions?category_source=ai,memory&limit=50", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert sorted(i["id"] for i in items) == sorted([str(ai.id), str(mem.id)])
+    assert {i["category_source"] for i in items} == {"ai", "memory"}
+
+    one = (await client.get("/api/transactions?category_source=user", headers=auth_headers)).json()["items"]
+    assert [i["category_source"] for i in one] == ["user"]
+    bad = await client.get("/api/transactions?category_source=bogus", headers=auth_headers)
+    assert bad.status_code == 422
+

@@ -73,6 +73,36 @@ async def get_settings(session: AsyncSession, workspace_id: uuid.UUID) -> Catego
         return (await session.execute(query)).scalar_one()
 
 
+async def find_ai_connection(
+    session: AsyncSession, settings: CategorizationSettings
+) -> LlmConnection | None:
+    """The Anthropic connection runs would spend, or None (no AI).
+
+    The one the settings name, when it is still an Anthropic connection of
+    the owner; otherwise the owner's default Anthropic connection.
+    """
+    if settings.owner_user_id is None:
+        return None
+    if settings.llm_connection_id is not None:
+        connection = await session.get(LlmConnection, settings.llm_connection_id)
+        if (
+            connection is not None
+            and connection.user_id == settings.owner_user_id
+            and connection.kind == CONNECTION_KIND
+        ):
+            return connection
+    return await session.scalar(
+        select(LlmConnection)
+        .where(
+            LlmConnection.user_id == settings.owner_user_id,
+            LlmConnection.kind == CONNECTION_KIND,
+            LlmConnection.is_default.is_(True),
+        )
+        .order_by(LlmConnection.created_at, LlmConnection.id)
+        .limit(1)
+    )
+
+
 async def update_settings(
     session: AsyncSession, workspace_id: uuid.UUID, patch: CategorizationSettingsUpdate
 ) -> CategorizationSettings:

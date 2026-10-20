@@ -112,7 +112,7 @@ async def _categorize(
             return await _categorize_in(session, workspace_id, trigger, run_id)
 
 
-async def _lock_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> None:
+async def lock_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> None:
     """Serialize claims of one workspace until commit (Postgres only).
 
     Two triggers checking "is a run busy?" at the same time would otherwise
@@ -125,7 +125,7 @@ async def _lock_workspace(session: AsyncSession, workspace_id: uuid.UUID) -> Non
     await session.execute(select(func.pg_advisory_xact_lock(LOCK_NAMESPACE, key)))
 
 
-async def _expire_stale_runs(session: AsyncSession, workspace_id: uuid.UUID) -> None:
+async def expire_stale_runs(session: AsyncSession, workspace_id: uuid.UUID) -> None:
     now = datetime.now(timezone.utc)
     for status, age in STALE_AFTER.items():
         await session.execute(
@@ -208,7 +208,7 @@ async def _claim(
     session: AsyncSession, workspace_id: uuid.UUID, trigger: str, run_id: uuid.UUID | None
 ) -> CategorizationRun | str:
     """The run this task executes, or why it should not run."""
-    await _lock_workspace(session, workspace_id)
+    await lock_workspace(session, workspace_id)
     if run_id is not None:
         # A run queued by a person (the API creates it, then enqueues): take
         # it unless another worker already did.
@@ -230,7 +230,7 @@ async def _claim(
     settings = await get_categorization_settings(session, workspace_id)
     if not settings.enabled and trigger != "manual":
         return "disabled"
-    await _expire_stale_runs(session, workspace_id)
+    await expire_stale_runs(session, workspace_id)
     if await _mark_busy_run(session, workspace_id):
         return "busy"
     run = CategorizationRun(

@@ -18,6 +18,7 @@ from app.core.workspace_context import (
 )
 from app.schemas.transaction import BulkAddToGroupRequest, BulkCategorizeRequest, DescriptionSuggestion, BulkTagsRequest, CreateCounterpartRequest, InstallmentSeriesCreate, LinkTransferRequest, TransactionBulkDeleteRequest, TransactionCreate, TransactionRead, TransactionUpdate, TransferCreate, TransferRead
 from app.schemas.transaction_calendar import TransactionCalendarResponse
+from app.models.categorization import CATEGORY_SOURCES
 from app.services import transaction_service
 from app.services.admin_service import get_credit_card_accounting_mode
 from app.services.transaction_calendar_service import get_transaction_calendar
@@ -107,6 +108,20 @@ def _merge_id_filters(
     return ids or None
 
 
+def _category_sources(raw: Optional[str]) -> Optional[list[str]]:
+    """Parse `?category_source=ai,memory`; unknown origins are a 422."""
+    if not raw:
+        return None
+    sources = list(dict.fromkeys(s.strip() for s in raw.split(",") if s.strip()))
+    unknown = [s for s in sources if s not in CATEGORY_SOURCES]
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unknown category_source: {', '.join(unknown)}",
+        )
+    return sources or None
+
+
 @router.get("", response_model=PaginatedTransactions)
 async def list_transactions(
     account_id: Optional[uuid.UUID] = Query(None),
@@ -134,6 +149,7 @@ async def list_transactions(
     max_amount: Optional[float] = Query(None, ge=0, description="Filter to transactions with absolute amount <= this value (primary currency)."),
     sort_by: Optional[str] = Query(None, description="Column to sort by (date|amount|description|payee|category|account|type|status). Default: date desc."),
     sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
+    category_source: Optional[str] = Query(None, description="Comma-separated category origins (ai, memory, rule, user, ...)."),
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
@@ -157,6 +173,7 @@ async def list_transactions(
         sort_dir=sort_dir,
         min_amount=min_amount,
         max_amount=max_amount,
+        category_sources=_category_sources(category_source),
         include_summary=True,
     )
     primary_currency = ctx.user.primary_currency

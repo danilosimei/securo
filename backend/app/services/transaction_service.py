@@ -139,6 +139,7 @@ async def get_transactions(
     include_summary: bool = False,
     user_pnl_only: bool = False,
     exclude_ignored: bool = False,
+    category_sources: Optional[list[str]] = None,
 ) -> tuple[list[Transaction], int, Optional[dict]]:
     """List transactions for a workspace.
 
@@ -264,6 +265,8 @@ async def get_transactions(
         base_query = base_query.where(Transaction.category_id == category_id)
     if payee_id:
         base_query = base_query.where(Transaction.payee_id == payee_id)
+    if category_sources:
+        base_query = base_query.where(Transaction.category_source.in_(category_sources))
     if uncategorized:
         base_query = base_query.where(
             Transaction.category_id == None,
