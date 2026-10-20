@@ -111,7 +111,7 @@ Um objeto por item recebido, sem omitir nenhum, com os campos nesta ordem:
 - "Pagamento de fatura", "Pgto fatura cartão": pagamento do cartão, não é um gasto novo. Use a categoria de transferência, se existir; senão c null.
 - Boleto, "Pagamento de título", "Débito automático": categorize pelo favorecido (quem recebe).
 - "Parcela 3/10", "PARC 03/10": parcela de uma compra; categorize pela loja.
-- Saque, "Saque 24h", "Saque Banco24Horas": dinheiro em espécie; use a categoria de saque ou dinheiro, se existir, ou a mais genérica (como Outros).
+- Saque, "Saque 24h", "Saque Banco24Horas": dinheiro em espécie; use a categoria de saque ou dinheiro, se existir; senão c null.
 - IOF (inclusive "IOF compra internacional"), tarifas, anuidade e, com t "d", juros, multa e encargos: impostos e taxas bancárias.
 - Com t "c", juros, remuneração, rendimento, "Rend pago aplic", dividendos, JCP ou "Juros s/ capital" de tickers como BBDC3, ITSA4 ou KNRI11 (final 11 costuma ser fundo imobiliário): renda de investimentos.
 - RDB, CDB, LCI, LCA, Tesouro, "Aplicação" e "Resgate": dinheiro indo para ou voltando de aplicação; não é gasto nem renda. Use a categoria de investimento ou de transferência, se existir.

@@ -208,6 +208,14 @@ def test_system_prompt_is_long_enough_to_cache():
     assert len(build_system_blocks(build_category_index(cats, groups), "")[1]["text"]) > 0
 
 
+def test_withdrawal_rule_leaves_c_null_without_a_cash_category():
+    """Unsure means `c` null everywhere; no fallback to a generic category."""
+    text = build_system_blocks(build_category_index([], []), "")[0]["text"]
+    [rule] = [line for line in text.splitlines() if line.startswith("- Saque")]
+    assert rule.endswith("use a categoria de saque ou dinheiro, se existir; senão c null.")
+    assert "genérica" not in rule
+
+
 # --- user message ---------------------------------------------------------
 
 
