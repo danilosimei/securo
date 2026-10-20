@@ -27,6 +27,7 @@ _SOURCES = (
     "none", "user", "rule", "memory", "ai", "provider",
     "installment", "import", "recurring", "legacy",
 )
+_EVENT_SOURCES = _SOURCES + ("undo",)
 _JSON = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 
 
@@ -141,7 +142,7 @@ def upgrade() -> None:
         _ts("created_at"),
         _ts("undone_at", nullable=True),
         sa.CheckConstraint(
-            "source IN (" + ", ".join(f"'{s}'" for s in _SOURCES) + ")",
+            "source IN (" + ", ".join(f"'{s}'" for s in _EVENT_SOURCES) + ")",
             name="ck_categorization_event_source",
         ),
     )

@@ -44,6 +44,8 @@ CATEGORY_SOURCES = (
     "none", "user", "rule", "memory", "ai", "provider",
     "installment", "import", "recurring", "legacy",
 )
+#: Events also record reverts, with the pseudo-source `undo`.
+EVENT_SOURCES = CATEGORY_SOURCES + ("undo",)
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -152,7 +154,7 @@ class CategorizationEvent(Base):
 
     __tablename__ = "categorization_events"
     __table_args__ = (
-        CheckConstraint(_in("source", CATEGORY_SOURCES), name="ck_categorization_event_source"),
+        CheckConstraint(_in("source", EVENT_SOURCES), name="ck_categorization_event_source"),
         Index("ix_categorization_events_workspace_created", "workspace_id", "created_at"),
         Index("ix_categorization_events_transaction_created", "transaction_id", "created_at"),
         Index("ix_categorization_events_run", "run_id"),

@@ -17,7 +17,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.categorization import CategorizationEvent
+from app.models.categorization import CATEGORY_SOURCES, CategorizationEvent
 from app.models.transaction import Transaction
 
 logger = logging.getLogger(__name__)
@@ -85,6 +85,10 @@ async def record_change(
     Returns None when nothing changes. Never raises on the event's account:
     the change to `tx` is applied even if writing the event fails.
     """
+    if source not in CATEGORY_SOURCES:
+        logger.error("invalid category source %r for transaction %s", source, tx.id)
+        return None
+
     payee_changes = not isinstance(new_payee_id, Unset) and new_payee_id != tx.payee_id
     if tx.category_id == new_category_id and tx.category_source == source and not payee_changes:
         return None
@@ -100,24 +104,28 @@ async def record_change(
 
     event: CategorizationEvent | None = None
     try:
-        event = CategorizationEvent(
-            id=uuid.uuid4(),
-            workspace_id=tx.workspace_id,
-            transaction_id=tx.id,
-            run_id=run_id,
-            source=source,
-            previous_source=previous_source,
-            previous_category_id=previous_category_id,
-            new_category_id=new_category_id,
-            previous_payee_id=previous_payee_id,
-            new_payee_id=tx.payee_id,
-            confidence=confidence,
-            reason=reason[:120] if reason else None,
-            model=model,
-            user_id=user_id,
-            created_at=_now(),
-        )
-        session.add(event)
+        # A savepoint, so a failing insert (CHECK/FK) rolls back only the
+        # event and leaves the caller's transaction usable.
+        async with session.begin_nested():
+            event = CategorizationEvent(
+                id=uuid.uuid4(),
+                workspace_id=tx.workspace_id,
+                transaction_id=tx.id,
+                run_id=run_id,
+                source=source,
+                previous_source=previous_source,
+                previous_category_id=previous_category_id,
+                new_category_id=new_category_id,
+                previous_payee_id=previous_payee_id,
+                new_payee_id=tx.payee_id,
+                confidence=confidence,
+                reason=reason[:120] if reason else None,
+                model=model,
+                user_id=user_id,
+                created_at=_now(),
+            )
+            session.add(event)
+            await session.flush()
     except Exception:
         logger.exception("could not record categorization event for %s", tx.id)
         event = None
@@ -137,7 +145,11 @@ async def record_bulk(
     user_id: uuid.UUID | None,
     run_id: uuid.UUID | None = None,
 ) -> int:
-    """`record_change` over many rows; returns how many changed."""
+    """`record_change` over many rows; returns how many changed.
+
+    Callers must pre-filter protected rows (`is_protected`) when the source
+    is not a person: this function writes whatever it is given.
+    """
     if not tx_ids:
         return 0
     result = await session.execute(
@@ -172,7 +184,7 @@ async def undo(
 
     An event is skipped when a later, not-undone event exists for the same
     transaction (a person may have corrected it), when it was already undone,
-    or when it is itself an undo.
+    or when it is itself an undo. Newest first, so chained events unwind.
     """
     if event_ids is None and run_id is None:
         return UndoResult(0, 0)
@@ -185,11 +197,10 @@ async def undo(
     targets: list[Any] = list(
         (await session.execute(query.order_by(CategorizationEvent.created_at.desc()))).scalars().all()
     )
-    target_ids = {e.id for e in targets}
 
     restored = skipped = 0
     for ev in targets:  # newest first, so chained events in one batch unwind in order
-        if ev.undone_at is not None or ev.reason == "undo":
+        if ev.undone_at is not None or ev.source == "undo":
             skipped += 1
             continue
         later = (
@@ -198,11 +209,12 @@ async def undo(
                     CategorizationEvent.transaction_id == ev.transaction_id,
                     CategorizationEvent.id != ev.id,
                     CategorizationEvent.undone_at.is_(None),
-                    CategorizationEvent.created_at >= ev.created_at,
+                    CategorizationEvent.source != "undo",
+                    CategorizationEvent.created_at > ev.created_at,
                 )
             )
         ).scalars().all()
-        if any(i not in target_ids for i in later):
+        if later:
             skipped += 1
             continue
         tx = await session.get(Transaction, ev.transaction_id)
@@ -218,13 +230,12 @@ async def undo(
                 workspace_id=workspace_id,
                 transaction_id=tx.id,
                 run_id=None,
-                source=restored_source,
+                source="undo",
                 previous_source=tx.category_source,
                 previous_category_id=tx.category_id,
                 new_category_id=ev.previous_category_id,
                 previous_payee_id=tx.payee_id,
                 new_payee_id=ev.previous_payee_id if payee_changed else tx.payee_id,
-                reason="undo",
                 user_id=user_id,
                 created_at=_now(),
             )
