@@ -793,12 +793,26 @@ function Redistribution({
       </p>
     )
   }
+  const retryButton = canManage && (
+    <Button size="sm" variant="outline" className="h-7 gap-1.5" onClick={onRetry} disabled={locked}>
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+      {t('categorization.organize.retry')}
+    </Button>
+  )
   if (run.status === 'capped') {
+    // The rows left in the first child already hold a category, so nothing
+    // asks about them in Review: only a retry (after raising the cap) moves them.
     return (
-      <p className={cn(box, 'text-amber-700 dark:text-amber-300')}>
+      <div className={cn(box, 'text-amber-700 dark:text-amber-300')}>
         <AlertCircle className="h-3.5 w-3.5" />
-        {t('categorization.organize.redistributeCapped', { name: first })}
-      </p>
+        <span>{t('categorization.organize.redistributeCapped', { name: first })}</span>
+        {canManage && (
+          <Button size="sm" variant="outline" className="h-7" asChild>
+            <Link to="/workspace/settings#categorization">{t('categorization.organize.adjustCap')}</Link>
+          </Button>
+        )}
+        {retryButton}
+      </div>
     )
   }
   return (
@@ -809,11 +823,8 @@ function Redistribution({
         <Button size="sm" variant="outline" className="h-7" asChild>
           <Link to="/workspace/settings#categorization">{t('categorization.organize.configure')}</Link>
         </Button>
-      ) : canManage && (
-        <Button size="sm" variant="outline" className="h-7 gap-1.5" onClick={onRetry} disabled={locked}>
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          {t('categorization.organize.retry')}
-        </Button>
+      ) : (
+        retryButton
       )}
     </div>
   )

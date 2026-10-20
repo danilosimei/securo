@@ -443,6 +443,37 @@ describe('OrganizeTab', () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['categorization'] })
   })
 
+  it('redistribuição parada no teto mensal explica o teto, aponta as configurações e tenta de novo', async () => {
+    view = {
+      ...view,
+      ops: [games, { ...split, status: 'applied', redistribution: run('capped', { id: 'r1', kind: 'redistribute' }) }],
+    }
+    api.categorization.retryOrganizerOp.mockImplementation(async () => {
+      const queued = run('queued', { id: 'r2', kind: 'redistribute' })
+      view = { ...view, ops: [games, { ...split, status: 'applied', redistribution: queued }] }
+      return { op: { ...split, status: 'applied' }, redistribute_run: queued }
+    })
+    const { user } = await renderProposal()
+    expect(within(card('o4')).getByText(t('categorization.organize.redistributeCapped', { name: 'Assinaturas' }))).toBeInTheDocument()
+    expect(within(card('o4')).getByText(/monthly AI spending cap/)).toBeInTheDocument()
+    const link = within(card('o4')).getByRole('link', { name: t('categorization.organize.adjustCap') })
+    expect(link).toHaveAttribute('href', '/workspace/settings#categorization')
+    await user.click(within(card('o4')).getByRole('button', { name: t('categorization.organize.retry') }))
+    expect(api.categorization.retryOrganizerOp).toHaveBeenCalledWith('o4', 'run-1')
+    expect(await within(card('o4')).findByText(t('categorization.organize.redistributing'))).toBeInTheDocument()
+  })
+
+  it('redistribuição parada no teto: sem permissão de gestor, só o aviso', async () => {
+    workspace.canManage = false
+    view = {
+      ...view,
+      ops: [games, { ...split, status: 'applied', redistribution: run('capped', { id: 'r1', kind: 'redistribute' }) }],
+    }
+    await renderProposal()
+    expect(within(card('o4')).getByText(t('categorization.organize.redistributeCapped', { name: 'Assinaturas' }))).toBeInTheDocument()
+    expect(within(card('o4')).queryByRole('button', { name: t('categorization.organize.retry') })).toBeNull()
+  })
+
   it('redistribuição sem conexão Claude aponta para as configurações', async () => {
     view = {
       ...view,
