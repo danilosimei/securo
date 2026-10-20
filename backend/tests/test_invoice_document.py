@@ -1154,21 +1154,29 @@ def test_a_line_taller_than_a_page_still_finishes():
     Guarded twice: the table may now break inside a row, and a failure to
     split on an already-empty page draws the content instead of asking
     for one more."""
-    import signal
+    import threading
 
     huge = ("Servico de consultoria detalhado " * 400).strip()
+    document = _doc(1)
+    document.lines[0].description = huge
+    rendered: list[bytes] = []
+    errors: list[BaseException] = []
 
-    def give_up(signum, frame):
-        raise AssertionError("pagination did not terminate")
+    def render():
+        try:
+            rendered.append(invoice_pdf.render_pdf(document))
+        except BaseException as exc:  # noqa: BLE001 - re-raised below
+            errors.append(exc)
 
-    signal.signal(signal.SIGALRM, give_up)
-    signal.alarm(20)
-    try:
-        document = _doc(1)
-        document.lines[0].description = huge
-        pdf = invoice_pdf.render_pdf(document)
-    finally:
-        signal.alarm(0)
+    # A daemon thread, not SIGALRM (absent on Windows): a real hang fails
+    # here and cannot keep the interpreter from exiting.
+    worker = threading.Thread(target=render, daemon=True)
+    worker.start()
+    worker.join(20)
+    assert not worker.is_alive(), "pagination did not terminate"
+    if errors:
+        raise errors[0]
+    [pdf] = rendered
 
     import io as _io
 
