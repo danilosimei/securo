@@ -395,3 +395,45 @@ async def test_poll_expires_stale_runs_of_every_kind(session, test_workspace):
         assert (run.status, run.error) == ("failed", "abandoned"), run.kind
         assert run.finished_at is not None
     assert (await _reload(session, fresh.id)).status == "running"
+
+
+@pytest.mark.asyncio
+async def test_expired_batch_keeps_its_estimate_as_spend(session, test_workspace):
+    """The money was committed when the batch was sent: expiring the run
+    must not take it out of the month's spend."""
+    from app.tasks.categorization_tasks import expire_stale_runs
+
+    ws = test_workspace.id
+    batch = _run(ws, "processing_batch", age=timedelta(hours=31))
+    batch.cost_usd = Decimal("0.01")
+    batch.detail = {"batch": {"estimated_cost_usd": "0.25"}, "rerun": True}
+    no_estimate = _run(ws, "processing_batch", age=timedelta(hours=31), kind="redistribute")
+    running = _run(ws, "running", age=timedelta(hours=7))
+    running.detail = {"batch": {"estimated_cost_usd": "9"}}
+    session.add_all([batch, no_estimate, running])
+    await session.commit()
+
+    expired = await expire_stale_runs(session, ws)
+    await session.commit()
+
+    assert set(expired) == {batch.id, no_estimate.id, running.id}
+    assert (await _reload(session, batch.id)).cost_usd == Decimal("0.26")
+    assert (await _reload(session, no_estimate.id)).cost_usd == Decimal("0")
+    assert (await _reload(session, running.id)).cost_usd == Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_poll_requeues_the_trigger_an_expired_run_carried(
+    session, test_workspace, categorization_enqueue
+):
+    from app.tasks.categorization_tasks import _poll
+
+    stale = _run(test_workspace.id, "processing_batch", age=timedelta(hours=31))
+    stale.detail = {"rerun": True}
+    session.add(stale)
+    await session.commit()
+
+    await _poll(_session_maker(session))
+
+    categorization_enqueue.assert_called_once_with(test_workspace.id, "ingest")
+    assert (await _reload(session, stale.id)).detail == {}

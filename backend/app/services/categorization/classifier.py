@@ -104,6 +104,7 @@ __all__ = [
     "ApplyStats",
     "apply_results",
     "batch_custom_id",
+    "batch_estimate",
     "classify",
     "classify_with_claude",
     "collect_batch",
@@ -602,13 +603,18 @@ async def committed_spend(session: AsyncSession, workspace_id: uuid.UUID) -> Dec
         )
     ).scalars().all()
     for detail in pending:
-        info = (detail or {}).get(BATCH_DETAIL)
-        raw = info.get("estimated_cost_usd") if isinstance(info, dict) else None
-        try:
-            spent += Decimal(str(raw)) if raw is not None else Decimal(0)
-        except ArithmeticError:
-            continue
+        spent += batch_estimate(detail)
     return spent
+
+
+def batch_estimate(detail: dict[str, Any] | None) -> Decimal:
+    """The estimate a run stored when it sent its batch; 0 when absent."""
+    info = (detail or {}).get(BATCH_DETAIL)
+    raw = info.get("estimated_cost_usd") if isinstance(info, dict) else None
+    try:
+        return Decimal(str(raw)) if raw is not None else Decimal(0)
+    except ArithmeticError:
+        return Decimal(0)
 
 
 def _account(run: CategorizationRun, usage: Any, *, batch: bool) -> None:
