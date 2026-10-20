@@ -3047,6 +3047,39 @@
       "undone_one": "{{count}} undone",
       "undone_other": "{{count}} undone",
       "undoError": "Could not undo"
+    },
+    "card": {
+      "toReview_one": "{{count}} to review",
+      "toReview_other": "{{count}} to review",
+      "autoWeek_one": "{{count}} categorized automatically this week",
+      "autoWeek_other": "{{count}} categorized automatically this week",
+      "autoWeekShort_one": "{{count}} automatic this week",
+      "autoWeekShort_other": "{{count}} automatic this week",
+      "review": "Review",
+      "allDone": "All categorized",
+      "viewApplied": "View applied",
+      "enableAi": "Turn on automatic categorization"
+    },
+    "config": {
+      "title": "Automatic categorization",
+      "enabled": "Categorize automatically",
+      "enabledHint": "New transactions are categorized as they arrive; doubtful ones wait for your review.",
+      "threshold": "When to apply on its own",
+      "thresholdHint": "Applies when confidence is {{value}}% or more",
+      "custom": "Custom ({{value}})",
+      "conservative": "Conservative",
+      "balanced": "Balanced",
+      "aggressive": "Aggressive",
+      "cap": "Monthly cap (US$)",
+      "capInvalid": "Enter an amount from 0 to {{max}}, with up to 2 decimals",
+      "spent": "Spent this month: {{spent}} of {{cap}}",
+      "connection": "Claude connection:",
+      "change": "Change",
+      "setUpConnection": "Set up a Claude connection",
+      "connectionUnavailable": "Not available on this server",
+      "organize": "Organize categories",
+      "saveError": "Could not save the setting",
+      "loadError": "Could not load the settings"
     }
   }
 }

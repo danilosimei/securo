@@ -38,7 +38,7 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { CheckCircle2, CalendarIcon, Clock, Paperclip, Target, ArrowUpDown, HelpCircle, EyeClosed, AlertCircle } from 'lucide-react'
+import { CalendarIcon, Clock, Paperclip, Target, ArrowUpDown, HelpCircle, EyeClosed } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ICON_MAP } from '@/lib/category-icons'
 import { PageHeader } from '@/components/page-header'
@@ -51,6 +51,7 @@ import { TransactionCalendarView } from '@/components/transaction-calendar-view'
 import { TransactionsViewSwitcher, type TransactionsViewMode } from '@/components/transactions-view-switcher'
 import { RuleDialog } from '@/components/rule-dialog'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
+import { CategorizationCard } from '@/components/categorization/categorization-card'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
 import { categoryChanged, withUndoneCategory, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
@@ -845,43 +846,16 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Uncategorized banner */}
-      {!summaryLoading && (
-        uncategorizedCount > 0 ? (
-          <button
-            type="button"
-            className="w-full flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-4 py-2.5 mb-5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors"
-            onClick={() => setDrillDown({
-              title: t('dashboard.drillDownUncategorized'),
-              uncategorized: true,
-            })}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              {/* An icon, not the count: the sentence beside it already states
-                  the number, and a fixed 24px circle clipped it from four
-                  digits on. Severity still reads through the tint. */}
-              <AlertCircle
-                size={16}
-                className={`shrink-0 ${uncategorizedCount >= 20 ? 'text-amber-600 dark:text-amber-400' : 'text-amber-500 dark:text-amber-500'}`}
-              />
-              <span className="text-sm text-amber-900 dark:text-amber-200 truncate">
-                {t('dashboard.uncategorizedCta', { count: uncategorizedCount })}
-                {uncategorizedAmount > 0 && (
-                  <span className="text-amber-700/70 dark:text-amber-300/70"> · {mask(formatCurrency(uncategorizedAmount, userCurrency, locale))}</span>
-                )}
-              </span>
-            </div>
-            <span className="shrink-0 text-sm font-semibold text-amber-600 dark:text-amber-400 hover:underline">
-              {t('dashboard.categorizeNow')} &rarr;
-            </span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-4 py-2.5 mb-5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="text-sm text-emerald-900 dark:text-emerald-200">{t('dashboard.allCategorized')}</span>
-          </div>
-        )
-      )}
+      {/* Categorization card (falls back to the uncategorized banner when AI is off) */}
+      <CategorizationCard
+        loading={summaryLoading}
+        uncategorizedCount={uncategorizedCount}
+        uncategorizedAmountLabel={uncategorizedAmount > 0 ? mask(formatCurrency(uncategorizedAmount, userCurrency, locale)) : null}
+        onOpenUncategorized={() => setDrillDown({
+          title: t('dashboard.drillDownUncategorized'),
+          uncategorized: true,
+        })}
+      />
 
       {/* Charts: Category Spending Bars + Balance Evolution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5" style={{ gridAutoRows: 'minmax(380px, auto)' }}>

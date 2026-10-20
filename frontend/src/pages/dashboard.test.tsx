@@ -23,9 +23,15 @@ const api = vi.hoisted(() => ({
   groups: { list: vi.fn() },
   payees: { list: vi.fn() },
   rules: { create: vi.fn() },
+  categorization: { summary: vi.fn() },
 }))
 
 vi.mock('@/lib/api', () => api)
+
+vi.mock('@/contexts/workspace-context', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/contexts/workspace-context')>()),
+  useWorkspace: () => ({ canWrite: true, canManage: true }),
+}))
 
 vi.mock('@/hooks/use-display-locale', () => ({
   useDisplayLocale: () => 'en-US',
@@ -116,6 +122,10 @@ beforeEach(() => {
   api.categoryGroups.list.mockResolvedValue([])
   api.accounts.list.mockResolvedValue(accounts)
   api.goals.summary.mockResolvedValue([])
+  api.categorization.summary.mockResolvedValue({
+    pending_groups: 2, pending_transactions: 5, applied_last_7d: 47, last_run: null,
+    ai_available: true, month_cost_usd: 0, monthly_cap_usd: 1,
+  })
   api.groups.list.mockResolvedValue([])
   api.payees.list.mockResolvedValue([])
 })
@@ -134,5 +144,18 @@ describe('Dashboard net worth breakdown', () => {
     const tooltip = await screen.findByRole('tooltip')
     const cardRow = within(tooltip).getByText(t('dashboard.creditCardBalance')).parentElement!
     expect(cardRow).toHaveTextContent(formatCurrency(-500, 'USD', 'en-US'))
+  })
+})
+
+describe('Dashboard categorization card', () => {
+  it('replaces the uncategorized banner with the review card', async () => {
+    renderWithProviders(
+      <TooltipProvider delayDuration={0}>
+        <DashboardPage />
+      </TooltipProvider>,
+    )
+    const card = await screen.findByTestId('categorization-card-pending')
+    expect(card).toHaveTextContent('5 to review')
+    expect(card).toHaveAttribute('href', '/categorization?tab=review')
   })
 })

@@ -101,7 +101,7 @@ export default function CategorizationPage() {
           {canManage && (
             <>
               <span aria-hidden="true">·</span>
-              <Link to="/workspace/settings" className="font-medium text-primary hover:underline">
+              <Link to="/workspace/settings#categorization" className="font-medium text-primary hover:underline">
                 {t('categorization.configure')}
               </Link>
             </>

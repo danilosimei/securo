@@ -99,11 +99,13 @@ export function Segmented<T extends string>({
   onChange,
   options,
   testIdPrefix,
+  disabled,
 }: {
   value: T
   onChange: (value: T) => void
   options: { value: T; label: React.ReactNode; count?: number }[]
   testIdPrefix: string
+  disabled?: boolean
 }) {
   return (
     <div className="inline-flex rounded-lg border border-border bg-muted p-0.5 text-xs font-medium">
@@ -113,9 +115,10 @@ export function Segmented<T extends string>({
           <button
             key={option.value}
             onClick={() => onChange(option.value)}
+            disabled={disabled}
             data-testid={`${testIdPrefix}-${option.value}`}
             className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap',
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60',
               active
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',

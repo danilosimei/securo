@@ -83,7 +83,7 @@ describe('CategorizationPage', () => {
     expect(await screen.findByText(t('categorization.aiOff'))).toBeInTheDocument()
     expect(screen.getByRole('link', { name: t('categorization.configure') })).toHaveAttribute(
       'href',
-      '/workspace/settings',
+      '/workspace/settings#categorization',
     )
   })
 

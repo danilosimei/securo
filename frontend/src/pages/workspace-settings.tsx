@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { CategorizationSettingsSection } from '@/components/categorization/categorization-settings-section'
 import { IconPicker } from '@/components/icon-picker'
 import { CategoryIcon } from '@/components/category-icon'
 import {
@@ -595,6 +596,8 @@ export default function WorkspaceSettingsPage() {
           </ul>
         )}
       </section>
+
+      <CategorizationSettingsSection />
 
       {/* Danger zone — owners only */}
       {canManage && (

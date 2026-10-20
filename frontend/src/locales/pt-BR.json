@@ -3032,6 +3032,39 @@
       "undone_one": "{{count}} desfeita",
       "undone_other": "{{count}} desfeitas",
       "undoError": "Não foi possível desfazer"
+    },
+    "card": {
+      "toReview_one": "{{count}} para revisar",
+      "toReview_other": "{{count}} para revisar",
+      "autoWeek_one": "{{count}} categorizada automaticamente esta semana",
+      "autoWeek_other": "{{count}} categorizadas automaticamente esta semana",
+      "autoWeekShort_one": "{{count}} automática esta semana",
+      "autoWeekShort_other": "{{count}} automáticas esta semana",
+      "review": "Revisar",
+      "allDone": "Tudo categorizado",
+      "viewApplied": "Ver aplicadas",
+      "enableAi": "Ativar categorização automática"
+    },
+    "config": {
+      "title": "Categorização automática",
+      "enabled": "Categorizar automaticamente",
+      "enabledHint": "As transações novas são categorizadas ao chegar; as duvidosas esperam sua revisão.",
+      "threshold": "Quando aplicar sozinho",
+      "thresholdHint": "Aplica quando a confiança é de {{value}}% ou mais",
+      "custom": "Personalizado ({{value}})",
+      "conservative": "Conservador",
+      "balanced": "Equilibrado",
+      "aggressive": "Agressivo",
+      "cap": "Teto mensal (US$)",
+      "capInvalid": "Informe um valor de 0 a {{max}}, com até 2 casas decimais",
+      "spent": "Gasto este mês: {{spent}} de {{cap}}",
+      "connection": "Conexão Claude:",
+      "change": "Trocar",
+      "setUpConnection": "Configure uma conexão Claude",
+      "connectionUnavailable": "Indisponível neste servidor",
+      "organize": "Organizar categorias",
+      "saveError": "Não foi possível salvar a configuração",
+      "loadError": "Não foi possível carregar as configurações"
     }
   }
 }
