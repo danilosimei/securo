@@ -108,12 +108,12 @@ export function CategorizationSettingsSection() {
 
   const commitCap = () => {
     if (capDraft === null) return
+    if (busy) return
     const parsed = parseCap(capDraft)
     if (parsed === null) {
       setCapError(true)
       return
     }
-    if (busy) return
     setCapError(false)
     const text = capDraft
     setCapDraft(null)

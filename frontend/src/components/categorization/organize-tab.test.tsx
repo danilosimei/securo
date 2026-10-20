@@ -213,6 +213,19 @@ describe('OrganizeTab', () => {
     })).toBeGreaterThan(0)
   })
 
+  it('redistribuição concluída: mostra movidas e mantidas no lugar', async () => {
+    const done = run('done', {
+      id: 'r1', kind: 'redistribute', stats: { applied: 2, memory: 1, skipped: 1, confirmed: 2 },
+    })
+    view = { ...view, ops: [{ ...split, status: 'applied', redistribution: done }] }
+    renderWithProviders(<OrganizeTab />)
+    expect(
+      await within(await screen.findByTestId('organizer-op-o4')).findByText(
+        t('categorization.organize.redistributed', { applied: 3, kept: 3 }),
+      ),
+    ).toBeInTheDocument()
+  })
+
   it('falha: mostra a mensagem e tenta de novo', async () => {
     view = { run: run('capped'), ops: [], message: 'O teto mensal de gastos com IA foi atingido.' }
     const { user } = renderWithProviders(<OrganizeTab />)

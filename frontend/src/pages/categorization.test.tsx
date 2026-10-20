@@ -113,6 +113,21 @@ describe('CategorizationPage', () => {
     expect(button).toBeDisabled()
   })
 
+  it('shows the running status line to read-only roles, ahead of the finished run', async () => {
+    workspace.canWrite = false
+    api.categorization.summary.mockResolvedValue(
+      summary({
+        last_run: {
+          id: 'r', status: 'running', stats: {},
+          finished_at: new Date(Date.now() - 3600_000).toISOString(),
+        },
+      }),
+    )
+    renderWithProviders(<CategorizationPage />, { route: '/categorization' })
+    expect(await screen.findByText(t('categorization.running'))).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: t('categorization.running') })).not.toBeInTheDocument()
+  })
+
   it('hides the run button without write access', async () => {
     workspace.canWrite = false
     renderWithProviders(<CategorizationPage />, { route: '/categorization' })
@@ -143,6 +158,21 @@ describe('SidebarNavLink', () => {
     renderLink(true)
     expect(await screen.findByRole('link', { name: /3 to review/ })).toBeInTheDocument()
     expect(screen.getByTestId('nav-badge-dot')).toBeInTheDocument()
+  })
+
+  it('does not read the summary for an item without a badge', async () => {
+    const plain = navItems.find((i) => i.type === 'link' && !i.badgeQueryKey)
+    if (!plain || plain.type !== 'link') throw new Error('plain nav item missing')
+    renderWithProviders(
+      <SidebarNavLink item={plain} isActive={false} collapsed={false} onNavigate={() => {}} />,
+    )
+    await screen.findByRole('link')
+    expect(api.categorization.summary).not.toHaveBeenCalled()
+  })
+
+  it('reads the summary for the item with a badge', async () => {
+    renderLink()
+    await waitFor(() => expect(api.categorization.summary).toHaveBeenCalledTimes(1))
   })
 
   it('has no badge and a plain name at zero', async () => {
