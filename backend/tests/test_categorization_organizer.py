@@ -1649,3 +1649,91 @@ async def test_split_first_child_may_repeat_a_hidden_name(session, test_user, te
     await session.commit()
 
     assert (await _fresh(session, Category, lazer.id)).name == "Cinema"
+
+
+@pytest.mark.asyncio
+async def test_redistribution_confirming_a_provider_row_survives_the_run_undo(
+    session, test_user, test_workspace, test_account, monkeypatch
+):
+    """A provider's row answered with the first child is a confirmation: it
+    is counted apart, and undoing the run leaves it settled."""
+    from app.services.categorization import review
+
+    family = await _redistribution_setup(session, test_user, test_workspace)
+    kept = _tx(session, test_user, test_account, "NETFLIX.COM",
+               category=family["Assinaturas"], source="provider")
+    moved = _tx(session, test_user, test_account, "INGRESSO.COM",
+                category=family["Assinaturas"], source="provider")
+    run = _redistribute_run(test_workspace, family)
+    session.add(run)
+    await session.commit()
+
+    def decide(sample):
+        return ("Ingressos", 95) if "INGRESSO" in sample else ("Assinaturas", 95)
+
+    monkeypatch.setattr(organizer, "resolve_client",
+                        AsyncMock(return_value=_fake_client(create=_answering(decide))))
+    await organizer.redistribute(session, test_workspace.id, run)
+    await session.commit()
+
+    run = await _fresh(session, CategorizationRun, run.id)
+    assert (run.status, run.stats["applied"], run.stats["confirmed"]) == ("done", 1, 1)
+    kept = await _fresh(session, Transaction, kept.id)
+    assert (kept.category_id, kept.category_source) == (family["Assinaturas"].id, "ai")
+
+    await review.undo(session, test_workspace.id, run_id=run.id, user_id=test_user.id)
+    await session.commit()
+
+    kept = await _fresh(session, Transaction, kept.id)
+    assert (kept.category_id, kept.category_source) == (family["Assinaturas"].id, "ai")
+    moved = await _fresh(session, Transaction, moved.id)
+    assert (moved.category_id, moved.category_source) == (family["Assinaturas"].id, "provider")
+    confirmation = (
+        await session.execute(
+            select(CategorizationEvent).where(CategorizationEvent.transaction_id == kept.id)
+        )
+    ).scalar_one()
+    assert confirmation.undone_at is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_apply_of_one_op_applies_it_once_postgres(postgres_sessions):
+    """Two clicks on "apply" race: the workspace lock lets one through, the
+    other finds the op decided (409)."""
+    import asyncio
+
+    from tests.test_categorization_models import _seed_pg
+
+    async with postgres_sessions() as setup:
+        ws, category, _txn = await _seed_pg(setup)
+        run = CategorizationRun(
+            id=uuid.uuid4(), workspace_id=ws, kind="organize", trigger="manual",
+            status="done", stats={}, created_at=datetime.now(timezone.utc),
+            detail={
+                "ops": [{**_op("o1", "rename", target="c1", name="Comida"),
+                         "status": "pending", "labels": {}}],
+                "ids": {"c1": str(category.id)},
+                "stores": {},
+            },
+        )
+        setup.add(run)
+        await setup.commit()
+        run_id, user_id, category_id = run.id, category.user_id, category.id
+
+    async def attempt() -> str:
+        async with postgres_sessions() as session:
+            try:
+                await apply_op(session, ws, run_id, "o1", user_id)
+            except organizer.OpConflict as exc:
+                await session.rollback()
+                return str(exc)
+            await session.commit()
+            return "applied"
+
+    outcomes = await asyncio.gather(attempt(), attempt())
+
+    assert sorted(outcomes) == ["Esta operação já foi decidida.", "applied"]
+    async with postgres_sessions() as session:
+        assert (await session.get(Category, category_id)).name == "Comida"
+        run = await session.get(CategorizationRun, run_id)
+        assert [op["status"] for op in run.detail["ops"]] == ["applied"]

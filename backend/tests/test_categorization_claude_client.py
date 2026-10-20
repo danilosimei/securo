@@ -144,19 +144,59 @@ async def test_batch_roundtrip():
 
 @pytest.mark.asyncio
 async def test_batch_results_yields_message_or_error_type():
-    ok = SimpleNamespace(custom_id="a", result=SimpleNamespace(type="succeeded", message="MSG"))
-    err = SimpleNamespace(custom_id="b", result=SimpleNamespace(
-        type="errored", error=SimpleNamespace(error=SimpleNamespace(type="overloaded_error"))))
-    expired = SimpleNamespace(custom_id="c", result=SimpleNamespace(type="expired"))
+    """The real SDK types, not look-alikes: `errored` nests the API error
+    twice (`result.error.error.type`)."""
+    from anthropic.types import ErrorResponse, Message, OverloadedError, TextBlock
+    from anthropic.types import Usage as SdkUsage
+    from anthropic.types.messages import (
+        MessageBatchCanceledResult,
+        MessageBatchErroredResult,
+        MessageBatchExpiredResult,
+        MessageBatchIndividualResponse,
+        MessageBatchSucceededResult,
+    )
+
+    message = Message(
+        id="msg_1", type="message", role="assistant", model="claude-haiku-5-5",
+        content=[TextBlock(type="text", text='{"items": []}')],
+        stop_reason="end_turn", stop_sequence=None,
+        usage=SdkUsage(input_tokens=1, output_tokens=1),
+    )
+    entries = [
+        MessageBatchIndividualResponse(
+            custom_id="a", result=MessageBatchSucceededResult(type="succeeded", message=message),
+        ),
+        MessageBatchIndividualResponse(
+            custom_id="b",
+            result=MessageBatchErroredResult(
+                type="errored",
+                error=ErrorResponse(
+                    type="error", request_id=None,
+                    error=OverloadedError(type="overloaded_error", message="Overloaded"),
+                ),
+            ),
+        ),
+        MessageBatchIndividualResponse(
+            custom_id="c", result=MessageBatchExpiredResult(type="expired"),
+        ),
+        MessageBatchIndividualResponse(
+            custom_id="d", result=MessageBatchCanceledResult(type="canceled"),
+        ),
+    ]
 
     async def decoder():
-        for item in (ok, err, expired):
-            yield item
+        for entry in entries:
+            yield entry
 
     client = MagicMock()
     client.messages.batches.results = AsyncMock(return_value=decoder())
     got = [r async for r in batch_results(client, "b1")]
-    assert got == [("a", "MSG", None), ("b", None, "overloaded_error"), ("c", None, "expired")]
+    assert got == [
+        ("a", message, None),
+        ("b", None, "overloaded_error"),
+        ("c", None, "expired"),
+        ("d", None, "canceled"),
+    ]
 
 
 def test_prices_cover_both_models_and_the_fallbacks():
