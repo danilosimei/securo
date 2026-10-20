@@ -80,6 +80,9 @@ class StagedChange:
     #: Follows from another change (a sibling parcel, a transfer pair, an
     #: inherited installment): noted, but not a new choice for the hooks.
     derived: bool = False
+    #: The payee before a change staged with `new_payee_id`. UNSET (no payee
+    #: staged) records the row's payee at write time on both sides.
+    previous_payee_id: uuid.UUID | None | Unset = UNSET
 
 
 def is_protected(tx: Transaction) -> bool:
@@ -182,8 +185,10 @@ def stage_change(
     confidence: int | None = None,
     model: str | None = None,
     derived: bool = False,
+    new_payee_id: uuid.UUID | None | Unset = UNSET,
 ) -> StagedChange | None:
-    """Apply a category change to `tx` in memory; `write_staged` notes it.
+    """Apply a category (and optionally payee) change to `tx` in memory;
+    `write_staged` notes it.
 
     Same rules as `record_change` (invalid source or no change: None), but
     no I/O, so loops over many rows pay for one insert at the end.
@@ -191,7 +196,8 @@ def stage_change(
     if source not in CATEGORY_SOURCES:
         logger.error("invalid category source %r for transaction %s", source, tx.id)
         return None
-    if tx.category_id == new_category_id and tx.category_source == source:
+    payee_changes = not isinstance(new_payee_id, Unset) and new_payee_id != tx.payee_id
+    if tx.category_id == new_category_id and tx.category_source == source and not payee_changes:
         return None
     staged = StagedChange(
         tx=tx,
@@ -206,9 +212,12 @@ def stage_change(
         confidence=confidence,
         model=model,
         derived=derived,
+        previous_payee_id=tx.payee_id if payee_changes else UNSET,
     )
     tx.category_id = new_category_id
     tx.category_source = source
+    if payee_changes and not isinstance(new_payee_id, Unset):
+        tx.payee_id = new_payee_id
     return staged
 
 
@@ -232,7 +241,11 @@ async def write_staged(session: AsyncSession, staged: list[StagedChange]) -> int
             "previous_source": change.previous_source,
             "previous_category_id": change.previous_category_id,
             "new_category_id": change.new_category_id,
-            "previous_payee_id": change.tx.payee_id,
+            "previous_payee_id": (
+                change.tx.payee_id
+                if isinstance(change.previous_payee_id, Unset)
+                else change.previous_payee_id
+            ),
             "new_payee_id": change.tx.payee_id,
             "reason": change.reason,
             "confidence": change.confidence,

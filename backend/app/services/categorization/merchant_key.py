@@ -5,7 +5,7 @@ Comportamento conservador: na duvida, a palavra fica.
 
 Precedencia da chave (merchant_key):
 1. nome do favorecido (payee) que nao seja documento e cuja origem nao seja
-   "description" -> "P:<NOME>" (sem sufixo societario: LTDA, S.A, ME...);
+   "description" nem "ai" -> "P:<NOME>" (sem sufixo societario: LTDA, S.A, ME...);
 2. transferencia/Pix para contraparte ("Transferencia Recebida|FULANO", ou
    is_person_transfer) -> "PIX:<NOME>" (so documento -> "PIX:#<sha1[:10]>");
 3. descricao normalizada (prefixos, parcelas, ids, cidade/UF removidos);
@@ -20,6 +20,11 @@ UNKNOWN_KEY = "UNKNOWN"
 SAMPLE_MAX_LENGTH = 60
 PERSON_PREFIX = "PIX:"
 PAYEE_PREFIX = "P:"
+# Origens de payee que nao definem a loja: o nome veio da propria descricao
+# (sync com payee_source="description") ou foi o nome limpo que a IA deu a
+# partir dela. Usa-los como chave mudaria a chave da linha depois de
+# categorizada e separaria a loja da memoria dela.
+DERIVED_PAYEE_SOURCES = frozenset({"description", "ai"})
 
 # Prefixos de adquirente/carteira que vem colados a um "*" (ex.: "PG *UBER").
 STAR_PREFIXES = (
@@ -254,7 +259,8 @@ def merchant_key(
     if description is not None and _fold(description).strip() in EMPTY_WORDS:
         description = None
     parts = _split_counterpart(description) if description else None
-    payee_ok = bool(payee_name and payee_source != "description" and _has_letters(payee_name))
+    derived_payee = payee_source in DERIVED_PAYEE_SOURCES
+    payee_ok = bool(payee_name and not derived_payee and _has_letters(payee_name))
 
     if is_person_transfer:
         if payee_ok and payee_name:
@@ -274,7 +280,7 @@ def merchant_key(
     folded_description = _fold(description).strip()
     if (
         payee_name
-        and payee_source != "description"
+        and not derived_payee
         and not payee_ok
         and not parts
         and _TRANSFER_KIND_RE.match(folded_description)

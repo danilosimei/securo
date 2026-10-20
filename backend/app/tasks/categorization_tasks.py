@@ -9,8 +9,9 @@ no trigger is lost. Only `classify` runs block classification: an organizer
 run (`organize` / `redistribute`) touches the category tree, not the rows,
 and runs alongside.
 
-`poll_batches` collects finished Message Batches (filled in with the Claude
-classifier); when it finishes a batch run it must call `requeue_if_requested`.
+`poll_batches` (beat, every 5 minutes) collects the Message Batches of runs
+waiting in `processing_batch` and applies them (`classifier.collect_batch`),
+then calls `requeue_if_requested` for each run it closes.
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ from sqlalchemy.pool import NullPool
 from app.core.app_clock import use_timezone
 from app.core.config import get_settings
 from app.models.categorization import CategorizationRun
-from app.services.categorization import pipeline
+from app.services.categorization import classifier, pipeline
 from app.services.categorization.settings import get_settings as get_categorization_settings
 from app.worker import celery_app
 
@@ -83,15 +84,19 @@ def categorize_workspace(workspace_id: str, trigger: str, run_id: str | None = N
 
 
 @celery_app.task(name=POLL_BATCHES_TASK)
-def poll_batches() -> None:
-    """Collect finished Message Batches; nothing is sent in batches yet."""
-    return None
+def poll_batches() -> dict:
+    """Collect the finished Message Batches of runs waiting on one."""
+    return asyncio.run(_poll_celery())
+
+
+def _fresh_engine() -> Any:
+    # A fresh engine per task: the global pool would hand asyncpg
+    # connections bound to loops `asyncio.run` already closed.
+    return create_async_engine(get_settings().database_url, poolclass=NullPool)
 
 
 async def _categorize_celery(workspace_id: str, trigger: str, run_id: str | None) -> dict:
-    # A fresh engine per task: the global pool would hand asyncpg
-    # connections bound to loops `asyncio.run` already closed.
-    engine = create_async_engine(get_settings().database_url, poolclass=NullPool)
+    engine = _fresh_engine()
     session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     try:
         return await _categorize(
@@ -102,6 +107,51 @@ async def _categorize_celery(workspace_id: str, trigger: str, run_id: str | None
         )
     finally:
         await engine.dispose()
+
+
+async def _poll_celery() -> dict:
+    engine = _fresh_engine()
+    session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        return await _poll(session_maker)
+    finally:
+        await engine.dispose()
+
+
+async def _poll(session_maker: Any) -> dict:
+    """One pass over the runs waiting on a batch; each in its own transaction.
+
+    A run whose collection fails (API down, rate limit) stays waiting and is
+    retried on the next pass; one that never ends is expired as abandoned.
+    """
+    summary = {"collected": 0, "pending": 0, "failed": 0}
+    async with session_maker() as session:
+        waiting = (
+            await session.execute(
+                select(CategorizationRun.id, CategorizationRun.workspace_id)
+                .where(
+                    CategorizationRun.kind == "classify",
+                    CategorizationRun.status == "processing_batch",
+                )
+                .order_by(CategorizationRun.created_at, CategorizationRun.id)
+            )
+        ).all()
+    for run_id, workspace_id in waiting:
+        async with session_maker() as session:
+            async with use_timezone(session, workspace_id, fresh=True):
+                try:
+                    outcome = await classifier.collect_batch(session, run_id)
+                    await session.commit()
+                except Exception:  # noqa: BLE001 - retried on the next pass
+                    logger.exception("could not collect the batch of run %s", run_id)
+                    await session.rollback()
+                    summary["failed"] += 1
+                    continue
+                if outcome in summary:
+                    summary[outcome] += 1
+                if outcome != "pending":
+                    await requeue_if_requested(session, run_id)
+    return summary
 
 
 async def _categorize(
@@ -259,7 +309,7 @@ async def _categorize_in(
 
     try:
         prepared = await pipeline.prepare_run(
-            session, workspace_id, trigger=claimed.trigger, run=claimed
+            session, workspace_id, trigger=claimed.trigger, run=claimed, use_ai=True
         )
         # The memory's work is saved before the (slow) classifier, so no row
         # stays locked while the model answers.

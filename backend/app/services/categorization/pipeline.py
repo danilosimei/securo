@@ -4,8 +4,9 @@ After every sync or import (and on demand) the transactions whose category
 is still a guess are grouped by merchant key. The workspace's memory settles
 what it can for free: a store the person categorized consistently, or a
 decision the model already made with enough confidence. What is left goes
-to the classifier when one is available (`ai_classifier`, wired in by the
-Claude integration) or becomes a pending suggestion for the person.
+to the classifier when one is available (`ai_classifier`, which
+`classifier` sets when imported -- the Celery task module imports it) or
+becomes a pending suggestion for the person.
 
 A pass has two phases so the caller can commit between them:
 `prepare_run` (candidates, memory) and `complete_run` (classifier or
@@ -24,18 +25,24 @@ from decimal import Decimal
 from statistics import median
 from typing import Any
 
-from sqlalchemy import and_, exists, func, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy import insert as sa_insert
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.account import Account
 from app.models.categorization import CategorizationRun, CategorizationSuggestion
 from app.models.payee import Payee
 from app.models.transaction import Transaction
-from app.services.categorization.events import REVIEWABLE_SOURCES, stage_change, write_staged
+from app.services.categorization.events import (
+    REVIEWABLE_SOURCES,
+    StagedChange,
+    stage_change,
+    write_staged,
+)
 from app.services.categorization.memory import MemoryHit, lookup
 from app.services.categorization.merchant_key import merchant_key, sample_description
-from app.services.categorization.settings import get_settings
+from app.services.categorization.settings import find_ai_connection, get_settings
 from app.services.category_service import get_assignable_category_ids
 
 #: Example descriptions per store shown to the model and to the person.
@@ -56,6 +63,10 @@ AUTO_APPLY_SOURCES = frozenset({"none", "provider"})
 #: `reason` of the suggestions made with no model behind them, so a later
 #: run with a model can tell them from the model's own and revisit them.
 NO_AI_REASON = "sem IA"
+#: `reason` given to a `NO_AI_REASON` suggestion when a later decision (the
+#: memory or the model) replaced it. It is closed as `dismissed`, but it is
+#: not the person ignoring the store.
+SUPERSEDED_REASON = "substituída"
 #: Run statuses whose `created_at` bounds what the next ingest looks at.
 FINISHED_STATUSES = ("done", "capped")
 #: An ingest run also revisits rows this much older than the previous run:
@@ -128,6 +139,10 @@ async def _dismissed_at(session: AsyncSession, workspace_id: uuid.UUID) -> dict[
         .where(
             CategorizationSuggestion.workspace_id == workspace_id,
             CategorizationSuggestion.status == "dismissed",
+            or_(
+                CategorizationSuggestion.reason.is_(None),
+                CategorizationSuggestion.reason != SUPERSEDED_REASON,
+            ),
         )
         .group_by(CategorizationSuggestion.merchant_key)
     )
@@ -147,19 +162,38 @@ async def ingest_since(session: AsyncSession, workspace_id: uuid.UUID) -> dateti
     return _utc(last) - INGEST_LOOKBACK if last is not None else None
 
 
+def model_less_suggestion() -> Any:
+    """A suggestion made with no model behind it."""
+    return and_(
+        CategorizationSuggestion.reason == NO_AI_REASON,
+        CategorizationSuggestion.category_id.is_(None),
+    )
+
+
 async def collect_candidates(
-    session: AsyncSession, workspace_id: uuid.UUID, since: datetime | None = None
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    since: datetime | None = None,
+    *,
+    revisit_no_ai: bool = False,
 ) -> list[Candidate]:
     """Posted, unpaired, counted transactions whose category is still a guess.
 
     Left out: rows with a pending suggestion (already waiting for the
     person), and rows of a store whose suggestions the person dismissed
     after the row arrived -- "ignore" holds until a new purchase of that
-    store lands. With `since`, only rows created from then on.
+    store lands. With `since`, only rows created from then on. With
+    `revisit_no_ai` (a model is available), a pending suggestion made
+    without one does not keep its row out: the model may decide it now.
+    One the model itself left undecided still does, so the same row is not
+    paid for twice.
     """
+    blocking = [CategorizationSuggestion.status == "pending"]
+    if revisit_no_ai:
+        blocking.append(~model_less_suggestion())
     pending = exists().where(
         CategorizationSuggestion.transaction_id == Transaction.id,
-        CategorizationSuggestion.status == "pending",
+        *blocking,
     )
     window = [Transaction.created_at >= since] if since is not None else []
     rows = await session.execute(
@@ -339,7 +373,7 @@ async def memory_pass(
             ):
                 plan[cand.tx_id] = decision
 
-    staged = []
+    staged: list[StagedChange] = []
     for ids in _chunks(list(plan)):
         txs = await session.execute(
             select(Transaction).where(
@@ -362,6 +396,7 @@ async def memory_pass(
             if change is not None:
                 staged.append(change)
     await write_staged(session, staged)
+    await supersede_no_ai(session, workspace_id, [change.tx.id for change in staged])
 
     if stats is not None:
         for change in staged:
@@ -424,6 +459,56 @@ async def suggest_without_ai(
     return len(payload)
 
 
+async def supersede_no_ai(
+    session: AsyncSession, workspace_id: uuid.UUID, tx_ids: list[uuid.UUID]
+) -> None:
+    """Close the model-less pending suggestions of rows just decided.
+
+    Marked `dismissed` with `SUPERSEDED_REASON`, which `_dismissed_at` does
+    not count as the person ignoring the store.
+    """
+    now = datetime.now(timezone.utc)
+    for ids in _chunks(list(dict.fromkeys(tx_ids))):
+        await session.execute(
+            sa_update(CategorizationSuggestion)
+            .where(
+                CategorizationSuggestion.workspace_id == workspace_id,
+                CategorizationSuggestion.transaction_id.in_(ids),
+                CategorizationSuggestion.status == "pending",
+                model_less_suggestion(),
+            )
+            .values(status="dismissed", reason=SUPERSEDED_REASON, resolved_at=now)
+            .execution_options(synchronize_session="fetch")
+        )
+
+
+def close_stats(stats: dict[str, Any]) -> None:
+    """`skipped` = candidates neither changed nor queued for the person."""
+    stats["skipped"] = max(
+        0,
+        stats.get("candidates", 0)
+        - stats.get("memory", 0)
+        - stats.get("applied", 0)
+        - stats.get("suggested", 0),
+    )
+
+
+async def suggest_for_run(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    groups: dict[str, MerchantGroup],
+    run: CategorizationRun,
+) -> None:
+    """The model-less ending of a run: `groups` become suggestions and the
+    run's counters close."""
+    stats = dict(run.stats or {})
+    stats["suggested"] = stats.get("suggested", 0) + await suggest_without_ai(
+        session, workspace_id, groups, run.id
+    )
+    close_stats(stats)
+    run.stats = stats
+
+
 def _undecided(groups: dict[str, MerchantGroup]) -> dict[str, MerchantGroup]:
     """Drop rows the pipeline itself already settled (and still stand)."""
     return group_by_key(
@@ -432,6 +517,11 @@ def _undecided(groups: dict[str, MerchantGroup]) -> dict[str, MerchantGroup]:
         for cand in group.candidates
         if not (cand.current_source in PIPELINE_SOURCES and cand.current_category_id is not None)
     )
+
+
+async def _ai_available(session: AsyncSession, workspace_id: uuid.UUID) -> bool:
+    settings = await get_settings(session, workspace_id)
+    return await find_ai_connection(session, settings) is not None
 
 
 @dataclass
@@ -449,15 +539,20 @@ async def prepare_run(
     *,
     trigger: str,
     run: CategorizationRun | None = None,
+    use_ai: bool = False,
 ) -> PreparedRun:
     """Phase 1: candidates, stores, memory. Cheap and local.
 
     Uses `run` when the caller already created it (a queued manual run),
     otherwise creates one. An `ingest` run looks only at rows since the
     previous finished run (`ingest_since`); `manual` and `backlog` look at
-    everything.
+    everything. When the run may use a model and one is available, rows
+    waiting on a model-less suggestion are candidates again.
     """
     since = await ingest_since(session, workspace_id) if trigger == "ingest" else None
+    revisit = (
+        use_ai and ai_classifier is not None and await _ai_available(session, workspace_id)
+    )
     if run is None:
         run = CategorizationRun(
             id=uuid.uuid4(),
@@ -473,7 +568,9 @@ async def prepare_run(
         run.status = "running"
     await session.flush()
 
-    candidates = await collect_candidates(session, workspace_id, since=since)
+    candidates = await collect_candidates(
+        session, workspace_id, since=since, revisit_no_ai=revisit
+    )
     groups = group_by_key(candidates)
     stats: dict[str, Any] = {
         "candidates": len(candidates),
@@ -499,18 +596,13 @@ async def complete_run(
     (reassigning `run.stats`) and may leave the run `capped` or
     `processing_batch`.
     """
-    run, stats = prepared.run, dict(prepared.stats)
+    run = prepared.run
+    run.stats = dict(prepared.stats)
     classifier = ai_classifier
     if use_ai and classifier is not None:
         await classifier(session, workspace_id, prepared.remaining, run)
     else:
-        stats["suggested"] = await suggest_without_ai(
-            session, workspace_id, prepared.remaining, run.id
-        )
-        stats["skipped"] = (
-            stats["candidates"] - stats["memory"] - stats["applied"] - stats["suggested"]
-        )
-        run.stats = stats
+        await suggest_for_run(session, workspace_id, prepared.remaining, run)
 
     now = datetime.now(timezone.utc)
     if run.status == "running":
@@ -536,5 +628,7 @@ async def run_categorization(
     Without a classifier (or with `use_ai` off) the stores the memory could
     not settle become pending suggestions.
     """
-    prepared = await prepare_run(session, workspace_id, trigger=trigger, run=run)
+    prepared = await prepare_run(
+        session, workspace_id, trigger=trigger, run=run, use_ai=use_ai
+    )
     return await complete_run(session, workspace_id, prepared, use_ai=use_ai)

@@ -66,7 +66,10 @@ def test_tasks_are_registered_and_scheduled():
     assert entry["schedule"] == 5 * 60
     assert categorization_tasks.poll_batches.name == entry["task"]
     assert categorization_tasks.categorize_workspace.name == CATEGORIZE_TASK
-    assert categorization_tasks.poll_batches() is None
+    summary = {"collected": 0, "pending": 0, "failed": 0}
+    with patch.object(categorization_tasks, "_poll", AsyncMock(return_value=summary)) as poll:
+        assert categorization_tasks.poll_batches() == summary
+    poll.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -116,7 +119,7 @@ async def test_finished_run_requeues_trigger_received_while_busy(
 
 @pytest.mark.asyncio
 async def test_failed_run_also_requeues(session, test_workspace, categorization_enqueue):
-    async def fail_after_mark(session_, workspace_id, *, trigger, run):
+    async def fail_after_mark(session_, workspace_id, *, trigger, run, use_ai=False):
         # Another trigger arrives mid-run, then the run blows up.
         assert await categorization_tasks._mark_busy_run(session_, workspace_id)
         await session_.commit()
