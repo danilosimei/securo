@@ -46,6 +46,8 @@ from app.services.categorization.settings import get_settings
 from app.tasks import categorization_tasks
 
 _SHORT_RE = re.compile(r"^(c\d+) (.+)$", re.MULTILINE)
+#: What the Message Batches API accepts as `custom_id`.
+CUSTOM_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
 # --- fixtures and helpers ---------------------------------------------------------
@@ -423,7 +425,8 @@ async def test_large_backlog_uses_batch_and_poll_applies(
     client.messages.create.assert_not_awaited()
     [call] = client.messages.batches.create.await_args_list
     requests = call.kwargs["requests"]
-    assert [r["custom_id"] for r in requests] == [f"{run.id}:0", f"{run.id}:1"]
+    assert [r["custom_id"] for r in requests] == [f"{run.id.hex}-0", f"{run.id.hex}-1"]
+    assert all(CUSTOM_ID_RE.fullmatch(r["custom_id"]) for r in requests)
     assert [len(sent_items(r["params"])) for r in requests] == [100, 20]
     run = await _reload(session, run)
     assert (run.status, run.batch_id, run.is_batch) == ("processing_batch", "batch_1", True)
@@ -436,13 +439,15 @@ async def test_large_backlog_uses_batch_and_poll_applies(
     )) == {"status": "skipped", "reason": "busy"}
 
     # The batch ends: chunk 0 answered, chunk 1 expired.
+    other_run = uuid.uuid4().hex
     params0 = requests[0]["params"]
     ids = shorts(params0)
     decided = [{"k": item["k"], **out(ids["Lazer"], p=95)} for item in sent_items(params0)]
     ok = SimpleNamespace(type="succeeded", message=message(decided, use=usage(1000, 400)))
     results = [
-        SimpleNamespace(custom_id=f"{run.id}:1", result=SimpleNamespace(type="expired")),
-        SimpleNamespace(custom_id=f"{run.id}:0", result=ok),
+        SimpleNamespace(custom_id=f"{run.id.hex}-1", result=SimpleNamespace(type="expired")),
+        SimpleNamespace(custom_id=f"{other_run}-0", result=ok),  # not this run's: ignored
+        SimpleNamespace(custom_id=f"{run.id.hex}-0", result=ok),
     ]
     client = wire(fake_client(results=results))
     summary = await categorization_tasks._poll(_session_maker(session))
@@ -870,3 +875,201 @@ def test_ai_named_payee_does_not_change_the_store_key():
     plain = merchant_key("IFOOD *REST 8812")
     assert merchant_key("IFOOD *REST 8812", payee_name="iFood", payee_source="ai") == plain
     assert merchant_key("IFOOD *REST 8812", payee_name="iFood", payee_source="manual") == "P:IFOOD"
+
+
+def test_every_custom_id_is_valid_for_message_batches():
+    from app.services.categorization.classifier import _chunk_position, batch_custom_id
+
+    run = CategorizationRun(id=uuid.uuid4())
+    for position in (0, 1, 99, 10_000):
+        custom_id = batch_custom_id(run, position)
+        assert CUSTOM_ID_RE.fullmatch(custom_id), custom_id
+        assert _chunk_position(custom_id, run, 10_001) == position
+    assert _chunk_position(batch_custom_id(run, 5), run, 5) is None
+    assert _chunk_position(f"{uuid.uuid4().hex}-0", run, 5) is None
+    assert _chunk_position(f"{run.id}:0", run, 5) is None
+
+
+@pytest.mark.asyncio
+async def test_blank_reason_without_category_is_undecided_and_not_resent(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    tx = _tx(session, test_user, test_account, "LOJA SEM MOTIVO")
+    await session.commit()
+    wire(fake_client(answer(lambda item, ids: {"n": None, "r": "", "c": None, "alt": None, "p": 10, "new": None})))
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+    [sug] = await _all(session, CategorizationSuggestion)
+    assert (sug.transaction_id, sug.category_id, sug.reason) == (tx.id, None, UNDECIDED_REASON)
+
+    client = wire(fake_client(answer(lambda item, ids: out(ids["Lazer"]))))
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    client.messages.create.assert_not_awaited()
+    assert len(await _all(session, CategorizationSuggestion)) == 1
+
+
+@pytest.mark.asyncio
+async def test_suggestion_with_null_reason_still_blocks(
+    session, test_user, test_workspace, test_account, cats
+):
+    from app.services.categorization.classifier import _waiting
+
+    tx = _tx(session, test_user, test_account, "LOJA NULA")
+    await session.flush()
+    session.add(CategorizationSuggestion(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, transaction_id=tx.id,
+        merchant_key="LOJA NULA", status="pending", reason=None,
+    ))
+    await session.commit()
+
+    assert await collect_candidates(session, test_workspace.id, revisit_no_ai=True) == []
+    assert await _waiting(session, test_workspace.id, [tx.id]) == {tx.id}
+
+
+@pytest.mark.asyncio
+async def test_undone_ai_decision_goes_to_review_not_back_to_claude(
+    client, auth_headers, session, test_user, test_workspace, test_account, cats,
+    ai_connection, wire,
+):
+    from app.services.categorization.review import UNDONE_REASON
+
+    tx = _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    await session.commit()
+    wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"], p=97, n="iFood"))))
+    run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+    await session.commit()
+    assert (await _reload(session, tx)).category_source == "ai"
+
+    headers = {**auth_headers, "X-Workspace-Id": str(test_workspace.id)}
+    resp = await client.post(
+        "/api/categorization/undo", headers=headers, json={"run_id": str(run.id)}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["restored"] == 1
+
+    tx = await _reload(session, tx)
+    assert (tx.category_id, tx.category_source, tx.payee_id) == (None, "none", None)
+    [memory] = await _all(session, MerchantMemory)
+    assert memory.ai_category_id is None
+    [sug] = await _all(session, CategorizationSuggestion)
+    assert (sug.status, sug.category_id, sug.alt_category_id, sug.reason) == (
+        "pending", None, cats["Alimentação"], UNDONE_REASON,
+    )
+
+    claude = wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"], p=97))))
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+    await session.commit()
+    claude.messages.create.assert_not_awaited()
+    assert (await _reload(session, tx)).category_source == "none"
+
+    queue = (await client.get("/api/categorization/review", headers=headers)).json()
+    [group] = queue["groups"]
+    assert group["suggestion"]["alt_category_id"] == str(cats["Alimentação"])
+
+
+@pytest.mark.asyncio
+async def test_paid_usage_survives_a_failure_while_applying(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire, monkeypatch
+):
+    _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    await session.commit()
+    spent = usage(1000, 200)
+    wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"]), use=spent)))
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("apply failed")
+
+    monkeypatch.setattr(classifier, "apply_results", boom)
+    prepared = await pipeline.prepare_run(session, test_workspace.id, trigger="manual", use_ai=True)
+    await session.commit()
+    with pytest.raises(RuntimeError):
+        await pipeline.complete_run(session, test_workspace.id, prepared, use_ai=True)
+    await session.rollback()
+
+    run = await session.get(CategorizationRun, prepared.run.id, populate_existing=True)
+    assert run is not None
+    assert run.cost_usd == cost_usd(CLASSIFIER_MODEL, spent, batch=False)
+    assert run.input_tokens == 1000
+
+
+@pytest.mark.asyncio
+async def test_cap_counts_batches_in_flight(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    from app.services.categorization.classifier import committed_spend
+
+    session.add(CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="classify", trigger="backlog",
+        status="processing_batch", batch_id="b0", stats={},
+        detail={"batch": {"estimated_cost_usd": "0.999990"}},
+    ))
+    session.add(CategorizationRun(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, kind="organize", trigger="manual",
+        status="done", cost_usd=Decimal("0.000005"), stats={}, detail={},
+    ))
+    await session.commit()
+    assert await committed_spend(session, test_workspace.id) == Decimal("0.999995")
+
+    _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    await session.commit()
+    client = wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"]))))
+    prepared = await pipeline.prepare_run(session, test_workspace.id, trigger="manual", use_ai=True)
+    run = await pipeline.complete_run(session, test_workspace.id, prepared, use_ai=True)
+
+    client.messages.create.assert_not_awaited()
+    assert run.status == "capped"
+
+
+@pytest.mark.asyncio
+async def test_submitted_batch_stores_its_estimate(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire, monkeypatch
+):
+    for name in _names(120):
+        _tx(session, test_user, test_account, name)
+    await session.commit()
+    monkeypatch.setattr(classifier, "estimate_cost", lambda params, *, batch: Decimal("0.10"))
+    wire(fake_client())
+
+    run = await run_categorization(session, test_workspace.id, trigger="backlog", use_ai=True)
+
+    assert run.detail["batch"]["estimated_cost_usd"] == "0.20"
+    from app.services.categorization.classifier import committed_spend
+
+    await session.commit()
+    assert await committed_spend(session, test_workspace.id) == Decimal("0.20")
+
+
+@pytest.mark.asyncio
+async def test_unusable_answer_is_logged_without_contents(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire, caplog
+):
+    _tx(session, test_user, test_account, "LOJA SEGREDO")
+    await session.commit()
+    wire(fake_client(answer(lambda item, ids: out(ids["Lazer"], r="segredo"), stop_reason="max_tokens")))
+
+    with caplog.at_level("WARNING", logger="app.services.categorization.classifier"):
+        run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    [record] = [r for r in caplog.records if "stop_reason" in r.getMessage()]
+    text = record.getMessage()
+    assert record.levelname == "WARNING"
+    assert str(run.id) in text and "chunk 0" in text and "max_tokens" in text
+    assert "SEGREDO" not in text.upper()
+
+
+@pytest.mark.asyncio
+async def test_ai_payee_is_not_created_when_no_row_takes_it(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    # A provider guess that already agrees keeps its origin: nothing changes,
+    # so no payee is created for nobody.
+    _tx(
+        session, test_user, test_account, "IFOOD *REST 8812",
+        source="provider", category_id=cats["Alimentação"],
+    )
+    await session.commit()
+    wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"], n="iFood"))))
+
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    assert await _all(session, Payee) == []

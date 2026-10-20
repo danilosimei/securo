@@ -40,9 +40,10 @@ from app.services.categorization.pipeline import MerchantGroup
 CLASSIFIER_MODEL = "claude-haiku-5-5"
 #: Person's examples in the cached block.
 EXAMPLES_LIMIT = 40
-#: Output budget: ~80 tokens per item plus the envelope, capped so a
-#: non-streaming call stays well under the SDK timeout.
-TOKENS_PER_ITEM = 80
+#: Output budget: up to 120 tokens per item plus the envelope, capped so a
+#: non-streaming call stays well under the SDK timeout. A ceiling, not a
+#: price: billing is by the tokens actually written.
+TOKENS_PER_ITEM = 120
 TOKENS_BASE = 200
 MAX_TOKENS_CAP = 16000
 #: Output fields in generation order: name and reason before the decision.

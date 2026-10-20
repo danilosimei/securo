@@ -375,6 +375,6 @@ def test_classify_params_uses_haiku_low_effort_no_thinking():
 
 def test_max_tokens_scales_with_items():
     schema = build_result_schema(build_category_index([], []))
-    assert classify_params([], "[]", 1, schema)["max_tokens"] == 280
-    assert classify_params([], "[]", 100, schema)["max_tokens"] == 8200
+    assert classify_params([], "[]", 1, schema)["max_tokens"] == 320
+    assert classify_params([], "[]", 100, schema)["max_tokens"] == 12200
     assert classify_params([], "[]", 500, schema)["max_tokens"] == 16000

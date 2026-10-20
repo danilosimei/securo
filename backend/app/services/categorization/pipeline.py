@@ -170,6 +170,16 @@ def model_less_suggestion() -> Any:
     )
 
 
+def blocking_suggestion() -> Any:
+    """Any other suggestion: the negation of `model_less_suggestion`, NULL-safe
+    (a plain NOT is NULL, not true, when `reason` is NULL)."""
+    return or_(
+        CategorizationSuggestion.reason.is_(None),
+        CategorizationSuggestion.reason != NO_AI_REASON,
+        CategorizationSuggestion.category_id.is_not(None),
+    )
+
+
 async def collect_candidates(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -190,7 +200,7 @@ async def collect_candidates(
     """
     blocking = [CategorizationSuggestion.status == "pending"]
     if revisit_no_ai:
-        blocking.append(~model_less_suggestion())
+        blocking.append(blocking_suggestion())
     pending = exists().where(
         CategorizationSuggestion.transaction_id == Transaction.id,
         *blocking,
@@ -597,7 +607,11 @@ async def complete_run(
     `processing_batch`.
     """
     run = prepared.run
-    run.stats = dict(prepared.stats)
+    # `prepare_run` already stored these; only write the row when they
+    # differ (the batch path must take the workspace lock before any write
+    # to this row, see `classifier._submit_batch`).
+    if run.stats != prepared.stats:
+        run.stats = dict(prepared.stats)
     classifier = ai_classifier
     if use_ai and classifier is not None:
         await classifier(session, workspace_id, prepared.remaining, run)

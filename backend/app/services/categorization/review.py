@@ -21,6 +21,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import and_, func, select
+from sqlalchemy import insert as sa_insert
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,6 +56,10 @@ from app.services.categorization.settings import find_ai_connection, get_setting
 
 #: Origins of the changes the pipeline made on its own (the audit list).
 AUTO_SOURCES: tuple[str, ...] = ("ai", "memory", "rule")
+#: Pipeline decisions an undo sends back to review instead of to the pipeline.
+REVIEWED_ON_UNDO: tuple[str, ...] = ("ai", "memory")
+#: `reason` of the suggestion an undone pipeline decision leaves behind.
+UNDONE_REASON = "desfeito por você"
 #: A new category is proposed only when this many stores ask for it.
 MIN_PROPOSAL_STORES = 3
 #: Events shown in a transaction's "how it got here".
@@ -573,24 +578,31 @@ async def undo(
     run_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None,
 ) -> events.UndoResult:
-    """`events.undo`, plus what the person's decisions had settled.
+    """`events.undo`, plus what the undone decisions had settled.
 
     Undoing a person's change (accept, create-category, apply-to-similar)
     takes back what it taught the memory, once per store and category, and
     reopens the suggestion it accepted, so the store is back in review.
+
+    Undoing a pipeline decision (`ai`, `memory`) drops the model's cached
+    decision for the store and leaves the row a pending suggestion with the
+    undone category as the alternative, so it goes to Revisar instead of
+    being re-applied (or paid for again) by the next run.
     """
     restorable: list[CategorizationEvent] = []
+    automatic: list[CategorizationEvent] = []
     if event_ids is not None or run_id is not None:
         query = select(CategorizationEvent).where(
             CategorizationEvent.workspace_id == workspace_id,
-            CategorizationEvent.source == "user",
+            CategorizationEvent.source.in_(("user", *REVIEWED_ON_UNDO)),
             CategorizationEvent.undone_at.is_(None),
         )
         if event_ids is not None:
             query = query.where(CategorizationEvent.id.in_(event_ids))
         if run_id is not None:
             query = query.where(CategorizationEvent.run_id == run_id)
-        restorable = list((await session.execute(query)).scalars().all())
+        for ev in (await session.execute(query)).scalars().all():
+            (restorable if ev.source == "user" else automatic).append(ev)
 
     result = await events.undo(
         session, workspace_id, event_ids=event_ids, run_id=run_id, user_id=user_id
@@ -599,7 +611,60 @@ async def undo(
     restored = [ev for ev in restorable if ev.undone_at is not None]
     if restored:
         await _take_back(session, workspace_id, restored)
+    undone = [ev for ev in automatic if ev.undone_at is not None]
+    if undone:
+        await _back_to_review(session, workspace_id, undone)
     return result
+
+
+async def _back_to_review(
+    session: AsyncSession, workspace_id: uuid.UUID, undone: list[CategorizationEvent]
+) -> None:
+    # The latest undone decision per row is the one the person saw.
+    latest: dict[uuid.UUID, CategorizationEvent] = {}
+    for ev in sorted(undone, key=lambda e: _utc(e.created_at), reverse=True):
+        latest.setdefault(ev.transaction_id, ev)
+    tx_ids = list(latest)
+    txs = {tx.id: tx for tx in await _load_transactions(session, workspace_id, tx_ids)}
+    pending: set[uuid.UUID] = set()
+    for chunk in _chunks(tx_ids):
+        pending.update(
+            (
+                await session.execute(
+                    select(CategorizationSuggestion.transaction_id).where(
+                        CategorizationSuggestion.workspace_id == workspace_id,
+                        CategorizationSuggestion.transaction_id.in_(chunk),
+                        CategorizationSuggestion.status == "pending",
+                    )
+                )
+            ).scalars().all()
+        )
+    keys: dict[str, None] = {}
+    payload: list[dict[str, Any]] = []
+    now = _now()
+    for tx_id, ev in latest.items():
+        tx = txs.get(tx_id)
+        if tx is None or tx.category_source in PROTECTED_SOURCES:
+            continue
+        key = stored_key(await memory.key_for_transaction(session, tx))
+        keys[key] = None
+        if tx_id in pending:
+            continue
+        payload.append({
+            "id": uuid.uuid4(),
+            "workspace_id": workspace_id,
+            "transaction_id": tx_id,
+            "merchant_key": key,
+            "alt_category_id": ev.new_category_id,
+            "reason": UNDONE_REASON,
+            "status": "pending",
+            "created_at": now,
+        })
+    if keys:
+        await memory.forget_ai_decisions(session, workspace_id, list(keys))
+    if payload:
+        await session.execute(sa_insert(CategorizationSuggestion), payload)
+    await session.flush()
 
 
 async def _take_back(

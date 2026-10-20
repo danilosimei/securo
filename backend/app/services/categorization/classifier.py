@@ -17,7 +17,9 @@
 The run was committed between the memory phase and this one, so a person
 may have touched the rows while Claude answered: every row is re-read
 (`FOR UPDATE`) and checked again right before anything is written. Nothing
-here commits, and nothing logs the request, the answer or the key.
+here commits but the usage of a paid call (so a failure while applying
+cannot hide it from the cap), and nothing logs the request, the answer or
+the key.
 """
 from __future__ import annotations
 
@@ -70,8 +72,8 @@ from app.services.categorization.pipeline import (
     PIPELINE_SOURCES,
     SUPERSEDED_REASON,
     MerchantGroup,
+    blocking_suggestion,
     close_stats,
-    model_less_suggestion,
     stored_key,
     suggest_for_run,
     suggest_without_ai,
@@ -97,9 +99,11 @@ __all__ = [
     "UNDECIDED_REASON",
     "ApplyStats",
     "apply_results",
+    "batch_custom_id",
     "classify",
     "classify_with_claude",
     "collect_batch",
+    "committed_spend",
     "estimate_cost",
 ]
 
@@ -123,6 +127,9 @@ CHARS_PER_TOKEN = 4
 BATCH_DETAIL = "batch"
 #: Ids per `IN (...)`.
 ID_CHUNK = 1000
+#: Message Batches accept only `^[a-zA-Z0-9_-]{1,64}$` as `custom_id`:
+#: `<run id hex>-<chunk position>`.
+CUSTOM_ID_SEPARATOR = "-"
 
 
 @dataclass
@@ -268,7 +275,7 @@ async def _waiting(
                         CategorizationSuggestion.workspace_id == workspace_id,
                         CategorizationSuggestion.transaction_id.in_(ids),
                         CategorizationSuggestion.status == "pending",
-                        ~model_less_suggestion(),
+                        blocking_suggestion(),
                     )
                 )
             ).scalars().all()
@@ -325,6 +332,8 @@ async def _payees_for(
         select(Payee).where(Payee.workspace_id == workspace_id, _same_name_as(name)).limit(1)
     )
     if payee is None:
+        # Created only when some row will take it (`rows` are the rows about
+        # to change).
         if not any(_keeps_key(tx, key, name, "ai") for tx in empty):
             return {}
         payee = await get_or_create_payee(
@@ -358,7 +367,9 @@ def _suggestion(
         category_id=answer.category_id,
         alt_category_id=answer.alt_category_id,
         confidence=answer.confidence,
-        reason=answer.reason,
+        # No category and no reason is the model not deciding: say so (and
+        # never leave a NULL reason a later filter could misread).
+        reason=answer.reason or (UNDECIDED_REASON if answer.category_id is None else None),
     )
     if answer.new_category is not None:
         row["new_category"] = answer.new_category
@@ -366,8 +377,8 @@ def _suggestion(
 
 
 async def _insert_suggestions(session: AsyncSession, rows: list[dict[str, Any]]) -> None:
-    # Rows without a proposed category leave the JSON column out, so it is
-    # SQL NULL rather than JSON null; one insert per shape.
+    # Rows with no new-category proposal leave the `new_category` key out, so
+    # the column is SQL NULL rather than JSON null; one insert per key set.
     for with_new in (True, False):
         shaped = [row for row in rows if ("new_category" in row) is with_new]
         if shaped:
@@ -425,11 +436,11 @@ async def apply_results(
             and not _person_disagrees(rows, answer.category_id)
         ):
             category_id = answer.category_id
-            payees = await _payees_for(session, workspace_id, group.key, answer.clean_name, open_rows)
-            for tx in open_rows:
-                if tx.category_id == category_id:
-                    stats.skipped += 1  # already right: keeps its origin
-                    continue
+            changing = [tx for tx in open_rows if tx.category_id != category_id]
+            # Already right: keeps its origin.
+            stats.skipped += len(open_rows) - len(changing)
+            payees = await _payees_for(session, workspace_id, group.key, answer.clean_name, changing)
+            for tx in changing:
                 change = stage_change(
                     tx,
                     source="ai",
@@ -477,6 +488,33 @@ def estimate_cost(params: dict[str, Any], *, batch: bool) -> Decimal:
     return cost_usd(params["model"], usage, batch=batch)
 
 
+async def committed_spend(session: AsyncSession, workspace_id: uuid.UUID) -> Decimal:
+    """The month's spend plus the estimate of the batches still in flight.
+
+    A batch is paid when it ends, but the money is committed when it is
+    sent: without this, a run started while another waits on its batch
+    could spend past the cap.
+    """
+    spent = await month_spend(session, workspace_id)
+    pending = (
+        await session.execute(
+            select(CategorizationRun.detail).where(
+                CategorizationRun.workspace_id == workspace_id,
+                CategorizationRun.kind == "classify",
+                CategorizationRun.status == "processing_batch",
+            )
+        )
+    ).scalars().all()
+    for detail in pending:
+        info = (detail or {}).get(BATCH_DETAIL)
+        raw = info.get("estimated_cost_usd") if isinstance(info, dict) else None
+        try:
+            spent += Decimal(str(raw)) if raw is not None else Decimal(0)
+        except ArithmeticError:
+            continue
+    return spent
+
+
 def _account(run: CategorizationRun, usage: Any, *, batch: bool) -> None:
     def tokens(name: str) -> int:
         return int(getattr(usage, name, None) or 0)
@@ -502,13 +540,14 @@ async def _apply_message(
     *,
     index: CategoryIndex,
     threshold: int,
+    position: int,
 ) -> ApplyStats:
     items = _items(message)
     if items is None:
-        # Only the stop reason: the answer itself is never logged.
+        # Run and chunk only: the request and the answer are never logged.
         logger.warning(
-            "categorization run %s: answer not usable (stop_reason=%s)",
-            run.id, getattr(message, "stop_reason", None),
+            "categorization run %s chunk %s: answer not usable (stop_reason=%s)",
+            run.id, position, getattr(message, "stop_reason", None),
         )
     return await apply_results(
         session, workspace_id, run, groups_by_item, items or [],
@@ -630,7 +669,7 @@ async def classify(
         for position, plan in enumerate(plans):
             # Checked before every call against what the month already spent
             # (this run included), so a run stops as soon as the cap is near.
-            spent = await month_spend(session, workspace_id)
+            spent = await committed_spend(session, workspace_id)
             if spent + estimate_cost(plan.params, batch=False) > cap:
                 run.status = "capped"
                 stats["suggested"] = stats.get("suggested", 0) + await suggest_without_ai(
@@ -640,10 +679,14 @@ async def classify(
             run.model = CLASSIFIER_MODEL
             message = await create_message(client, plan.params)
             _account(run, getattr(message, "usage", None), batch=False)
-            await session.flush()
+            # The one commit of this module: the call is paid, so its cost
+            # must reach `month_spend` even if applying the answer fails and
+            # the task rolls back. Nothing else is pending at this point
+            # (the memory phase was committed; no row is locked yet).
+            await session.commit()
             _count(stats, await _apply_message(
                 session, workspace_id, run, plan.groups_by_item, message,
-                index=index, threshold=threshold,
+                index=index, threshold=threshold, position=position,
             ))
     close_stats(stats)
     run.stats = stats
@@ -661,8 +704,19 @@ async def _submit_batch(
     cap: Decimal,
 ) -> None:
     """Send the chunks that fit under the cap as one Message Batch; the rest
-    become model-less suggestions and the run ends `capped`."""
-    total = await month_spend(session, workspace_id)
+    become model-less suggestions and the run ends `capped`.
+
+    The workspace lock is taken first, before the batch is created and
+    before this run's row is written: a trigger arriving meanwhile holds
+    that lock while it marks this row (`_mark_busy_run`), so taking the
+    lock after an UPDATE of the row would deadlock against it. Held until
+    the task commits; triggers wait for it, none is lost.
+    """
+    from app.tasks import categorization_tasks as tasks
+
+    await tasks.lock_workspace(session, workspace_id)
+    spent = await committed_spend(session, workspace_id)
+    total = spent
     sent: list[_Plan] = []
     for plan in plans:
         estimate = estimate_cost(plan.params, batch=True)
@@ -679,7 +733,7 @@ async def _submit_batch(
         return
 
     requests = [
-        Request(custom_id=f"{run.id}:{position}", params=cast(Any, plan.params))
+        Request(custom_id=batch_custom_id(run, position), params=cast(Any, plan.params))
         for position, plan in enumerate(sent)
     ]
     batch_id = await create_batch(client, requests)
@@ -700,6 +754,8 @@ async def _submit_batch(
             },
             "index": [[short, str(category_id)] for short, category_id, _ in index.entries],
             "capped": bool(left),
+            # Counted by `committed_spend` while the batch is in flight.
+            "estimated_cost_usd": str(total - spent),
         }
     })
     if left:
@@ -723,9 +779,13 @@ def _stored_groups(chunk: dict[str, str], rows: dict[str, list[str]]) -> dict[st
     return groups
 
 
+def batch_custom_id(run: CategorizationRun, position: int) -> str:
+    return f"{run.id.hex}{CUSTOM_ID_SEPARATOR}{position}"
+
+
 def _chunk_position(custom_id: str, run: CategorizationRun, size: int) -> int | None:
-    prefix, _, raw = custom_id.rpartition(":")
-    if prefix != str(run.id) or not raw.isdigit() or int(raw) >= size:
+    prefix, _, raw = custom_id.rpartition(CUSTOM_ID_SEPARATOR)
+    if prefix != run.id.hex or not raw.isdigit() or int(raw) >= size:
         return None
     return int(raw)
 
@@ -803,7 +863,7 @@ async def _collect(
             _account(run, getattr(message, "usage", None), batch=True)
             result = await _apply_message(
                 session, run.workspace_id, run, groups, message,
-                index=index, threshold=threshold,
+                index=index, threshold=threshold, position=position,
             )
         _count(stats, result)
     for position, chunk in enumerate(chunks):
