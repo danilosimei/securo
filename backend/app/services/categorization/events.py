@@ -198,9 +198,14 @@ def _person_clear(
     return source == "none" and user_id is not None and new_category_id is None and not derived
 
 
-async def _run_clear_hooks(
+async def run_clear_hooks(
     session: AsyncSession, tx: Transaction, previous_category_id: uuid.UUID
 ) -> None:
+    """Run the user-clear hooks for `tx`; a failing hook is logged, never raised.
+
+    Run by `record_change` and `write_staged` for a person's own,
+    non-derived clear, and by callers that take a choice back once per store.
+    """
     for hook in list(user_clear_hooks):
         try:
             await hook(session, tx.workspace_id, tx, previous_category_id)
@@ -281,7 +286,7 @@ async def record_change(
     elif previous_category_id is not None and _person_clear(
         source, user_id, new_category_id, derived
     ):
-        await _run_clear_hooks(session, tx, previous_category_id)
+        await run_clear_hooks(session, tx, previous_category_id)
     return event
 
 
@@ -378,7 +383,7 @@ async def write_staged(session: AsyncSession, staged: list[StagedChange]) -> int
         elif change.previous_category_id is not None and _person_clear(
             change.source, change.user_id, change.new_category_id, change.derived
         ):
-            await _run_clear_hooks(session, change.tx, change.previous_category_id)
+            await run_clear_hooks(session, change.tx, change.previous_category_id)
     return len(staged)
 
 

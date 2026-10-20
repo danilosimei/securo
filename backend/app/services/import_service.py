@@ -886,6 +886,17 @@ async def import_transactions(
         )
         if change is not None:
             staged.append(change)
+
+    def _leave_uncategorized(tx: Transaction) -> None:
+        # "Leave uncategorized" is the person's choice (R27): noted as their
+        # clear, so the pipeline only ever suggests a category. No category
+        # changes, so `stage_change` would note nothing.
+        staged.append(StagedChange(
+            tx=tx, source="none", previous_category_id=None,
+            previous_source=tx.category_source or "none", new_category_id=None,
+            created_at=datetime.now(timezone.utc), user_id=user_id,
+        ))
+        tx.category_source = "none"
     matched_existing_ids: set[uuid.UUID] = set()
     effective_format = (detected_format or source or "").lower()
     should_detect_duplicates = detect_duplicates if effective_format == "csv" else True
@@ -1042,6 +1053,8 @@ async def import_transactions(
                 and (preview_source == "user" or not is_protected(placeholder))
             ):
                 _stage(placeholder, preview.category_id, preview_source)
+            elif placeholder.category_id is None and txn_data.force_uncategorized:
+                _leave_uncategorized(placeholder)
             if import_payee_raw and not placeholder.payee:
                 placeholder.payee = import_payee_raw
             if placeholder.payee_id is None:
@@ -1077,14 +1090,7 @@ async def import_transactions(
         if category_id is not None:
             _stage(incoming, category_id, category_source)
         elif txn_data.force_uncategorized:
-            # "Leave uncategorized" is the person's choice (R27): noted as
-            # their clear, so the pipeline only ever suggests a category. No
-            # category changes, so `stage_change` would note nothing.
-            staged.append(StagedChange(
-                tx=incoming, source="none", previous_category_id=None,
-                previous_source="none", new_category_id=None,
-                created_at=datetime.now(timezone.utc), user_id=user_id,
-            ))
+            _leave_uncategorized(incoming)
         if should_detect_duplicates and not txn_data.external_id:
             matched_existing_ids.add(incoming.id)
         if recurring_link is not None:

@@ -974,16 +974,20 @@ async def test_bulk_categorize_teaches_one_pick_per_store(
     bread = [_manual_tx(session, test_user, test_account, "PADARIA SOL") for _ in range(3)]
     settled = _manual_tx(session, test_user, test_account, "PADARIA SOL", food, "ai")
     taxi = _manual_tx(session, test_user, test_account, "TAXI LUZ")
+    # The person confirms a guess: it becomes theirs, so it is a pick (m1).
+    guessed = _manual_tx(session, test_user, test_account, "CAFE LUA", food, "ai")
     await session.commit()
 
     matched = await transaction_service.bulk_update_category(
-        session, test_workspace.id, [t.id for t in [*bread, settled, taxi]], food,
+        session, test_workspace.id, [t.id for t in [*bread, settled, taxi, guessed]], food,
         user_id=test_user.id,
     )
 
-    assert matched == 5
-    assert await _memory_counts(session) == {"PADARIA SOL": {str(food): 1}, "TAXI LUZ": {str(food): 1}}
-    for tx in [*bread, settled, taxi]:
+    assert matched == 6
+    assert await _memory_counts(session) == {
+        "PADARIA SOL": {str(food): 1}, "TAXI LUZ": {str(food): 1}, "CAFE LUA": {str(food): 1},
+    }
+    for tx in [*bread, settled, taxi, guessed]:
         row = await _reload(session, tx.id)
         assert (row.category_id, row.category_source) == (food, "user")
 
@@ -1135,3 +1139,160 @@ async def test_record_changes_bulk_survives_a_real_failing_event_insert_postgres
         row = await _reload(session, txn.id)
         assert (row.category_id, row.category_source) == (category.id, "ai")
         assert await _events(session, txn.id) == []
+
+
+# ---------------------------------------------------------------------------
+# B1 review minors (m1, m2, m4, m6, m7)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_bulk_edit_runs_every_registered_hook_once_per_store(
+    session, test_user, test_workspace, test_account, test_categories, monkeypatch
+):
+    """m6: bulk edits go through the hooks, so a hook added later runs too:
+    once per store for a pick, once per store and category for a clear."""
+    food, transport = test_categories[0].id, test_categories[1].id
+    picks: list[str] = []
+    clears: list[tuple[str, uuid.UUID]] = []
+
+    async def choice(_s, _ws, tx, new_category_id):
+        assert new_category_id == food
+        picks.append(tx.description)
+
+    async def clear(_s, _ws, tx, previous_category_id):
+        clears.append((tx.description, previous_category_id))
+
+    monkeypatch.setattr(categorization_events, "user_choice_hooks", [choice])
+    monkeypatch.setattr(categorization_events, "user_clear_hooks", [clear])
+    bread = [_manual_tx(session, test_user, test_account, "PADARIA SOL") for _ in range(3)]
+    taxi = _manual_tx(session, test_user, test_account, "TAXI LUZ")
+    await session.commit()
+
+    await transaction_service.bulk_update_category(
+        session, test_workspace.id, [t.id for t in [*bread, taxi]], food, user_id=test_user.id,
+    )
+    assert sorted(picks) == ["PADARIA SOL", "TAXI LUZ"]
+
+    bread[0].category_id = transport
+    await session.commit()
+    await transaction_service.bulk_update_category(
+        session, test_workspace.id, [t.id for t in bread], None, user_id=test_user.id,
+    )
+    assert sorted(clears, key=str) == sorted(
+        [("PADARIA SOL", food), ("PADARIA SOL", transport)], key=str
+    )
+
+
+@pytest.mark.asyncio
+async def test_bulk_clear_of_a_store_with_two_categories_takes_one_pick_from_each(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    from app.services.categorization import memory
+
+    food, transport = test_categories[0].id, test_categories[1].id
+    for category in (food, food, transport, transport):
+        await memory.learn_choice(session, test_workspace.id, "PADARIA SOL", category)
+    rows = [
+        _manual_tx(session, test_user, test_account, "PADARIA SOL", category, "user")
+        for category in (food, food, transport)
+    ]
+    await session.commit()
+
+    await transaction_service.bulk_update_category(
+        session, test_workspace.id, [t.id for t in rows], None, user_id=test_user.id,
+    )
+
+    assert await _memory_counts(session) == {"PADARIA SOL": {str(food): 1, str(transport): 1}}
+
+
+@pytest.mark.asyncio
+async def test_failing_bulk_unlearner_keeps_the_clear_and_the_session(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    food = test_categories[0].id
+    tx = _manual_tx(session, test_user, test_account, "PADARIA SOL", food, "user")
+    await session.commit()
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("unlearner failed")
+
+    with patch("app.services.categorization.memory.unlearn_choice", boom):
+        await transaction_service.bulk_update_category(
+            session, test_workspace.id, [tx.id], None, user_id=test_user.id,
+        )
+    row = await _reload(session, tx.id)
+    assert (row.category_id, row.category_source) == (None, "none")
+    [event] = await _events(session, tx.id)
+    assert (event.source, event.user_id) == ("none", test_user.id)
+
+
+@pytest.mark.asyncio
+async def test_series_clear_that_only_empties_siblings_takes_the_pick_back_once(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """m2, the clear mirror of X-1: the anchor is already empty and only its
+    siblings lose the category; the memory loses one pick, not one per row."""
+    from app.services.categorization import memory
+
+    food = test_categories[0].id
+    created = await transaction_service.create_installment_series(
+        session, test_workspace.id, test_user.id,
+        InstallmentSeriesCreate(
+            base=TransactionCreate(
+                account_id=test_account.id, description="SOFA", amount=Decimal("100"),
+                date=date(2026, 1, 10), type="debit", category_id=food,
+            ),
+            installments=4,
+        ),
+    )
+    [key] = await _memory_counts(session)  # the series taught one pick
+    for _ in range(3):
+        await memory.learn_choice(session, test_workspace.id, key, food)
+    await session.commit()
+
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id, TransactionUpdate(category_id=None),
+    )
+    assert await _memory_counts(session) == {key: {str(food): 3}}
+
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=None, apply_to="all"),
+    )
+
+    assert await _memory_counts(session) == {key: {str(food): 2}}
+    for tx in created:
+        assert (await _reload(session, tx.id)).category_id is None
+
+    # Nothing moved: nothing to take back.
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=None, apply_to="all"),
+    )
+    assert await _memory_counts(session) == {key: {str(food): 2}}
+
+
+@pytest.mark.asyncio
+async def test_import_leave_uncategorized_on_a_matched_placeholder_is_a_persons_clear(
+    session, test_user, test_workspace, conn_account  # noqa: F811
+):
+    """m4: the F-3 rule on the path that upgrades a recurring placeholder."""
+    _conn, account = conn_account
+    placeholder_id = await _generated_placeholder(session, test_workspace, test_user, account, None)
+
+    await import_transactions(
+        session, test_workspace.id, test_user.id, account.id,
+        [TransactionImport(
+            description="Netflix Subscription", amount=Decimal("39.90"),
+            date=date(2025, 1, 11), type="debit", force_uncategorized=True,
+        )],
+        "csv",
+    )
+
+    row = await _reload(session, placeholder_id)
+    assert row.import_id is not None
+    assert (row.category_id, row.category_source) == (None, "none")
+    [event] = await _events(session, row.id)
+    assert (event.source, event.user_id, event.new_category_id) == ("none", test_user.id, None)
+    assert await categorization_events.cleared_by_person(session, [row.id]) == {row.id}

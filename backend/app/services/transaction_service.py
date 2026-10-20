@@ -29,6 +29,7 @@ from app.services.categorization.events import (
     StagedChange,
     record_change,
     record_changes_bulk,
+    run_clear_hooks,
     run_user_hooks,
     stage_change,
     write_staged,
@@ -1460,6 +1461,18 @@ async def _apply_update_to_row(
         )
     )
 
+    # A clear is noted before the other fields land: the memory takes the
+    # pick back from the store the row was in, not the one it is renamed to.
+    if (
+        "category_id" in update_data
+        and update_data["category_id"] is None
+        and tx.category_id is not None
+    ):
+        await record_change(
+            session, tx, source="user", new_category_id=None, user_id=user_id,
+            derived=derived,
+        )
+
     description_changed = (
         "description" in update_data
         and update_data["description"] != tx.description
@@ -1655,6 +1668,13 @@ async def update_transaction(
         "category_id" in update_data and update_data["category_id"] != transaction.category_id
     )
     categories_before = {row.id: row.category_id for row in rows}
+    # The anchor is already empty and only its siblings lose the category:
+    # the siblings are derived, so the clear is taken back here, once per
+    # store and category, from the rows as they are before the edit.
+    if not anchor_changes and "category_id" in update_data and update_data["category_id"] is None:
+        await _person_hooks_once_per_store(
+            session, [(row, row.category_id) for row in rows if row.category_id is not None], None,
+        )
 
     for row in rows:
         # The edited transaction itself reflects the full form payload; the
@@ -1701,6 +1721,27 @@ async def update_transaction(
     return transaction
 
 
+async def _person_hooks_once_per_store(
+    session: AsyncSession,
+    changes: list[tuple[Transaction, Optional[uuid.UUID]]],
+    new_category_id: Optional[uuid.UUID],
+) -> None:
+    """Run a person's hooks for rows they changed together (`(tx, previous
+    category)` each) once per store, not once per row: the user-choice hooks
+    for a pick, the user-clear hooks (once per store and category the rows
+    held) for a clear. The rows' own writes are `derived`, so their hooks
+    do not run as well."""
+    if not changes:
+        return
+    for tx, previous in await categorization_memory.one_per_store(
+        session, changes, by_previous=new_category_id is None
+    ):
+        if new_category_id is not None:
+            await run_user_hooks(session, tx, new_category_id)
+        elif previous is not None:
+            await run_clear_hooks(session, tx, previous)
+
+
 async def bulk_update_category(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -1726,12 +1767,19 @@ async def bulk_update_category(
             )
         ).scalars().all()
     )
-    changed = [(tx, tx.category_id) for tx in rows if tx.category_id != category_id]
+    # What the write below changes: a new category, or a guess at the same
+    # one that becomes the person's (a pick, as in `record_change`).
+    changed = [
+        (tx, tx.category_id)
+        for tx in rows
+        if tx.category_id != category_id
+        or (category_id is not None and tx.category_source != "user")
+    ]
     await record_changes_bulk(
         session, workspace_id, [(tx, category_id, "user") for tx in rows],
         user_id=user_id, derived=True,
     )
-    await categorization_memory.on_bulk_choice(session, workspace_id, changed, category_id)
+    await _person_hooks_once_per_store(session, changed, category_id)
     await session.commit()
     return len(rows)
 

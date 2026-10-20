@@ -11,7 +11,6 @@ Nothing here commits: the caller owns the transaction.
 """
 from __future__ import annotations
 
-import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -26,8 +25,6 @@ from app.models.payee import Payee
 from app.models.transaction import Transaction
 from app.services.categorization import events
 from app.services.categorization.merchant_key import merchant_key
-
-logger = logging.getLogger(__name__)
 
 #: Choices needed before the memory is trusted.
 MIN_CHOICES = 2
@@ -170,12 +167,9 @@ async def unlearn_choice(
     ).scalar_one_or_none()
     if row is None:
         return
-    counts = dict(row.counts or {})
+    counts = _counts(row.counts)
     entry = str(category_id)
-    try:
-        current = int(counts.get(entry, 0) or 0)
-    except (TypeError, ValueError):
-        current = 0
+    current = counts.get(entry, 0)
     if current > 1:
         counts[entry] = current - 1
     else:
@@ -189,22 +183,27 @@ async def unlearn_choice(
 async def lookup(
     session: AsyncSession, workspace_id: uuid.UUID, keys: list[str]
 ) -> dict[str, MemoryHit]:
-    """One `MemoryHit` per requested key (empty for stores never seen)."""
+    """One `MemoryHit` per requested key (empty for stores never seen).
+
+    Keys are matched in their stored form (`stored_key`), the one every
+    writer uses, so a store key longer than the column still hits.
+    """
     unique = list(dict.fromkeys(keys))
+    stored = list(dict.fromkeys(stored_key(key) for key in unique))
     found: dict[str, MerchantMemory] = {}
-    if unique:
+    for start in range(0, len(stored), CHUNK):
         rows = (
             await session.execute(
                 select(MerchantMemory).where(
                     MerchantMemory.workspace_id == workspace_id,
-                    MerchantMemory.merchant_key.in_(unique),
+                    MerchantMemory.merchant_key.in_(stored[start:start + CHUNK]),
                 )
             )
         ).scalars().all()
-        found = {r.merchant_key: r for r in rows}
+        found.update((r.merchant_key, r) for r in rows)
     hits: dict[str, MemoryHit] = {}
     for key in unique:
-        row = found.get(key)
+        row = found.get(stored_key(key))
         if row is None:
             hits[key] = MemoryHit(None, False)
             continue
@@ -378,38 +377,20 @@ async def on_user_clear(
         await forget_ai_decisions(session, workspace_id, [key])
 
 
-async def on_bulk_choice(
+async def one_per_store(
     session: AsyncSession,
-    workspace_id: uuid.UUID,
-    changed: list[tuple[Transaction, uuid.UUID | None]],
-    new_category_id: uuid.UUID | None,
-) -> None:
-    """A person's bulk categorize: one pick per store, not one per row.
-
-    `changed` holds each row whose category moved, with the category it
-    held. A bulk clear takes back one pick per store and category it held,
-    and drops those stores' cached AI decisions (R27-U). Like the hooks, a
-    failure is logged and leaves the caller's transaction usable.
-    """
-    if not changed:
-        return
-    try:
-        async with session.begin_nested():
-            keys = await keys_for(session, [tx for tx, _previous in changed])
-            if new_category_id is not None:
-                for key in dict.fromkeys(keys.values()):
-                    await learn_choice(session, workspace_id, key, new_category_id)
-                return
-            taken = dict.fromkeys(
-                (keys[tx.id], previous) for tx, previous in changed if previous is not None
-            )
-            for key, previous in taken:
-                await unlearn_choice(session, workspace_id, key, previous)
-            await forget_ai_decisions(
-                session, workspace_id, list(dict.fromkeys(key for key, _ in taken))
-            )
-    except Exception:
-        logger.exception("bulk memory update failed in workspace %s", workspace_id)
+    changes: list[tuple[Transaction, uuid.UUID | None]],
+    *,
+    by_previous: bool,
+) -> list[tuple[Transaction, uuid.UUID | None]]:
+    """The first `(tx, previous_category_id)` of each store in `changes` (of
+    each store and previous category with `by_previous`): rows of one store
+    a person changes together are one choice, not one per row."""
+    keys = await keys_for(session, [tx for tx, _previous in changes])
+    first: dict[tuple[str, uuid.UUID | None], tuple[Transaction, uuid.UUID | None]] = {}
+    for tx, previous in changes:
+        first.setdefault((keys[tx.id], previous if by_previous else None), (tx, previous))
+    return list(first.values())
 
 
 if on_user_choice not in events.user_choice_hooks:

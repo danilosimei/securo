@@ -446,3 +446,86 @@ async def test_failing_unlearner_keeps_the_clear_and_session(
     await session.refresh(tx)
     assert (tx.category_id, tx.category_source) == (None, "none")
     await learn_choice(session, test_workspace.id, "ok", test_categories[0].id)  # still usable
+
+
+# ---------------------------------------------------------------------------
+# B1 review minors (m3, m5, m8)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_unlearn_choice_survives_corrupt_counts(session, test_workspace, test_categories):
+    """m5: the same tolerance as `lookup` and `learn_choice`."""
+    from app.services.categorization.memory import unlearn_choice
+
+    a = test_categories[0].id
+    good = MerchantMemory(id=uuid.uuid4(), workspace_id=test_workspace.id, merchant_key="loja",
+                          counts={str(a): 2, "not-a-uuid": "x"})
+    broken = MerchantMemory(id=uuid.uuid4(), workspace_id=test_workspace.id, merchant_key="outra",
+                            counts=[1, 2])
+    session.add_all([good, broken])
+    await session.flush()
+
+    await unlearn_choice(session, test_workspace.id, "loja", a)
+    await unlearn_choice(session, test_workspace.id, "outra", a)
+
+    assert (good.counts, broken.counts) == ({str(a): 1}, {})
+
+
+@pytest.mark.asyncio
+async def test_lookup_matches_a_store_key_longer_than_the_column(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """m8: a store key over 255 characters is learned under its stored form,
+    and the lookup by the full key finds it."""
+    from datetime import date
+    from decimal import Decimal
+
+    from app.models.transaction import Transaction
+    from app.services.categorization.memory import stored_key
+
+    food = test_categories[0].id
+    description = "LOJA " + "MUITO COMPRIDA " * 30
+    key = merchant_key(description)
+    assert len(key) > 255
+    for _ in range(2):
+        tx = Transaction(
+            id=uuid.uuid4(), user_id=test_user.id, account_id=test_account.id,
+            description=description, amount=Decimal("10"), date=date(2026, 9, 10),
+            type="debit", source="manual",
+        )
+        session.add(tx)
+        await session.flush()
+        await record_change(session, tx, source="user", new_category_id=food, user_id=test_user.id)
+
+    [row] = (await session.execute(select(MerchantMemory))).scalars().all()
+    assert row.merchant_key == stored_key(key)
+    hit = (await lookup(session, test_workspace.id, [key]))[key]
+    assert (hit.category_id, hit.consistent) == (food, True)
+
+
+@pytest.mark.asyncio
+async def test_clear_takes_the_pick_back_from_the_store_the_row_was_in(
+    session, test_user, test_workspace, test_transactions, test_categories
+):
+    """m3: clearing the category and renaming the row in one save unlearns
+    the store that held the pick, not the new name."""
+    tx = test_transactions[4]  # NETFLIX
+    food = test_categories[0].id
+    key = await key_for_transaction(session, tx)
+    await learn_choice(session, test_workspace.id, key, food)
+    await learn_choice(session, test_workspace.id, key, food)
+    await transaction_service.update_transaction(
+        session, tx.id, test_workspace.id, test_user.id, TransactionUpdate(category_id=food)
+    )
+    assert (await lookup(session, test_workspace.id, [key]))[key].distribution == {str(food): 3}
+
+    await transaction_service.update_transaction(
+        session, tx.id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=None, description="SPOTIFY"),
+    )
+
+    rows = {r.merchant_key: r.counts for r in (await session.execute(
+        select(MerchantMemory).execution_options(populate_existing=True)
+    )).scalars().all()}
+    assert rows == {key: {str(food): 2}}
