@@ -87,7 +87,7 @@ async def _get_or_create(
             await session.flush()
         return row
     except IntegrityError:
-        session.expunge(row)
+        # The savepoint rollback already expunged `row`.
         return (await session.execute(query)).scalar_one()
 
 
@@ -185,7 +185,11 @@ async def on_user_choice(
     """User-choice hook: feed the memory with the person's pick."""
     if new_category_id is None:
         return
-    await learn_choice(session, workspace_id, await key_for_transaction(session, tx), new_category_id)
+    # A savepoint, so a failing learner rolls back only its own work and
+    # leaves the caller's transaction usable.
+    async with session.begin_nested():
+        key = await key_for_transaction(session, tx)
+        await learn_choice(session, workspace_id, key, new_category_id)
 
 
 if on_user_choice not in events.user_choice_hooks:

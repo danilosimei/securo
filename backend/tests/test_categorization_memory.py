@@ -137,3 +137,69 @@ async def test_key_for_transaction_with_payees(
     assert await key_for_transaction(session, tx) == merchant_key(
         tx.description, payee_name="Padaria Sol", payee_source="document"
     )
+
+
+@pytest.mark.asyncio
+async def test_lookup_empty_keys(session, test_workspace):
+    assert await lookup(session, test_workspace.id, []) == {}
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_survives_lost_race(session, test_workspace, test_categories):
+    from unittest.mock import patch
+
+    a, b = test_categories[0].id, test_categories[1].id
+    existing = MerchantMemory(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, merchant_key="corrida",
+        counts={str(a): 1},
+    )
+    session.add(existing)
+    await session.flush()
+
+    real_execute = session.execute
+    calls = {"n": 0}
+
+    class _Empty:
+        def scalar_one_or_none(self):
+            return None
+
+    async def racy_execute(stmt, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:  # first select "misses" the row another writer just made
+            return _Empty()
+        return await real_execute(stmt, *args, **kwargs)
+
+    with patch.object(session, "execute", racy_execute):
+        await learn_choice(session, test_workspace.id, "corrida", b)
+    assert calls["n"] >= 2
+
+    calls["n"] = 0
+    with patch.object(session, "execute", racy_execute):
+        await remember_ai_decision(session, test_workspace.id, "corrida", a, 91, "Corrida")
+
+    rows = (await session.execute(select(MerchantMemory))).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].id == existing.id
+    assert rows[0].ai_category_id == a and rows[0].ai_confidence == 91
+
+
+@pytest.mark.asyncio
+async def test_failing_learner_keeps_user_change_and_session(
+    session, test_user, test_workspace, test_transactions, test_categories
+):
+    from unittest.mock import patch
+
+    tx = test_transactions[4]
+    target = test_categories[0].id
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("learner failed")
+
+    with patch("app.services.categorization.memory.learn_choice", boom):
+        await transaction_service.update_transaction(
+            session, tx.id, test_workspace.id, test_user.id, TransactionUpdate(category_id=target)
+        )
+    await session.refresh(tx)
+    assert tx.category_id == target and tx.category_source == "user"
+    await learn_choice(session, test_workspace.id, "ok", target)  # session still usable
+    assert (await lookup(session, test_workspace.id, ["ok"]))["ok"].distribution == {str(target): 1}
