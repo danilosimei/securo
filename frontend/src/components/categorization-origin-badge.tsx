@@ -56,7 +56,7 @@ export function CategorizationOriginBadge({
         to="/categorization?tab=review"
         onClick={(e) => e.stopPropagation()}
         title={reason || t('categorization.origin.reviewTooltip')}
-        aria-label={label}
+        aria-label={t('categorization.origin.reviewAria')}
         className={cn(
           base,
           'border-amber-200 bg-amber-50 text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/70',

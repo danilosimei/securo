@@ -56,6 +56,7 @@ import { cn } from '@/lib/utils'
 import { LinkTransferDialog } from '@/components/link-transfer-dialog'
 import { BulkAddToGroupDialog, type BulkAddToGroupSubmission } from '@/components/bulk-add-to-group-dialog'
 import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
+import { parseCategorySourceParam } from '@/lib/category-source-options'
 import { TransactionsFilterBar } from '@/components/transactions-filter-bar'
 import { TransactionCalendarView } from '@/components/transaction-calendar-view'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
@@ -159,10 +160,7 @@ export default function TransactionsPage() {
   const [filterGroupId, setFilterGroupId] = useState<string>(searchParams.get('group_id') ?? '')
   const [filterType, setFilterType] = useState<string>(searchParams.get('type') ?? '')
   const [filterStatus, setFilterStatus] = useState<string>(searchParams.get('status') ?? '')
-  const [filterCategorySource, setFilterCategorySource] = useState<string[]>(() => {
-    const raw = searchParams.get('category_source')
-    return raw ? raw.split(',').filter(Boolean) : []
-  })
+  const [filterCategorySource, setFilterCategorySource] = useState<string[]>(() => parseCategorySourceParam(searchParams.get('category_source')))
   // Hiding ignored rows is a reading preference, not a query someone re-picks
   // every visit, so it outlives the page the way page size and columns do. The
   // URL still wins when present, so a shared link shows what its sender saw.
@@ -253,8 +251,7 @@ export default function TransactionsPage() {
     setFilterGroupId(searchParams.get('group_id') ?? '')
     setFilterType(searchParams.get('type') ?? '')
     setFilterStatus(searchParams.get('status') ?? '')
-    const urlCategorySource = searchParams.get('category_source')
-    setFilterCategorySource(urlCategorySource ? urlCategorySource.split(',').filter(Boolean) : [])
+    setFilterCategorySource(parseCategorySourceParam(searchParams.get('category_source')))
     const urlHideIgnored = searchParams.get('hide_ignored')
     if (urlHideIgnored !== null) setHideIgnored(urlHideIgnored === 'true')
     const categories = searchParams.get('category_id');

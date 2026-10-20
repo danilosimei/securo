@@ -42,6 +42,7 @@ import {
 import { Calendar } from '@/components/ui/calendar'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { CATEGORY_SOURCE_OPTIONS } from '@/lib/category-source-options'
 import { localDateString } from '@/lib/date-utils'
 import { formatDateRange } from '@/lib/date-range-format'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
@@ -93,15 +94,6 @@ interface TransactionsFilterBarProps {
   payees: Payee[]
   groups: Group[]
 }
-
-const CATEGORY_SOURCE_OPTIONS = [
-  { value: 'ai', labelKey: 'categorization.origin.ai' },
-  { value: 'memory', labelKey: 'categorization.origin.memory' },
-  { value: 'rule', labelKey: 'categorization.origin.rule' },
-  { value: 'user', labelKey: 'categorization.origin.filterUser' },
-  { value: 'provider', labelKey: 'categorization.origin.filterProvider' },
-  { value: 'none', labelKey: 'categorization.origin.filterNone' },
-] as const
 
 function toggleInArray(arr: string[], id: string): string[] {
   return arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]
@@ -458,6 +450,7 @@ export function TransactionsFilterBar({
                   group: selectedGroup?.name,
                   type: typeLabel,
                   status: statusLabel,
+                  categorySource: categorySourceLabel,
                   ignored: hideIgnored ? t('transactions.ignoredHide') : undefined,
                   date: dateLabel,
                   amount: amountLabel,
@@ -471,6 +464,8 @@ export function TransactionsFilterBar({
                 onGroupIdChange={onGroupIdChange}
                 onTypeChange={onTypeChange}
                 status={filterStatus}
+                categorySources={filterCategorySource}
+                onCategorySourceChange={onCategorySourceChange}
                 onStatusChange={onStatusChange}
                 hideIgnored={hideIgnored}
                 onHideIgnoredChange={onHideIgnoredChange}

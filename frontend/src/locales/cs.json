@@ -3149,11 +3149,12 @@
       "aiTooltip": "Categorized by AI · open the transaction to see why",
       "memoryTooltip": "Categorized from your earlier choices for this merchant",
       "ruleTooltip": "Categorized by one of your rules",
-      "reviewTooltip": "A category suggestion is waiting for your review",
+      "reviewTooltip": "Category to review: a suggestion is waiting for your review",
       "filter": "Origin",
       "filterUser": "You",
       "filterProvider": "Bank",
-      "filterNone": "No category"
+      "filterNone": "No category",
+      "reviewAria": "Category to review"
     }
   }
 }

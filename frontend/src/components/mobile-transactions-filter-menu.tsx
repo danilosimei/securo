@@ -9,6 +9,7 @@ import {
   Coins,
   EyeClosed,
   ListChecks,
+  Sparkles,
   Store,
   Tag,
   Users,
@@ -25,6 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { getAccountName } from '@/lib/account-utils'
 import { cn } from '@/lib/utils'
+import { CATEGORY_SOURCE_OPTIONS } from '@/lib/category-source-options'
 import type { Account, Category, CategoryGroup, Group, Payee } from '@/types'
 
 export type MobileFilterView =
@@ -35,6 +37,7 @@ export type MobileFilterView =
   | 'group'
   | 'type'
   | 'status'
+  | 'categorySource'
   | 'ignored'
   | 'date'
   | 'amount'
@@ -62,6 +65,8 @@ interface MobileTransactionsFilterMenuProps {
   groupId: string
   type: string
   status: string
+  categorySources?: string[]
+  onCategorySourceChange?: (value: string[]) => void
   hideIgnored: boolean
   from: string
   to: string
@@ -71,7 +76,7 @@ interface MobileTransactionsFilterMenuProps {
   appliedMaxAmount: string
   setMinAmount: (value: string) => void
   setMaxAmount: (value: string) => void
-  summaries: Record<Exclude<MobileFilterView, 'root'>, string | null | undefined>
+  summaries: Partial<Record<Exclude<MobileFilterView, 'root'>, string | null | undefined>>
   datePresets: MobileDatePreset[]
   hasAnyFilter: boolean
   onAccountIdsChange: (value: string[]) => void
@@ -228,6 +233,43 @@ function MobileAccountOption({
         </span>
       )}
     </DropdownMenuCheckboxItem>
+  )
+}
+
+export function MobileCategorySourceView({
+  selected,
+  onChange,
+}: {
+  selected: string[]
+  onChange: (value: string[]) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <>
+      {CATEGORY_SOURCE_OPTIONS.map((option) => (
+        <DropdownMenuCheckboxItem
+          key={option.value}
+          checked={selected.includes(option.value)}
+          onSelect={(event) => event.preventDefault()}
+          onCheckedChange={() => onChange(toggleSelection(selected, option.value))}
+          className="text-[13px]"
+        >
+          {t(option.labelKey)}
+        </DropdownMenuCheckboxItem>
+      ))}
+      {selected.length > 0 && (
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            onChange([])
+          }}
+          className="mt-1 gap-2 border-t border-border/60 text-xs text-muted-foreground"
+        >
+          <X size={12} />
+          {t('transactions.filtersBar.clearSelection')}
+        </DropdownMenuItem>
+      )}
+    </>
   )
 }
 
@@ -434,7 +476,11 @@ function MobileAmountView({
 function buildRootOptions(
   labels: Record<Exclude<MobileFilterView, 'root'>, string>,
   summaries: MobileTransactionsFilterMenuProps['summaries'],
+  menu: MobileTransactionsFilterMenuProps,
 ): RootOption[] {
+  const originOption: RootOption[] = menu.onCategorySourceChange
+    ? [{ view: 'categorySource', icon: Sparkles, label: labels.categorySource, summary: summaries.categorySource }]
+    : []
   return [
     { view: 'account', icon: Wallet, label: labels.account, summary: summaries.account },
     { view: 'category', icon: Tag, label: labels.category, summary: summaries.category },
@@ -442,6 +488,7 @@ function buildRootOptions(
     { view: 'group', icon: Users, label: labels.group, summary: summaries.group },
     { view: 'type', icon: ArrowUpDown, label: labels.type, summary: summaries.type },
     { view: 'status', icon: ListChecks, label: labels.status, summary: summaries.status },
+    ...originOption,
     { view: 'ignored', icon: EyeClosed, label: labels.ignored, summary: summaries.ignored },
     { view: 'date', icon: CalendarIcon, label: labels.date, summary: summaries.date },
     { view: 'amount', icon: Coins, label: labels.amount, summary: summaries.amount },
@@ -458,6 +505,7 @@ function buildLabels(
     group: t('splitGroups.group'),
     type: t('transactions.type'),
     status: t('transactions.status'),
+    categorySource: t('categorization.origin.filter'),
     ignored: t('transactions.ignoredRows'),
     date: t('transactions.filtersBar.date'),
     amount: t('transactions.filtersBar.amount'),
@@ -493,6 +541,14 @@ function MobileFilterDetail({
     const options = [allOption, { value: 'pending', label: t('transactions.statusPending') }, { value: 'posted', label: t('transactions.statusPosted') }]
     return <MobileSelectionView options={options} selectedValue={menu.status} onChange={menu.onStatusChange} />
   }
+  if (menu.view === 'categorySource') {
+    return (
+      <MobileCategorySourceView
+        selected={menu.categorySources ?? []}
+        onChange={menu.onCategorySourceChange ?? (() => undefined)}
+      />
+    )
+  }
   if (menu.view === 'ignored') {
     const options = [
       { value: 'show', label: t('transactions.ignoredShow') },
@@ -506,7 +562,7 @@ function MobileFilterDetail({
   if (menu.view === 'amount') {
     return <MobileAmountView minAmount={menu.minAmount} maxAmount={menu.maxAmount} setMinAmount={menu.setMinAmount} setMaxAmount={menu.setMaxAmount} onReset={() => resetAmount(menu)} onApply={menu.onApplyAmountRange} />
   }
-  return <MobileFilterRoot options={buildRootOptions(labels, menu.summaries)} hasAnyFilter={menu.hasAnyFilter} onSelect={(view) => openDetail(menu, view)} onClear={() => clearAll(menu)} />
+  return <MobileFilterRoot options={buildRootOptions(labels, menu.summaries, menu)} hasAnyFilter={menu.hasAnyFilter} onSelect={(view) => openDetail(menu, view)} onClear={() => clearAll(menu)} />
 }
 
 function openDetail(

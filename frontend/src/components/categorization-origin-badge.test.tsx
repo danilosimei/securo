@@ -30,7 +30,7 @@ describe('CategorizationOriginBadge', () => {
 
   it('pending takes precedence and links to the review tab', () => {
     renderWithProviders(<CategorizationOriginBadge source="ai" pending />)
-    const link = screen.getByRole('link', { name: t('categorization.origin.review') })
+    const link = screen.getByRole('link', { name: t('categorization.origin.reviewAria') })
     expect(link).toHaveAttribute('href', '/categorization?tab=review')
     expect(screen.queryByText(t('categorization.origin.ai'))).not.toBeInTheDocument()
   })
