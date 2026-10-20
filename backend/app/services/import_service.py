@@ -23,6 +23,7 @@ from app.schemas.transaction import TransactionImport, FailedRow
 from app.services import reconciliation_service, recurring_match_service
 from app.services.credit_card_service import apply_effective_date
 from app.services.category_service import get_assignable_category_ids
+from app.services.categorization.events import is_protected, record_change
 from app.services.rule_engine import apply_rule_actions, evaluate_conditions, merge_notes
 from app.services.rule_service import apply_rules_to_transaction, preview_rules_for_transaction
 from app.services.fx_rate_service import stamp_primary_amount
@@ -949,6 +950,14 @@ async def import_transactions(
             if txn_data.force_uncategorized
             else user_category_id or suggested_category_id
         )
+        # Who chose it: the person in the review table, or the preview's
+        # suggestion (the CSV's own column, or a rule).
+        if user_category_id:
+            category_source = "user"
+        elif suggested_category_id and suggested_category_id == csv_category_id:
+            category_source = "import"
+        else:
+            category_source = "rule"
 
         incoming = Transaction(
             user_id=user_id,
@@ -976,8 +985,14 @@ async def import_transactions(
             incoming,
             skip_category_rules=txn_data.force_uncategorized,
         )
-        if preview.category_id is None and not txn_data.force_uncategorized:
-            preview.category_id = csv_category_id
+        if category_id is not None:
+            preview_source = category_source
+        elif preview.category_id is not None:
+            preview_source = "rule"
+        else:
+            preview_source = "import"
+            if not txn_data.force_uncategorized:
+                preview.category_id = csv_category_id
 
         # Normalize a detached candidate before either recurring match. If a
         # generated placeholder already represents this occurrence, upgrade it
@@ -1004,8 +1019,16 @@ async def import_transactions(
             # wins, the charge only fills what is still empty, and only its
             # provenance is recorded outright.
             placeholder.original_description = txn_data.description
-            if placeholder.category_id is None:
-                placeholder.category_id = preview.category_id
+            if (
+                placeholder.category_id is None
+                and preview.category_id is not None
+                and (preview_source == "user" or not is_protected(placeholder))
+            ):
+                await record_change(
+                    session, placeholder, source=preview_source,
+                    new_category_id=preview.category_id,
+                    user_id=user_id if preview_source == "user" else None,
+                )
             if import_payee_raw and not placeholder.payee:
                 placeholder.payee = import_payee_raw
             if placeholder.payee_id is None:
@@ -1033,8 +1056,17 @@ async def import_transactions(
             incoming.fx_rate_used = txn_data.fx_rate
             incoming.amount_primary = txn_data.amount * txn_data.fx_rate
 
+        # The chosen category is written through provenance once the row has
+        # an id; until then it only had to steer the rule preview above.
+        incoming.category_id = None
         session.add(incoming)
         await session.flush()
+        if category_id is not None:
+            await record_change(
+                session, incoming, source=category_source,
+                new_category_id=category_id,
+                user_id=user_id if category_source == "user" else None,
+            )
         if should_detect_duplicates and not txn_data.external_id:
             matched_existing_ids.add(incoming.id)
         if recurring_link is not None:
@@ -1046,8 +1078,14 @@ async def import_transactions(
             incoming,
             skip_category_rules=txn_data.force_uncategorized,
         )
-        if incoming.category_id is None and not txn_data.force_uncategorized:
-            incoming.category_id = csv_category_id
+        if (
+            incoming.category_id is None
+            and csv_category_id is not None
+            and not txn_data.force_uncategorized
+        ):
+            await record_change(
+                session, incoming, source="import", new_category_id=csv_category_id
+            )
 
         if not txn_data.fx_rate:
             await stamp_primary_amount(session, user_id, incoming)

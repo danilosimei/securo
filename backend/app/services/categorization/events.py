@@ -1,7 +1,7 @@
 """Who set a transaction's category, written down, protected and reversible.
 
-Every write of `Transaction.category_id` goes through `record_change` or
-`record_bulk`, so `category_source` always says who put the value there and
+Every write of `Transaction.category_id` goes through `record_change`,
+`record_bulk` or (for a set-based category merge) `record_moves`, so `category_source` always says who put the value there and
 `CategorizationEvent` keeps what it replaced. Nothing here commits: the
 caller owns the transaction, like `reconciliation_history_service.record`.
 """
@@ -14,7 +14,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import insert as sa_insert
 from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.categorization import CATEGORY_SOURCES, CategorizationEvent
@@ -170,6 +172,61 @@ async def record_bulk(
         if event is not None:
             changed += 1
     return changed
+
+
+async def record_moves(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    from_category_id: uuid.UUID,
+    to_category_id: uuid.UUID,
+) -> int:
+    """Move every transaction from one category to another, keeping its origin.
+
+    Set-based, for taxonomy tidying (merging a category into another): one
+    SELECT of the rows and their current origin, one UPDATE, one bulk insert
+    of events whose `source` is the origin each row already had. Returns how
+    many rows moved. The move itself never fails on the events' account.
+    """
+    rows = (
+        await session.execute(
+            select(Transaction.id, Transaction.category_source, Transaction.payee_id).where(
+                Transaction.workspace_id == workspace_id,
+                Transaction.category_id == from_category_id,
+            )
+        )
+    ).all()
+    if not rows:
+        return 0
+    await session.execute(
+        sa_update(Transaction)
+        .where(
+            Transaction.workspace_id == workspace_id,
+            Transaction.category_id == from_category_id,
+        )
+        .values(category_id=to_category_id)
+    )
+    now = _now()
+    payload = [
+        {
+            "id": uuid.uuid4(),
+            "workspace_id": workspace_id,
+            "transaction_id": row.id,
+            "source": row.category_source or "none",
+            "previous_source": row.category_source,
+            "previous_category_id": from_category_id,
+            "new_category_id": to_category_id,
+            "previous_payee_id": row.payee_id,
+            "new_payee_id": row.payee_id,
+            "created_at": now,
+        }
+        for row in rows
+    ]
+    try:
+        async with session.begin_nested():
+            await session.execute(sa_insert(CategorizationEvent), payload)
+    except Exception:
+        logger.exception("could not record category move events in workspace %s", workspace_id)
+    return len(rows)
 
 
 async def undo(

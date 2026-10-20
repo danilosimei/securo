@@ -2,9 +2,9 @@ import re
 import uuid
 from datetime import date
 from decimal import Decimal
-from typing import Optional, cast
+from typing import Optional
 
-from sqlalchemy import CursorResult, case, delete, select, func, or_, not_, update
+from sqlalchemy import case, delete, select, func, or_, not_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,6 +24,7 @@ from app.schemas.transaction import (
 )
 from app.schemas.transaction_split import TransactionSplitInput, TransactionSplitsInput
 from app.services import reconciliation_service, split_service
+from app.services.categorization.events import record_bulk, record_change
 from app.services.credit_card_service import apply_effective_date
 from app.services.rule_service import apply_rules_to_transaction
 from app.services.fx_rate_service import stamp_primary_amount, convert as fx_convert
@@ -728,7 +729,9 @@ async def create_transaction(
         user_id=user_id,
         workspace_id=workspace_id,
         account_id=data.account_id,
-        category_id=data.category_id,  # use provided category if given
+        # A provided category is written below, through provenance, once the
+        # row has an id.
+        category_id=None,
         payee_id=data.payee_id,
         external_id=data.external_id,
         description=data.description,
@@ -755,7 +758,12 @@ async def create_transaction(
     await session.flush()  # get ID without committing
 
     # Apply rules only if no explicit category provided
-    if not data.category_id:
+    if data.category_id:
+        await record_change(
+            session, transaction, source="user",
+            new_category_id=data.category_id, user_id=user_id,
+        )
+    else:
         await apply_rules_to_transaction(session, user_id, transaction)
 
     # Stamp primary currency amount (manual override or auto)
@@ -837,7 +845,7 @@ async def create_installment_series(
             user_id=user_id,
             workspace_id=workspace_id,
             account_id=base.account_id,
-            category_id=base.category_id,
+            category_id=None,  # written below, through provenance
             payee_id=base.payee_id,
             description=base.description,
             amount=base.amount,
@@ -864,7 +872,12 @@ async def create_installment_series(
     # Rules, FX stamping and splits run after every row has an ID so each
     # parcel is finalized exactly like a single manual transaction.
     for tx in created:
-        if not base.category_id:
+        if base.category_id:
+            await record_change(
+                session, tx, source="user",
+                new_category_id=base.category_id, user_id=user_id,
+            )
+        else:
             await apply_rules_to_transaction(session, user_id, tx)
         if base.fx_rate_used is not None:
             _apply_fx_override(tx, tx.amount, None, base.fx_rate_used)
@@ -1435,9 +1448,16 @@ async def _apply_update_to_row(
 
     fx_keys = {"amount_primary", "fx_rate_used"}
     for key, value in update_data.items():
-        if key in fx_keys:
+        if key in fx_keys or key == "category_id":
             continue
         setattr(tx, key, value)
+    # Only an actual change is a person's choice: saving the form with the
+    # category it already showed leaves its origin alone.
+    if "category_id" in update_data and update_data["category_id"] != tx.category_id:
+        await record_change(
+            session, tx, source="user",
+            new_category_id=update_data["category_id"], user_id=user_id,
+        )
 
     restamp_fields = {"amount", "currency", "date"}
     needs_restamp = bool(restamp_fields & update_data.keys())
@@ -1479,7 +1499,13 @@ async def _apply_update_to_row(
         paired_tx = paired.scalar_one_or_none()
         if paired_tx:
             if should_cascade_category:
-                paired_tx.category_id = tx.category_id
+                # The pair mirrors the leg's category and where it came from.
+                pair_source = tx.category_source or "none"
+                await record_change(
+                    session, paired_tx, source=pair_source,
+                    new_category_id=tx.category_id,
+                    user_id=user_id if pair_source == "user" else None,
+                )
             # When the user typed both amounts, neither is a conversion of the
             # other: correcting one leg leaves the amount that actually landed
             # on the other account untouched. Re-converting here would throw
@@ -1643,18 +1669,31 @@ async def bulk_update_category(
     workspace_id: uuid.UUID,
     transaction_ids: list[uuid.UUID],
     category_id: Optional[uuid.UUID] = None,
+    *,
+    user_id: Optional[uuid.UUID] = None,
 ) -> int:
+    """Give the selected transactions one category, as a person's choice.
+
+    Returns how many transactions matched (in the workspace), whether or not
+    their category actually changed.
+    """
     await _ensure_category_in_workspace(session, workspace_id, category_id)
-    result = await session.execute(
-        update(Transaction)
-        .where(
-            Transaction.id.in_(transaction_ids),
-            Transaction.workspace_id == workspace_id,
-        )
-        .values(category_id=category_id)
+    matched_ids = list(
+        (
+            await session.execute(
+                select(Transaction.id).where(
+                    Transaction.id.in_(transaction_ids),
+                    Transaction.workspace_id == workspace_id,
+                )
+            )
+        ).scalars().all()
+    )
+    await record_bulk(
+        session, workspace_id, matched_ids,
+        source="user", new_category_id=category_id, user_id=user_id,
     )
     await session.commit()
-    return cast(CursorResult, result).rowcount
+    return len(matched_ids)
 
 
 _TAG_CHAR_CLASS = r"[\wÀ-ž-]"

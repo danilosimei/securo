@@ -47,6 +47,7 @@ from app.services.asset_group_service import (
     _unique_default_name,
     ensure_group_for_connection,
 )
+from app.services.categorization.events import is_protected, record_change
 from app.services.credit_card_service import apply_effective_date
 from app.services.rule_engine import merge_notes
 from app.services.rule_service import apply_rules_to_transaction, preview_rules_for_transaction
@@ -852,8 +853,10 @@ async def _find_installment_category(
     session: AsyncSession,
     account_id: uuid.UUID,
     txn_data,
-) -> Optional[uuid.UUID]:
+) -> Optional[tuple[uuid.UUID, str]]:
     """Reuse the latest user-selected category from an earlier installment.
+
+    Returns the category and the origin it had on that installment.
 
     Pluggy gives every parcel the original purchase date, installment count,
     and total purchase amount. Together with the card account and transaction
@@ -873,7 +876,7 @@ async def _find_installment_category(
         return None
 
     result = await session.execute(
-        select(Transaction.category_id)
+        select(Transaction.category_id, Transaction.category_source)
         .where(
             Transaction.account_id == account_id,
             Transaction.source == "sync",
@@ -887,7 +890,44 @@ async def _find_installment_category(
         .order_by(Transaction.installment_number.desc(), Transaction.date.desc())
         .limit(1)
     )
-    return result.scalars().first()
+    row = result.first()
+    if row is None or row.category_id is None:
+        return None
+    return row.category_id, row.category_source
+
+
+async def _provider_side_category(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    account_id: uuid.UUID,
+    txn_data,
+    use_provider_categories: bool,
+) -> tuple[Optional[uuid.UUID], str]:
+    """The category a synced row falls back to when no rule set one, and its origin.
+
+    An earlier parcel of the same purchase wins (`installment`, or `user` when
+    a person chose it there, so the choice stays protected); otherwise the
+    provider's own category mapping (`provider`).
+    """
+    inherited = await _find_installment_category(session, account_id, txn_data)
+    if inherited is not None:
+        category_id, previous_source = inherited
+        return category_id, "user" if previous_source == "user" else "installment"
+    category_id = await _match_pluggy_category(
+        session, workspace_id, txn_data.pluggy_category, enabled=use_provider_categories
+    )
+    return category_id, "provider"
+
+
+async def _fill_empty_category(
+    session: AsyncSession,
+    tx: Transaction,
+    category_id: Optional[uuid.UUID],
+    source: str,
+) -> None:
+    """Fill an empty, unprotected category, noting where it came from."""
+    if tx.category_id is None and category_id is not None and not is_protected(tx):
+        await record_change(session, tx, source=source, new_category_id=category_id)
 
 
 async def get_connections(session: AsyncSession, workspace_id: uuid.UUID) -> list[BankConnection]:
@@ -1193,16 +1233,9 @@ async def handle_oauth_callback(
                     )
                 continue
 
-            category_id = await _find_installment_category(
-                session, account.id, txn_data
+            fallback_category_id, fallback_source = await _provider_side_category(
+                session, workspace_id, account.id, txn_data, use_provider_cats
             )
-            if category_id is None:
-                category_id = await _match_pluggy_category(
-                    session,
-                    workspace_id,
-                    txn_data.pluggy_category,
-                    enabled=use_provider_cats,
-                )
             # Resolve payee entity from raw payee text
             payee_id = None
             if txn_data.payee:
@@ -1246,8 +1279,9 @@ async def handle_oauth_callback(
             await session.flush()
             new_tx_ids.append(transaction.id)
             await apply_rules_to_transaction(session, user_id, transaction)
-            if transaction.category_id is None:
-                transaction.category_id = category_id
+            await _fill_empty_category(
+                session, transaction, fallback_category_id, fallback_source
+            )
 
             # Prefer bank-provided conversion for international transactions
             acct_currency = acc_data.currency or user_currency
@@ -2267,16 +2301,9 @@ async def sync_connection(
                 incoming_currency = (
                     txn_data.currency or acc_data.currency or user_currency
                 )
-                category_id = await _find_installment_category(
-                    session, account.id, txn_data
+                fallback_category_id, fallback_source = await _provider_side_category(
+                    session, workspace_id, account.id, txn_data, use_provider_cats
                 )
-                if category_id is None:
-                    category_id = await _match_pluggy_category(
-                        session,
-                        workspace_id,
-                        txn_data.pluggy_category,
-                        enabled=use_provider_cats,
-                    )
 
                 sync_payee_id = None
                 if txn_data.payee:
@@ -2354,8 +2381,14 @@ async def sync_connection(
                     # win, the charge fills the empty ones, and only its
                     # provenance is recorded outright.
                     placeholder.original_description = txn_data.description
-                    if placeholder.category_id is None:
-                        placeholder.category_id = preview.category_id or category_id
+                    if preview.category_id is not None:
+                        await _fill_empty_category(
+                            session, placeholder, preview.category_id, "rule"
+                        )
+                    else:
+                        await _fill_empty_category(
+                            session, placeholder, fallback_category_id, fallback_source
+                        )
                     if txn_data.payee and not placeholder.payee:
                         placeholder.payee = txn_data.payee
                     if placeholder.payee_id is None:
@@ -2391,8 +2424,9 @@ async def sync_connection(
                     )
                 new_tx_ids.append(transaction.id)
                 await apply_rules_to_transaction(session, user_id, transaction)
-                if transaction.category_id is None:
-                    transaction.category_id = category_id
+                await _fill_empty_category(
+                    session, transaction, fallback_category_id, fallback_source
+                )
 
                 # Prefer bank-provided conversion for international transactions
                 acct_currency = acc_data.currency or user_currency

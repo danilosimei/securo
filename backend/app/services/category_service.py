@@ -13,6 +13,7 @@ from app.models.recurring_transaction import RecurringTransaction
 from app.models.rule import Rule
 from app.models.transaction import Transaction
 from app.schemas.category import CategoryCreate, CategoryUpdate
+from app.services.categorization import events as categorization_events
 from app.services.category_defaults import (
     CATEGORY_TO_GROUP,
     DEFAULT_CATEGORIES,
@@ -378,16 +379,22 @@ async def _transfer_category_references(
     category_id: uuid.UUID,
     destination_id: uuid.UUID,
 ) -> None:
-    """Point everything that used one category at another, without committing."""
-    for model in (Transaction, RecurringTransaction):
-        await session.execute(
-            sa_update(model)
-            .where(
-                model.workspace_id == workspace_id,
-                model.category_id == category_id,
-            )
-            .values(category_id=destination_id)
+    """Point everything that used one category at another, without committing.
+
+    Transactions keep the origin of their category (a person's choice stays
+    protected) and each move is written down as a categorization event.
+    """
+    await categorization_events.record_moves(
+        session, workspace_id, category_id, destination_id
+    )
+    await session.execute(
+        sa_update(RecurringTransaction)
+        .where(
+            RecurringTransaction.workspace_id == workspace_id,
+            RecurringTransaction.category_id == category_id,
         )
+        .values(category_id=destination_id)
+    )
     await _merge_budgets(session, workspace_id, category_id, destination_id)
     await _repoint_rules(session, workspace_id, category_id, destination_id)
 

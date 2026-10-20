@@ -278,7 +278,8 @@ async def bulk_categorize(
 ):
     try:
         count = await transaction_service.bulk_update_category(
-            session, ctx.workspace.id, data.transaction_ids, data.category_id
+            session, ctx.workspace.id, data.transaction_ids, data.category_id,
+            user_id=ctx.user_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

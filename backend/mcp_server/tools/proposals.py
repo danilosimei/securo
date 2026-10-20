@@ -171,7 +171,7 @@ async def propose_categorize(
             return {**preview, "error": "no matching transactions to update"}
         tx_uuids = [u for a in affected if (u := parse_uuid(a["id"])) is not None]
         updated = await transaction_service.bulk_update_category(
-            session, ws_id, tx_uuids, cat.id
+            session, ws_id, tx_uuids, cat.id, user_id=ctx.user_id
         )
         return {**preview, "applied": True, "updated_count": updated}
 

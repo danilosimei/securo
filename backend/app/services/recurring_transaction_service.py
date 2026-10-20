@@ -13,6 +13,7 @@ from app.models.recurring_transaction import RecurringTransaction
 from app.models.transaction import Transaction
 from app.schemas.recurring_transaction import RecurringTransactionCreate, RecurringTransactionUpdate
 from app.services import recurring_match_service
+from app.services.categorization.events import record_change
 from app.services.credit_card_service import apply_effective_date
 from app.services.fx_rate_service import stamp_primary_amount
 
@@ -391,7 +392,7 @@ async def generate_pending(
                 transaction = Transaction(
                     user_id=user_id,
                     account_id=recurring.account_id,
-                    category_id=recurring.category_id,
+                    category_id=None,  # written below, through provenance
                     description=recurring.description,
                     amount=recurring.amount,
                     currency=recurring.currency,
@@ -404,6 +405,11 @@ async def generate_pending(
                 apply_effective_date(transaction, account)
                 session.add(transaction)
                 await session.flush()
+                if recurring.category_id is not None:
+                    await record_change(
+                        session, transaction, source="recurring",
+                        new_category_id=recurring.category_id,
+                    )
                 await stamp_primary_amount(session, user_id, transaction)
                 count += 1
 
