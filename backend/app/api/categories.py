@@ -116,6 +116,7 @@ async def delete_category(
             category_id,
             ctx.workspace.id,
             transfer_to_id=transfer_to_category_id,
+            user_id=ctx.user_id,
         )
     except category_service.CategoryTransferError as exc:
         raise HTTPException(

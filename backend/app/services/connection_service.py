@@ -47,7 +47,12 @@ from app.services.asset_group_service import (
     _unique_default_name,
     ensure_group_for_connection,
 )
-from app.services.categorization.events import is_protected, record_change
+from app.services.categorization.events import (
+    StagedChange,
+    is_protected,
+    stage_change,
+    write_staged,
+)
 from app.services.credit_card_service import apply_effective_date
 from app.services.rule_engine import merge_notes
 from app.services.rule_service import apply_rules_to_transaction, preview_rules_for_transaction
@@ -919,15 +924,21 @@ async def _provider_side_category(
     return category_id, "provider"
 
 
-async def _fill_empty_category(
-    session: AsyncSession,
+def _fill_empty_category(
+    staged: list[StagedChange],
     tx: Transaction,
     category_id: Optional[uuid.UUID],
     source: str,
 ) -> None:
-    """Fill an empty, unprotected category, noting where it came from."""
+    """Fill an empty, unprotected category, queueing the note of where it came from.
+
+    Derived: an inherited `user` category is a person's earlier choice, not
+    a new one, so it does not reach the user-choice hooks again.
+    """
     if tx.category_id is None and category_id is not None and not is_protected(tx):
-        await record_change(session, tx, source=source, new_category_id=category_id)
+        change = stage_change(tx, source=source, new_category_id=category_id, derived=True)
+        if change is not None:
+            staged.append(change)
 
 
 async def get_connections(session: AsyncSession, workspace_id: uuid.UUID) -> list[BankConnection]:
@@ -1148,6 +1159,9 @@ async def handle_oauth_callback(
     use_provider_cats = await admin_service.use_provider_categories(session)
 
     institution_cache: dict[str, Institution] = {}
+    # Category changes of the account being imported; their events are
+    # written once per account rather than once per row.
+    staged: list[StagedChange] = []
     for acc_data in connection_data.accounts:
         is_cc = acc_data.type == "credit_card"
         institution = await _resolve_institution(
@@ -1278,10 +1292,8 @@ async def handle_oauth_callback(
             session.add(transaction)
             await session.flush()
             new_tx_ids.append(transaction.id)
-            await apply_rules_to_transaction(session, user_id, transaction)
-            await _fill_empty_category(
-                session, transaction, fallback_category_id, fallback_source
-            )
+            await apply_rules_to_transaction(session, user_id, transaction, staged=staged)
+            _fill_empty_category(staged, transaction, fallback_category_id, fallback_source)
 
             # Prefer bank-provided conversion for international transactions
             acct_currency = acc_data.currency or user_currency
@@ -1300,6 +1312,8 @@ async def handle_oauth_callback(
         # that SUM(all transactions) matches the provider-reported balance. Any
         # history that falls outside the provider's lookback window gets
         # absorbed into this synthetic transaction.
+        await write_staged(session, staged)
+        staged.clear()
         await sync_opening_balance_for_connected_account(session, account)
 
     # Detect transfer pairs among newly synced transactions
@@ -2052,6 +2066,10 @@ async def sync_connection(
             if acc.institution_external_id
         )
         institution_cache: dict[str, Institution] = {}
+        # Category changes of the account being synced; their events are
+        # written once per account (before phantom cleanup can delete a
+        # row) rather than once per row.
+        staged: list[StagedChange] = []
         for acc_data in accounts_data:
             institution = await _resolve_institution(
                 session, connection.id, institution_cache, acc_data
@@ -2382,12 +2400,10 @@ async def sync_connection(
                     # provenance is recorded outright.
                     placeholder.original_description = txn_data.description
                     if preview.category_id is not None:
-                        await _fill_empty_category(
-                            session, placeholder, preview.category_id, "rule"
-                        )
+                        _fill_empty_category(staged, placeholder, preview.category_id, "rule")
                     else:
-                        await _fill_empty_category(
-                            session, placeholder, fallback_category_id, fallback_source
+                        _fill_empty_category(
+                            staged, placeholder, fallback_category_id, fallback_source
                         )
                     if txn_data.payee and not placeholder.payee:
                         placeholder.payee = txn_data.payee
@@ -2423,9 +2439,11 @@ async def sync_connection(
                         recurring_link, txn_data.date
                     )
                 new_tx_ids.append(transaction.id)
-                await apply_rules_to_transaction(session, user_id, transaction)
-                await _fill_empty_category(
-                    session, transaction, fallback_category_id, fallback_source
+                await apply_rules_to_transaction(
+                    session, user_id, transaction, staged=staged
+                )
+                _fill_empty_category(
+                    staged, transaction, fallback_category_id, fallback_source
                 )
 
                 # Prefer bank-provided conversion for international transactions
@@ -2443,6 +2461,8 @@ async def sync_connection(
 
             # Reconcile the opening balance after any new transactions land so
             # SUM(all txs) keeps matching account.balance from the provider.
+            await write_staged(session, staged)
+            staged.clear()
             await sync_opening_balance_for_connected_account(session, account)
 
         # Detect transfer pairs among newly synced transactions

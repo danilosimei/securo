@@ -23,7 +23,12 @@ from app.schemas.transaction import TransactionImport, FailedRow
 from app.services import reconciliation_service, recurring_match_service
 from app.services.credit_card_service import apply_effective_date
 from app.services.category_service import get_assignable_category_ids
-from app.services.categorization.events import is_protected, record_change
+from app.services.categorization.events import (
+    StagedChange,
+    is_protected,
+    stage_change,
+    write_staged,
+)
 from app.services.rule_engine import apply_rule_actions, evaluate_conditions, merge_notes
 from app.services.rule_service import apply_rules_to_transaction, preview_rules_for_transaction
 from app.services.fx_rate_service import stamp_primary_amount
@@ -869,6 +874,18 @@ async def import_transactions(
     imported = 0
     landed: list[Transaction] = []
     skipped = 0
+    # Category changes of the whole import; their events go in one batch.
+    staged: list[StagedChange] = []
+
+    def _stage(
+        tx: Transaction, new_category_id: uuid.UUID, category_source: str
+    ) -> None:
+        change = stage_change(
+            tx, source=category_source, new_category_id=new_category_id,
+            user_id=user_id if category_source == "user" else None,
+        )
+        if change is not None:
+            staged.append(change)
     matched_existing_ids: set[uuid.UUID] = set()
     effective_format = (detected_format or source or "").lower()
     should_detect_duplicates = detect_duplicates if effective_format == "csv" else True
@@ -1024,11 +1041,7 @@ async def import_transactions(
                 and preview.category_id is not None
                 and (preview_source == "user" or not is_protected(placeholder))
             ):
-                await record_change(
-                    session, placeholder, source=preview_source,
-                    new_category_id=preview.category_id,
-                    user_id=user_id if preview_source == "user" else None,
-                )
+                _stage(placeholder, preview.category_id, preview_source)
             if import_payee_raw and not placeholder.payee:
                 placeholder.payee = import_payee_raw
             if placeholder.payee_id is None:
@@ -1062,11 +1075,7 @@ async def import_transactions(
         session.add(incoming)
         await session.flush()
         if category_id is not None:
-            await record_change(
-                session, incoming, source=category_source,
-                new_category_id=category_id,
-                user_id=user_id if category_source == "user" else None,
-            )
+            _stage(incoming, category_id, category_source)
         if should_detect_duplicates and not txn_data.external_id:
             matched_existing_ids.add(incoming.id)
         if recurring_link is not None:
@@ -1077,15 +1086,14 @@ async def import_transactions(
             user_id,
             incoming,
             skip_category_rules=txn_data.force_uncategorized,
+            staged=staged,
         )
         if (
             incoming.category_id is None
             and csv_category_id is not None
             and not txn_data.force_uncategorized
         ):
-            await record_change(
-                session, incoming, source="import", new_category_id=csv_category_id
-            )
+            _stage(incoming, csv_category_id, "import")
 
         if not txn_data.fx_rate:
             await stamp_primary_amount(session, user_id, incoming)
@@ -1095,6 +1103,7 @@ async def import_transactions(
 
     # Update import log with actual imported count
     import_log.transaction_count = imported
+    await write_staged(session, staged)
 
     # Invoices last, and as one batch. Unlike the recurring match above:
     # which upgrades a placeholder in place and so must happen before the

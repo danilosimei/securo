@@ -1,9 +1,17 @@
 """Who set a transaction's category, written down, protected and reversible.
 
-Every write of `Transaction.category_id` goes through `record_change`,
-`record_bulk` or (for a set-based category merge) `record_moves`, so `category_source` always says who put the value there and
-`CategorizationEvent` keeps what it replaced. Nothing here commits: the
-caller owns the transaction, like `reconciliation_history_service.record`.
+Every write of `Transaction.category_id` goes through this module, so
+`category_source` always says who put the value there and
+`CategorizationEvent` keeps what it replaced:
+
+- `record_change`: one row, one savepoint (edits, single writes);
+- `stage_change` + `write_staged` / `record_changes_bulk`: many rows, the
+  changes applied in memory as they happen and all their events inserted
+  in one savepoint (rule runs, bulk categorize, sync and import loops);
+- `record_moves`: a set-based category merge that keeps each row's origin.
+
+Nothing here commits: the caller owns the transaction, like
+`reconciliation_history_service.record`.
 """
 from __future__ import annotations
 
@@ -28,6 +36,9 @@ logger = logging.getLogger(__name__)
 PROTECTED_SOURCES: frozenset[str] = frozenset({"user", "legacy"})
 #: Guesses the pipeline may revisit.
 REVIEWABLE_SOURCES: frozenset[str] = frozenset({"none", "provider", "memory", "ai"})
+#: `reason` of the events `record_moves` writes. Their previous category is
+#: the deleted one (nulled by the FK), so `undo` cannot restore them.
+CATEGORY_MERGE_REASON = "category_merge"
 
 
 class Unset:
@@ -49,6 +60,24 @@ user_choice_hooks: list[UserChoiceHook] = []
 class UndoResult:
     restored: int
     skipped: int
+
+
+@dataclass
+class StagedChange:
+    """A category change already applied to `tx`, its event still unwritten."""
+
+    tx: Transaction
+    source: str
+    previous_category_id: uuid.UUID | None
+    previous_source: str | None
+    new_category_id: uuid.UUID | None
+    created_at: datetime
+    user_id: uuid.UUID | None = None
+    run_id: uuid.UUID | None = None
+    reason: str | None = None
+    #: Follows from another change (a sibling parcel, a transfer pair, an
+    #: inherited installment): noted, but not a new choice for the hooks.
+    derived: bool = False
 
 
 def is_protected(tx: Transaction) -> bool:
@@ -81,11 +110,14 @@ async def record_change(
     model: str | None = None,
     run_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None = None,
+    derived: bool = False,
 ) -> CategorizationEvent | None:
     """Apply a category (and optionally payee) change and note it.
 
     Returns None when nothing changes. Never raises on the event's account:
-    the change to `tx` is applied even if writing the event fails.
+    the change to `tx` is applied even if writing the event fails. A
+    `derived` change (one that only follows a person's choice made on
+    another row) is noted but does not run the user-choice hooks.
     """
     if source not in CATEGORY_SOURCES:
         logger.error("invalid category source %r for transaction %s", source, tx.id)
@@ -132,9 +164,113 @@ async def record_change(
         logger.exception("could not record categorization event for %s", tx.id)
         event = None
 
-    if source == "user":
+    if source == "user" and not derived:
         await _run_user_hooks(session, tx, new_category_id)
     return event
+
+
+def stage_change(
+    tx: Transaction,
+    *,
+    source: str,
+    new_category_id: uuid.UUID | None,
+    user_id: uuid.UUID | None = None,
+    run_id: uuid.UUID | None = None,
+    reason: str | None = None,
+    derived: bool = False,
+) -> StagedChange | None:
+    """Apply a category change to `tx` in memory; `write_staged` notes it.
+
+    Same rules as `record_change` (invalid source or no change: None), but
+    no I/O, so loops over many rows pay for one insert at the end.
+    """
+    if source not in CATEGORY_SOURCES:
+        logger.error("invalid category source %r for transaction %s", source, tx.id)
+        return None
+    if tx.category_id == new_category_id and tx.category_source == source:
+        return None
+    staged = StagedChange(
+        tx=tx,
+        source=source,
+        previous_category_id=tx.category_id,
+        previous_source=tx.category_source,
+        new_category_id=new_category_id,
+        created_at=_now(),
+        user_id=user_id,
+        run_id=run_id,
+        reason=reason[:120] if reason else None,
+        derived=derived,
+    )
+    tx.category_id = new_category_id
+    tx.category_source = source
+    return staged
+
+
+async def write_staged(session: AsyncSession, staged: list[StagedChange]) -> int:
+    """Insert the events of staged changes in one savepoint; returns how many.
+
+    The rows themselves are flushed first, outside the savepoint, so a
+    failing event insert (logged, never raised) cannot take them back.
+    Rows must already have an id (be flushed) when staged.
+    """
+    if not staged:
+        return 0
+    await session.flush()
+    payload = [
+        {
+            "id": uuid.uuid4(),
+            "workspace_id": change.tx.workspace_id,
+            "transaction_id": change.tx.id,
+            "run_id": change.run_id,
+            "source": change.source,
+            "previous_source": change.previous_source,
+            "previous_category_id": change.previous_category_id,
+            "new_category_id": change.new_category_id,
+            "previous_payee_id": change.tx.payee_id,
+            "new_payee_id": change.tx.payee_id,
+            "reason": change.reason,
+            "user_id": change.user_id,
+            "created_at": change.created_at,
+        }
+        for change in staged
+    ]
+    try:
+        async with session.begin_nested():
+            await session.execute(sa_insert(CategorizationEvent), payload)
+    except Exception:
+        logger.exception("could not record %d categorization events", len(payload))
+    for change in staged:
+        if change.source == "user" and not change.derived:
+            await _run_user_hooks(session, change.tx, change.new_category_id)
+    return len(staged)
+
+
+async def record_changes_bulk(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    changes: list[tuple[Transaction, uuid.UUID | None, str]],
+    *,
+    user_id: uuid.UUID | None = None,
+    run_id: uuid.UUID | None = None,
+    derived: bool = False,
+) -> int:
+    """Apply `(tx, new_category_id, source)` changes and note them in one insert.
+
+    Returns how many rows changed. Rows outside `workspace_id` are refused.
+    Callers pre-filter protected rows when the source is not a person.
+    """
+    staged: list[StagedChange] = []
+    for tx, new_category_id, source in changes:
+        if tx.workspace_id != workspace_id:
+            logger.error("transaction %s is not in workspace %s", tx.id, workspace_id)
+            continue
+        change = stage_change(
+            tx, source=source, new_category_id=new_category_id,
+            user_id=user_id, run_id=run_id, derived=derived,
+        )
+        if change is not None:
+            staged.append(change)
+    return await write_staged(session, staged)
 
 
 async def record_bulk(
@@ -147,7 +283,7 @@ async def record_bulk(
     user_id: uuid.UUID | None,
     run_id: uuid.UUID | None = None,
 ) -> int:
-    """`record_change` over many rows; returns how many changed.
+    """One change over many rows, by id; returns how many changed.
 
     Callers must pre-filter protected rows (`is_protected`) when the source
     is not a person: this function writes whatever it is given.
@@ -159,19 +295,13 @@ async def record_bulk(
             Transaction.workspace_id == workspace_id, Transaction.id.in_(tx_ids)
         )
     )
-    changed = 0
-    for tx in result.scalars().all():
-        event = await record_change(
-            session,
-            tx,
-            source=source,
-            new_category_id=new_category_id,
-            run_id=run_id,
-            user_id=user_id,
-        )
-        if event is not None:
-            changed += 1
-    return changed
+    return await record_changes_bulk(
+        session,
+        workspace_id,
+        [(tx, new_category_id, source) for tx in result.scalars().all()],
+        user_id=user_id,
+        run_id=run_id,
+    )
 
 
 async def record_moves(
@@ -179,32 +309,33 @@ async def record_moves(
     workspace_id: uuid.UUID,
     from_category_id: uuid.UUID,
     to_category_id: uuid.UUID,
+    *,
+    user_id: uuid.UUID | None = None,
 ) -> int:
     """Move every transaction from one category to another, keeping its origin.
 
     Set-based, for taxonomy tidying (merging a category into another): one
-    SELECT of the rows and their current origin, one UPDATE, one bulk insert
-    of events whose `source` is the origin each row already had. Returns how
-    many rows moved. The move itself never fails on the events' account.
+    `UPDATE ... RETURNING` (no gap between reading the rows and moving them)
+    and one bulk insert of events whose `source` is the origin each row
+    already had, tagged `reason=CATEGORY_MERGE_REASON`. Returns how many rows
+    moved. The move itself never fails on the events' account.
+
+    These events are history only: the merged category is deleted right
+    after, which nulls their `previous_category_id`, so `undo` skips them.
     """
     rows = (
         await session.execute(
-            select(Transaction.id, Transaction.category_source, Transaction.payee_id).where(
+            sa_update(Transaction)
+            .where(
                 Transaction.workspace_id == workspace_id,
                 Transaction.category_id == from_category_id,
             )
+            .values(category_id=to_category_id)
+            .returning(Transaction.id, Transaction.category_source, Transaction.payee_id)
         )
     ).all()
     if not rows:
         return 0
-    await session.execute(
-        sa_update(Transaction)
-        .where(
-            Transaction.workspace_id == workspace_id,
-            Transaction.category_id == from_category_id,
-        )
-        .values(category_id=to_category_id)
-    )
     now = _now()
     payload = [
         {
@@ -217,6 +348,8 @@ async def record_moves(
             "new_category_id": to_category_id,
             "previous_payee_id": row.payee_id,
             "new_payee_id": row.payee_id,
+            "reason": CATEGORY_MERGE_REASON,
+            "user_id": user_id,
             "created_at": now,
         }
         for row in rows
@@ -241,7 +374,8 @@ async def undo(
 
     An event is skipped when a later, not-undone event exists for the same
     transaction (a person may have corrected it), when it was already undone,
-    or when it is itself an undo. Newest first, so chained events unwind.
+    when it is itself an undo, or when it records a category merge (its
+    previous category was deleted). Newest first, so chained events unwind.
     """
     if event_ids is None and run_id is None:
         return UndoResult(0, 0)
@@ -257,7 +391,11 @@ async def undo(
 
     restored = skipped = 0
     for ev in targets:  # newest first, so chained events in one batch unwind in order
-        if ev.undone_at is not None or ev.source == "undo":
+        if (
+            ev.undone_at is not None
+            or ev.source == "undo"
+            or ev.reason == CATEGORY_MERGE_REASON
+        ):
             skipped += 1
             continue
         later = (

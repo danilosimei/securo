@@ -29,9 +29,17 @@ from app.schemas.transaction import (
     TransferCreate,
 )
 from app.services import category_service, rule_service, transaction_service
+from app.services.categorization import events as categorization_events
 from app.services.connection_service import sync_connection
 from app.services.import_service import import_transactions
 from app.services.recurring_transaction_service import generate_pending
+from tests.test_recurring_match_sync import (
+    _make_bill,
+    _provider,
+    _run_sync,
+    _tx,
+    conn_account,  # noqa: F401 (fixture)
+)
 
 
 async def _events(session: AsyncSession, tx_id: uuid.UUID) -> list[CategorizationEvent]:
@@ -540,3 +548,355 @@ async def test_write_paths_on_postgres(postgres_sessions):
         assert [e.source for e in events] == ["user", "user"]
         assert events[1].new_category_id == destination.id
         assert events[1].previous_category_id is None  # SET NULL on delete
+
+
+# ---------------------------------------------------------------------------
+# Fix round 1: preview parity, derived writes, merges, placeholders
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_preview_rule_agrees_with_apply_single_rule_on_protected_rows(
+    session, test_user, test_workspace, test_transactions, test_categories
+):
+    target = test_categories[0].id
+    actions = [{"op": "set_category", "value": str(target)}]
+    conditions = [{"field": "description", "op": "contains", "value": "UBER"}]
+    rule = await _make_rule(session, test_user, actions)
+    mine = test_transactions[0]  # UBER TRIP, Transporte
+    mine.category_source = "user"
+    empty_mine = test_transactions[3]  # PIX RECEBIDO, uncategorized
+    empty_mine.description = "UBER PIX"
+    empty_mine.category_source = "user"
+    other = test_transactions[2]  # SALARIO, provider
+    other.description = "UBER SALARIO"
+    other.category_source = "provider"
+    await session.commit()
+
+    preview = await rule_service.preview_rule(
+        session, test_workspace.id, "and", conditions, actions,
+        overwrite_existing_categories=True,
+    )
+    by_id = {item.id: item for item in preview.sample}
+    assert by_id[mine.id].will_change is False
+    assert by_id[mine.id].new_category_id == test_categories[1].id
+    assert by_id[empty_mine.id].will_change is False
+    assert by_id[empty_mine.id].new_category_id is None
+    assert by_id[other.id].will_change is True
+    assert preview.will_change == 1
+
+    changed = await rule_service.apply_single_rule(
+        session, test_workspace.id, rule, overwrite_existing_categories=True
+    )
+    assert changed == preview.will_change
+    assert (await _reload(session, mine.id)).category_id == test_categories[1].id
+    assert (await _reload(session, empty_mine.id)).category_id is None
+    assert (await _reload(session, other.id)).category_id == target
+
+
+@pytest.mark.asyncio
+async def test_apply_rules_to_transaction_skips_user_row_with_empty_category(
+    session, test_user, test_workspace, test_transactions, test_categories
+):
+    await _make_rule(
+        session, test_user,
+        [{"op": "set_category", "value": str(test_categories[0].id)}], value="NETFLIX",
+    )
+    tx = test_transactions[4]  # NETFLIX, uncategorized
+    tx.category_source = "user"
+    await session.commit()
+
+    await rule_service.apply_rules_to_transaction(session, test_user.id, tx)
+
+    assert tx.category_id is None
+    assert tx.category_source == "user"
+    assert await _events(session, tx.id) == []
+
+
+@pytest.mark.asyncio
+async def test_manual_edit_with_unchanged_category_keeps_origin(
+    session, test_user, test_workspace, test_transactions
+):
+    tx = test_transactions[0]
+    tx.category_source = "ai"
+    await session.commit()
+
+    await transaction_service.update_transaction(
+        session, tx.id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=tx.category_id, notes="nota nova"),
+    )
+
+    row = await _reload(session, tx.id)
+    assert row.category_source == "ai"
+    assert row.notes == "nota nova"
+    assert await _events(session, tx.id) == []
+
+
+@pytest.mark.asyncio
+async def test_manual_edit_propagated_to_siblings_runs_user_hook_once(
+    session, test_user, test_workspace, test_account, test_categories, monkeypatch
+):
+    calls: list[uuid.UUID] = []
+
+    async def hook(_session, _workspace_id, tx, _new_category_id):
+        calls.append(tx.id)
+
+    monkeypatch.setattr(categorization_events, "user_choice_hooks", [hook])
+    created = await transaction_service.create_installment_series(
+        session, test_workspace.id, test_user.id,
+        InstallmentSeriesCreate(
+            base=TransactionCreate(
+                account_id=test_account.id, description="SOFA", amount=Decimal("100"),
+                date=date(2026, 1, 10), type="debit", category_id=test_categories[0].id,
+            ),
+            installments=4,
+        ),
+    )
+    assert calls == [created[0].id]  # the series is one choice
+    calls.clear()
+
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=test_categories[1].id, apply_to="all"),
+    )
+
+    assert calls == [created[0].id]
+    for tx in created:
+        row = await _reload(session, tx.id)
+        assert row.category_source == "user"
+        assert (await _events(session, tx.id))[-1].source == "user"
+
+
+@pytest.mark.asyncio
+async def test_transfer_pair_unchanged_and_protected_is_left_alone(
+    session, test_user, test_workspace, test_account, test_categories, monkeypatch
+):
+    calls: list[uuid.UUID] = []
+
+    async def hook(_session, _workspace_id, tx, _new_category_id):
+        calls.append(tx.id)
+
+    monkeypatch.setattr(categorization_events, "user_choice_hooks", [hook])
+    other = await _make_manual_account(session, test_user)
+    debit, credit = await transaction_service.create_transfer(
+        session, test_workspace.id, test_user.id,
+        TransferCreate(
+            from_account_id=test_account.id, to_account_id=other.id,
+            description="XFER", amount=Decimal("100"), date=date.today(),
+        ),
+    )
+    category = test_categories[0].id
+    debit_row = await _reload(session, debit.id)
+    credit_row = await _reload(session, credit.id)
+    debit_row.category_id, debit_row.category_source = category, "ai"
+    credit_row.category_id, credit_row.category_source = category, "user"
+    await session.commit()
+
+    # Unchanged leg and pair: nothing moves, nobody is promoted or stripped.
+    await transaction_service.update_transaction(
+        session, debit.id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=category, apply_to_transfer_pair=True),
+    )
+    assert (await _reload(session, credit.id)).category_source == "user"
+    assert (await _reload(session, debit.id)).category_source == "ai"
+    assert await _events(session, credit.id) == []
+
+    # A real change cascades as the person's choice; hooks once (the leg).
+    await transaction_service.update_transaction(
+        session, debit.id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=test_categories[1].id, apply_to_transfer_pair=True),
+    )
+    paired = await _reload(session, credit.id)
+    assert paired.category_id == test_categories[1].id
+    assert paired.category_source == "user"
+    assert calls == [debit.id]
+
+
+@pytest.mark.asyncio
+async def test_category_merge_events_carry_user_and_are_not_undone(
+    session, test_user, test_workspace, test_transactions, test_categories
+):
+    doomed = Category(id=uuid.uuid4(), user_id=test_user.id, name="Apagar", icon="tag", color="#000")
+    session.add(doomed)
+    await session.flush()
+    tx = test_transactions[4]
+    tx.category_id, tx.category_source = doomed.id, "rule"
+    await session.commit()
+
+    assert await category_service.delete_category(
+        session, doomed.id, test_workspace.id,
+        transfer_to_id=test_categories[0].id, user_id=test_user.id,
+    )
+    (event,) = await _events(session, tx.id)
+    assert event.reason == categorization_events.CATEGORY_MERGE_REASON
+    assert event.user_id == test_user.id
+
+    result = await categorization_events.undo(
+        session, test_workspace.id, event_ids=[event.id], user_id=test_user.id
+    )
+    assert (result.restored, result.skipped) == (0, 1)
+    row = await _reload(session, tx.id)
+    assert row.category_id == test_categories[0].id
+    assert row.category_source == "rule"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_provider_category_marks_provider(
+    session, test_user, test_workspace, test_categories
+):
+    from app.providers.base import ConnectionData
+    from app.services.connection_service import handle_oauth_callback
+
+    provider = AsyncMock()
+    provider.handle_oauth_callback = AsyncMock(return_value=ConnectionData(
+        external_id="oauth-prov", institution_name="Banco", credentials={"token": "abc"},
+        accounts=[AccountData(
+            external_id="oauth-acc", name="Checking", type="checking",
+            balance=Decimal("0"), currency="BRL",
+        )],
+    ))
+    provider.get_transactions = AsyncMock(return_value=[
+        TransactionData(
+            external_id="oauth-tx", description="RESTAURANTE", amount=Decimal("40"),
+            date=date.today(), type="debit", currency="BRL", pluggy_category="Eating out",
+        ),
+    ])
+    with patch("app.services.connection_service.get_provider", return_value=provider), \
+         patch("app.services.connection_service.detect_transfer_pairs", new_callable=AsyncMock), \
+         patch("app.services.connection_service.stamp_primary_amount", new_callable=AsyncMock):
+        await handle_oauth_callback(session, test_workspace.id, test_user.id, "code", "pluggy")
+
+    tx = await _by_external_id(session, "oauth-tx")
+    assert tx.category_id == test_categories[0].id
+    assert tx.category_source == "provider"
+    assert [e.source for e in await _events(session, tx.id)] == ["provider"]
+
+
+async def _generated_placeholder(session, test_workspace, test_user, account, category_id):
+    bill = await _make_bill(
+        session, test_workspace, test_user, account,
+        description="Netflix Subscription", amount=Decimal("39.90"),
+        start_date=date(2025, 1, 10), category_id=category_id,
+    )
+    bill_id = bill.id
+    await generate_pending(
+        session, test_user.id, up_to=date(2025, 1, 10), include_manual=True,
+        workspace_id=test_workspace.id,
+    )
+    placeholder = (await session.execute(
+        select(Transaction).where(Transaction.recurring_transaction_id == bill_id)
+    )).scalar_one()
+    return placeholder.id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("definition_has_category", [True, False])
+async def test_sync_matched_placeholder_origin(
+    session, test_user, test_workspace, conn_account, test_categories, definition_has_category  # noqa: F811
+):
+    conn, account = conn_account
+    conn_id, account_id = conn.id, account.id
+    definition_category = test_categories[1].id if definition_has_category else None
+    fallback_category = test_categories[0].id
+    placeholder_id = await _generated_placeholder(
+        session, test_workspace, test_user, account, definition_category
+    )
+
+    await _run_sync(session, conn_id, test_workspace, test_user, _provider([
+        _tx(
+            external_id="netflix-1", description="Netflix Subscription",
+            amount=Decimal("39.90"), date=date(2025, 1, 11), pluggy_category="Eating out",
+        ),
+    ]), mock_rules=False)
+
+    row = await _reload(session, placeholder_id)
+    assert row.account_id == account_id
+    assert row.external_id == "netflix-1"
+    if definition_has_category:
+        assert row.category_id == definition_category
+        assert row.category_source == "recurring"
+        assert [e.source for e in await _events(session, row.id)] == ["recurring"]
+    else:
+        assert row.category_id == fallback_category  # Pluggy "Eating out"
+        assert row.category_source == "provider"
+        assert [e.source for e in await _events(session, row.id)] == ["provider"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("definition_has_category", [True, False])
+async def test_import_matched_placeholder_origin(
+    session, test_user, test_workspace, conn_account, test_categories, definition_has_category  # noqa: F811
+):
+    _conn, account = conn_account
+    account_id = account.id
+    definition_category = test_categories[1].id if definition_has_category else None
+    chosen = test_categories[2].id
+    placeholder_id = await _generated_placeholder(
+        session, test_workspace, test_user, account, definition_category
+    )
+
+    await import_transactions(
+        session, test_workspace.id, test_user.id, account_id,
+        [TransactionImport(
+            description="Netflix Subscription", amount=Decimal("39.90"),
+            date=date(2025, 1, 11), type="debit", category_id=chosen,
+        )],
+        "csv",
+    )
+
+    row = await _reload(session, placeholder_id)
+    assert row.import_id is not None
+    if definition_has_category:
+        assert row.category_id == definition_category
+        assert row.category_source == "recurring"
+        assert [e.source for e in await _events(session, row.id)] == ["recurring"]
+    else:
+        assert row.category_id == chosen
+        assert row.category_source == "user"
+        events = await _events(session, row.id)
+        assert [e.source for e in events] == ["user"]
+        assert events[0].user_id == test_user.id
+
+
+@pytest.mark.asyncio
+async def test_apply_all_rules_writes_its_events_in_one_savepoint(
+    session, test_user, test_workspace, test_transactions, test_categories, monkeypatch
+):
+    target = test_categories[0].id
+    await _make_rule(session, test_user, [{"op": "set_category", "value": str(target)}], value="I")
+    savepoints = 0
+    real_begin_nested = session.begin_nested
+
+    def counting_begin_nested():
+        nonlocal savepoints
+        savepoints += 1
+        return real_begin_nested()
+
+    monkeypatch.setattr(session, "begin_nested", counting_begin_nested)
+    await rule_service.apply_all_rules(session, test_workspace.id)
+
+    changed = [t for t in test_transactions if (await _events(session, t.id))]
+    assert len(changed) >= 3  # UBER TRIP, IFOOD, SALARIO FEV, PIX RECEBIDO, NETFLIX contain "I"
+    assert savepoints == 1
+
+
+@pytest.mark.asyncio
+async def test_record_changes_bulk_keeps_changes_when_event_insert_fails(
+    session, test_workspace, test_transactions, test_categories, monkeypatch
+):
+    def broken_insert(_model):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(categorization_events, "sa_insert", broken_insert)
+    target = test_categories[2].id
+    changed = await categorization_events.record_changes_bulk(
+        session, test_workspace.id,
+        [(t, target, "ai") for t in test_transactions[:2]],
+    )
+
+    assert changed == 2
+    await session.commit()
+    for t in test_transactions[:2]:
+        row = await _reload(session, t.id)
+        assert row.category_id == target
+        assert row.category_source == "ai"
+        assert await _events(session, t.id) == []

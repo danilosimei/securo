@@ -24,7 +24,13 @@ from app.schemas.transaction import (
 )
 from app.schemas.transaction_split import TransactionSplitInput, TransactionSplitsInput
 from app.services import reconciliation_service, split_service
-from app.services.categorization.events import record_bulk, record_change
+from app.services.categorization.events import (
+    StagedChange,
+    record_change,
+    record_changes_bulk,
+    stage_change,
+    write_staged,
+)
 from app.services.credit_card_service import apply_effective_date
 from app.services.rule_service import apply_rules_to_transaction
 from app.services.fx_rate_service import stamp_primary_amount, convert as fx_convert
@@ -870,15 +876,20 @@ async def create_installment_series(
         created.append(tx)
 
     # Rules, FX stamping and splits run after every row has an ID so each
-    # parcel is finalized exactly like a single manual transaction.
+    # parcel is finalized exactly like a single manual transaction. The
+    # category events of the whole series are written in one batch; only
+    # the first parcel counts as a new choice for the user-choice hooks.
+    staged: list[StagedChange] = []
     for tx in created:
         if base.category_id:
-            await record_change(
-                session, tx, source="user",
-                new_category_id=base.category_id, user_id=user_id,
+            change = stage_change(
+                tx, source="user", new_category_id=base.category_id,
+                user_id=user_id, derived=tx is not created[0],
             )
+            if change is not None:
+                staged.append(change)
         else:
-            await apply_rules_to_transaction(session, user_id, tx)
+            await apply_rules_to_transaction(session, user_id, tx, staged=staged)
         if base.fx_rate_used is not None:
             _apply_fx_override(tx, tx.amount, None, base.fx_rate_used)
         elif base.amount_primary is not None:
@@ -888,6 +899,7 @@ async def create_installment_series(
         if base.splits is not None:
             await split_service.replace_splits(session, tx, base.splits, user_id)
 
+    await write_staged(session, staged)
     await session.commit()
     for tx in created:
         await session.refresh(tx, ["category", "splits"])
@@ -1418,8 +1430,13 @@ async def _apply_update_to_row(
     update_data: dict,
     apply_to_transfer_pair: bool,
     splits_payload: Optional[TransactionSplitsInput],
+    derived: bool = False,
 ) -> None:
     """Apply a parsed TransactionUpdate payload to a single row.
+
+    `derived` marks a row that only follows the edit of another one (a
+    sibling installment): its category change is noted as the person's, but
+    is not a new choice for the user-choice hooks.
 
     Shared by single-row edits and installment-series scoped edits so both
     paths behave identically (FX restamp, bill re-link, transfer cascade,
@@ -1457,6 +1474,7 @@ async def _apply_update_to_row(
         await record_change(
             session, tx, source="user",
             new_category_id=update_data["category_id"], user_id=user_id,
+            derived=derived,
         )
 
     restamp_fields = {"amount", "currency", "date"}
@@ -1498,13 +1516,13 @@ async def _apply_update_to_row(
         )
         paired_tx = paired.scalar_one_or_none()
         if paired_tx:
-            if should_cascade_category:
-                # The pair mirrors the leg's category and where it came from.
-                pair_source = tx.category_source or "none"
+            if should_cascade_category and paired_tx.category_id != tx.category_id:
+                # The person asked for the pair to follow, so the copy is
+                # theirs; a pair already in that category keeps its origin.
                 await record_change(
-                    session, paired_tx, source=pair_source,
-                    new_category_id=tx.category_id,
-                    user_id=user_id if pair_source == "user" else None,
+                    session, paired_tx, source="user",
+                    new_category_id=tx.category_id, user_id=user_id,
+                    derived=True,
                 )
             # When the user typed both amounts, neither is a conversion of the
             # other: correcting one leg leaves the amount that actually landed
@@ -1650,6 +1668,7 @@ async def update_transaction(
             row_update,
             apply_to_transfer_pair,
             row_splits,
+            derived=not is_anchor,
         )
 
     # A changed parcel amount makes the stored series total stale, whatever
@@ -1678,22 +1697,22 @@ async def bulk_update_category(
     their category actually changed.
     """
     await _ensure_category_in_workspace(session, workspace_id, category_id)
-    matched_ids = list(
+    rows = list(
         (
             await session.execute(
-                select(Transaction.id).where(
+                select(Transaction).where(
                     Transaction.id.in_(transaction_ids),
                     Transaction.workspace_id == workspace_id,
                 )
             )
         ).scalars().all()
     )
-    await record_bulk(
-        session, workspace_id, matched_ids,
-        source="user", new_category_id=category_id, user_id=user_id,
+    await record_changes_bulk(
+        session, workspace_id, [(tx, category_id, "user") for tx in rows],
+        user_id=user_id,
     )
     await session.commit()
-    return len(matched_ids)
+    return len(rows)
 
 
 _TAG_CHAR_CLASS = r"[\wÀ-ž-]"

@@ -378,6 +378,7 @@ async def _transfer_category_references(
     workspace_id: uuid.UUID,
     category_id: uuid.UUID,
     destination_id: uuid.UUID,
+    user_id: Optional[uuid.UUID] = None,
 ) -> None:
     """Point everything that used one category at another, without committing.
 
@@ -385,7 +386,7 @@ async def _transfer_category_references(
     protected) and each move is written down as a categorization event.
     """
     await categorization_events.record_moves(
-        session, workspace_id, category_id, destination_id
+        session, workspace_id, category_id, destination_id, user_id=user_id
     )
     await session.execute(
         sa_update(RecurringTransaction)
@@ -405,6 +406,7 @@ async def delete_category(
     workspace_id: uuid.UUID,
     *,
     transfer_to_id: Optional[uuid.UUID] = None,
+    user_id: Optional[uuid.UUID] = None,
 ) -> bool:
     """Delete a category, optionally moving what it holds to another one.
 
@@ -424,7 +426,7 @@ async def delete_category(
         if not destination:
             raise CategoryTransferError("Destination category not found.")
         await _transfer_category_references(
-            session, workspace_id, category_id, transfer_to_id
+            session, workspace_id, category_id, transfer_to_id, user_id
         )
     else:
         usage = await get_category_usage(session, workspace_id, category_id)
