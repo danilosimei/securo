@@ -126,3 +126,11 @@ describe('deleting a category', () => {
     expect(options.map((option) => option.textContent)).toEqual(['Transport'])
   })
 })
+
+describe('organizing with AI', () => {
+  it('links the section header to the organizer tab', async () => {
+    renderWithProviders(<CategoriesPage />)
+    const link = await screen.findByRole('link', { name: /Organize with AI/ })
+    expect(link).toHaveAttribute('href', '/categorization?tab=organize')
+  })
+})

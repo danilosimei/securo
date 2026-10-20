@@ -1801,6 +1801,8 @@ export type CategorizationRunStatus =
   | 'running'
   | 'processing_batch'
   | 'completed'
+  | 'done'
+  | 'capped'
   | 'failed'
   | (string & {})
 
@@ -1995,10 +1997,54 @@ export interface CategorizationSettingsUpdate {
   llm_connection_id?: string | null
 }
 
-/** Filled by the organizer (Tasks 17/18); shape is provisional until then. */
-export interface OrganizerProposal {
+export type OrganizerOpKind =
+  | 'create_group'
+  | 'create_category'
+  | 'rename'
+  | 'move_category'
+  | 'merge'
+  | 'split_category'
+
+/** Readable names for an op's short ids (`c1`, `g2`, store ids). */
+export interface OrganizerOpLabels {
+  target?: string | null
+  group?: string | null
+  into?: string | null
+  /** Store names for `create_category`, child names for `split_category`. */
+  children?: string[]
+}
+
+/** One proposed change to the category tree (mirrors `OrganizerOp`). */
+export interface OrganizerOp {
   id: string
-  kind: string
-  payload: Record<string, unknown>
-  status: string
+  op: OrganizerOpKind | (string & {})
+  /** Short id of a category (`c1`) or group (`g2`). */
+  target: string | null
+  /** Short id of an existing group, or the name of a new one. */
+  group: string | null
+  name: string | null
+  children: string[]
+  into: string | null
+  why: string
+  /** Last 12 months; `total` is unmasked: mask it with `mask(formatCurrency(...))`. */
+  impact: { tx: number; total: number }
+  labels: OrganizerOpLabels
+  status: 'pending' | 'applied' | 'rejected'
+  decided_at: string | null
+  result: Record<string, unknown> | null
+  /** An applied split's redistribution run (GET only). */
+  redistribution?: CategorizationRun | null
+}
+
+export interface OrganizerView {
+  run: CategorizationRun | null
+  ops: OrganizerOp[]
+  /** Why the run has no proposal (failed, capped…), in the person's words. */
+  message: string | null
+}
+
+export interface OrganizerApplyResult {
+  op: OrganizerOp
+  /** The redistribution a split queued, to follow by polling. */
+  redistribute_run: CategorizationRun | null
 }

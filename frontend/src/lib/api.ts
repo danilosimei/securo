@@ -11,6 +11,9 @@ import type {
   CategorizationSummary,
   CreateCategoryRequest,
   CreateCategoryResult,
+  OrganizerApplyResult,
+  OrganizerOp,
+  OrganizerView,
   Provenance,
   ReviewQueue,
   RuleDraft,
@@ -2357,6 +2360,36 @@ export const categorization = {
   /** 202 with the new run, 200 with the run already busy, 503 when the queue is down. */
   run: async (payload: { scope: 'backlog' } = { scope: 'backlog' }): Promise<CategorizationRun> => {
     const { data } = await api.post('/categorization/run', payload)
+    return data
+  },
+  /** The latest organize run with its proposed ops. */
+  organizer: async (): Promise<OrganizerView> => {
+    const { data } = await api.get('/categorization/organizer')
+    return data
+  },
+  /** 202 with the new run, 200 with the run already busy, 503 when the queue is down. */
+  runOrganizer: async (): Promise<CategorizationRun> => {
+    const { data } = await api.post('/categorization/organizer/run')
+    return data
+  },
+  /** 409 when the tree changed since the proposal (the detail says why). */
+  applyOrganizerOp: async (opId: string, runId?: string): Promise<OrganizerApplyResult> => {
+    const { data } = await api.post(`/categorization/organizer/ops/${encodeURIComponent(opId)}/apply`, null, {
+      params: runId ? { run_id: runId } : undefined,
+    })
+    return data
+  },
+  rejectOrganizerOp: async (opId: string, runId?: string): Promise<OrganizerOp> => {
+    const { data } = await api.post(`/categorization/organizer/ops/${encodeURIComponent(opId)}/reject`, null, {
+      params: runId ? { run_id: runId } : undefined,
+    })
+    return data
+  },
+  /** Queue again a split's redistribution that failed. */
+  retryOrganizerOp: async (opId: string, runId?: string): Promise<OrganizerApplyResult> => {
+    const { data } = await api.post(`/categorization/organizer/ops/${encodeURIComponent(opId)}/retry`, null, {
+      params: runId ? { run_id: runId } : undefined,
+    })
     return data
   },
 }

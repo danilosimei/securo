@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { categories as categoriesApi, categoryGroups as groupsApi } from '@/lib/api'
@@ -18,7 +19,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { Category, CategoryGroup, CategoryUsage } from '@/types'
-import { Pencil, Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff } from 'lucide-react'
+import { Pencil, Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff, WandSparkles } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { invalidateCategoryQueries } from '@/lib/invalidate-queries'
 import { CategoryIcon } from '@/components/category-icon'
@@ -341,16 +342,23 @@ export default function CategoriesPage() {
             </button>
           }
           action={
-            canWrite ? (
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => openGroupDialog(null)}>
-                  <Plus size={13} /> <span className="hidden sm:inline">{t('groups.add')}</span>
-                </Button>
-                <Button size="sm" className="gap-1.5 h-8" onClick={() => openCatDialog(null)}>
-                  <Plus size={13} /> <span className="hidden sm:inline">{t('categories.addCategory')}</span>
-                </Button>
-              </div>
-            ) : undefined
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" className="gap-1.5 h-8" asChild>
+                <Link to="/categorization?tab=organize">
+                  <WandSparkles size={13} /> {t('categories.organizeWithAi')}
+                </Link>
+              </Button>
+              {canWrite && (
+                <>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => openGroupDialog(null)}>
+                    <Plus size={13} /> <span className="hidden sm:inline">{t('groups.add')}</span>
+                  </Button>
+                  <Button size="sm" className="gap-1.5 h-8" onClick={() => openCatDialog(null)}>
+                    <Plus size={13} /> <span className="hidden sm:inline">{t('categories.addCategory')}</span>
+                  </Button>
+                </>
+              )}
+            </div>
           }
         />
         <div>
