@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 
 import CategorizationPage from '@/pages/categorization'
-import { NavBadge } from '@/components/nav-badge'
+import { SidebarNavLink } from '@/components/sidebar-nav-link'
+import { isCategorizationBusy } from '@/hooks/use-categorization-summary'
 import { navItems } from '@/lib/nav-items'
 import { renderWithProviders, t } from '@/test/utils'
 
@@ -111,21 +112,43 @@ describe('CategorizationPage', () => {
   })
 })
 
-describe('NavBadge', () => {
+describe('SidebarNavLink', () => {
+  const item = navItems.find((i) => i.type === 'link' && i.key === 'categorization')
+  if (!item || item.type !== 'link') throw new Error('categorization nav item missing')
+  const renderLink = (collapsed = false) =>
+    renderWithProviders(
+      <SidebarNavLink item={item} isActive={false} collapsed={collapsed} onNavigate={() => {}} />,
+    )
+
   it('is wired to the categorization nav item', () => {
-    const item = navItems.find((i) => i.type === 'link' && i.key === 'categorization')
     expect(item).toMatchObject({ module: 'categories', badgeQueryKey: ['categorization', 'summary'] })
   })
 
-  it('shows the pending group count', async () => {
-    renderWithProviders(<NavBadge queryKey={['categorization', 'summary']} />)
+  it('shows the pending count and announces it in the link name', async () => {
+    renderLink()
     expect(await screen.findByTestId('nav-badge')).toHaveTextContent('3')
+    expect(screen.getByRole('link', { name: /3 to review/ })).toBeInTheDocument()
   })
 
-  it('is hidden at zero', async () => {
+  it('announces the count when the sidebar is collapsed too', async () => {
+    renderLink(true)
+    expect(await screen.findByRole('link', { name: /3 to review/ })).toBeInTheDocument()
+    expect(screen.getByTestId('nav-badge-dot')).toBeInTheDocument()
+  })
+
+  it('has no badge and a plain name at zero', async () => {
     api.categorization.summary.mockResolvedValue(summary({ pending_groups: 0 }))
-    renderWithProviders(<NavBadge queryKey={['categorization', 'summary']} />)
+    renderLink()
     await waitFor(() => expect(api.categorization.summary).toHaveBeenCalled())
     expect(screen.queryByTestId('nav-badge')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: t('nav.categorization') })).toBeInTheDocument()
+  })
+})
+
+describe('useCategorizationSummary polling', () => {
+  it('polls only while a run is busy', () => {
+    expect(isCategorizationBusy(summary({ last_run: { id: 'r', status: 'queued', finished_at: null, stats: {} } }) as never)).toBe(true)
+    expect(isCategorizationBusy(summary() as never)).toBe(false)
+    expect(isCategorizationBusy(undefined)).toBe(false)
   })
 })

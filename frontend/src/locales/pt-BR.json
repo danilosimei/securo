@@ -2890,7 +2890,7 @@
     "aiOff": "IA desligada — só regras e memória",
     "configure": "Configurar",
     "settings": "Configurações",
-    "pendingBadge": "{{count}} para revisar",
-    "soon": "Em breve"
+    "soon": "Em breve",
+    "navWithPending": "{{name}}, {{count}} para revisar"
   }
 }

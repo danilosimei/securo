@@ -2905,7 +2905,7 @@
     "aiOff": "AI is off — rules and memory only",
     "configure": "Configure",
     "settings": "Settings",
-    "pendingBadge": "{{count}} to review",
-    "soon": "Coming soon"
+    "soon": "Coming soon",
+    "navWithPending": "{{name}}, {{count}} to review"
   }
 }

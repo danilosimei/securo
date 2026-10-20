@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Loader2, Settings, Sparkles } from 'lucide-react'
 import { categorization as categorizationApi } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { invalidateCategorizationQueries } from '@/lib/invalidate-queries'
+import { isCategorizationBusy, useCategorizationSummary } from '@/hooks/use-categorization-summary'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useDateLocale } from '@/hooks/use-display-locale'
 import { PageHeader } from '@/components/page-header'
@@ -15,17 +16,13 @@ import { Button } from '@/components/ui/button'
 import { ReviewTab } from '@/components/categorization/review-tab'
 import { AppliedTab } from '@/components/categorization/applied-tab'
 import { OrganizeTab } from '@/components/categorization/organize-tab'
-import type { CategorizationSummary } from '@/types'
 
 type Tab = 'review' | 'applied' | 'organize'
 const TABS: Tab[] = ['review', 'applied', 'organize']
-const BUSY_STATUSES = ['queued', 'running', 'processing_batch']
-const POLL_MS = 5000
-
-function isBusy(summary: CategorizationSummary | undefined) {
-  return !!summary?.last_run && BUSY_STATUSES.includes(summary.last_run.status)
-}
-
+/**
+ * Own helper rather than `lib/relative-time.formatRelative`: that one emits
+ * hard-coded English ("2h ago"), and this line is localized copy.
+ */
 function relativeFromNow(iso: string, locale: string): string {
   const diffSec = Math.round((new Date(iso).getTime() - Date.now()) / 1000)
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' })
@@ -50,12 +47,8 @@ export default function CategorizationPage() {
   const setTab = (next: Tab) =>
     setSearchParams(next === 'review' ? {} : { tab: next }, { replace: true })
 
-  const { data: summary } = useQuery({
-    queryKey: ['categorization', 'summary'],
-    queryFn: categorizationApi.summary,
-    // Poll only while a run is in flight; the menu badge reads this same query.
-    refetchInterval: (query) => (isBusy(query.state.data) ? POLL_MS : false),
-  })
+  // Shared with the sidebar badge; polls only while a run is in flight.
+  const { data: summary } = useCategorizationSummary()
 
   const run = useMutation({
     mutationFn: () => categorizationApi.run({ scope: 'backlog' }),
@@ -66,7 +59,7 @@ export default function CategorizationPage() {
     onError: (error) => toast.error(extractApiError(error, t('categorization.runError'))),
   })
 
-  const busy = run.isPending || isBusy(summary)
+  const busy = run.isPending || isCategorizationBusy(summary)
 
   // A run finishing changes what the other tabs show; refresh them once.
   const wasBusy = useRef(false)

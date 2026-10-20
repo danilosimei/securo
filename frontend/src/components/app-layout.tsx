@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useSidebarState } from '@/contexts/sidebar-state-context'
-import { NavBadge } from '@/components/nav-badge'
+import { SidebarNavLink } from '@/components/sidebar-nav-link'
 import { CollectionSelector } from '@/components/collection-selector'
 import { auth as authApi, admin as adminApi } from '@/lib/api'
 import { resolveSupportedLang } from '@/lib/i18n'
@@ -434,37 +434,15 @@ export function AppLayout() {
                 item.path === '/'
                   ? location.pathname === '/'
                   : location.pathname.startsWith(item.path)
-              const Icon = item.icon
               const showQuickAdd = item.key === 'transactions' && canWrite
               const link = (
-                <Link
+                <SidebarNavLink
                   key={item.key}
-                  to={item.path}
-                  data-tour={`nav-${item.key}`}
-                  onClick={() => setSidebarOpen(false)}
-                  title={t(`nav.${item.key}`)}
-                  aria-label={t(`nav.${item.key}`)}
-                  className={cn(
-                    'relative flex items-center gap-3 text-[13px] font-medium transition-all rounded-lg px-3 py-2',
-                    isActive
-                      ? 'bg-primary/[0.08] text-primary border-l-[3px] border-primary pl-[9px]'
-                      : 'text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground',
-                    desktopSidebarCollapsed && 'lg:h-10 lg:w-10 lg:justify-center lg:border-l-0 lg:px-0 lg:pl-0',
-                  )}
-                >
-                  <Icon
-                    size={17}
-                    className={cn(
-                      'shrink-0',
-                      isActive ? 'text-primary' : 'text-sidebar-muted',
-                      desktopSidebarCollapsed && 'lg:h-5 lg:w-5',
-                    )}
-                  />
-                  <span className={cn(desktopSidebarCollapsed && 'lg:hidden')}>{t(`nav.${item.key}`)}</span>
-                  {item.badgeQueryKey && (
-                    <NavBadge queryKey={item.badgeQueryKey} collapsed={desktopSidebarCollapsed} />
-                  )}
-                </Link>
+                  item={item}
+                  isActive={isActive}
+                  collapsed={desktopSidebarCollapsed}
+                  onNavigate={() => setSidebarOpen(false)}
+                />
               )
               if (!showQuickAdd) return link
               return (
