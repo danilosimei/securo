@@ -1112,6 +1112,11 @@ async def import_transactions(
     await reconciliation_service.match_incoming(session, workspace_id, landed)
 
     await session.commit()
+    if imported:
+        # Categorize what just landed, off the request; never raises.
+        from app.tasks.categorization_tasks import enqueue_categorization
+
+        enqueue_categorization(workspace_id, "ingest")
     return imported, skipped, excluded_count, import_log.id
 
 # Currency symbols and ISO codes around a number ("R$", "$", "NGN ", " EUR").

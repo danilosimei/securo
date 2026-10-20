@@ -1340,8 +1340,17 @@ async def handle_oauth_callback(
 
     connection.last_sync_at = datetime.now(timezone.utc)
     await session.commit()
+    if new_tx_ids:
+        _enqueue_categorization(workspace_id)
     await session.refresh(connection)
     return connection
+
+
+def _enqueue_categorization(workspace_id: uuid.UUID) -> None:
+    """Categorize what a sync just landed, off the request; never raises."""
+    from app.tasks.categorization_tasks import enqueue_categorization
+
+    enqueue_categorization(workspace_id, "ingest")
 
 
 def _normalized_account_name(name: str | None) -> str:
@@ -2548,6 +2557,8 @@ async def sync_connection(
         else:
             connection.status = "active"
         await session.commit()
+        if new_tx_ids:
+            _enqueue_categorization(workspace_id)
         await session.refresh(connection)
         return connection, merged_count
 

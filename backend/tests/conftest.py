@@ -199,6 +199,17 @@ def _fast_password_hashes():
         yield
 
 
+@pytest.fixture(autouse=True)
+def categorization_enqueue():
+    """Syncs and imports enqueue categorization; tests never reach a broker.
+
+    A developer's local Redis would otherwise receive real tasks. Tests of
+    the enqueue helper itself import the function before this patch runs.
+    """
+    with patch("app.tasks.categorization_tasks.enqueue_categorization") as enqueue:
+        yield enqueue
+
+
 async def override_get_async_session() -> AsyncGenerator[AsyncSession, None]:
     from app.core.app_clock import use_timezone
 

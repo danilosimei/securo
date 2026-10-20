@@ -75,6 +75,8 @@ class StagedChange:
     user_id: uuid.UUID | None = None
     run_id: uuid.UUID | None = None
     reason: str | None = None
+    confidence: int | None = None
+    model: str | None = None
     #: Follows from another change (a sibling parcel, a transfer pair, an
     #: inherited installment): noted, but not a new choice for the hooks.
     derived: bool = False
@@ -177,6 +179,8 @@ def stage_change(
     user_id: uuid.UUID | None = None,
     run_id: uuid.UUID | None = None,
     reason: str | None = None,
+    confidence: int | None = None,
+    model: str | None = None,
     derived: bool = False,
 ) -> StagedChange | None:
     """Apply a category change to `tx` in memory; `write_staged` notes it.
@@ -199,6 +203,8 @@ def stage_change(
         user_id=user_id,
         run_id=run_id,
         reason=reason[:120] if reason else None,
+        confidence=confidence,
+        model=model,
         derived=derived,
     )
     tx.category_id = new_category_id
@@ -229,6 +235,8 @@ async def write_staged(session: AsyncSession, staged: list[StagedChange]) -> int
             "previous_payee_id": change.tx.payee_id,
             "new_payee_id": change.tx.payee_id,
             "reason": change.reason,
+            "confidence": change.confidence,
+            "model": change.model,
             "user_id": change.user_id,
             "created_at": change.created_at,
         }
