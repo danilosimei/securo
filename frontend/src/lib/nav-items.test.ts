@@ -40,11 +40,15 @@ describe('nav catalog', () => {
 
   it('has a link for every module in the catalog', () => {
     const covered = navItems.filter((i) => i.type === 'link').map((i) => i.module)
-    expect([...covered].sort()).toEqual([...MODULE_IDS].sort())
+    expect([...new Set(covered)].sort()).toEqual([...MODULE_IDS].sort())
   })
 
-  it('gives every link a distinct module', () => {
-    const covered = navItems.filter((i) => i.type === 'link').map((i) => i.module)
+  it('gives every link a distinct module, except the ones that live inside another', () => {
+    // Categorization is a view over the categories module, not a module of its own.
+    const sharesModule = new Set(['categorization'])
+    const covered = navItems
+      .filter((i) => i.type === 'link' && !sharesModule.has(i.key))
+      .map((i) => (i.type === 'link' ? i.module : ''))
     expect(new Set(covered).size).toBe(covered.length)
   })
 })
@@ -54,6 +58,7 @@ describe('visibleNavItems', () => {
     const personal = visibleNavItems(navItems, (id) => PERSONAL_MODULES.includes(id))
     expect(linkKeys(personal)).toEqual([
       'transactions',
+      'categorization',
       'accounts',
       'import',
       'reports',
@@ -74,7 +79,7 @@ describe('visibleNavItems', () => {
     const business = visibleNavItems(navItems, all)
     expect(linkKeys(business)).toContain('invoices')
     // And it does not disturb the rest of the order.
-    expect(linkKeys(business).indexOf('invoices')).toBe(1)
+    expect(linkKeys(business).indexOf('invoices')).toBe(2)
   })
 
   it('hides a section header once its last link goes', () => {

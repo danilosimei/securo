@@ -7,6 +7,7 @@ import {
   Receipt,
   Repeat,
   SlidersHorizontal,
+  Sparkles,
   Split,
   Tag,
   Target,
@@ -26,7 +27,15 @@ import type { ModuleId } from './modules'
  * checkable rather than aspirational.
  */
 export type NavItem =
-  | { type: 'link'; key: string; path: string; icon: React.ElementType; module: ModuleId }
+  | {
+      type: 'link'
+      key: string
+      path: string
+      icon: React.ElementType
+      module: ModuleId
+      /** Query whose data carries a pending count, shown as an amber pill. */
+      badgeQueryKey?: readonly string[]
+    }
   | { type: 'separator'; labelKey: string }
 
 export const navItems: NavItem[] = [
@@ -36,6 +45,7 @@ export const navItems: NavItem[] = [
   // inside the ACCOUNTS section since it's account-scoped data.
   { type: 'separator', labelKey: 'nav.groupAccounts' },
   { type: 'link', key: 'transactions', path: '/transactions', icon: ArrowLeftRight, module: 'transactions' },
+  { type: 'link', key: 'categorization', path: '/categorization', icon: Sparkles, module: 'categories', badgeQueryKey: ['categorization', 'summary'] },
   { type: 'link', key: 'invoices', path: '/invoices', icon: Receipt, module: 'invoices' },
   { type: 'link', key: 'accounts', path: '/accounts', icon: Building2, module: 'accounts' },
   { type: 'link', key: 'import', path: '/import', icon: Upload, module: 'import' },

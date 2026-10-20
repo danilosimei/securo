@@ -132,7 +132,8 @@
     "agents": "Agenten",
     "aiAgents": "KI-Agenten",
     "collapseSidebar": "Seitenleiste einklappen",
-    "expandSidebar": "Seitenleiste ausklappen"
+    "expandSidebar": "Seitenleiste ausklappen",
+    "categorization": "Categorization"
   },
   "invoices": {
     "title": "Invoices",
@@ -2869,5 +2870,24 @@
       "recurring": "Regeln für Wiederkehrendes",
       "recurringHint": "Wie wir entscheiden, dass eine Buchung die erwartete Rechnung ist."
     }
+  },
+  "categorization": {
+    "tab": {
+      "review": "Review",
+      "applied": "Applied",
+      "organize": "Organize"
+    },
+    "runNow": "Categorize now",
+    "running": "Categorizing…",
+    "runStarted": "Categorization started",
+    "runError": "Could not start categorization",
+    "lastRun": "Last run {{when}} · {{applied}} applied · {{review}} to review",
+    "neverRun": "No runs yet",
+    "lastRunFailed": "The last run failed",
+    "aiOff": "AI is off — rules and memory only",
+    "configure": "Configure",
+    "settings": "Settings",
+    "pendingBadge": "{{count}} to review",
+    "soon": "Coming soon"
   }
 }

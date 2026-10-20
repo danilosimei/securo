@@ -132,7 +132,8 @@
     "agents": "エージェント",
     "aiAgents": "AIエージェント",
     "collapseSidebar": "サイドバーを折りたたむ",
-    "expandSidebar": "サイドバーを展開する"
+    "expandSidebar": "サイドバーを展開する",
+    "categorization": "Categorization"
   },
   "invoices": {
     "title": "請求書",
@@ -2868,5 +2869,24 @@
       "recurring": "定期のルール",
       "recurringHint": "ある引き落としが予定していた支払いだと判断する方法。"
     }
+  },
+  "categorization": {
+    "tab": {
+      "review": "Review",
+      "applied": "Applied",
+      "organize": "Organize"
+    },
+    "runNow": "Categorize now",
+    "running": "Categorizing…",
+    "runStarted": "Categorization started",
+    "runError": "Could not start categorization",
+    "lastRun": "Last run {{when}} · {{applied}} applied · {{review}} to review",
+    "neverRun": "No runs yet",
+    "lastRunFailed": "The last run failed",
+    "aiOff": "AI is off — rules and memory only",
+    "configure": "Configure",
+    "settings": "Settings",
+    "pendingBadge": "{{count}} to review",
+    "soon": "Coming soon"
   }
 }

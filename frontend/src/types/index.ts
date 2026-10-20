@@ -264,6 +264,8 @@ export interface Transaction {
   date: string
   type: 'debit' | 'credit'
   source: string
+  /** Who decided the category: the pipeline or the user. */
+  category_source?: CategorySource
   status: 'posted' | 'pending'
   payee: string | null
   payee_id: string | null
@@ -1777,4 +1779,220 @@ export interface ReconciliationHistoryEvent {
   user_id?: string | null
   transaction_id?: string | null
   transaction_description?: string | null
+}
+
+// Automatic categorization (mirrors backend/app/schemas/categorization.py).
+export type CategorySource =
+  | 'none'
+  | 'user'
+  | 'rule'
+  | 'memory'
+  | 'ai'
+  | 'provider'
+  | 'installment'
+  | 'import'
+  | 'recurring'
+  | 'legacy'
+
+export type CategorizationRunStatus =
+  | 'queued'
+  | 'running'
+  | 'processing_batch'
+  | 'completed'
+  | 'failed'
+  | (string & {})
+
+export interface CategorizationLastRun {
+  id: string
+  status: CategorizationRunStatus
+  finished_at: string | null
+  stats: Record<string, number | string | null>
+}
+
+export interface CategorizationSummary {
+  pending_groups: number
+  pending_transactions: number
+  applied_last_7d: number
+  last_run: CategorizationLastRun | null
+  ai_available: boolean
+  month_cost_usd: number | string
+  monthly_cap_usd: number | string
+}
+
+export interface CategorizationRun {
+  id: string
+  kind: string
+  trigger: string
+  status: CategorizationRunStatus
+  stats: Record<string, unknown>
+  cost_usd: number | string
+  error: string | null
+  created_at: string | null
+  finished_at: string | null
+}
+
+export interface ReviewSuggestion {
+  category_id: string | null
+  alt_category_id: string | null
+  confidence: number | null
+  reason: string | null
+}
+
+export interface ReviewNewCategory {
+  group: string
+  name: string
+}
+
+export interface ReviewGroup {
+  merchant_key: string
+  clean_name: string | null
+  count: number
+  /** Sum of absolute amounts, unmasked: mask it with `mask(formatCurrency(...))`. */
+  total: number | string
+  samples: string[]
+  suggestion: ReviewSuggestion | null
+  new_category: ReviewNewCategory | null
+  is_person: boolean
+  transaction_ids: string[]
+}
+
+export interface NewCategoryProposal {
+  group: string
+  name: string
+  merchant_keys: string[]
+  count: number
+  total: number | string
+}
+
+export interface ReviewQueue {
+  groups: ReviewGroup[]
+  total: number
+  new_category_proposals: NewCategoryProposal[]
+}
+
+export interface AcceptRequest {
+  merchant_key: string
+  category_id: string
+  transaction_ids?: string[]
+}
+
+export interface AppliedResult {
+  applied: number
+  /** Undo goes through these ids (`event_run_id` is always null). */
+  event_ids: string[]
+  event_run_id: string | null
+}
+
+export interface CreateCategoryRequest {
+  group: string
+  name: string
+  merchant_keys?: string[]
+}
+
+export interface CreateCategoryResult {
+  category_id: string
+  applied: number
+  event_ids: string[]
+}
+
+export interface AppliedTransaction {
+  id: string
+  date: string
+  description: string
+  amount: number | string
+  currency: string
+}
+
+export interface AppliedEvent {
+  event_id: string
+  run_id: string | null
+  transaction: AppliedTransaction
+  source: CategorySource
+  previous_category_id: string | null
+  new_category_id: string | null
+  confidence: number | null
+  reason: string | null
+  created_at: string
+}
+
+export interface AppliedPage {
+  items: AppliedEvent[]
+  total: number
+}
+
+export interface AppliedFilters {
+  /** Comma-separated subset of ai, memory, rule. */
+  source?: string
+  min_confidence?: number
+  max_confidence?: number
+  since?: string
+  limit?: number
+  offset?: number
+}
+
+export interface UndoRequest {
+  event_ids?: string[]
+  run_id?: string
+}
+
+export interface UndoResult {
+  restored: number
+  skipped: number
+}
+
+export interface ProvenanceEvent {
+  id: string
+  run_id: string | null
+  source: CategorySource
+  previous_source: CategorySource | null
+  previous_category_id: string | null
+  new_category_id: string | null
+  confidence: number | null
+  reason: string | null
+  model: string | null
+  user_id: string | null
+  created_at: string
+  undone_at: string | null
+}
+
+export interface Provenance {
+  current_source: CategorySource
+  original_description: string | null
+  events: ProvenanceEvent[]
+}
+
+export interface SimilarResult {
+  merchant_key: string
+  count: number
+  transaction_ids: string[]
+}
+
+export interface RuleDraft {
+  name: string
+  conditions: { field: string; op: string; value: string }[]
+  actions: { op: string; value: string }[]
+}
+
+export interface CategorizationSettings {
+  enabled: boolean
+  auto_apply_threshold: number
+  monthly_cap_usd: number | string
+  llm_connection_id: string | null
+  owner_user_id: string | null
+  last_run_at: string | null
+}
+
+export interface CategorizationSettingsUpdate {
+  enabled?: boolean
+  auto_apply_threshold?: number
+  monthly_cap_usd?: number | string
+  llm_connection_id?: string | null
+}
+
+/** Filled by the organizer (Tasks 17/18); shape is provisional until then. */
+export interface OrganizerProposal {
+  id: string
+  kind: string
+  payload: Record<string, unknown>
+  status: string
 }

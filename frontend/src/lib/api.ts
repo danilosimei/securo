@@ -1,6 +1,22 @@
 import axios from 'axios'
 import type { NumberFormat, DateFormat } from '@/lib/format'
 import type {
+  AcceptRequest,
+  AppliedFilters,
+  AppliedPage,
+  AppliedResult,
+  CategorizationRun,
+  CategorizationSettings,
+  CategorizationSettingsUpdate,
+  CategorizationSummary,
+  CreateCategoryRequest,
+  CreateCategoryResult,
+  Provenance,
+  ReviewQueue,
+  RuleDraft,
+  SimilarResult,
+  UndoRequest,
+  UndoResult,
   User,
   AdminUser,
   AdminUserList,
@@ -2279,4 +2295,66 @@ export const publicInvoices = {
     return data
   },
   pdfUrl: (token: string): string => `/api/public/invoices/${token}/pdf`,
+}
+
+// Automatic categorization: review queue, audit list, undo, settings, runs.
+// Nothing here calls the model; runs are queued for the worker.
+export const categorization = {
+  summary: async (): Promise<CategorizationSummary> => {
+    const { data } = await api.get('/categorization/summary')
+    return data
+  },
+  review: async (params: { limit?: number; offset?: number } = {}): Promise<ReviewQueue> => {
+    const { data } = await api.get('/categorization/review', { params })
+    return data
+  },
+  accept: async (payload: AcceptRequest): Promise<AppliedResult> => {
+    const { data } = await api.post('/categorization/review/accept', payload)
+    return data
+  },
+  dismiss: async (merchantKey: string): Promise<{ dismissed: number }> => {
+    const { data } = await api.post('/categorization/review/dismiss', { merchant_key: merchantKey })
+    return data
+  },
+  createCategory: async (payload: CreateCategoryRequest): Promise<CreateCategoryResult> => {
+    const { data } = await api.post('/categorization/review/create-category', payload)
+    return data
+  },
+  applied: async (filters: AppliedFilters = {}): Promise<AppliedPage> => {
+    const { data } = await api.get('/categorization/applied', { params: filters })
+    return data
+  },
+  undo: async (payload: UndoRequest): Promise<UndoResult> => {
+    const { data } = await api.post('/categorization/undo', payload)
+    return data
+  },
+  provenance: async (txId: string): Promise<Provenance> => {
+    const { data } = await api.get(`/categorization/transactions/${txId}/provenance`)
+    return data
+  },
+  similar: async (transactionId: string): Promise<SimilarResult> => {
+    const { data } = await api.post('/categorization/similar', { transaction_id: transactionId })
+    return data
+  },
+  applySimilar: async (transactionId: string): Promise<AppliedResult> => {
+    const { data } = await api.post('/categorization/similar/apply', { transaction_id: transactionId })
+    return data
+  },
+  ruleDraft: async (txId: string): Promise<RuleDraft> => {
+    const { data } = await api.get(`/categorization/rule-draft/${txId}`)
+    return data
+  },
+  getSettings: async (): Promise<CategorizationSettings> => {
+    const { data } = await api.get('/categorization/settings')
+    return data
+  },
+  updateSettings: async (payload: CategorizationSettingsUpdate): Promise<CategorizationSettings> => {
+    const { data } = await api.put('/categorization/settings', payload)
+    return data
+  },
+  /** 202 with the new run, 200 with the run already busy, 503 when the queue is down. */
+  run: async (payload: { scope: 'backlog' } = { scope: 'backlog' }): Promise<CategorizationRun> => {
+    const { data } = await api.post('/categorization/run', payload)
+    return data
+  },
 }

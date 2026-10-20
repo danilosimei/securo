@@ -24,3 +24,11 @@ export function invalidateFinancialQueries(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: ['reports'] })
   queryClient.invalidateQueries({ queryKey: ['drill-down'] })
 }
+
+// Every categorization view (summary badge, review, applied, organizer).
+// Accepting, dismissing or undoing also moves transaction categories, so the
+// transaction-facing queries go with it.
+export function invalidateCategorizationQueries(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: ['categorization'] })
+  invalidateFinancialQueries(queryClient)
+}

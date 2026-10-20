@@ -132,7 +132,8 @@
     "agents": "एजेंट",
     "aiAgents": "AI एजेंट",
     "collapseSidebar": "साइडबार छोटा करें",
-    "expandSidebar": "साइडबार बड़ा करें"
+    "expandSidebar": "साइडबार बड़ा करें",
+    "categorization": "Categorization"
   },
   "invoices": {
     "title": "इनवॉइस",
@@ -2868,5 +2869,24 @@
       "recurring": "आवर्ती नियम",
       "recurringHint": "हम कैसे तय करते हैं कि कोई शुल्क वही बिल है जिसकी आप पहले से अपेक्षा कर रहे थे।"
     }
+  },
+  "categorization": {
+    "tab": {
+      "review": "Review",
+      "applied": "Applied",
+      "organize": "Organize"
+    },
+    "runNow": "Categorize now",
+    "running": "Categorizing…",
+    "runStarted": "Categorization started",
+    "runError": "Could not start categorization",
+    "lastRun": "Last run {{when}} · {{applied}} applied · {{review}} to review",
+    "neverRun": "No runs yet",
+    "lastRunFailed": "The last run failed",
+    "aiOff": "AI is off — rules and memory only",
+    "configure": "Configure",
+    "settings": "Settings",
+    "pendingBadge": "{{count}} to review",
+    "soon": "Coming soon"
   }
 }

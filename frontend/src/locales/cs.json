@@ -132,7 +132,8 @@
     "agents": "Agenti",
     "aiAgents": "AI agenti",
     "collapseSidebar": "Sbalit boční panel",
-    "expandSidebar": "Rozbalit boční panel"
+    "expandSidebar": "Rozbalit boční panel",
+    "categorization": "Categorization"
   },
   "invoices": {
     "title": "Faktury",
@@ -3030,5 +3031,24 @@
       "recurring": "Pravidla opakovaných plateb",
       "recurringHint": "Jak určujeme, že odepsaná částka je účet, který jste už očekávali."
     }
+  },
+  "categorization": {
+    "tab": {
+      "review": "Review",
+      "applied": "Applied",
+      "organize": "Organize"
+    },
+    "runNow": "Categorize now",
+    "running": "Categorizing…",
+    "runStarted": "Categorization started",
+    "runError": "Could not start categorization",
+    "lastRun": "Last run {{when}} · {{applied}} applied · {{review}} to review",
+    "neverRun": "No runs yet",
+    "lastRunFailed": "The last run failed",
+    "aiOff": "AI is off — rules and memory only",
+    "configure": "Configure",
+    "settings": "Settings",
+    "pendingBadge": "{{count}} to review",
+    "soon": "Coming soon"
   }
 }

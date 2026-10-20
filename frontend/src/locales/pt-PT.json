@@ -132,7 +132,8 @@
     "agents": "Agentes",
     "aiAgents": "Agentes de IA",
     "collapseSidebar": "Recolher barra lateral",
-    "expandSidebar": "Expandir barra lateral"
+    "expandSidebar": "Expandir barra lateral",
+    "categorization": "Categorization"
   },
   "invoices": {
     "title": "Cobranças",
@@ -2872,5 +2873,24 @@
       "recurring": "Regras de Recorrentes",
       "recurringHint": "Como decidimos que uma cobrança é a conta que já esperava."
     }
+  },
+  "categorization": {
+    "tab": {
+      "review": "Review",
+      "applied": "Applied",
+      "organize": "Organize"
+    },
+    "runNow": "Categorize now",
+    "running": "Categorizing…",
+    "runStarted": "Categorization started",
+    "runError": "Could not start categorization",
+    "lastRun": "Last run {{when}} · {{applied}} applied · {{review}} to review",
+    "neverRun": "No runs yet",
+    "lastRunFailed": "The last run failed",
+    "aiOff": "AI is off — rules and memory only",
+    "configure": "Configure",
+    "settings": "Settings",
+    "pendingBadge": "{{count}} to review",
+    "soon": "Coming soon"
   }
 }

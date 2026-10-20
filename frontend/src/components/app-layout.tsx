@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useSidebarState } from '@/contexts/sidebar-state-context'
+import { NavBadge } from '@/components/nav-badge'
 import { CollectionSelector } from '@/components/collection-selector'
 import { auth as authApi, admin as adminApi } from '@/lib/api'
 import { resolveSupportedLang } from '@/lib/i18n'
@@ -444,7 +445,7 @@ export function AppLayout() {
                   title={t(`nav.${item.key}`)}
                   aria-label={t(`nav.${item.key}`)}
                   className={cn(
-                    'flex items-center gap-3 text-[13px] font-medium transition-all rounded-lg px-3 py-2',
+                    'relative flex items-center gap-3 text-[13px] font-medium transition-all rounded-lg px-3 py-2',
                     isActive
                       ? 'bg-primary/[0.08] text-primary border-l-[3px] border-primary pl-[9px]'
                       : 'text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground',
@@ -460,6 +461,9 @@ export function AppLayout() {
                     )}
                   />
                   <span className={cn(desktopSidebarCollapsed && 'lg:hidden')}>{t(`nav.${item.key}`)}</span>
+                  {item.badgeQueryKey && (
+                    <NavBadge queryKey={item.badgeQueryKey} collapsed={desktopSidebarCollapsed} />
+                  )}
                 </Link>
               )
               if (!showQuickAdd) return link
