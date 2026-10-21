@@ -48,7 +48,7 @@ from app.services.categorization.events import (
     write_staged,
 )
 from app.services.categorization.memory import CHUNK, MemoryHit, lookup, stored_key, teaches
-from app.services.categorization.merchant_key import merchant_key, sample_description
+from app.services.categorization.merchant_key import UNKNOWN_KEY, merchant_key, sample_description
 from app.services.categorization.settings import find_ai_connection, get_settings
 from app.services.category_service import get_assignable_category_ids
 
@@ -70,6 +70,12 @@ AUTO_APPLY_SOURCES = frozenset({"none", "provider"})
 #: `reason` of the suggestions made with no model behind them, so a later
 #: run with a model can tell them from the model's own and revisit them.
 NO_AI_REASON = "sem IA"
+#: `reason` of the model-less suggestion a nameless (`UNKNOWN`) store's rows
+#: get: the model would only see amount, date and type, so none is asked.
+#: Unlike `NO_AI_REASON` it is a *blocking* suggestion (`blocking_suggestion`):
+#: a later run with a model does not collect the rows again. Only the person
+#: (or an edit of the row) settles them.
+UNNAMED_REASON = "loja sem nome"
 #: `reason` given to a `NO_AI_REASON` suggestion when a later decision (the
 #: memory or the model) replaced it. It is closed as `dismissed`, but it is
 #: not the person ignoring the store.
@@ -476,11 +482,14 @@ async def suggest_without_ai(
     workspace_id: uuid.UUID,
     groups: dict[str, MerchantGroup],
     run_id: uuid.UUID | None,
+    *,
+    reason: str = NO_AI_REASON,
 ) -> int:
     """Queue the uncategorized rows of `groups` for the person; returns how many.
 
     The suggestion carries no category (there is no model to propose one)
-    and `reason=NO_AI_REASON`, so a run with a model can revisit it.
+    and, by default, `reason=NO_AI_REASON`, so a run with a model can revisit
+    it (`hold_unnamed` passes a blocking reason instead).
     Rows that already hold a category keep it: without a model there is
     nothing better to ask about. At most one pending suggestion per row.
     """
@@ -514,7 +523,7 @@ async def suggest_without_ai(
             "run_id": run_id,
             "merchant_key": stored_key(key),
             "status": "pending",
-            "reason": NO_AI_REASON,
+            "reason": reason,
             "created_at": now,
         }
         for tx_id, key in wanted
@@ -523,6 +532,28 @@ async def suggest_without_ai(
     if payload:
         await session.execute(sa_insert(CategorizationSuggestion), payload)
     return len(payload)
+
+
+async def hold_unnamed(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    groups: dict[str, MerchantGroup],
+    run_id: uuid.UUID | None,
+    stats: dict[str, Any],
+) -> dict[str, MerchantGroup]:
+    """Take the nameless `UNKNOWN` store out of `groups`; return the rest.
+
+    Its uncategorized rows get a model-less pending suggestion with
+    `UNNAMED_REASON` (blocking, see there) and nothing of them is ever sent
+    to a model. Counted in `stats["suggested"]`.
+    """
+    if UNKNOWN_KEY not in groups:
+        return groups
+    stats["suggested"] = stats.get("suggested", 0) + await suggest_without_ai(
+        session, workspace_id, {UNKNOWN_KEY: groups[UNKNOWN_KEY]}, run_id,
+        reason=UNNAMED_REASON,
+    )
+    return {key: group for key, group in groups.items() if key != UNKNOWN_KEY}
 
 
 async def supersede_no_ai(
@@ -649,6 +680,7 @@ async def prepare_run(
         "skipped": 0,
     }
     remaining = _undecided(await memory_pass(session, workspace_id, groups, run.id, stats=stats))
+    remaining = await hold_unnamed(session, workspace_id, remaining, run.id, stats)
     run.stats = dict(stats)
     await session.flush()
     return PreparedRun(run=run, remaining=remaining, stats=stats)
@@ -670,11 +702,12 @@ async def complete_run(
     # to this row, see `classifier._submit_batch`).
     if run.stats != prepared.stats:
         run.stats = dict(prepared.stats)
+    remaining = prepared.remaining
     classifier = ai_classifier
     if use_ai and classifier is not None:
-        await classifier(session, workspace_id, prepared.remaining, run)
+        await classifier(session, workspace_id, remaining, run)
     else:
-        await suggest_for_run(session, workspace_id, prepared.remaining, run)
+        await suggest_for_run(session, workspace_id, remaining, run)
 
     now = datetime.now(timezone.utc)
     if run.status == "running":

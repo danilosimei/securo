@@ -780,6 +780,61 @@ async def test_without_a_client_the_seam_falls_back_to_suggestions(
     assert sug.reason == NO_AI_REASON
 
 
+@pytest.mark.asyncio
+async def test_nameless_store_is_held_for_review_without_calling_the_model(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    """`UNKNOWN` rows would reach the model with only amount/date/type: no
+    call is paid for them. They wait as a blocking, model-less suggestion
+    (not `NO_AI_REASON`), so no later run re-collects or re-sends them."""
+    from app.services.categorization.merchant_key import UNKNOWN_KEY
+
+    nameless = [_tx(session, test_user, test_account, "") for _ in range(2)]
+    named = _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    await session.commit()
+    client = wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"]))))
+
+    run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    assert client.messages.create.await_count == 1
+    sent = [item for call in client.messages.create.await_args_list
+            for item in sent_items(call.kwargs)]
+    assert len(sent) == 1 and "IFOOD" in sent[0]["s"][0]
+    assert (await _reload(session, named)).category_source == "ai"
+    held = [s for s in await _all(session, CategorizationSuggestion)
+            if s.transaction_id in {tx.id for tx in nameless}]
+    assert {s.transaction_id for s in held} == {tx.id for tx in nameless}
+    assert {s.merchant_key for s in held} == {UNKNOWN_KEY}
+    assert {(s.status, s.category_id, s.reason) for s in held} == {
+        ("pending", None, pipeline.UNNAMED_REASON)
+    }
+    assert pipeline.UNNAMED_REASON != NO_AI_REASON
+    assert run.stats["suggested"] == 2
+
+    client.messages.create.reset_mock()
+    again = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    assert client.messages.create.await_count == 0
+    assert again.stats["suggested"] == 0
+    assert len(await _all(session, CategorizationSuggestion)) == len(held)
+
+
+@pytest.mark.asyncio
+async def test_nameless_store_without_a_model_is_also_blocking(
+    session, test_user, test_workspace, test_account, cats, monkeypatch
+):
+    """Even with no model, the nameless store's reason is not the one a later
+    run with a model revisits."""
+    monkeypatch.setattr(pipeline, "ai_classifier", classifier.classify_with_claude)
+    tx = _tx(session, test_user, test_account, "")
+    await session.commit()
+
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    [sug] = await _all(session, CategorizationSuggestion)
+    assert (sug.transaction_id, sug.reason) == (tx.id, pipeline.UNNAMED_REASON)
+
+
 def test_classifier_is_wired_into_the_pipeline():
     assert pipeline.ai_classifier is classifier.classify_with_claude
 
