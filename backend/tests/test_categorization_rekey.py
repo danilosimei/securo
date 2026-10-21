@@ -1121,3 +1121,102 @@ async def test_rekey_keeps_the_pick_of_a_suggestion_under_an_untouched_key(
     rows = await _rows(session, ws)
     assert rows["P:LOJA X"].counts == {}
     assert rows["NETSHOES"].counts == {a: 1}
+
+
+async def test_rekey_keeps_marks_settled_by_a_suggestion_under_an_untouched_key(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """Accepted under `P:LOJA X` (E1, A), the row then changed store and the
+    person moved it to B (E2). E2 is the touched store's decision; E1's pick
+    is still `P:LOJA X`'s, so its mark stays: undoing E2 then E1 empties
+    both stores, as without the re-key."""
+    from app.services.categorization import review
+
+    cat_a, cat_b, _ = test_categories
+    ws, user_id, a, b = test_workspace.id, test_user.id, str(cat_a.id), str(cat_b.id)
+    tx = _tx(session, test_user, test_account, "Mlp*Netshoes", source="user", category_id=cat_b.id)
+    await session.flush()
+    e1 = _user_event(session, tx, cat_a.id, NOON, pick=True)
+    sug = _suggest(session, tx, "P:LOJA X")
+    sug.status, sug.resolved_at = "accepted", NOON + timedelta(seconds=1)
+    e2 = CategorizationEvent(
+        id=uuid.uuid4(), workspace_id=ws, transaction_id=tx.id, source="user",
+        previous_source="user", previous_category_id=cat_a.id, new_category_id=cat_b.id,
+        user_id=user_id, memory_pick=True, created_at=NOON + timedelta(days=1),
+    )
+    session.add(e2)
+    _memory(session, ws, "P:LOJA X", {a: 1})
+    _memory(session, ws, "MLP", {b: 1})
+    await session.commit()
+    e1_id, e2_id = e1.id, e2.id
+
+    report = await rekey.rekey_workspace(session, ws)
+    await session.commit()
+    rows = await _rows(session, ws)
+    assert rows["NETSHOES"].counts == {b: 1}
+    assert report.unmarked == 0
+    await session.refresh(e1)
+    assert e1.memory_pick is True
+
+    session.expire_all()
+    await review.undo(session, ws, event_ids=[e2_id], user_id=user_id)
+    await session.commit()
+    await review.undo(session, ws, event_ids=[e1_id], user_id=user_id)
+    await session.commit()
+
+    rows = await _rows(session, ws)
+    assert rows["NETSHOES"].counts == {}
+    assert rows["P:LOJA X"].counts == {}
+
+
+async def test_rekey_transfer_leg_copied_by_cascade_is_not_a_decision(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """Categorizing one leg of a transfer copies the category to the other
+    (`user`, same person, an instant later). The copy is the main leg's
+    decision, counted under the main leg's store, not one of its own."""
+    cat_a = test_categories[0]
+    ws, a = test_workspace.id, str(cat_a.id)
+    pair = uuid.uuid4()
+    main = _tx(session, test_user, test_account, "Conta Investimento", source="user",
+               category_id=cat_a.id, transfer_pair_id=pair)
+    leg = _tx(session, test_user, test_account, "Mlp*Netshoes", source="user",
+              category_id=cat_a.id, transfer_pair_id=pair)
+    other = _tx(session, test_user, test_account, "Mlp*Netshoes", source="user",
+                category_id=cat_a.id)
+    await session.flush()
+    _user_event(session, main, cat_a.id, NOON, pick=True)
+    _user_event(session, leg, cat_a.id, NOON + timedelta(milliseconds=3))
+    _user_event(session, other, cat_a.id, NOON + timedelta(hours=1), pick=True)
+    _memory(session, ws, "MLP", {a: 2})
+    await session.commit()
+
+    await rekey.rekey_workspace(session, ws)
+    await session.commit()
+
+    assert (await _rows(session, ws))["NETSHOES"].counts == {a: 1}
+
+
+async def test_rekey_does_not_recount_a_row_whose_untouched_v1_key_holds_its_pick(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """An ignored `Mlp*Netshoes` taught `MLP`, which no candidate leads to,
+    so `MLP` is left alone with that pick; `NETSHOES`, touched through
+    another key, does not count it again."""
+    cat_a = test_categories[0]
+    ws, a = test_workspace.id, str(cat_a.id)
+    ignored = _tx(session, test_user, test_account, "Mlp*Netshoes", source="user",
+                  category_id=cat_a.id, is_ignored=True)
+    _tx(session, test_user, test_account, "Ebn*Netshoes")
+    await session.flush()
+    _user_event(session, ignored, cat_a.id, NOON, pick=True)
+    _memory(session, ws, "MLP", {a: 1})
+    _memory(session, ws, "EBN", {a: 1})
+    await session.commit()
+
+    await rekey.rekey_workspace(session, ws)
+    await session.commit()
+
+    rows = await _rows(session, ws)
+    assert rows["MLP"].counts == {a: 1}
+    assert rows["NETSHOES"].counts == {}

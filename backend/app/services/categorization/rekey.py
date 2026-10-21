@@ -42,8 +42,11 @@ person files, and no stale mark may survive on any of them):
   bulk write stamps each row as it goes); a `user` row with no event at
   all (older than the events) is a decision of its own. A decision whose
   acceptance settled a suggestion under a key the re-key does not touch
-  belongs to that key (its undo takes the pick there): not counted, its
-  mark kept.
+  belongs to that key (its undo takes the pick there): not counted, and
+  every event that suggestion settled keeps its mark. A transfer leg whose
+  category a cascade copied from the other leg is that leg's decision, not
+  one of its own; a row the pipeline does not consider whose untouched v1
+  key holds memory already gave that key its pick and is not counted again.
 - `memory_pick`: exactly one event of each counted decision carries it
   (one already marked if any, else the earliest); every other marked event
   of those rows loses it (a superseded edit, a clear, a second mark of the
@@ -172,6 +175,7 @@ class _Row:
     source: str
     day: date
     candidate: bool
+    pair: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -291,6 +295,7 @@ async def _load_rows(session: AsyncSession, workspace_id: uuid.UUID) -> list[_Ro
             Transaction.category_source,
             Transaction.date,
             candidate.label("candidate"),
+            Transaction.transfer_pair_id,
         )
         .outerjoin(
             Payee, and_(Payee.id == Transaction.payee_id, Payee.workspace_id == workspace_id)
@@ -299,9 +304,10 @@ async def _load_rows(session: AsyncSession, workspace_id: uuid.UUID) -> list[_Ro
     )
     cache: dict[tuple[str | None, str | None, str | None], tuple[str, str]] = {}
     rows: list[_Row] = []
-    for tx_id, description, payee_name, payee_source, category_id, source, day, is_candidate in (
-        result.all()
-    ):
+    for (
+        tx_id, description, payee_name, payee_source, category_id, source, day, is_candidate,
+        pair,
+    ) in result.all():
         names = (description, payee_name, payee_source)
         keys = cache.get(names)
         if keys is None:
@@ -310,7 +316,7 @@ async def _load_rows(session: AsyncSession, workspace_id: uuid.UUID) -> list[_Ro
                 _key(description, payee_name, payee_source, NEW_VERSION),
             )
         old, new = keys
-        rows.append(_Row(tx_id, old, new, category_id, source, day, bool(is_candidate)))
+        rows.append(_Row(tx_id, old, new, category_id, source, day, bool(is_candidate), pair))
     return rows
 
 
@@ -414,12 +420,50 @@ async def _rekey_proposals(
     return moved
 
 
+def _cause(
+    events: list[tuple[_Event, datetime | None]],
+) -> tuple[_Event | None, bool]:
+    """The event behind a row's current category, and whether a category
+    merge re-filed it since: the latest standing one, undos and undone
+    events aside, passing over merges."""
+    standing = sorted(
+        (ev for ev, undone_at in events if undone_at is None and ev.source != "undo"),
+        key=lambda ev: (ev.at, ev.id),
+    )
+    merged = False
+    for ev in reversed(standing):
+        if ev.reason == CATEGORY_MERGE_REASON:
+            merged = True
+            continue
+        return ev, merged
+    return None, merged
+
+
+def _is_mirror(cause: _Event, twin: _Event | None) -> bool:
+    """Whether `cause` is the copy a transfer cascade wrote on the paired leg
+    of the person's change on `twin` (same person and category, within
+    `DECISION_GAP`). The change is the marked one, else the earlier (the
+    cascade is recorded after it), else the lower id."""
+    if (
+        twin is None
+        or twin.source != "user"
+        or twin.user_id != cause.user_id
+        or twin.new_category_id != cause.new_category_id
+        or abs(twin.at - cause.at) > DECISION_GAP
+    ):
+        return False
+    order = min((cause, twin), key=lambda ev: (not ev.memory_pick, ev.at, ev.id))
+    return order is twin
+
+
 async def _facts(
     session: AsyncSession,
     workspace_id: uuid.UUID,
     rows: list[_Row],
     owners: dict[uuid.UUID, _Owner],
-) -> tuple[dict[str, _Facts], set[uuid.UUID]]:
+    partners: dict[uuid.UUID, uuid.UUID],
+    skip: set[uuid.UUID],
+) -> dict[str, _Facts]:
     """Per store key, the person's standing decisions behind its `user` rows,
     and the events whose pick belongs to a key the re-key leaves alone.
 
@@ -432,11 +476,22 @@ async def _facts(
     memory never counted, and neither does this. A row with no such event at
     all (filed before the events) is a decision of its own. A decision whose
     acceptance settled a suggestion under another, untouched key is that
-    key's (its undo takes the pick there): not counted here, mark kept.
+    key's (its undo takes the pick there): not counted here. A transfer leg
+    whose category a cascade copied from the other leg (`partners`) is that
+    leg's decision, not one of its own. Rows in `skip` (not candidates, whose
+    untouched v1 key already holds their pick) are not counted again.
     """
-    chosen = [row for row in rows if row.source == "user" and row.category_id is not None]
+    chosen = [
+        row for row in rows
+        if row.source == "user" and row.category_id is not None and row.id not in skip
+    ]
     by_tx: dict[uuid.UUID, list[tuple[_Event, datetime | None]]] = defaultdict(list)
-    ids = [row.id for row in chosen]
+    ids = list(
+        dict.fromkeys(
+            [row.id for row in chosen]
+            + [partners[row.id] for row in chosen if row.id in partners]
+        )
+    )
     for start in range(0, len(ids), memory.CHUNK):
         found = await session.execute(
             select(
@@ -464,25 +519,10 @@ async def _facts(
             by_tx[tx_id].append((event, undone_at))
 
     facts: dict[str, _Facts] = defaultdict(_Facts)
-    owned: set[uuid.UUID] = set()
     bursts: dict[tuple[str, str, uuid.UUID | None], list[tuple[_Event, date]]] = defaultdict(list)
     for row in chosen:
         category = str(row.category_id)
-        standing = sorted(
-            (
-                ev for ev, undone_at in by_tx.get(row.id, [])
-                if undone_at is None and ev.source != "undo"
-            ),
-            key=lambda ev: (ev.at, ev.id),
-        )
-        merged = False
-        cause: _Event | None = None
-        for ev in reversed(standing):
-            if ev.reason == CATEGORY_MERGE_REASON:
-                merged = True
-                continue
-            cause = ev
-            break
+        cause, merged = _cause(by_tx.get(row.id, []))
         if cause is None:
             facts[row.new].decisions.append(_Decision(category, [], row.day))
             continue
@@ -492,7 +532,9 @@ async def _facts(
             continue
         owner = owners.get(row.id)
         if owner is not None and owner.key != row.new and owner.resolved_at >= cause.at:
-            owned.add(cause.id)
+            continue
+        partner = partners.get(row.id)
+        if partner is not None and _is_mirror(cause, _cause(by_tx.get(partner, []))[0]):
             continue
         bursts[(row.new, category, cause.user_id)].append((cause, row.day))
     for (key, category, _user), found_events in bursts.items():
@@ -504,19 +546,23 @@ async def _facts(
                 facts[key].decisions.append(current)
             current.events.append(event)
             current.day = max(current.day, day)
-    return dict(facts), owned
+    return dict(facts)
 
 
 async def _set_picks(
     session: AsyncSession,
     workspace_id: uuid.UUID,
-    tx_ids: list[uuid.UUID],
+    rows: list[_Row],
     facts: list[_Facts],
-    owned: set[uuid.UUID],
+    owners: dict[uuid.UUID, _Owner],
 ) -> tuple[int, int]:
     """One `memory_pick` per counted decision, none on any other event of
-    `tx_ids` (except the `owned` ones, whose pick lives under an untouched
-    key); returns (marked, unmarked)."""
+    `rows`, except those whose pick lives under an untouched key: every
+    event a row's accepted suggestion under another key settled (created
+    up to its `resolved_at`), which `review._take_back` undoes there.
+    Returns (marked, unmarked)."""
+    new_key = {row.id: row.new for row in rows}
+    tx_ids = list(new_key)
     carriers: dict[uuid.UUID, bool] = {}
     for found in facts:
         for decision in found.decisions:
@@ -525,21 +571,31 @@ async def _set_picks(
                 carriers[carrier.id] = carrier.memory_pick
     stale: list[uuid.UUID] = []
     for start in range(0, len(tx_ids), memory.CHUNK):
-        stale.extend(
-            ev_id
-            for ev_id in (
-                await session.execute(
-                    select(CategorizationEvent.id).where(
-                        CategorizationEvent.workspace_id == workspace_id,
-                        CategorizationEvent.transaction_id.in_(
-                            tx_ids[start:start + memory.CHUNK]
-                        ),
-                        CategorizationEvent.memory_pick.is_(True),
-                    )
+        for ev_id, tx_id, created_at in (
+            await session.execute(
+                select(
+                    CategorizationEvent.id,
+                    CategorizationEvent.transaction_id,
+                    CategorizationEvent.created_at,
+                ).where(
+                    CategorizationEvent.workspace_id == workspace_id,
+                    CategorizationEvent.transaction_id.in_(tx_ids[start:start + memory.CHUNK]),
+                    CategorizationEvent.memory_pick.is_(True),
                 )
-            ).scalars()
-            if ev_id not in carriers and ev_id not in owned
-        )
+            )
+        ).all():
+            if ev_id in carriers:
+                continue
+            owner = owners.get(tx_id)
+            at = _utc(created_at)
+            if (
+                owner is not None
+                and owner.key != new_key[tx_id]
+                and at is not None
+                and at <= owner.resolved_at
+            ):
+                continue  # its undo takes the pick from the owner's key
+            stale.append(ev_id)
     mark = [ev_id for ev_id, already in carriers.items() if not already]
     for ids, value in ((mark, True), (stale, False)):
         for start in range(0, len(ids), memory.CHUNK):
@@ -586,7 +642,23 @@ async def _rekey_memory(
     # Every row now carrying a touched key, candidate or not: the live
     # memory learns from any row a person files, and no stale mark may stay.
     facts_rows = [row for row in every if row.new in live]
-    facts, owned = await _facts(session, workspace_id, facts_rows, owners)
+    by_pair: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    for row in every:
+        if row.pair is not None:
+            by_pair[row.pair].append(row.id)
+    partners = {
+        tx_id: other
+        for legs in by_pair.values() if len(legs) == 2
+        for tx_id, other in (legs, legs[::-1])
+    }
+    # A row the pipeline does not consider, whose v1 key the re-key leaves
+    # alone with memory there, already gave that key its pick.
+    skip = {
+        row.id for row in facts_rows
+        if not row.candidate and row.old != row.new
+        and row.old in stored and row.old not in touched
+    }
+    facts = await _facts(session, workspace_id, facts_rows, owners, partners, skip)
     notes: dict[str, list[str]] = defaultdict(list)
     picks = {key: _picks(stored[key]) for key in touched if key in stored}
 
@@ -659,8 +731,8 @@ async def _rekey_memory(
         report.seeded += 1
         report.recounts.append((key, before, sum(counts.values())))
     report.marked, report.unmarked = await _set_picks(
-        session, workspace_id, [row.id for row in facts_rows],
-        [facts[key] for key in sorted(live) if key in facts], owned,
+        session, workspace_id, facts_rows,
+        [facts[key] for key in sorted(live) if key in facts], owners,
     )
 
     for key in sorted(splits):
