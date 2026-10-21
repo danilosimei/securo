@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.core.database import get_async_session
 from app.main import app
+from app.models.category import Category
 from app.models.transaction import Transaction
 from app.services import admin_service, report_service
 import mcp_server.tools  # noqa: F401 -- registers the real MCP handlers
@@ -42,11 +43,23 @@ async def client(postgres_sessions, monkeypatch):
         yield client
 
 
-async def test_income_expenses_api_endpoint(client, auth_headers, test_transactions):
+async def _countable(session, transactions):
+    """Make the shared fixture rows countable by the report rules: they are USD
+    with no converted value (kept out of the sums) and the salary sits in a
+    category that is not `income` (it would ease spending)."""
+    for txn in transactions:
+        txn.amount_primary = txn.amount
+        if txn.type == "credit" and txn.category_id is not None:
+            (await session.get(Category, txn.category_id)).report_kind = "income"
+    await session.commit()
+
+
+async def test_income_expenses_api_endpoint(client, auth_headers, session, test_transactions):
     """GET /reports/income-expenses returns valid response."""
+    await _countable(session, test_transactions)
     response = await client.get(
         "/api/reports/income-expenses",
-        params={"months": 12, "interval": "monthly"},
+        params={"period": "this_month", "interval": "monthly"},
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -106,11 +119,14 @@ async def test_income_expenses_excludes_opening_balance(client, auth_headers):
     assert breakdowns["income"] == 0.0
 
 
-async def test_income_expenses_has_category_trend(client, auth_headers, test_transactions, test_categories):
+async def test_income_expenses_has_category_trend(
+    client, auth_headers, session, test_transactions, test_categories
+):
     """GET /reports/income-expenses response includes category_trend array."""
+    await _countable(session, test_transactions)
     response = await client.get(
         "/api/reports/income-expenses",
-        params={"months": 12, "interval": "monthly"},
+        params={"period": "this_month", "interval": "monthly"},
         headers=auth_headers,
     )
     assert response.status_code == 200
@@ -145,7 +161,9 @@ async def test_income_expenses_has_category_trend(client, auth_headers, test_tra
 async def test_income_expenses_excludes_transfers(
     client, auth_headers, session, test_account, test_transactions,
 ):
-    before = await client.get("/api/reports/income-expenses", headers=auth_headers)
+    await _countable(session, test_transactions)
+    this_month = {"period": "this_month"}
+    before = await client.get("/api/reports/income-expenses", params=this_month, headers=auth_headers)
     assert before.status_code == 200
     destination = await client.post(
         "/api/accounts",
@@ -167,7 +185,7 @@ async def test_income_expenses_excludes_transfers(
     legs = list(await session.scalars(select(Transaction).where(Transaction.transfer_pair_id.is_not(None))))
     assert len(legs) == 2
     assert {leg.amount for leg in legs} == {Decimal("500")}
-    response = await client.get("/api/reports/income-expenses", headers=auth_headers)
+    response = await client.get("/api/reports/income-expenses", params=this_month, headers=auth_headers)
     assert response.status_code == 200
     assert response.json()["summary"]["breakdowns"] == before.json()["summary"]["breakdowns"]
     totals = {b["key"]: b["value"] for b in response.json()["summary"]["breakdowns"]}
@@ -180,7 +198,7 @@ async def test_monthly_trend_numeric_fields(client, auth_headers, session, test_
     previous_month = today.replace(day=1) - timedelta(days=1)
     test_transactions[0].date = previous_month
     test_transactions[0].effective_date = previous_month
-    await session.commit()
+    await _countable(session, test_transactions)
     response = await client.get("/api/dashboard/monthly-trend", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
