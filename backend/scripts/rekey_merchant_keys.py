@@ -9,9 +9,16 @@ Options:
     --dry-run         compute and print what would change; write nothing
     --workspace UUID  only this workspace
 
-Idempotent: a second run changes nothing. A workspace with a busy
-classification is skipped (reported "pulado: busy"); run again later.
-What is merged and split is described in `app/services/categorization/rekey.py`.
+Idempotent: a second run changes nothing. A real run is refused (exit 2)
+while any classification or redistribution is busy; the dry run still
+reports it ("pulado: busy"). Close every browser tab of Securo first:
+accepting, choosing or saving a note in the app does not take the
+workspace lock, and one made during the real run can lose its pick.
+
+The output starts with the stores whose picks fall below `MIN_CHOICES`
+(they stop being filed by the memory alone until a new decision): read
+them before the real run. What is merged and split is described in
+`app/services/categorization/rekey.py`.
 """
 import argparse
 import asyncio
@@ -23,9 +30,12 @@ from typing import Any
 # Allow running from repo root or backend root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from app.services.categorization.memory import MIN_CHOICES  # noqa: E402
 from app.services.categorization.rekey import (  # noqa: E402
     MERGE,
+    SPLIT,
     RekeyReport,
+    busy_workspaces,
     rekey_all,
 )
 
@@ -47,6 +57,46 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 def after_minus_before(recount: tuple[str, int | None, int]) -> int:
     _key, before, after = recount
     return after - (before or 0)
+
+
+def below_min(report: RekeyReport) -> list[tuple[str, str, int]]:
+    """Recomputed stores left below `MIN_CHOICES` picks that had at least
+    that many: `(key, before, after)`, biggest losses first. A store created
+    by a split had, before, the picks of the mixed key it came from."""
+    split_from: dict[str, tuple[str, int]] = {}
+    for change in report.changes:
+        if change.kind != SPLIT:
+            continue
+        for key in change.new:
+            if change.picks > split_from.get(key, ("", -1))[1]:
+                split_from[key] = (change.old, change.picks)
+    found: list[tuple[bool, int, str, str, int]] = []
+    for key, before, after in report.recounts:
+        if after >= MIN_CHOICES:
+            continue
+        if before is not None:
+            if before >= MIN_CHOICES:
+                found.append((False, after - before, key, str(before), after))
+        elif key in split_from and split_from[key][1] >= MIN_CHOICES:
+            source, picks = split_from[key]
+            found.append((True, after - picks, key, f"nova ({source} tinha {picks})", after))
+    found.sort()
+    return [(key, before, after) for _new, _loss, key, before, after in found]
+
+
+def format_below_min(reports: list[RekeyReport]) -> list[str]:
+    rows = [
+        (report.workspace_id, *row) for report in reports for row in below_min(report)
+    ]
+    if not rows:
+        return [f"nenhuma loja fica abaixo de {MIN_CHOICES} escolhas"]
+    lines = [
+        f"ATENÇÃO: {len(rows)} lojas ficam abaixo de {MIN_CHOICES} escolhas e deixam de ser"
+        " aplicadas sozinhas pela memória até uma nova decisão:"
+    ]
+    for ws_id, key, before, after in rows:
+        lines.append(f"  {ws_id} {key}: {before} → {after} escolhas")
+    return lines
 
 
 def format_report(report: RekeyReport) -> list[str]:
@@ -92,6 +142,18 @@ async def run(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     session_maker, dispose = _session_maker()
     try:
+        busy = (
+            [] if args.dry_run
+            else await busy_workspaces(session_maker, workspace_id=args.workspace)
+        )
+        if busy:
+            for ws_id, run in busy:
+                print(f"recusado: {ws_id} {run}")
+            print(
+                "categorização em andamento: espere terminar, feche a aba do Securo"
+                " e rode de novo (nada foi gravado)"
+            )
+            return 2
         reports = await rekey_all(
             session_maker, dry_run=args.dry_run, workspace_id=args.workspace
         )
@@ -99,6 +161,8 @@ async def run(argv: list[str] | None = None) -> int:
         await dispose()
     if args.dry_run:
         print("simulação (--dry-run): nada foi gravado")
+    for line in format_below_min(reports):
+        print(line)
     for report in reports:
         for line in format_report(report):
             print(line)

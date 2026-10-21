@@ -822,21 +822,40 @@ async def rekey_workspace(
     return report
 
 
+async def _workspace_ids(session_maker: Any, workspace_id: uuid.UUID | None) -> list[uuid.UUID]:
+    if workspace_id is not None:
+        return [workspace_id]
+    async with session_maker() as session:
+        return list(
+            (await session.execute(select(Workspace.id).order_by(Workspace.id))).scalars()
+        )
+
+
+async def busy_workspaces(
+    session_maker: Any, *, workspace_id: uuid.UUID | None = None
+) -> list[tuple[uuid.UUID, str]]:
+    """The workspaces (all, or only `workspace_id`) with a busy `classify` /
+    `redistribute` run, each with the run that holds it. Read-only: the
+    script refuses a real run while any is busy, instead of leaving them
+    half done; `rekey_workspace` still checks again under the lock."""
+    found: list[tuple[uuid.UUID, str]] = []
+    ids = await _workspace_ids(session_maker, workspace_id)
+    async with session_maker() as session:
+        for ws_id in ids:
+            busy = await _busy_run(session, ws_id)
+            if busy is not None:
+                found.append((ws_id, busy))
+    return found
+
+
 async def rekey_all(
     session_maker: Any, *, dry_run: bool = False, workspace_id: uuid.UUID | None = None
 ) -> list[RekeyReport]:
     """`rekey_workspace` for every workspace (or only `workspace_id`), each in
     its own transaction and commit, so one busy or failing workspace leaves
     the ones before it done."""
-    if workspace_id is not None:
-        ids = [workspace_id]
-    else:
-        async with session_maker() as session:
-            ids = list(
-                (await session.execute(select(Workspace.id).order_by(Workspace.id))).scalars()
-            )
     reports: list[RekeyReport] = []
-    for ws_id in ids:
+    for ws_id in await _workspace_ids(session_maker, workspace_id):
         async with session_maker() as session:
             report = await rekey_workspace(session, ws_id, dry_run=dry_run)
             if not dry_run:

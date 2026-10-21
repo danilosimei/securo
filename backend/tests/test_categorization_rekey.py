@@ -561,6 +561,7 @@ async def test_rekey_script_parses_args(monkeypatch, capsys):
 
     monkeypatch.setattr(script, "rekey_all", fake_rekey_all)
     monkeypatch.setattr(script, "_session_maker", lambda: (None, _noop))
+    monkeypatch.setattr(script, "busy_workspaces", _no_busy)
 
     assert await script.run(["--dry-run"]) == 0
     assert await script.run(["--workspace", str(ws)]) == 0
@@ -582,6 +583,124 @@ async def test_rekey_script_parses_args(monkeypatch, capsys):
 
 async def _noop():
     return None
+
+
+async def _no_busy(session_maker, *, workspace_id=None):
+    return []
+
+
+async def test_rekey_script_lists_stores_falling_below_min_choices_first(monkeypatch, capsys):
+    """The recount is one pick per decision (R16/N7): a store bulk-filed in
+    one go drops to one pick and stops auto-applying. Those come first, with
+    before -> after, so the owner reads them before anything else."""
+    script = _load_script()
+    ws = uuid.uuid4()
+
+    async def fake_rekey_all(session_maker, *, dry_run=False, workspace_id=None):
+        return [
+            rekey.RekeyReport(
+                ws, split=1,
+                changes=[rekey.KeyChange("split", "MLP", ("KABUM", "NETSHOES"), 4)],
+                recounts=[
+                    ("SPOTIFY", 3, 2), ("NETSHOES", 5, 1), ("KABUM", None, 1),
+                    ("DL", 1, 1), ("NOVA", None, 1), ("BKG", 2, 0),
+                ],
+            ),
+        ]
+
+    monkeypatch.setattr(script, "rekey_all", fake_rekey_all)
+    monkeypatch.setattr(script, "_session_maker", lambda: (None, _noop))
+    monkeypatch.setattr(script, "busy_workspaces", _no_busy)
+
+    assert await script.run(["--dry-run"]) == 0
+    out = capsys.readouterr().out
+    head, _, rest = out.partition(f"{ws} sugestões=")
+    assert "ATENÇÃO: 3 lojas ficam abaixo de 2 escolhas" in head
+    assert f"{ws} NETSHOES: 5 → 1 escolhas" in head
+    assert f"{ws} BKG: 2 → 0 escolhas" in head
+    assert f"{ws} KABUM: nova (MLP tinha 4) → 1 escolhas" in head
+    assert head.index("NETSHOES") < head.index("BKG") < head.index("KABUM")
+    for key in ("SPOTIFY", "DL", "NOVA"):
+        assert key not in head
+    assert "recontar SPOTIFY: 3 → 2 escolhas" in rest
+
+
+async def test_rekey_script_says_when_no_store_falls_below_min_choices(monkeypatch, capsys):
+    script = _load_script()
+
+    async def fake_rekey_all(session_maker, *, dry_run=False, workspace_id=None):
+        return [rekey.RekeyReport(uuid.uuid4(), recounts=[("SPOTIFY", 3, 2)])]
+
+    monkeypatch.setattr(script, "rekey_all", fake_rekey_all)
+    monkeypatch.setattr(script, "_session_maker", lambda: (None, _noop))
+    monkeypatch.setattr(script, "busy_workspaces", _no_busy)
+
+    assert await script.run(["--dry-run"]) == 0
+    assert "nenhuma loja fica abaixo de 2 escolhas" in capsys.readouterr().out
+
+
+async def test_rekey_script_refuses_a_real_run_while_a_categorization_is_busy(
+    monkeypatch, capsys
+):
+    script = _load_script()
+    ws = uuid.uuid4()
+    calls = []
+
+    async def fake_rekey_all(session_maker, *, dry_run=False, workspace_id=None):
+        calls.append(dry_run)
+        return []
+
+    async def busy(session_maker, *, workspace_id=None):
+        return [(ws, "classify running abc, criada há 0h01m")]
+
+    monkeypatch.setattr(script, "rekey_all", fake_rekey_all)
+    monkeypatch.setattr(script, "_session_maker", lambda: (None, _noop))
+    monkeypatch.setattr(script, "busy_workspaces", busy)
+
+    assert await script.run([]) == 2
+    assert calls == []
+    out = capsys.readouterr().out
+    assert f"recusado: {ws} classify running abc, criada há 0h01m" in out
+    assert "feche a aba do Securo" in out
+    # A dry run writes nothing: it still runs and reports the workspace busy.
+    assert await script.run(["--dry-run"]) == 0
+    assert calls == [True]
+
+
+async def test_busy_workspaces_postgres(postgres_sessions):
+    from decimal import Decimal
+
+    from app.models.account import Account
+    from tests.test_admin_service import _make_user
+
+    async with postgres_sessions() as session:
+        user = await _make_user(session, f"rekeybusy_{uuid.uuid4().hex[:8]}@test.com")
+        account = Account(
+            id=uuid.uuid4(), user_id=user.id, name="Main", type="checking",
+            balance=Decimal("0"), currency="BRL",
+        )
+        session.add(account)
+        await session.flush()
+        ws = account.workspace_id
+        await session.commit()
+
+    assert await rekey.busy_workspaces(postgres_sessions, workspace_id=ws) == []
+
+    async with postgres_sessions() as session:
+        run = CategorizationRun(
+            id=uuid.uuid4(), workspace_id=ws, kind="redistribute", trigger="manual",
+            status="queued",
+        )
+        session.add(run)
+        session.add(CategorizationRun(
+            id=uuid.uuid4(), workspace_id=ws, kind="ask", trigger="manual", status="done",
+        ))
+        await session.commit()
+
+    [(found_ws, busy)] = await rekey.busy_workspaces(postgres_sessions, workspace_id=ws)
+    assert found_ws == ws
+    assert busy.startswith(f"redistribute queued {run.id}")
+    assert (ws, busy) in await rekey.busy_workspaces(postgres_sessions)
 
 
 def test_rekey_script_rejects_bad_workspace():
