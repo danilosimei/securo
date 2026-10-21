@@ -745,3 +745,66 @@ def test_an_empty_list_of_assignable_categories_blocks_every_categorization():
         is False
     )
     assert tx.category_id is None
+
+
+# --- mojibake: U+FFFD in the transaction text --------------------------------------
+# Production descriptions lost their accented letters to U+FFFD on the way
+# in; each one stands for exactly one letter of the rule value.
+
+_DEPOSITO = "Dep\ufffdsito de Confian\ufffda de IOF"
+_REMUNERACAO = "Taxa de Remunera\ufffd\ufffdo BTC"
+
+
+@pytest.mark.parametrize(
+    ("op", "value", "description"),
+    [
+        ("contains", "Depósito de Confiança", _DEPOSITO),
+        ("contains", "Remuneração", _REMUNERACAO),
+        ("equals", "Depósito de Confiança de IOF", _DEPOSITO),
+        ("equals", "Taxa de Remuneração BTC", _REMUNERACAO),
+        ("starts_with", "Depósito", _DEPOSITO),
+        ("ends_with", "Remuneração BTC", _REMUNERACAO),
+        # The rule may be typed without accents, too.
+        ("contains", "remuneracao", _REMUNERACAO),
+        ("regex", "Remunera..o", _REMUNERACAO),
+        ("regex", "^Dep[oó]sito de Confian[cç]a", _DEPOSITO),
+        ("regex", "remunera(ção|cao)\\s+btc", _REMUNERACAO),
+        ("regex", "(?i:dep)ósito", _DEPOSITO),
+        ("regex", "\\u0044ep\u00f3sito", _DEPOSITO),
+    ],
+)
+def test_replacement_character_matches_one_letter_of_the_rule(op, value, description):
+    conditions = [{"field": "description", "op": op, "value": value}]
+    assert evaluate_conditions("and", conditions, make_tx(description=description)) is True
+
+
+@pytest.mark.parametrize(
+    ("op", "value", "description"),
+    [
+        # One U+FFFD is one letter: "çã" needs two.
+        ("contains", "Remuneração", "Taxa de Remunera\ufffdo BTC"),
+        # Never a digit, a space or punctuation.
+        ("contains", "IOF 1", "IOF \ufffd"),
+        ("contains", "A B", "A\ufffdB"),
+        ("equals", "Depósito de Confiança", _DEPOSITO),
+        ("starts_with", "Confiança", _DEPOSITO),
+        ("regex", "Remuneração\\d", _REMUNERACAO),
+        ("regex", "Dep[0-9]sito", _DEPOSITO),
+    ],
+)
+def test_replacement_character_never_matches_more_than_a_letter(op, value, description):
+    conditions = [{"field": "description", "op": op, "value": value}]
+    assert evaluate_conditions("and", conditions, make_tx(description=description)) is False
+
+
+def test_negated_operators_see_the_replacement_character_as_a_letter():
+    tx = make_tx(description=_REMUNERACAO)
+    assert evaluate_conditions(
+        "and", [{"field": "description", "op": "not_contains", "value": "Remuneração"}], tx
+    ) is False
+    assert evaluate_conditions(
+        "and", [{"field": "description", "op": "not_equals", "value": "Taxa de Remuneração BTC"}], tx
+    ) is False
+    assert evaluate_conditions(
+        "and", [{"field": "description", "op": "not_contains", "value": "Rendimento"}], tx
+    ) is True

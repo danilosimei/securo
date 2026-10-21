@@ -34,6 +34,155 @@ def _normalize(text: str) -> str:
     return _strip_accents(text.upper())
 
 
+#: What a lost accented letter became in some production descriptions
+#: ("Remunera��o"): one per letter. In a transaction's text it
+#: stands for any one letter of the rule value.
+REPLACEMENT_CHAR = "�"
+#: A letter, or the character standing for one.
+_LETTER_OR_REPLACEMENT = r"(?:[^\W\d_]|�)"
+#: Escapes of letter classes and anchors, whose letter is not a literal.
+_CLASS_ESCAPES = frozenset("dDsSwWbBAZ")
+#: Escapes followed by a fixed number of hex digits.
+_HEX_ESCAPES = {"x": 2, "u": 4, "U": 8}
+
+
+def _same_at(text: str, start: int, value: str) -> bool:
+    """`value` sits at `text[start:]`, a U+FFFD of the text standing for any
+    one letter of the value."""
+    if start < 0 or start + len(value) > len(text):
+        return False
+    return all(
+        t == v or (t == REPLACEMENT_CHAR and v.isalpha())
+        for t, v in zip(text[start:start + len(value)], value, strict=True)
+    )
+
+
+def _contains(text: str, value: str) -> bool:
+    if REPLACEMENT_CHAR not in text:
+        return value in text
+    return any(_same_at(text, i, value) for i in range(len(text) - len(value) + 1))
+
+
+def _starts_with(text: str, value: str) -> bool:
+    if REPLACEMENT_CHAR not in text:
+        return text.startswith(value)
+    return _same_at(text, 0, value)
+
+
+def _ends_with(text: str, value: str) -> bool:
+    if REPLACEMENT_CHAR not in text:
+        return text.endswith(value)
+    return _same_at(text, len(text) - len(value), value)
+
+
+def _equals(text: str, value: str) -> bool:
+    if REPLACEMENT_CHAR not in text:
+        return text == value
+    return len(text) == len(value) and _same_at(text, 0, value)
+
+
+def _escape_end(pattern: str, i: int) -> int:
+    """End of the escape at `pattern[i]` (a backslash)."""
+    code = pattern[i + 1:i + 2]
+    if code in _HEX_ESCAPES:
+        return min(len(pattern), i + 2 + _HEX_ESCAPES[code])
+    if code == "N" and pattern.startswith("{", i + 2):
+        close = pattern.find("}", i + 3)
+        return len(pattern) if close < 0 else close + 1
+    return min(len(pattern), i + 2)
+
+
+def _class_end(pattern: str, i: int) -> tuple[int, bool]:
+    """End of the class at `pattern[i]` ("["), and whether it may match a
+    letter: not negated, and holding a literal letter or a word class."""
+    j = i + 1
+    negated = pattern.startswith("^", j)
+    if negated:
+        j += 1
+    if pattern.startswith("]", j):
+        j += 1
+    letters = False
+    while j < len(pattern) and pattern[j] != "]":
+        if pattern[j] == "\\":
+            end = _escape_end(pattern, j)
+            code = pattern[j + 1:j + 2]
+            letters = letters or code == "w" or (
+                end - j == 2 and code.isalpha() and code not in _CLASS_ESCAPES
+            )
+            j = end
+            continue
+        letters = letters or pattern[j].isalpha()
+        j += 1
+    return min(len(pattern), j + 1), letters and not negated
+
+
+def _group_head_end(pattern: str, i: int) -> int:
+    """End of the head of the "(?" construct at `pattern[i]`: the part with
+    names and flags, whose letters are not literals."""
+    j = i + 2
+    head = pattern[j:j + 1]
+    if head == "<" and pattern[j + 1:j + 2] in ("=", "!"):
+        return j + 2
+    if head in ("P", "<"):
+        stops = ">)"
+    elif head in ("#", "("):
+        stops = ")"
+    else:
+        while j < len(pattern) and (pattern[j].isalpha() or pattern[j] == "-"):
+            j += 1
+        return min(len(pattern), j + 1)
+    while j < len(pattern) and pattern[j] not in stops:
+        j += 1
+    return min(len(pattern), j + 1)
+
+
+def _letters_or_replacement(pattern: str) -> str:
+    """`pattern` with each literal letter, word class and class that may
+    match a letter also accepting U+FFFD; other escapes, group names and
+    flags are kept as they are."""
+    out: list[str] = []
+    i = 0
+    while i < len(pattern):
+        char = pattern[i]
+        if char == "\\":
+            end = _escape_end(pattern, i)
+            out.append(_LETTER_OR_REPLACEMENT if pattern[i + 1:end] == "w" else pattern[i:end])
+            i = end
+        elif char == "[":
+            end, letters = _class_end(pattern, i)
+            body = pattern[i:end]
+            out.append(f"(?:{body}|{REPLACEMENT_CHAR})" if letters else body)
+            i = end
+        elif char == "(" and pattern.startswith("?", i + 1):
+            end = _group_head_end(pattern, i)
+            out.append(pattern[i:end])
+            i = end
+        elif char.isalpha():
+            out.append(f"(?:{char}|{REPLACEMENT_CHAR})")
+            i += 1
+        else:
+            out.append(char)
+            i += 1
+    return "".join(out)
+
+
+def _regex_search(pattern: str, text: str) -> bool:
+    """`compile_rule_regex(pattern)` searched in `text`; when the text holds
+    U+FFFD, each one may also stand for a letter the pattern expects.
+
+    Raises ValueError for a pattern `compile_rule_regex` refuses.
+    """
+    if compile_rule_regex(pattern).search(text) is not None:
+        return True
+    if REPLACEMENT_CHAR not in text:
+        return False
+    try:
+        lenient = re.compile(_letters_or_replacement(_strip_accents(pattern)), re.IGNORECASE)
+    except re.error:
+        return False
+    return lenient.search(text) is not None
+
+
 def _to_decimal(val) -> Decimal:
     try:
         return Decimal(str(val))
@@ -75,26 +224,27 @@ def _match_condition(condition: dict, tx: "Transaction") -> bool:
         tx_str = _normalize(str(tx_val or ""))
         val_str = _normalize(str(value or ""))
 
+        # A U+FFFD in the text stands for one letter of the value (see
+        # `REPLACEMENT_CHAR`).
         if op == "contains":
-            return val_str in tx_str
+            return _contains(tx_str, val_str)
         if op == "not_contains":
-            return val_str not in tx_str
+            return not _contains(tx_str, val_str)
         if op == "starts_with":
-            return tx_str.startswith(val_str)
+            return _starts_with(tx_str, val_str)
         if op == "ends_with":
-            return tx_str.endswith(val_str)
+            return _ends_with(tx_str, val_str)
         if op == "equals":
-            return tx_str == val_str
+            return _equals(tx_str, val_str)
         if op == "not_equals":
-            return tx_str != val_str
+            return not _equals(tx_str, val_str)
         if op == "regex":
             try:
                 # Strip accents from the pattern so it lines up with the
                 # normalized text, but keep its case: uppercasing a regex
                 # inverts escape classes (\s -> \S, \b -> \B, \d -> \D) and
                 # breaks inline flags. Case is already handled by IGNORECASE.
-                compiled = compile_rule_regex(str(value or ""))
-                return compiled.search(tx_str) is not None
+                return _regex_search(str(value or ""), tx_str)
             except ValueError:
                 return False
 
