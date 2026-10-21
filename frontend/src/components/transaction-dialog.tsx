@@ -208,10 +208,12 @@ export function TransactionDialog({
         // chrome) and make it a flex column so the inner scroll region works
         // on small screens, not just at the sm: breakpoint (issue #286).
         'transition-[max-width] duration-300 flex flex-col max-h-[calc(100dvh-2rem)] overflow-hidden',
-        hasPreview ? 'sm:max-w-5xl max-w-2xl' : 'sm:max-w-2xl max-w-2xl'
+        // From md up the form is two columns, so it is wide enough not to scroll.
+        hasPreview ? 'max-w-2xl md:max-w-6xl' : 'max-w-2xl md:max-w-4xl'
       )}>
+        {/* The height follows the form; only an open preview needs a fixed one. */}
         <div className={isEditing
-          ? 'flex flex-col min-h-0 flex-1 sm:flex-row sm:flex-none sm:gap-0 sm:h-[80vh]'
+          ? cn('flex flex-col min-h-0 flex-1 sm:flex-row sm:gap-0', hasPreview && 'sm:flex-none sm:h-[80vh]')
           : 'flex flex-col min-h-0 flex-1'}>
           {/* Left column: form */}
           <div className={isEditing
@@ -964,6 +966,10 @@ function TransactionForm({
           </Button>
         </div>
       )}
+      {/* Two columns from md up: what the transaction is on the left, what
+          was added to it (provenance, notes, splits, files) on the right. */}
+      <div className="grid gap-4 md:grid-cols-2 md:items-start md:gap-6">
+      <div className="min-w-0 space-y-4">
       <div className="space-y-2">
         <Label>{t('transactions.description')}</Label>
         {isSynced ? (
@@ -1166,18 +1172,6 @@ function TransactionForm({
           />
         </div>
       </div>
-      {transaction && (
-        <ProvenanceBlock
-          transactionId={transaction.id}
-          categories={categories}
-          // The row went back server-side; follow it so a later save does
-          // not re-file it under the category just undone.
-          onUndone={(restored, source) => {
-            setCategoryId(restored ?? '')
-            onCategoryUndone?.(transaction.id, restored, source)
-          }}
-        />
-      )}
       <div className={cn("grid gap-4", isSynced ? "grid-cols-1" : "grid-cols-2")}>
         <div className="space-y-2">
           <Label>{t('payees.payee')}</Label>
@@ -1207,36 +1201,6 @@ function TransactionForm({
           </div>
         )}
       </div>
-
-      <div className="space-y-2">
-        <Label>{t('transactions.notes')} <span className="text-muted-foreground font-normal text-xs">({t('transactions.notesHint')})</span></Label>
-        <textarea
-          className="w-full border border-input rounded-md px-3 py-2 text-sm bg-card resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
-          rows={2}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder={t('transactions.notesPlaceholder')}
-        />
-      </div>
-
-      {transaction && (
-        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3">
-          <input
-            type="checkbox"
-            className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
-            checked={excludeFromReports}
-            onChange={(event) => setExcludeFromReports(event.target.checked)}
-          />
-          <span>
-            <span className="block text-sm font-medium">
-              {t('transactions.excludeFromReports')}
-            </span>
-            <span className="block text-xs text-muted-foreground">
-              {t('transactions.excludeFromReportsHint')}
-            </span>
-          </span>
-        </label>
-      )}
 
       {/* Manual bill-cycle override (issue #92). CC accounts only. Empty
           input = use auto bucketing (Pluggy bill_id when available, cycle
@@ -1273,6 +1237,51 @@ function TransactionForm({
           </div>
         )
       })()}
+      </div>
+
+      <div className="min-w-0 space-y-4">
+      {transaction && (
+        <ProvenanceBlock
+          transactionId={transaction.id}
+          categories={categories}
+          // The row went back server-side; follow it so a later save does
+          // not re-file it under the category just undone.
+          onUndone={(restored, source) => {
+            setCategoryId(restored ?? '')
+            onCategoryUndone?.(transaction.id, restored, source)
+          }}
+        />
+      )}
+
+      <div className="space-y-2">
+        <Label>{t('transactions.notes')} <span className="text-muted-foreground font-normal text-xs">({t('transactions.notesHint')})</span></Label>
+        <textarea
+          className="w-full border border-input rounded-md px-3 py-2 text-sm bg-card resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
+          rows={2}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder={t('transactions.notesPlaceholder')}
+        />
+      </div>
+
+      {transaction && (
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+            checked={excludeFromReports}
+            onChange={(event) => setExcludeFromReports(event.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium">
+              {t('transactions.excludeFromReports')}
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              {t('transactions.excludeFromReportsHint')}
+            </span>
+          </span>
+        </label>
+      )}
 
       {/* A settlement-sourced transaction *is* the movement clearing a
           group debt; splitting it would create circular accounting
@@ -1400,6 +1409,8 @@ function TransactionForm({
           )}
         </div>
       )}
+      </div>
+      </div>
 
       </div>
 
@@ -1820,7 +1831,7 @@ function PendingAttachmentsSection({
         </>
       ) : (
         <div
-          className={`rounded-xl border-2 border-dashed py-6 px-4 text-center transition-all cursor-pointer ${
+          className={`rounded-xl border-2 border-dashed py-3 px-4 text-center transition-all cursor-pointer ${
             dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
           }`}
           onDragOver={(e) => { e.preventDefault(); onDragOver() }}
@@ -1828,8 +1839,8 @@ function PendingAttachmentsSection({
           onDrop={onDrop}
           onClick={() => fileInputRef.current?.click()}
         >
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
               <Upload size={14} className="text-muted-foreground" />
             </div>
             <span className="text-xs text-muted-foreground">{t('transactions.attachmentsUpload')}</span>

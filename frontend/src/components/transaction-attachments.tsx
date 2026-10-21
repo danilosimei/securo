@@ -365,13 +365,13 @@ export function TransactionAttachments({
 
       {/* Attachment grid */}
       {isLoading ? (
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
           <Skeleton className="aspect-square w-full rounded-xl" />
           <Skeleton className="aspect-square w-full rounded-xl" />
         </div>
       ) : hasAttachments ? (
         <>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
           {allItems.map((att) => {
             const isUploading = att.isUploading
             const isActive = !isUploading && activePreviewId === att.id
@@ -561,7 +561,7 @@ export function TransactionAttachments({
       ) : (
         /* Empty state with drop zone */
         <div
-          className={`rounded-xl border-2 border-dashed py-6 px-4 text-center transition-all cursor-pointer ${
+          className={`rounded-xl border-2 border-dashed py-3 px-4 text-center transition-all cursor-pointer ${
             dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
           }`}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -569,8 +569,8 @@ export function TransactionAttachments({
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
         >
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+          <div className="flex items-center justify-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
               <Upload size={14} className="text-muted-foreground" />
             </div>
             <span className="text-xs text-muted-foreground">{t('transactions.attachmentsUpload')}</span>
