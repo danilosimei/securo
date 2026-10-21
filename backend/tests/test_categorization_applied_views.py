@@ -474,3 +474,43 @@ async def test_accept_returns_rows_in_review_or_request_order(
         "merchant_key": "PADARIA", "category_id": str(food),
     })
     assert accepted.json()["transaction_ids"] == rest
+
+
+@pytest.mark.asyncio
+async def test_event_views_keep_to_the_categorizable_base(
+    client, auth_headers, session, test_user, test_account, test_categories,
+):
+    """An AI or memory decision over a row that later left the base (a
+    transfer leg, ignored, still pending, an opening balance) is no longer
+    one the section reports: the default view, Confirmadas and
+    `applied_last_7d` agree with the scoreboard, which does not count it."""
+    food = test_categories[0].id
+    kept = _tx(session, test_user, test_account, "POSTO", source="ai", category_id=food)
+    kept_confirmed = _tx(session, test_user, test_account, "FEIRA", source="memory", category_id=food)
+    gone = [
+        _tx(session, test_user, test_account, "UBER", source="ai", category_id=food,
+            transfer_pair_id=uuid.uuid4()),
+        _tx(session, test_user, test_account, "UBER", source="ai", category_id=food,
+            is_ignored=True),
+        _tx(session, test_user, test_account, "UBER", source="ai", category_id=food,
+            status="pending"),
+        _tx(session, test_user, test_account, "UBER", source="memory", category_id=food,
+            tx_source="opening_balance"),
+    ]
+    gone_confirmed = _tx(session, test_user, test_account, "MERCADO", source="memory",
+                         category_id=food, is_ignored=True)
+    await session.flush()
+    change = _event(session, kept, source="ai", new=food)
+    confirmation = _event(session, kept_confirmed, source="memory", previous=food, new=food)
+    for tx in gone:
+        _event(session, tx, source=tx.category_source, new=food)
+    _event(session, gone_confirmed, source="memory", previous=food, new=food)
+    await session.commit()
+
+    default = (await client.get(f"{API}/applied", headers=auth_headers)).json()
+    assert [i["event_id"] for i in default["items"]] == [str(change.id)]
+    assert default["total"] == 1
+    summary = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+    assert summary["applied_last_7d"] == 1
+    body = await _applied(client, auth_headers, "confirmed")
+    assert [i["event_id"] for i in body["items"]] == [str(confirmation.id)]

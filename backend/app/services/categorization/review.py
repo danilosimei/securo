@@ -180,13 +180,16 @@ async def summary(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, A
         )
     ).one()
     applied = await session.scalar(
-        select(func.count(CategorizationEvent.id)).where(
+        select(func.count(CategorizationEvent.id))
+        # What the default Aplicadas list shows (`applied_events`).
+        .join(Transaction, Transaction.id == CategorizationEvent.transaction_id)
+        .where(
             CategorizationEvent.workspace_id == workspace_id,
             CategorizationEvent.source.in_(AUTO_SOURCES),
-            # What the default Aplicadas list shows (`applied_events`).
             standing_event(),
             CategorizationEvent.created_at >= _now() - APPLIED_WINDOW,
             changes_category(),
+            *categorizable(workspace_id),
         )
     )
     last = (
@@ -698,7 +701,8 @@ async def applied_events(
     """Changes the pipeline made on its own still in force, newest first:
     one undone, or superseded by a later decision on the same row (it shows
     a category the row may no longer have, and its undo would be skipped),
-    is left out.
+    is left out, and so is one over a row that left the categorizable base
+    since (a transfer leg, ignored...), as the scoreboard and `origin_rows`.
 
     Confirmations (the category did not change) are no change to check, so
     they are left out -- unless `confirmed`, which lists only them: the AI
@@ -725,7 +729,7 @@ async def applied_events(
         filters.append(CategorizationEvent.created_at >= since)
     joined = and_(
         Transaction.id == CategorizationEvent.transaction_id,
-        Transaction.workspace_id == workspace_id,
+        *categorizable(workspace_id),
     )
     total = await session.scalar(
         select(func.count(CategorizationEvent.id)).join(Transaction, joined).where(*filters)
