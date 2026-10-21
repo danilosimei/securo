@@ -187,15 +187,29 @@ async def _organize_in(session: AsyncSession, workspace_id: uuid.UUID, run_id: u
         await session.commit()
     except Exception as exc:  # noqa: BLE001 - recorded on the run
         logger.exception("organizer run %s failed", run_id)
-        await session.rollback()
-        failed = await session.get(CategorizationRun, run_id, populate_existing=True)
-        if failed is not None:
-            failed.status = "failed"
-            failed.error = type(exc).__name__
-            failed.finished_at = datetime.now(timezone.utc)
-            await session.commit()
-        return {"status": "failed", "run_id": str(run_id)}
+        status = await record_failure(session, run_id, exc)
+        return {"status": status, "run_id": str(run_id)}
     return {"status": run.status, "run_id": str(run.id)}
+
+
+async def record_failure(session: AsyncSession, run_id: uuid.UUID, exc: BaseException) -> str:
+    """Roll back and record `exc` on the run; returns the status it keeps.
+
+    A run that already sent its Message Batch (`processing_batch` with a
+    `batch_id`, committed by `classifier._submit_batch`) stays waiting on
+    it: the batch is paid, and `poll_batches` collects it. Only `error`
+    names the exception. Any other run ends `failed`.
+    """
+    await session.rollback()
+    failed = await session.get(CategorizationRun, run_id, populate_existing=True)
+    if failed is None:
+        return "failed"
+    failed.error = type(exc).__name__
+    if failed.status != "processing_batch" or not failed.batch_id:
+        failed.status = "failed"
+        failed.finished_at = datetime.now(timezone.utc)
+    await session.commit()
+    return failed.status
 
 
 async def _poll_celery() -> dict:
@@ -494,15 +508,9 @@ async def _categorize_in(
         await session.commit()
     except Exception as exc:  # noqa: BLE001 - recorded on the run
         logger.exception("categorization run %s failed", run_pk)
-        await session.rollback()
-        failed = await session.get(CategorizationRun, run_pk, populate_existing=True)
-        if failed is not None:
-            failed.status = "failed"
-            failed.error = type(exc).__name__
-            failed.finished_at = datetime.now(timezone.utc)
-            await session.commit()
+        status = await record_failure(session, run_pk, exc)
         await requeue_if_requested(session, run_pk)
-        return {"status": "failed", "run_id": str(run_pk)}
+        return {"status": status, "run_id": str(run_pk)}
     result = {"status": run.status, "run_id": str(run.id), "stats": dict(run.stats or {})}
     await requeue_if_requested(session, run_pk)
     return result

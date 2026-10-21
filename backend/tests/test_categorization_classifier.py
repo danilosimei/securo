@@ -8,7 +8,7 @@ import itertools
 import json
 import re
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -1319,3 +1319,207 @@ async def test_reading_a_batch_does_not_hold_the_workspace(postgres_sessions, mo
         release.set()
         outcome = await collector
     assert outcome == "collected"
+
+
+# --- committed spend and paid batches ---------------------------------------------
+
+
+def _spend_run(workspace_id, status, *, days_ago=0, cost="0", estimate=None, kind="classify"):
+    return CategorizationRun(
+        id=uuid.uuid4(), workspace_id=workspace_id, kind=kind, trigger="backlog",
+        status=status, cost_usd=Decimal(cost), stats={},
+        batch_id="b-old" if status == "processing_batch" else None,
+        detail={"batch": {"estimated_cost_usd": estimate}} if estimate is not None else {},
+        created_at=datetime.now(timezone.utc) - timedelta(days=days_ago),
+    )
+
+
+@pytest.mark.asyncio
+async def test_committed_spend_is_one_statement(session, test_workspace):
+    from sqlalchemy import event
+
+    session.add(_spend_run(test_workspace.id, "done", cost="0.10"))
+    session.add(_spend_run(test_workspace.id, "processing_batch", estimate="0.05"))
+    await session.commit()
+    statements: list[str] = []
+
+    def count(conn, cursor, statement, parameters, context, executemany):
+        if "categorization_runs" in statement:
+            statements.append(statement)
+
+    sync_engine = session.bind.sync_engine
+    event.listen(sync_engine, "before_cursor_execute", count)
+    try:
+        spent = await classifier.committed_spend(session, test_workspace.id)
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", count)
+
+    assert spent == Decimal("0.15")
+    assert len(statements) == 1
+
+
+@pytest.mark.asyncio
+async def test_committed_spend_counts_month_cost_and_inflight_estimates(session, test_workspace):
+    ws = test_workspace.id
+    session.add_all([
+        _spend_run(ws, "done", cost="0.10"),
+        # Sent last month and still in flight: its estimate is committed money.
+        _spend_run(ws, "processing_batch", days_ago=40, estimate="0.05"),
+        # Paid last month: the cap reset since.
+        _spend_run(ws, "done", days_ago=40, cost="1.00"),
+        # Not a batch kind: never in flight.
+        _spend_run(ws, "processing_batch", days_ago=40, estimate="9", kind="organize"),
+    ])
+    await session.commit()
+
+    assert await classifier.committed_spend(session, ws) == Decimal("0.15")
+
+
+def _raise_once(original):
+    calls = {"n": 0}
+
+    async def wrapped(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("write failed")
+        return await original(*args, **kwargs)
+
+    return wrapped
+
+
+@pytest.mark.asyncio
+async def test_batch_stays_collectable_when_work_after_send_fails(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire, monkeypatch
+):
+    """A batch is paid once it is sent: whatever fails after that, the run
+    keeps waiting on it with its estimate, and the beat collects it."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    ws = test_workspace.id
+    for name in _names(120):
+        _tx(session, test_user, test_account, name)
+    await session.commit()
+    monkeypatch.setattr(classifier, "estimate_cost", lambda params, *, batch: Decimal("0.60"))
+    client = wire(fake_client())
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("suggestions failed")
+
+    monkeypatch.setattr(classifier, "suggest_without_ai", boom)
+
+    result = await categorization_tasks._categorize(
+        _session_maker(session), ws, "ingest", None
+    )
+
+    client.messages.batches.create.assert_awaited_once()
+    run_id = uuid.UUID(result["run_id"])
+    async with AsyncSession(bind=session.bind) as fresh:
+        run = await fresh.get(CategorizationRun, run_id)
+        assert run is not None
+        assert (run.status, run.batch_id, run.is_batch) == ("processing_batch", "batch_1", True)
+        assert run.error == "RuntimeError" and run.finished_at is None
+        assert run.detail["batch"]["estimated_cost_usd"] == "0.60"
+        assert run.detail["batch"]["capped"] is True
+        assert await classifier.committed_spend(fresh, ws) == Decimal("0.60")
+
+    wire(fake_client(results=[]))
+    summary = await categorization_tasks._poll(_session_maker(session))
+
+    assert summary == {"collected": 1, "pending": 0, "failed": 0}
+    run = await session.get(CategorizationRun, run_id, populate_existing=True)
+    assert run is not None and run.status == "capped" and run.finished_at is not None
+
+
+@pytest.mark.asyncio
+async def test_batch_tracked_when_writing_tracking_fails_once(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire, monkeypatch
+):
+    ws = test_workspace.id
+    for name in _names(120):
+        _tx(session, test_user, test_account, name)
+    await session.commit()
+    monkeypatch.setattr(classifier, "estimate_cost", lambda params, *, batch: Decimal("0.10"))
+    wire(fake_client())
+    prepared = await pipeline.prepare_run(session, ws, trigger="backlog", use_ai=True)
+    await session.commit()
+    run_id = prepared.run.id
+    # A trigger marked the run meanwhile: the fallback write keeps the mark.
+    await session.execute(
+        update(CategorizationRun)
+        .where(CategorizationRun.id == run_id)
+        .values(detail={"rerun": True})
+    )
+    await session.commit()
+    monkeypatch.setattr(classifier, "_merge_detail", _raise_once(classifier._merge_detail))
+
+    with pytest.raises(RuntimeError, match="write failed"):
+        await pipeline.complete_run(session, ws, prepared, use_ai=True)
+    await session.rollback()
+
+    run = await session.get(CategorizationRun, run_id, populate_existing=True)
+    assert run is not None
+    assert (run.status, run.batch_id, run.is_batch, run.model) == (
+        "processing_batch", "batch_1", True, CLASSIFIER_MODEL,
+    )
+    assert run.detail["rerun"] is True
+    assert run.detail["batch"]["estimated_cost_usd"] == "0.20"
+    assert len(run.detail["batch"]["chunks"]) == 2
+    assert await classifier.committed_spend(session, ws) == Decimal("0.20")
+
+
+@pytest.mark.asyncio
+async def test_concurrent_batch_submissions_respect_the_cap_postgres(
+    postgres_sessions, monkeypatch
+):
+    """The spend lock's reason to exist: two runs of one workspace sending a
+    batch at once, with room for one, send one; the other ends capped."""
+    import asyncio
+
+    from app.services.categorization.prompts import CategoryIndex
+
+    ws, category_id, redistribute_id = await _pg_redistribution(postgres_sessions, "running")
+    async with postgres_sessions() as setup:
+        classify_run = CategorizationRun(
+            id=uuid.uuid4(), workspace_id=ws, kind="classify", trigger="backlog",
+            status="running", stats={}, detail={},
+        )
+        setup.add(classify_run)
+        await setup.commit()
+    monkeypatch.setattr(classifier, "estimate_cost", lambda params, *, batch: Decimal("0.60"))
+    client = fake_client()
+    sent = itertools.count()
+
+    async def create(**_):
+        # Slow enough that both submitters are inside `_submit_batch` at once.
+        await asyncio.sleep(0.2)
+        return SimpleNamespace(id=f"batch_{next(sent)}")
+
+    client.messages.batches.create = AsyncMock(side_effect=create)
+    group = next(iter(_groups(1).values()))
+    plan = classifier._Plan(
+        groups_by_item={"i1": group}, params={"model": CLASSIFIER_MODEL, "max_tokens": 10},
+    )
+
+    async def submit(run_id, allowed):
+        async with postgres_sessions() as session:
+            run = await session.get(CategorizationRun, run_id)
+            assert run is not None
+            await classifier._submit_batch(
+                session, ws, run, [plan], {}, client=client, index=CategoryIndex(()),
+                cap=Decimal("1.00"), allowed_category_ids=allowed,
+            )
+            await session.commit()
+
+    await asyncio.wait_for(asyncio.gather(
+        submit(classify_run.id, None), submit(redistribute_id, {category_id}),
+    ), timeout=20)
+
+    client.messages.batches.create.assert_awaited_once()
+    async with postgres_sessions() as session:
+        runs = (
+            await session.execute(
+                select(CategorizationRun).where(CategorizationRun.workspace_id == ws)
+            )
+        ).scalars().all()
+        assert sorted(run.status for run in runs) == ["capped", "processing_batch"]
+        assert await classifier.committed_spend(session, ws) == Decimal("0.60")

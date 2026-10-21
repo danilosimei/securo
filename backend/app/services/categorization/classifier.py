@@ -19,8 +19,9 @@
 The run was committed between the memory phase and this one, so a person
 may have touched the rows while Claude answered: every row is re-read
 (`FOR UPDATE`) and checked again right before anything is written. Nothing
-here commits but the usage of a paid call (so a failure while applying
-cannot hide it from the cap), and nothing logs the request, the answer or
+here commits but what was paid: the usage of a call, and the tracking of
+a sent batch (so a failure afterwards cannot hide it from the cap, nor
+leave a paid batch uncollected); nothing logs the request, the answer or
 the key.
 """
 from __future__ import annotations
@@ -38,10 +39,11 @@ from typing import Any, cast
 
 from anthropic import AsyncAnthropic
 from anthropic.types.messages.batch_create_params import Request
+from sqlalchemy import and_, case, or_, select, update
 from sqlalchemy import insert as sa_insert
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.app_clock import get_workspace_timezone
 from app.models.categorization import (
     CategorizationRun,
     CategorizationSuggestion,
@@ -59,7 +61,7 @@ from app.services.categorization.claude_client import (
     create_message,
     resolve_client,
 )
-from app.services.categorization.costs import cost_usd, month_spend
+from app.services.categorization.costs import _month_bounds, cost_usd
 from app.services.categorization.events import (
     PROTECTED_SOURCES,
     UNSET,
@@ -597,20 +599,34 @@ async def committed_spend(session: AsyncSession, workspace_id: uuid.UUID) -> Dec
 
     A batch is paid when it ends, but the money is committed when it is
     sent: without this, a run started while another waits on its batch
-    could spend past the cap.
+    could spend past the cap. One statement, so both terms come from the
+    same snapshot: a collection committing in between cannot move a batch
+    from "estimate" to `cost_usd` unseen (the submitter holds only the spend
+    lock, not the workspace lock `collect_batch` takes).
     """
-    spent = await month_spend(session, workspace_id)
-    pending = (
+    tz = await get_workspace_timezone(session, workspace_id)
+    start, end = _month_bounds(datetime.now(tz))
+    in_month = and_(CategorizationRun.created_at >= start, CategorizationRun.created_at < end)
+    in_flight = and_(
+        CategorizationRun.kind.in_(BATCH_KINDS),
+        CategorizationRun.status == "processing_batch",
+    )
+    rows = (
         await session.execute(
-            select(CategorizationRun.detail).where(
-                CategorizationRun.workspace_id == workspace_id,
-                CategorizationRun.kind.in_(BATCH_KINDS),
-                CategorizationRun.status == "processing_batch",
-            )
+            select(
+                CategorizationRun.cost_usd,
+                CategorizationRun.detail,
+                case((in_month, True), else_=False).label("in_month"),
+                case((in_flight, True), else_=False).label("in_flight"),
+            ).where(CategorizationRun.workspace_id == workspace_id, or_(in_month, in_flight))
         )
-    ).scalars().all()
-    for detail in pending:
-        spent += batch_estimate(detail)
+    ).all()
+    spent = Decimal(0)
+    for cost, detail, month, flight in rows:
+        if month:
+            spent += Decimal(str(cost or 0))
+        if flight:
+            spent += batch_estimate(detail)
     return spent
 
 
@@ -827,7 +843,7 @@ async def classify(
             run.model = CLASSIFIER_MODEL
             message = await create_message(client, plan.params)
             account_usage(run, getattr(message, "usage", None), batch=False)
-            # The one commit of this module: the call is paid, so its cost
+            # The call is paid (see the module docstring), so its cost
             # must reach `month_spend` even if applying the answer fails and
             # the task rolls back. Nothing else is pending at this point
             # (the memory phase was committed; no row is locked yet), which
@@ -857,14 +873,19 @@ async def _submit_batch(
     """Send the chunks that fit under the cap as one Message Batch; the rest
     become model-less suggestions and the run ends `capped`.
 
-    The workspace's spend lock is taken first and held until the task
-    commits: two batches of one workspace are sent one at a time, so each
-    sees the other's estimate in `committed_spend`. It is not the workspace
-    lock, so a trigger or a POST /run does not wait for `create_batch` (a
-    network call). The workspace lock is taken after it, before this run's
-    row is written: a trigger holds that lock while it marks this row
-    (`_mark_busy_run`), so taking it after an UPDATE of the row would
-    deadlock against it.
+    The workspace's spend lock is taken first and held until the batch's
+    tracking is committed: two batches of one workspace are sent one at a
+    time, so each sees the other's estimate in `committed_spend`. It is not
+    the workspace lock, so a trigger or a POST /run does not wait for
+    `create_batch` (a network call). The workspace lock is taken after it,
+    before this run's row is written: a trigger holds that lock while it
+    marks this row (`_mark_busy_run`), so taking it after an UPDATE of the
+    row would deadlock against it.
+
+    Once `create_batch` returns, the batch is paid: its tracking (`batch_id`,
+    `processing_batch`, the estimate) is committed right away, before the
+    suggestions for what was left out, and written again with a direct
+    UPDATE when that commit fails (the error is then raised).
     """
     from app.tasks import categorization_tasks as tasks
 
@@ -895,12 +916,13 @@ async def _submit_batch(
         for position, plan in enumerate(sent)
     ]
     batch_id = await create_batch(client, requests)
-    await tasks.lock_workspace(session, workspace_id)
-    run.model = CLASSIFIER_MODEL
-    run.is_batch = True
-    run.batch_id = batch_id
-    run.status = "processing_batch"
-    await _merge_detail(session, run, {
+    tracking = {
+        "model": CLASSIFIER_MODEL,
+        "is_batch": True,
+        "batch_id": batch_id,
+        "status": "processing_batch",
+    }
+    patch = {
         BATCH_DETAIL: {
             "chunks": [
                 {item_id: group.key for item_id, group in plan.groups_by_item.items()}
@@ -923,11 +945,56 @@ async def _submit_batch(
             "estimated_cost_usd": str(total - spent),
         },
         **unsent,
-    })
+    }
+    # The batch is paid from here on: its tracking is committed before any
+    # other work, so nothing failing later can roll it back (the run then
+    # stays `processing_batch` and the beat collects it, see
+    # `tasks.record_failure`). The commit also frees the spend lock.
+    run_id = run.id
+    try:
+        await tasks.lock_workspace(session, workspace_id)
+        for name, value in tracking.items():
+            setattr(run, name, value)
+        await _merge_detail(session, run, patch)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        await _track_batch(session, run_id, workspace_id, tracking, patch)
+        raise
+    # Held until the task commits, as before the commit above: this run's
+    # row is written again (stats, status) after this point.
+    await tasks.lock_workspace(session, workspace_id)
     if left:
         stats["suggested"] = stats.get("suggested", 0) + await suggest_without_ai(
             session, workspace_id, _groups_of(left), run.id
         )
+
+
+async def _track_batch(
+    session: AsyncSession,
+    run_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    tracking: dict[str, Any],
+    patch: dict[str, Any],
+) -> None:
+    """Write a sent batch's tracking with a direct UPDATE, in a transaction
+    of its own, when the regular write failed: the batch is paid and must
+    stay collectable. Same locks and order as `_submit_batch` (spend, then
+    workspace), and the stored `detail` is merged, not replaced."""
+    from app.tasks import categorization_tasks as tasks
+
+    await tasks.lock_spend(session, workspace_id)
+    await tasks.lock_workspace(session, workspace_id)
+    stored = await session.scalar(
+        select(CategorizationRun.detail).where(CategorizationRun.id == run_id)
+    )
+    await session.execute(
+        update(CategorizationRun)
+        .where(CategorizationRun.id == run_id)
+        .values(**tracking, detail={**(stored or {}), **patch})
+        .execution_options(synchronize_session=False)
+    )
+    await session.commit()
 
 
 # --- collecting a batch -----------------------------------------------------------

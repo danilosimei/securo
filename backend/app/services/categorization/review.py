@@ -1242,8 +1242,6 @@ async def request_run(
     first). When another transaction holds the lock, a busy run still
     within `STALE_AFTER` is returned without waiting for it.
     """
-    from sqlalchemy import or_
-
     from app.tasks import categorization_tasks as tasks
 
     busy_query = (
