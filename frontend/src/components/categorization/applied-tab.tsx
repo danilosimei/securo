@@ -16,7 +16,7 @@
  *  and its Accept is a fix like any other. */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   BadgeCheck,
@@ -147,6 +147,8 @@ export function AppliedTab() {
   const sourceParam = view ?? ([...sources].sort().join(',') || undefined)
   const applied = useInfiniteQuery({
     queryKey: ['categorization', 'applied', { source: sourceParam ?? null, confidence }],
+    // A filter switch keeps the rows up, dimmed, until the new page lands.
+    placeholderData: keepPreviousData,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       categorizationApi.applied({
@@ -511,72 +513,77 @@ export function AppliedTab() {
         />
         {filters}
 
-        {days.length === 0 ? (
-          <div className="py-10 text-center">
-            <ListChecks size={20} className="mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">
-              {filtered ? t('categorization.applied.emptyFiltered') : t('categorization.applied.empty')}
-            </p>
-            {!filtered && (
-              <p className="mt-0.5 text-xs text-muted-foreground">{t('categorization.applied.emptyHint')}</p>
-            )}
-          </div>
-        ) : (
-          <div aria-label={t('categorization.applied.listLabel')}>
-            {days.map((day) => (
-              <section key={day.day} className="border-b border-border last:border-b-0">
-                <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 px-4 py-2 sm:px-5">
-                  <h3 className="text-xs font-semibold text-foreground">
-                    {dayLabel(day.date)}
-                    <span className="ml-2 font-normal text-muted-foreground">{day.count}</span>
-                  </h3>
-                  {canWrite && day.runs.length > 0 && (
-                    <BatchUndo
-                      runs={day.runs.map((run) => ({
-                        id: run.runId,
-                        count: run.eventIds.length,
-                        time: run.at.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' }),
-                        eventIds: run.eventIds,
-                      }))}
-                      busy={busy}
-                      onUndo={(ids) => void undo(ids)}
-                    />
-                  )}
-                </div>
-                <div className="divide-y divide-border">
-                  {day.stores.map((store) => (
-                    <StoreGroup
-                      key={store.key}
-                      store={store}
-                      open={opened.get(store.key) ?? store.events.length <= OPEN_BY_DEFAULT}
-                      onToggle={() =>
-                        setOpened((prev) =>
-                          new Map(prev).set(
-                            store.key,
-                            !(prev.get(store.key) ?? store.events.length <= OPEN_BY_DEFAULT),
-                          ),
-                        )
-                      }
-                      canWrite={canWrite}
-                      selected={selected}
-                      onSelect={toggleIds}
-                      catalog={catalog}
-                      categories={categories}
-                      categoryGroups={categoryGroups}
-                      path={path}
-                      money={money}
-                      onCorrect={correct}
-                      onCreate={createAndCorrect}
-                      onAsk={ask.available ? askAbout : undefined}
-                      askBlockedReason={askBlockedReason}
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-
+        <div
+          data-testid="applied-list"
+          aria-busy={applied.isPlaceholderData}
+          className={cn('transition-opacity duration-200', applied.isPlaceholderData && 'opacity-60')}
+        >
+          {days.length === 0 ? (
+            <div className="py-10 text-center">
+              <ListChecks size={20} className="mx-auto mb-2 text-muted-foreground" />
+              <p className="text-sm font-medium text-foreground">
+                {filtered ? t('categorization.applied.emptyFiltered') : t('categorization.applied.empty')}
+              </p>
+              {!filtered && (
+                <p className="mt-0.5 text-xs text-muted-foreground">{t('categorization.applied.emptyHint')}</p>
+              )}
+            </div>
+          ) : (
+            <div aria-label={t('categorization.applied.listLabel')}>
+              {days.map((day) => (
+                <section key={day.day} className="border-b border-border last:border-b-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 px-4 py-2 sm:px-5">
+                    <h3 className="text-xs font-semibold text-foreground">
+                      {dayLabel(day.date)}
+                      <span className="ml-2 font-normal text-muted-foreground">{day.count}</span>
+                    </h3>
+                    {canWrite && day.runs.length > 0 && (
+                      <BatchUndo
+                        runs={day.runs.map((run) => ({
+                          id: run.runId,
+                          count: run.eventIds.length,
+                          time: run.at.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' }),
+                          eventIds: run.eventIds,
+                        }))}
+                        busy={busy}
+                        onUndo={(ids) => void undo(ids)}
+                      />
+                    )}
+                  </div>
+                  <div className="divide-y divide-border">
+                    {day.stores.map((store) => (
+                      <StoreGroup
+                        key={store.key}
+                        store={store}
+                        open={opened.get(store.key) ?? store.events.length <= OPEN_BY_DEFAULT}
+                        onToggle={() =>
+                          setOpened((prev) =>
+                            new Map(prev).set(
+                              store.key,
+                              !(prev.get(store.key) ?? store.events.length <= OPEN_BY_DEFAULT),
+                            ),
+                          )
+                        }
+                        canWrite={canWrite}
+                        selected={selected}
+                        onSelect={toggleIds}
+                        catalog={catalog}
+                        categories={categories}
+                        categoryGroups={categoryGroups}
+                        path={path}
+                        money={money}
+                        onCorrect={correct}
+                        onCreate={createAndCorrect}
+                        onAsk={ask.available ? askAbout : undefined}
+                        askBlockedReason={askBlockedReason}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+        </div>
         {(applied.hasNextPage || total > events.length) && days.length > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3 text-xs text-muted-foreground sm:px-5">
             <p>{t('categorization.applied.showing', { shown: events.length, total })}</p>

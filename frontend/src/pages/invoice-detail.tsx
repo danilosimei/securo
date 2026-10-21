@@ -9,6 +9,7 @@ import {
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { FadePanel } from '@/components/ui/fade-panel'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -534,6 +535,7 @@ export default function InvoiceDetailPage() {
         <SchedulePeriodChip invoice={invoice} />
       </div>
 
+      <FadePanel panelKey={tab}>
       {tab === 'document' ? (
         <div className="space-y-4">
           {offerStatement && (
@@ -883,6 +885,7 @@ export default function InvoiceDetailPage() {
           </SectionCard>
         </div>
       )}
+      </FadePanel>
 
       <EditDraftDialog
         open={editOpen}

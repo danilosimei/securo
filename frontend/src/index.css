@@ -162,6 +162,27 @@
   animation: securo-highlight-flash 2.4s ease-out;
 }
 
+/* Loading placeholders stay invisible for the first 150ms: a load that ends
+   by then never flashes grey. Past it they fade in, then pulse. */
+@keyframes securo-skeleton-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes securo-skeleton-pulse {
+  50% { opacity: 0.5; }
+}
+.animate-skeleton {
+  animation:
+    securo-skeleton-in 0.3s ease-out 0.15s backwards,
+    securo-skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) 0.45s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Still late, so nothing flashes, but it appears at once and holds still. */
+  .animate-skeleton {
+    animation: securo-skeleton-in 0s linear 0.15s backwards;
+  }
+}
+
 /* Soft ambient aurora for the auth brand panel. Drifting, blurred purple
    blobs over a deep indigo base — slow enough to feel alive, not busy.
    Only transform/opacity animate, never layout. */

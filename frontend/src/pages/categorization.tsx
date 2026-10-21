@@ -14,6 +14,7 @@ import { useDateLocale } from '@/hooks/use-display-locale'
 import { PageHeader } from '@/components/page-header'
 import { Segmented } from '@/components/invoice-ui'
 import { Button } from '@/components/ui/button'
+import { FadePanel } from '@/components/ui/fade-panel'
 import { ReviewTab } from '@/components/categorization/review-tab'
 import { AppliedTab } from '@/components/categorization/applied-tab'
 import { OrganizeTab } from '@/components/categorization/organize-tab'
@@ -138,9 +139,11 @@ export default function CategorizationPage() {
 
       {/* "Ask AI" opens from Review and Applied; its conversations last the visit. */}
       <AskProvider>
-        {tab === 'review' && <ReviewTab />}
-        {tab === 'applied' && <AppliedTab />}
-        {tab === 'organize' && <OrganizeTab />}
+        <FadePanel panelKey={tab}>
+          {tab === 'review' && <ReviewTab />}
+          {tab === 'applied' && <AppliedTab />}
+          {tab === 'organize' && <OrganizeTab />}
+        </FadePanel>
       </AskProvider>
     </div>
   )

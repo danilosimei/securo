@@ -4,12 +4,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { renderWithProviders } from '@/test/utils'
 
 describe('Skeleton', () => {
-  it('renders a pulsing placeholder', () => {
+  it('renders a placeholder that fades in late and then pulses, so a fast load never flashes it', () => {
     const { container } = renderWithProviders(<Skeleton />)
 
     const skeleton = container.querySelector('[data-slot="skeleton"]')!
     expect(skeleton).toBeInTheDocument()
-    expect(skeleton).toHaveClass('animate-pulse')
+    expect(skeleton).toHaveClass('animate-skeleton')
+    expect(skeleton).not.toHaveClass('animate-pulse')
   })
 
   it('keeps the caller sizing classes', () => {

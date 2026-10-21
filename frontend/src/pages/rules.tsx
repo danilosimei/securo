@@ -7,6 +7,7 @@ import { extractApiError } from '@/lib/api-errors'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { FadePanel } from '@/components/ui/fade-panel'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { Label } from '@/components/ui/label'
 import {
@@ -475,10 +476,16 @@ export default function RulesPage() {
         />
       </div>
 
-      {tab === 'queue' && <ReconciliationQueue canWrite={canWrite} />}
-      {tab === 'history' && <ReconciliationHistory />}
+      {tab !== 'rules' && (
+        <FadePanel panelKey={tab}>
+          {tab === 'queue' && <ReconciliationQueue canWrite={canWrite} />}
+          {tab === 'history' && <ReconciliationHistory />}
+        </FadePanel>
+      )}
 
-      <div className={tab === 'rules' ? '' : 'hidden'}>
+      {/* Kept mounted (its state survives a tab trip) and only hidden: the
+          animation replays each time it shows again. */}
+      <div className={tab === 'rules' ? 'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200' : 'hidden'}>
       <SectionCard>
         <SectionHeader
           title={t('rules.sectionTitle')}

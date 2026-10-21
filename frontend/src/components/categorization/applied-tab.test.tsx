@@ -134,6 +134,16 @@ describe('AppliedTab', () => {
     expect(within(second).getByText('Groceries')).toBeInTheDocument()
   })
 
+  it('trocar o filtro mantém as linhas na tela, marcadas como carregando, até a nova página chegar', async () => {
+    const { user } = await renderTab()
+    api.categorization.applied.mockReturnValue(new Promise(() => {}))
+    await user.click(screen.getByTestId('applied-confidence-low'))
+
+    expect(screen.getByText('Today')).toBeInTheDocument()
+    expect(screen.getByTestId('applied-list')).toHaveAttribute('aria-busy', 'true')
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+  })
+
   it('filtro de origem refaz a query', async () => {
     const { user } = await renderTab()
     expect(api.categorization.applied).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }))

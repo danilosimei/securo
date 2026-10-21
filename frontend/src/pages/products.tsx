@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, ArchiveRestore, ArrowLeft, Package, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -61,9 +61,10 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<Product | 'new' | null>(null)
 
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, isPlaceholderData } = useQuery({
     queryKey: ['products', filter],
     queryFn: () => productsApi.list({ active: filter === 'active' }),
+    placeholderData: keepPreviousData,
   })
 
   const visible = useMemo(() => {
@@ -155,6 +156,13 @@ export default function ProductsPage() {
         />
       </div>
 
+      {/* Switching the filter keeps this list up, dimmed, until the new one
+          lands, rather than dropping it for a skeleton in between. */}
+      <div
+        data-testid="products-list"
+        aria-busy={isPlaceholderData}
+        className={cn('transition-opacity duration-200', isPlaceholderData && 'opacity-60')}
+      >
       <SectionCard>
         {isLoading ? (
           <div className="p-5 space-y-3">
@@ -253,6 +261,7 @@ export default function ProductsPage() {
           </div>
         )}
       </SectionCard>
+      </div>
 
       <ProductDialog
         key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id}

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Repeat } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -72,9 +72,10 @@ export default function InvoiceSchedulesPage() {
     queryKey: ['invoice-schedule-summary'],
     queryFn: schedulesApi.summary,
   })
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, isPlaceholderData } = useQuery({
     queryKey: ['invoice-schedules', filter],
     queryFn: () => schedulesApi.list(filter === 'all' ? undefined : { status: filter }),
+    placeholderData: keepPreviousData,
   })
 
   const money = (value: string | number | null | undefined, code: string) =>
@@ -187,6 +188,13 @@ export default function InvoiceSchedulesPage() {
         />
       </div>
 
+      {/* Switching the filter keeps this list up, dimmed, until the new one
+          lands, rather than dropping it for a skeleton in between. */}
+      <div
+        data-testid="invoice-schedules-list"
+        aria-busy={isPlaceholderData}
+        className={cn('transition-opacity duration-200', isPlaceholderData && 'opacity-60')}
+      >
       <SectionCard>
         {isLoading ? (
           <div className="p-5 space-y-3">
@@ -276,6 +284,7 @@ export default function InvoiceSchedulesPage() {
           </div>
         )}
       </SectionCard>
+      </div>
 
       <CreateScheduleDialog
         key={createOpen ? 'open' : 'closed'}

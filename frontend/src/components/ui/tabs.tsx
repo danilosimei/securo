@@ -80,7 +80,8 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn("flex-1 outline-none", className)}
+      // The panel that becomes active fades in rather than popping.
+      className={cn("flex-1 outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200", className)}
       {...props}
     />
   )

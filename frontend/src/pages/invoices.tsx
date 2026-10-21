@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Calendar as CalendarIcon,
   ChevronDown,
@@ -117,15 +117,19 @@ export default function InvoicesPage() {
     queryKey: ['invoice-settings'],
     queryFn: invoicesApi.settings,
   })
-  const { data: summary, isLoading: summaryLoading } = useQuery({
+  // Switching direction, filter or year keeps what is on screen, dimmed,
+  // until the new numbers land: no skeleton flash in between.
+  const { data: summary, isLoading: summaryLoading, isPlaceholderData: summaryStale } = useQuery({
     queryKey: ['invoice-summary', direction],
     queryFn: () => invoicesApi.summary(direction),
+    placeholderData: keepPreviousData,
   })
   const { data: facets } = useQuery({
     queryKey: ['invoice-facets', year, direction],
     queryFn: () => invoicesApi.facets(year ?? undefined, direction),
+    placeholderData: keepPreviousData,
   })
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, isPlaceholderData } = useQuery({
     queryKey: ['invoices', filter, year, direction],
     queryFn: () =>
       invoicesApi.list({
@@ -135,6 +139,7 @@ export default function InvoicesPage() {
         ...(filter === 'all' || filter === 'open' ? {} : { state: filter }),
         ...(year ? { year } : {}),
       }),
+    placeholderData: keepPreviousData,
   })
 
   const visible = useMemo(() => {
@@ -220,7 +225,10 @@ export default function InvoicesPage() {
       {/* One block, in the dashboard's shape: a headline figure with its
           supporting numbers beside it, and the accountant's view of the
           same money to the right. Four identical stat cards say less. */}
-      <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
+      <div
+        aria-busy={summaryStale}
+        className={cn('bg-card rounded-xl border border-border shadow-sm mb-5 transition-opacity duration-200', summaryStale && 'opacity-60')}
+      >
         <div className="grid grid-cols-1 lg:grid-cols-3">
           <div className="lg:col-span-2 px-5 py-4">
             <p className="text-xs font-medium text-muted-foreground mb-0.5">
@@ -382,6 +390,13 @@ export default function InvoicesPage() {
         </DropdownMenu>
       </div>
 
+      {/* Switching the filter or direction keeps this list up, dimmed, until the new one
+          lands, rather than dropping it for a skeleton in between. */}
+      <div
+        data-testid="invoices-list"
+        aria-busy={isPlaceholderData}
+        className={cn('transition-opacity duration-200', isPlaceholderData && 'opacity-60')}
+      >
       <SectionCard>
         {isLoading ? (
           <div className="p-5 space-y-3">
@@ -517,6 +532,7 @@ export default function InvoicesPage() {
           </div>
         )}
       </SectionCard>
+      </div>
 
       <CreateInvoiceDialog
         open={createOpen}

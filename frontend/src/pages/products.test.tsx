@@ -115,6 +115,17 @@ describe('ProductsPage', () => {
     expect(api.products.list).toHaveBeenLastCalledWith({ active: false })
   })
 
+  it('keeps the current list on screen, marked busy, while the other filter loads', async () => {
+    const { user } = renderWithProviders(<ProductsPage />, { route: '/invoices/products' })
+    await screen.findAllByTestId('product-row')
+    api.products.list.mockReturnValue(new Promise(() => {}))
+    await user.click(screen.getByTestId('product-filter-archived'))
+
+    expect(screen.getAllByTestId('product-row')).toHaveLength(2)
+    expect(screen.getByTestId('products-list')).toHaveAttribute('aria-busy', 'true')
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
+  })
+
   it('hides every write from a viewer', async () => {
     canWrite = false
     renderWithProviders(<ProductsPage />, { route: '/invoices/products' })
