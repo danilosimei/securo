@@ -649,3 +649,66 @@ async def test_ask_store_name_only_from_this_stores_suggestions(
         "HORTIFRUTI BOM", transaction_ids=[str(tx.id) for tx in rows],
     ))
     assert "Hortifruti do Bairro" in fake_ai.calls[1]["system"][2]["text"]
+
+
+class _SlowCommitSession:
+    """Just enough of a session for `ask._book`: a commit that waits."""
+
+    def __init__(self, fail: bool = False):
+        self.release = asyncio.Event()
+        self.started = asyncio.Event()
+        self.committed = False
+        self.fail = fail
+
+    def add(self, _row):
+        pass
+
+    async def commit(self):
+        self.started.set()
+        await self.release.wait()
+        if self.fail:
+            raise RuntimeError("connection closed")
+        self.committed = True
+
+
+@pytest.mark.asyncio
+async def test_book_waits_for_its_commit_through_repeated_cancellation():
+    """Cancelled again while booking (worker shutdown), `_book` must not
+    return before its commit lands: the request's session is closed right
+    after, and closing it mid-commit would lose a paid call's cost."""
+    session = _SlowCommitSession()
+    run = SimpleNamespace(status="running", error=None, finished_at=None, cost_usd=Decimal(0))
+    task = asyncio.ensure_future(
+        ask._book(session, run, status="failed", error="CancelledError", cost=Decimal("0.01"))
+    )
+    await session.started.wait()
+    for _ in range(3):
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done()
+    session.release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert session.committed is True
+    assert run.cost_usd == Decimal("0.01")
+
+
+@pytest.mark.asyncio
+async def test_book_logs_a_cost_it_could_not_commit(caplog):
+    session = _SlowCommitSession(fail=True)
+    run = SimpleNamespace(
+        id=uuid.uuid4(), status="running", error=None, finished_at=None, cost_usd=Decimal(0)
+    )
+    task = asyncio.ensure_future(
+        ask._book(session, run, status="failed", error="CancelledError", cost=Decimal("0.02"))
+    )
+    await session.started.wait()
+    task.cancel()
+    await asyncio.sleep(0)
+    session.release.set()
+    # The cancellation wins (the caller asked to stop); the lost cost shows.
+    with caplog.at_level("WARNING"), pytest.raises(asyncio.CancelledError):
+        await task
+    assert any(
+        str(run.id) in r.getMessage() and "0.02" in r.getMessage() for r in caplog.records
+    )

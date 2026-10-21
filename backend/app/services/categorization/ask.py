@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from collections import Counter
 from collections.abc import Sequence
@@ -78,6 +79,8 @@ from app.services.categorization.claude_client import create_message, resolve_cl
 from app.services.categorization.merchant_key import PERSON_PREFIX
 from app.services.categorization.prompts import build_examples, prompt_sample
 from app.services.categorization.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 #: The person's messages in one conversation (the client starts a new one).
 MAX_PERSON_MESSAGES = 30
@@ -323,15 +326,37 @@ async def _book(
     error: str | None = None,
     cost: Decimal | None = None,
 ) -> None:
-    """Close `run` and commit it on its own, shielded: a paid call must reach
-    the ledger even when the request is being cancelled."""
+    """Close `run` and commit it on its own, shielded from cancellation: a
+    paid call must reach the ledger even when the request is being cancelled.
+
+    Cancelled again while committing (a worker shutting down), it keeps
+    waiting for the commit and re-raises the cancellation only once the
+    commit is over: returning earlier lets the request's session be closed
+    under the commit still running on its connection. A commit that fails
+    is logged with the run and its cost, so a lost booking shows."""
     run.status = status
     run.error = error
     run.finished_at = _now()
     if cost is not None:
         run.cost_usd = cost
     session.add(run)
-    await asyncio.shield(session.commit())
+    commit = asyncio.ensure_future(session.commit())
+    interrupted = False
+    while not commit.done():
+        try:
+            # Unlike awaiting the commit, a cancelled wait leaves it running.
+            await asyncio.wait({commit})
+        except asyncio.CancelledError:
+            interrupted = True
+    if commit.cancelled() or commit.exception() is not None:
+        logger.warning(
+            "ask run %s not booked (status=%s, cost_usd=%s): %r",
+            getattr(run, "id", None), status, run.cost_usd,
+            "cancelled" if commit.cancelled() else commit.exception(),
+        )
+    if interrupted:
+        raise asyncio.CancelledError()
+    commit.result()
 
 
 def _timed_out(exc: BaseException) -> bool:
