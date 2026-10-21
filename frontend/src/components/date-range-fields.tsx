@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { useDateLocale } from '@/hooks/use-display-locale'
-import { formatDateInput, parseDateInput } from '@/lib/date-input'
+import { formatDateInput, looksCompleteDate, parseDateInput } from '@/lib/date-input'
 import { cn } from '@/lib/utils'
 
 interface DateRangeFieldsProps {
@@ -43,6 +43,8 @@ export function DateRangeFields({
     setSynced({ from, to })
   }
 
+  // Errors show once the person leaves the field, presses Enter, or the text looks finished.
+  const [touched, setTouched] = useState({ from: false, to: false })
   const fromBad = fromText.trim() !== '' && parseDateInput(fromText, locale) === null
   const toBad = toText.trim() !== '' && parseDateInput(toText, locale) === null
   const reversed = !fromBad && !toBad && !!from && !!to && to < from
@@ -66,7 +68,9 @@ export function DateRangeFields({
   }
 
   const example = formatDateInput('2026-03-25', locale)
-  const error = fromBad || toBad ? t('transactions.filtersBar.invalidDate') : reversed ? t('transactions.filtersBar.rangeOrder') : null
+  const showFrom = fromBad && (touched.from || looksCompleteDate(fromText))
+  const showTo = toBad && (touched.to || looksCompleteDate(toText))
+  const error = showFrom || showTo ? t('transactions.filtersBar.invalidDate') : reversed ? t('transactions.filtersBar.rangeOrder') : null
 
   const field = (side: 'from' | 'to', text: string, bad: boolean) => (
     <div className="min-w-0">
@@ -83,16 +87,18 @@ export function DateRangeFields({
         autoComplete="off"
         value={text}
         placeholder={t('transactions.filtersBar.dateExample', { example })}
-        aria-invalid={bad || (reversed && side === 'to') || undefined}
+        aria-invalid={(bad && (side === 'from' ? showFrom : showTo)) || (reversed && side === 'to') || undefined}
         aria-describedby={error ? `${id}-error` : undefined}
         onChange={(event) => type(side, event.target.value)}
         onBlur={() => {
+          setTouched((x) => ({ ...x, [side]: true }))
           const iso = side === 'from' ? from : to
           if (iso) (side === 'from' ? setFromText : setToText)(formatDateInput(iso, locale))
         }}
         onKeyDown={(event) => {
           // Keep typeahead of a surrounding menu out of the field; Escape still bubbles.
           if (event.key !== 'Escape') event.stopPropagation()
+          if (event.key === 'Enter') setTouched((x) => ({ ...x, [side]: true }))
           if (event.key === 'Enter' && valid && (from || to)) {
             event.preventDefault()
             onSubmit?.()
@@ -100,7 +106,7 @@ export function DateRangeFields({
         }}
         className={cn(
           'h-9 w-full rounded-md border bg-card px-2 text-[13px] text-foreground outline-none focus:border-primary/60',
-          bad || (reversed && side === 'to') ? 'border-destructive' : 'border-border',
+          (bad && (side === 'from' ? showFrom : showTo)) || (reversed && side === 'to') ? 'border-destructive' : 'border-border',
         )}
       />
     </div>

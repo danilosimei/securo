@@ -25,9 +25,22 @@ function build(year: number, month: number, day: number): string | null {
   return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`
 }
 
+/** 2-digit years: up to 10 years past the current one is 20xx, otherwise 19xx. */
+function expandTwoDigitYear(yy: number): number {
+  const limit = (new Date().getFullYear() % 100) + 10
+  return yy <= limit ? 2000 + yy : 1900 + yy
+}
+
+/** True when the text already has three groups and a 2- or 4-digit last one. */
+export function looksCompleteDate(text: string): boolean {
+  const parts = text.replace(/^\D+|\D+$/g, '').split(/\D+/)
+  return parts.length === 3 && (parts[2].length === 2 || parts[2].length === 4 || parts[0].length === 4)
+}
+
 /** Returns an ISO date, or null when the text is not a complete valid date. */
 export function parseDateInput(text: string, locale: string): string | null {
-  const parts = text.trim().split(/[^\d]+/)
+  // Some locales end with a separator (hu: "2026. 03. 25."); drop it before splitting.
+  const parts = text.replace(/^\D+|\D+$/g, '').split(/\D+/)
   if (parts.length !== 3 || parts.some((p) => !/^\d+$/.test(p))) return null
 
   let order = fieldOrder(locale)
@@ -39,7 +52,7 @@ export function parseDateInput(text: string, locale: string): string | null {
     const raw = parts[i]
     if (order[i] === 'year') {
       if (raw.length !== 2 && raw.length !== 4) return null
-      value.year = raw.length === 2 ? 2000 + Number(raw) : Number(raw)
+      value.year = raw.length === 2 ? expandTwoDigitYear(Number(raw)) : Number(raw)
     } else {
       if (raw.length > 2) return null
       value[order[i]] = Number(raw)

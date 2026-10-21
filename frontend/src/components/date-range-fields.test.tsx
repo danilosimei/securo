@@ -70,6 +70,15 @@ describe('DateRangeFields', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(t('transactions.filtersBar.invalidDate'))
   })
 
+  it('does not flash the invalid alert while still typing, only on blur', async () => {
+    const { user } = renderWithProviders(<Harness />)
+    const from = screen.getByLabelText(t('transactions.filtersBar.fromLabel'))
+    await user.type(from, '01/02/2')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await user.tab()
+    expect(screen.getByRole('alert')).toHaveTextContent(t('transactions.filtersBar.invalidDate'))
+  })
+
   it('allows one side only and submits with Enter', async () => {
     const onSubmit = vi.fn()
     const { user } = renderWithProviders(<Harness onSubmit={onSubmit} />)
