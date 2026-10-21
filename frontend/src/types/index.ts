@@ -1907,6 +1907,8 @@ export interface AppliedResult {
   /** Undo goes through these ids (`event_run_id` is always null). */
   event_ids: string[]
   event_run_id: string | null
+  /** The rows that actually changed, in the order given. */
+  transaction_ids: string[]
 }
 
 export interface CreateCategoryRequest {
@@ -1919,6 +1921,8 @@ export interface CreateCategoryResult {
   category_id: string
   applied: number
   event_ids: string[]
+  /** The rows that actually changed. */
+  transaction_ids: string[]
 }
 
 /** A category to create on the spot; the group is created too when no
@@ -1946,6 +1950,9 @@ export interface ChooseResult {
   applied: number
   /** The events written, for undo. */
   event_ids: string[]
+  /** The rows that actually changed, in the order given (a row categorized
+   *  by hand meanwhile is left out). */
+  transaction_ids: string[]
 }
 
 /** One turn of the conversation about a store, as the API takes it. */
@@ -1993,7 +2000,8 @@ export interface AppliedTransaction {
 }
 
 export interface AppliedEvent {
-  event_id: string
+  /** Null for a row listed by origin with no standing event: no undo. */
+  event_id: string | null
   run_id: string | null
   transaction: AppliedTransaction
   source: CategorySource
@@ -2013,14 +2021,31 @@ export interface AppliedPage {
   total: number
 }
 
+/** Aplicadas views that stand alone: confirmations, and rows by origin
+ *  (the person's, and the bank, imports and series). */
+export type AppliedView = 'confirmed' | 'user' | 'other'
+
 export interface AppliedFilters {
-  /** Comma-separated subset of ai, memory, rule. */
-  source?: string
+  /** Comma-separated subset of ai, memory, rule; or one `AppliedView` alone
+   *  (`user` and `other` ignore confidence and `since`). */
+  source?: 'ai' | 'memory' | 'rule' | AppliedView | (string & {})
   min_confidence?: number
   max_confidence?: number
   since?: string
   limit?: number
   offset?: number
+}
+
+/** Categorizable rows (posted, no transfer pair, no opening balance, not
+ *  ignored); `decided + to_review + waiting == total`. */
+export interface Scoreboard {
+  total: number
+  /** With a category and nothing pending to review. */
+  decided: number
+  /** With a pending suggestion Review shows. */
+  to_review: number
+  /** No category and nothing to review yet. */
+  waiting: number
 }
 
 export interface UndoRequest {

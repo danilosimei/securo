@@ -2951,7 +2951,10 @@
         "accept": "accept",
         "navigate": "move",
         "expand": "open",
-        "ignore": "ignore"
+        "ignore": "ignore",
+        "applySimilar": "apply to similar",
+        "declineSimilar": "no",
+        "ask": "ask AI"
       },
       "applying": "Applying…",
       "partialFailure_one": "{{count}} store was not applied: {{error}}",
@@ -2971,7 +2974,10 @@
         "rule": "Rule",
         "all": "All",
         "low": "< 90",
-        "high": "≥ 90"
+        "high": "≥ 90",
+        "confirmed": "Confirmed",
+        "user": "Yours",
+        "other": "Other sources"
       },
       "today": "Today",
       "yesterday": "Yesterday",
@@ -3004,7 +3010,13 @@
       "emptyFiltered": "Nothing matches these filters",
       "loadMore": "Load more",
       "showing": "Showing {{shown}} of {{total}}",
-      "loadError": "Could not load the applied categorizations"
+      "loadError": "Could not load the applied categorizations",
+      "viewTitle": "{{view}} · {{count}}",
+      "viewHint": {
+        "confirmed": "Where the AI or the memory agreed with the category the transaction already had. Nothing changed, so there is nothing to undo; fix any that are wrong.",
+        "user": "The categories you chose, including the ones set before automatic categorization. Fix any of them here.",
+        "other": "Categories from the bank, imports, recurring series and installments. Fix any that are wrong."
+      }
     },
     "origin": {
       "ai": "AI",
@@ -3253,6 +3265,12 @@
         "not_found": "No transactions of this store are left to talk about. Reload the page.",
         "invalid_conversation": "This conversation could not be read. Close it and start again."
       }
+    },
+    "scoreboard": {
+      "summary_one": "{{total}} transaction · {{decided}}% decided · {{review}}% to review",
+      "summary_other": "{{total}} transactions · {{decided}}% decided · {{review}}% to review",
+      "waiting": " · {{waiting}}% waiting for the AI",
+      "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out."
     }
   }
 }

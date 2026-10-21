@@ -8,6 +8,7 @@ import type {
   ChooseResult,
   AppliedFilters,
   AppliedPage,
+  Scoreboard,
   AppliedResult,
   CategorizationRun,
   CategorizationSettings,
@@ -2352,6 +2353,11 @@ export const categorization = {
   },
   applied: async (filters: AppliedFilters = {}): Promise<AppliedPage> => {
     const { data } = await api.get('/categorization/applied', { params: filters })
+    return data
+  },
+  /** How far categorization got: query key `['categorization', 'scoreboard']`. */
+  scoreboard: async (): Promise<Scoreboard> => {
+    const { data } = await api.get('/categorization/scoreboard')
     return data
   },
   undo: async (payload: UndoRequest): Promise<UndoResult> => {

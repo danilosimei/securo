@@ -2,16 +2,35 @@
  *  on their own, newest day first, one line per transaction showing what it
  *  was before and what it is now. Fix a row in place (the memory learns it)
  *  or undo one, a store, a batch or a selection (they go back to Review).
+ *
+ *  Three views stand alone next to AI, Memory and Rule (picking one clears
+ *  the others): Confirmed (the AI or the memory agreed with the category the
+ *  row had: nothing to undo, only to fix), Yours (the person's categories)
+ *  and Other sources (bank, import, series), so Review + Applied cover every
+ *  row that can be categorized. The last two list rows by origin: confidence
+ *  does not apply, and a row with no event behind it has no undo.
  *  A fix leaves the list, so the question about the store's similar rows
  *  shows in a bar with the store's name, docked at the bottom of the screen
  *  (above the selection bar): in sight wherever the fix was made, without
  *  scrolling the page. "Ask AI" on a row talks about that one transaction,
  *  and its Accept is a fix like any other. */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ChevronRight, ListChecks, Loader2, Sparkles, Undo2, X, type LucideIcon } from 'lucide-react'
+import {
+  BadgeCheck,
+  ChevronRight,
+  CircleDot,
+  Landmark,
+  ListChecks,
+  Loader2,
+  Sparkles,
+  Undo2,
+  UserRound,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 import {
   categories as categoriesApi,
   categoryGroups as categoryGroupsApi,
@@ -20,7 +39,14 @@ import {
 } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { invalidateCategorizationQueries, invalidateCategoryQueries } from '@/lib/invalidate-queries'
-import { groupApplied, isToday, isYesterday, type StoreBucket } from '@/lib/categorization-applied'
+import {
+  groupApplied,
+  isToday,
+  isUndoable,
+  isYesterday,
+  rowKey,
+  type StoreBucket,
+} from '@/lib/categorization-applied'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useAuth } from '@/contexts/auth-context'
 import { useSidebarState } from '@/contexts/sidebar-state-context'
@@ -38,7 +64,7 @@ import { formatCurrency } from '@/lib/format'
 import { ORIGIN_STYLES } from '@/lib/categorization-origins'
 import { cn } from '@/lib/utils'
 import type { GroupedCreateDraft } from '@/lib/inline-create'
-import type { AppliedEvent, Category, CategoryGroup, CategorySource } from '@/types'
+import type { AppliedEvent, AppliedView, Category, CategoryGroup, CategorySource } from '@/types'
 
 const PAGE = 50
 /** Stores with this many rows or fewer start open; bigger ones start closed. */
@@ -50,10 +76,41 @@ type SourceFilter = 'ai' | 'memory' | 'rule'
 type ConfidenceFilter = 'all' | 'low' | 'high'
 
 const SOURCES: SourceFilter[] = ['ai', 'memory', 'rule']
+const VIEWS: AppliedView[] = ['confirmed', 'user', 'other']
+const VIEW_ICON: Record<AppliedView, LucideIcon> = { confirmed: BadgeCheck, user: UserRound, other: Landmark }
+/** Rows by origin: confidence describes events, so it does not apply. */
+const BY_ORIGIN: AppliedView[] = ['user', 'other']
 
-const ORIGIN: Record<string, { icon: LucideIcon; className: string }> = Object.fromEntries(
-  (['ai', 'memory', 'rule'] as const).map((s) => [s, { icon: ORIGIN_STYLES[s].Icon, className: ORIGIN_STYLES[s].iconClass }]),
-)
+interface Origin {
+  icon: LucideIcon
+  className: string
+  /** i18n key of what to call it. */
+  label: string
+}
+
+const ORIGIN: Record<string, Origin> = {
+  ...Object.fromEntries(
+    (['ai', 'memory', 'rule'] as const).map((s) => [
+      s,
+      { icon: ORIGIN_STYLES[s].Icon, className: ORIGIN_STYLES[s].iconClass, label: `categorization.applied.filters.${s}` },
+    ]),
+  ),
+  provider: {
+    icon: ORIGIN_STYLES.provider.Icon,
+    className: ORIGIN_STYLES.provider.iconClass,
+    label: 'categorization.provenance.by_provider',
+  },
+  user: { icon: UserRound, className: 'text-muted-foreground', label: 'categorization.provenance.by_user' },
+  legacy: { icon: UserRound, className: 'text-muted-foreground', label: 'categorization.provenance.by_user' },
+}
+const OTHER_ORIGIN: Origin = {
+  icon: CircleDot,
+  className: 'text-muted-foreground',
+  label: 'categorization.provenance.by_other',
+}
+
+/** Room between the content and the bars docked over it. */
+const FOOTER_GAP = 16
 
 /** Undoing these puts the row back in Review as a pending suggestion. */
 const BACK_TO_REVIEW: CategorySource[] = ['ai', 'memory']
@@ -76,6 +133,8 @@ export function AppliedTab() {
   const ask = useAsk()
 
   const [sources, setSources] = useState<Set<SourceFilter>>(() => new Set())
+  // A view that stands alone (null: what the pipeline applied).
+  const [view, setView] = useState<AppliedView | null>(null)
   const [confidence, setConfidence] = useState<ConfidenceFilter>('all')
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [opened, setOpened] = useState<Map<string, boolean>>(() => new Map())
@@ -84,15 +143,17 @@ export function AppliedTab() {
   // The last fix, asking about the store's similar rows (a newer fix replaces it).
   const [similarFor, setSimilarFor] = useState<{ referenceId: string; storeName: string } | null>(null)
 
-  const sourceParam = [...sources].sort().join(',') || undefined
+  const byOrigin = !!view && BY_ORIGIN.includes(view)
+  const sourceParam = view ?? ([...sources].sort().join(',') || undefined)
+  const level: ConfidenceFilter = byOrigin ? 'all' : confidence
   const applied = useInfiniteQuery({
-    queryKey: ['categorization', 'applied', { source: sourceParam ?? null, confidence }],
+    queryKey: ['categorization', 'applied', { source: sourceParam ?? null, confidence: level }],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       categorizationApi.applied({
         source: sourceParam,
-        min_confidence: confidence === 'high' ? CUT : undefined,
-        max_confidence: confidence === 'low' ? CUT - 1 : undefined,
+        min_confidence: level === 'high' ? CUT : undefined,
+        max_confidence: level === 'low' ? CUT - 1 : undefined,
         limit: PAGE,
         offset: pageParam,
       }),
@@ -122,11 +183,11 @@ export function AppliedTab() {
   const pages = applied.data?.pages
   const total = pages?.[pages.length - 1]?.total ?? 0
   const events = useMemo(
-    () => (pages ?? []).flatMap((p) => p.items).filter((e) => !fixed.has(e.event_id)),
+    () => (pages ?? []).flatMap((p) => p.items).filter((e) => !fixed.has(rowKey(e))),
     [pages, fixed],
   )
   const days = useMemo(() => groupApplied(events), [events])
-  const byId = useMemo(() => new Map(events.map((e) => [e.event_id, e])), [events])
+  const byId = useMemo(() => new Map(events.map((e) => [rowKey(e), e])), [events])
   const selectedEvents = useMemo(
     () => [...selected].map((id) => byId.get(id)).filter((e): e is AppliedEvent => !!e),
     [selected, byId],
@@ -140,13 +201,22 @@ export function AppliedTab() {
     return entry.groupName ? `${entry.groupName} › ${entry.category.name}` : entry.category.name
   }
 
-  const toggleSource = (source: SourceFilter) =>
+  // Another list: what was selected in the last one is out of sight.
+  const toggleSource = (source: SourceFilter) => {
+    setView(null)
+    setSelected(new Set())
     setSources((prev) => {
       const next = new Set(prev)
       if (next.has(source)) next.delete(source)
       else next.add(source)
       return next
     })
+  }
+  const toggleView = (next: AppliedView) => {
+    setSources(new Set())
+    setSelected(new Set())
+    setView((cur) => (cur === next ? null : next))
+  }
 
   const toggleIds = useCallback((ids: string[], on: boolean) => {
     setSelected((prev) => {
@@ -189,20 +259,37 @@ export function AppliedTab() {
     [busy, byId, canWrite, queryClient, t],
   )
 
-  /** The row leaves the list: it is the person's now. */
+  /** The row is the person's now: it leaves the list (in Yours it stays,
+   *  with its new category once the list is fetched again) and the bar asks
+   *  about the store's similar rows. */
   const markFixed = useCallback(
     (event: AppliedEvent) => {
-      setFixed((prev) => new Set(prev).add(event.event_id))
+      const key = rowKey(event)
+      if (view !== 'user') setFixed((prev) => new Set(prev).add(key))
       setSelected((prev) => {
         const next = new Set(prev)
-        next.delete(event.event_id)
+        next.delete(key)
         return next
       })
       toast.success(t('categorization.applied.corrected'))
       setSimilarFor({ referenceId: event.transaction.id, storeName: event.store_name })
       invalidateCategorizationQueries(queryClient)
     },
-    [queryClient, t],
+    [queryClient, t, view],
+  )
+
+  /** A choice through the API: only a row it changed is fixed. One it left
+   *  alone (edited by hand meanwhile) asks nothing; the list catches up. */
+  const settleChoice = useCallback(
+    (event: AppliedEvent, changed: string[]) => {
+      if (changed.includes(event.transaction.id)) {
+        markFixed(event)
+        return
+      }
+      toast.info(t('categorization.applied.skipped', { count: 1 }))
+      invalidateCategorizationQueries(queryClient)
+    },
+    [markFixed, queryClient, t],
   )
 
   const correct = useCallback(
@@ -229,15 +316,27 @@ export function AppliedTab() {
           new_category: { group: draft.group, name: draft.name },
         })
         if (result.created_category || result.created_group) invalidateCategoryQueries(queryClient)
-        markFixed(event)
+        settleChoice(event, result.transaction_ids)
       } catch (err) {
         toast.error(extractApiError(err, t('categorization.applied.correctError')))
       }
     },
-    [canWrite, markFixed, queryClient, t],
+    [canWrite, queryClient, settleChoice, t],
   )
 
   const rootRef = useRef<HTMLDivElement>(null)
+
+  // The docked bars, measured: the content keeps that much room below it.
+  const showFooter = canWrite && (selected.size > 0 || !!similarFor)
+  const footerRef = useRef<HTMLDivElement>(null)
+  const [footerHeight, setFooterHeight] = useState(0)
+  useLayoutEffect(() => {
+    const el = footerRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => setFooterHeight(el.getBoundingClientRect().height))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [showFooter])
 
   /** "Ask AI" about one row: the answer files that row only. When the
    *  dialog closes, the focus goes back to the row's button; a fixed row has
@@ -257,7 +356,7 @@ export function AppliedTab() {
         transactionIds: [event.transaction.id],
         suggestedGroupId: after?.category.group_id ?? null,
         // The dialog already refreshed the categories it created.
-        onAccepted: () => markFixed(event),
+        onAccepted: (result) => settleChoice(event, result.transaction_ids),
         restoreFocus: () => {
           if (focusRow()) return
           const apply = rootRef.current?.querySelector<HTMLButtonElement>('[data-similar-prompt] button')
@@ -266,7 +365,7 @@ export function AppliedTab() {
         },
       })
     },
-    [ask, catalog, markFixed],
+    [ask, catalog, settleChoice],
   )
   const askBlockedReason = ask.blocked ? t(`categorization.ask.blocked.${ask.blocked}`) : null
 
@@ -279,35 +378,38 @@ export function AppliedTab() {
 
   const selectedNet = selectedEvents.reduce((sum, e) => sum + Number(e.transaction.amount), 0)
 
+  const chip = (id: string, on: boolean, Icon: LucideIcon, iconClass: string, onClick: () => void) => (
+    <button
+      key={id}
+      type="button"
+      aria-pressed={on}
+      data-testid={`applied-source-${id}`}
+      onClick={onClick}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
+        on
+          ? 'border-primary/40 bg-primary/10 text-foreground'
+          : 'border-border text-muted-foreground hover:text-foreground',
+      )}
+    >
+      <Icon size={13} className={iconClass} aria-hidden="true" />
+      {t(`categorization.applied.filters.${id}`)}
+    </button>
+  )
+
   const filters = (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-3 sm:px-5">
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t('categorization.applied.filters.source')}>
-        {SOURCES.map((source) => {
-          const on = sources.has(source)
-          const { icon: Icon, className } = ORIGIN[source]
-          return (
-            <button
-              key={source}
-              type="button"
-              aria-pressed={on}
-              data-testid={`applied-source-${source}`}
-              onClick={() => toggleSource(source)}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                on
-                  ? 'border-primary/40 bg-primary/10 text-foreground'
-                  : 'border-border text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <Icon size={13} className={className} />
-              {t(`categorization.applied.filters.${source}`)}
-            </button>
-          )
-        })}
+        {SOURCES.map((source) =>
+          chip(source, sources.has(source), ORIGIN[source].icon, ORIGIN[source].className, () => toggleSource(source)),
+        )}
+        <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border" />
+        {VIEWS.map((v) => chip(v, view === v, VIEW_ICON[v], 'text-muted-foreground', () => toggleView(v)))}
       </div>
       <Segmented<ConfidenceFilter>
-        value={confidence}
+        value={level}
         onChange={setConfidence}
+        disabled={byOrigin}
         testIdPrefix="applied-confidence"
         options={[
           { value: 'all', label: t('categorization.applied.filters.all') },
@@ -357,7 +459,8 @@ export function AppliedTab() {
     )
   }
 
-  const filtered = sources.size > 0 || confidence !== 'all'
+  const filtered = sources.size > 0 || !!view || level !== 'all'
+  const footerPad = showFooter && footerHeight > 0 ? footerHeight + FOOTER_GAP : undefined
 
   return (
     <div
@@ -366,16 +469,19 @@ export function AppliedTab() {
       // Focusable only by script: where the focus waits for the similar bar.
       tabIndex={-1}
       data-focus-parking=""
-      className={cn(
-        'outline-none',
-        canWrite && (selected.size > 0 || similarFor) && 'pb-24',
-        canWrite && selected.size > 0 && similarFor && 'pb-44',
-      )}
+      // As tall as the bars docked over the content (two of them stack on a
+      // phone, and the question can wrap to a few lines).
+      className={cn('outline-none', showFooter && !footerPad && 'pb-24')}
+      style={footerPad ? { paddingBottom: footerPad } : undefined}
     >
       <SectionCard>
         <SectionHeader
-          title={t('categorization.applied.title', { count: total })}
-          description={t('categorization.applied.hint')}
+          title={
+            view
+              ? t('categorization.applied.viewTitle', { view: t(`categorization.applied.filters.${view}`), count: total })
+              : t('categorization.applied.title', { count: total })
+          }
+          description={view ? t(`categorization.applied.viewHint.${view}`) : t('categorization.applied.hint')}
         />
         {filters}
 
@@ -464,8 +570,10 @@ export function AppliedTab() {
         )}
       </SectionCard>
 
-      {canWrite && (selected.size > 0 || similarFor) && (
+      {showFooter && (
         <div
+          ref={footerRef}
+          data-applied-footer=""
           className={cn(
             // Only the bars take clicks: the gaps around them reach the page.
             'pointer-events-none fixed bottom-0 left-0 right-0 z-50',
@@ -514,7 +622,7 @@ export function AppliedTab() {
                     size="sm"
                     className="h-9 gap-1.5"
                     disabled={busy}
-                    onClick={() => void undo(selectedEvents.map((e) => e.event_id))}
+                    onClick={() => void undo(selectedEvents.filter(isUndoable).map((e) => e.event_id))}
                   >
                     {busy ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
                     {t('categorization.applied.undoSelected')}
@@ -608,7 +716,9 @@ function StoreGroup({
   onAsk, askBlockedReason,
 }: StoreGroupProps) {
   const { t } = useTranslation()
-  const ids = store.events.map((e) => e.event_id)
+  // Only the lines an undo changes can be picked (to undo them).
+  const ids = store.events.filter(isUndoable).map((e) => e.event_id)
+  const selectable = ids.length > 0
   const picked = ids.filter((id) => selected.has(id)).length
   const checkRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
@@ -619,7 +729,7 @@ function StoreGroup({
   return (
     <div>
       <div className="flex items-center gap-2 px-4 py-2.5 sm:px-5">
-        {canWrite && (
+        {canWrite && selectable && (
           <input
             ref={checkRef}
             type="checkbox"
@@ -654,11 +764,12 @@ function StoreGroup({
         <ul className="bg-muted/20">
           {store.events.map((event) => (
             <AppliedRow
-              key={event.event_id}
+              key={rowKey(event)}
               event={event}
               canWrite={canWrite}
-              checked={selected.has(event.event_id)}
-              onCheck={(on) => onSelect([event.event_id], on)}
+              alignWithChecks={selectable}
+              checked={selected.has(rowKey(event))}
+              onCheck={(on) => onSelect([rowKey(event)], on)}
               catalog={catalog}
               categories={categories}
               categoryGroups={categoryGroups}
@@ -678,6 +789,8 @@ function StoreGroup({
 interface AppliedRowProps {
   event: AppliedEvent
   canWrite: boolean
+  /** Other lines of the store have a check box: keep this one in line. */
+  alignWithChecks: boolean
   checked: boolean
   onCheck: (on: boolean) => void
   catalog: Map<string, CategoryEntry>
@@ -691,7 +804,7 @@ interface AppliedRowProps {
 }
 
 function AppliedRow({
-  event, canWrite, checked, onCheck, catalog, categories, categoryGroups, money, onCorrect, onCreate,
+  event, canWrite, alignWithChecks, checked, onCheck, catalog, categories, categoryGroups, money, onCorrect, onCreate,
   onAsk, askBlockedReason,
 }: AppliedRowProps) {
   const { t } = useTranslation()
@@ -706,14 +819,17 @@ function AppliedRow({
     })
   const before = event.previous_category_id ? catalog.get(event.previous_category_id) : undefined
   const after = event.new_category_id ? catalog.get(event.new_category_id) : undefined
-  const origin = ORIGIN[event.source] ?? ORIGIN.rule
+  const origin = ORIGIN[event.source] ?? OTHER_ORIGIN
   const OriginIcon = origin.icon
   const tx = event.transaction
+  // With no event behind the row, what it was before is not known.
+  const showBefore = event.event_id !== null
+  const undoable = isUndoable(event)
 
   return (
     <li className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-4 sm:pl-12 sm:pr-5">
       <div className="flex min-w-0 flex-1 items-start gap-2.5">
-        {canWrite && (
+        {canWrite && undoable ? (
           <input
             type="checkbox"
             className="mt-0.5 size-4 shrink-0 accent-primary"
@@ -721,13 +837,15 @@ function AppliedRow({
             aria-label={t('categorization.applied.selectRow', { name: tx.description })}
             onChange={(e) => onCheck(e.target.checked)}
           />
+        ) : (
+          canWrite && alignWithChecks && <span aria-hidden="true" className="size-4 shrink-0" />
         )}
         <div className="min-w-0">
           <p className="truncate text-sm text-foreground" title={`${t('categorization.applied.original')}: ${tx.description}`}>
             {tx.description}
           </p>
           <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-            <OriginIcon size={12} className={origin.className} aria-label={t(`categorization.applied.filters.${event.source === 'ai' || event.source === 'memory' ? event.source : 'rule'}`)} />
+            <OriginIcon size={12} className={origin.className} aria-label={t(origin.label)} />
             {event.confidence != null && (
               <span>{t('categorization.applied.confidence', { value: event.confidence })}</span>
             )}
@@ -737,13 +855,17 @@ function AppliedRow({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 pl-6 sm:flex-nowrap sm:pl-0">
-        <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-          {before && <CategoryIcon icon={before.category.icon} color={before.category.color} size="sm" />}
-          <span className={cn(!before && 'italic')}>
-            {before ? before.category.name : t('categorization.applied.noCategory')}
-          </span>
-        </span>
-        <span className="text-xs text-muted-foreground" aria-hidden="true">→</span>
+        {showBefore && (
+          <>
+            <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+              {before && <CategoryIcon icon={before.category.icon} color={before.category.color} size="sm" />}
+              <span className={cn(!before && 'italic')}>
+                {before ? before.category.name : t('categorization.applied.noCategory')}
+              </span>
+            </span>
+            <span className="text-xs text-muted-foreground" aria-hidden="true">→</span>
+          </>
+        )}
         {canWrite ? (
           <CategorySelect
             value={event.new_category_id ?? ''}

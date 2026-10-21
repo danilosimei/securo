@@ -225,6 +225,7 @@ describe('AppliedTab', () => {
   it('criar categoria na linha aplica so a essa transacao', async () => {
     api.categorization.choose.mockResolvedValue({
       category_id: 'c9', created_group: false, created_category: true, applied: 1, event_ids: ['e9'],
+      transaction_ids: ['t4'],
     })
     const { user, queryClient } = renderWithProviders(
       <WorkspaceContext.Provider value={{ canWrite: true } as unknown as React.ContextType<typeof WorkspaceContext>}>
@@ -270,6 +271,151 @@ describe('AppliedTab', () => {
     total = 0
     renderWithProviders(<AppliedTab />)
     expect(await screen.findByText('Nothing was applied automatically yet')).toBeInTheDocument()
+  })
+})
+
+describe('AppliedTab: confirmadas, suas e outras origens', () => {
+  const pressed = (id: string) => screen.getByTestId(id).getAttribute('aria-pressed')
+
+  it('clicar "Suas" pede source user e desmarca "IA"', async () => {
+    const { user } = await renderTab()
+    await user.click(screen.getByTestId('applied-source-ai'))
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'ai' })),
+    )
+    await user.click(screen.getByTestId('applied-source-user'))
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'user' })),
+    )
+    expect(pressed('applied-source-user')).toBe('true')
+    expect(pressed('applied-source-ai')).toBe('false')
+  })
+
+  it('as vistas exclusivas se excluem, e IA/Memória/Regra limpam a vista', async () => {
+    const { user } = await renderTab()
+    await user.click(screen.getByTestId('applied-source-confirmed'))
+    await user.click(screen.getByTestId('applied-source-other'))
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'other' })),
+    )
+    expect(pressed('applied-source-confirmed')).toBe('false')
+    await user.click(screen.getByTestId('applied-source-memory'))
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'memory' })),
+    )
+    expect(pressed('applied-source-other')).toBe('false')
+    // Clicking the active view again goes back to everything automatic.
+    await user.click(screen.getByTestId('applied-source-confirmed'))
+    await user.click(screen.getByTestId('applied-source-confirmed'))
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(expect.objectContaining({ source: undefined })),
+    )
+  })
+
+  it('em Suas e Outras origens a confiança não vale: desligada e fora do pedido', async () => {
+    const { user } = await renderTab()
+    await user.click(screen.getByTestId('applied-confidence-high'))
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(expect.objectContaining({ min_confidence: 90 })),
+    )
+    await user.click(screen.getByTestId('applied-source-user'))
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(
+        expect.objectContaining({ source: 'user', min_confidence: undefined, max_confidence: undefined }),
+      ),
+    )
+    expect(screen.getByTestId('applied-confidence-high')).toBeDisabled()
+    // Confirmadas are events: the confidence counts again.
+    await user.click(screen.getByTestId('applied-source-confirmed'))
+    expect(screen.getByTestId('applied-confidence-high')).toBeEnabled()
+  })
+
+  it('linha sem evento (event_id null) não tem caixa de seleção nem desfazer, mas corrige e pergunta à IA', async () => {
+    items = [
+      ev(1, {
+        event_id: null, run_id: null, source: 'legacy', confidence: null, reason: null,
+        description: 'PADARIA DO ZE', merchant_key: 'PADARIA', store_name: 'Padaria do Zé',
+      }),
+      ev(2, { event_id: null, run_id: null, source: 'legacy', confidence: null, reason: null,
+        description: 'PADARIA DO ZE 2', merchant_key: 'PADARIA', store_name: 'Padaria do Zé' }),
+    ]
+    total = 2
+    const { user } = renderWithProviders(
+      <AskProvider>
+        <AppliedTab />
+      </AskProvider>,
+    )
+    await screen.findByText('Today')
+    await user.click(screen.getByTestId('applied-source-user'))
+    const store = await screen.findByRole('button', { name: /Padaria do Zé/ })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Undo/ })).not.toBeInTheDocument()
+    const row = screen.getByText('PADARIA DO ZE').closest('li') as HTMLElement
+    // We do not know what it was before: no "before" shown.
+    expect(within(row).queryByText('No category')).not.toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: 'Restaurants' })).toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: t('categorization.ask.button') })).toBeInTheDocument()
+
+    await user.click(within(row).getByRole('button', { name: 'Restaurants' }))
+    await user.click(await screen.findByRole('option', { name: /Groceries/ }))
+    await waitFor(() => expect(api.transactions.update).toHaveBeenCalledWith('t1', { category_id: 'c2' }))
+  })
+
+  it('confirmadas não se desfazem (não mudaram nada), mas se corrigem com a pergunta das parecidas', async () => {
+    items = [
+      ev(1, { previous_category_id: 'c1', new_category_id: 'c1' }),
+      ev(2, { previous_category_id: 'c1', new_category_id: 'c1', source: 'memory' }),
+    ]
+    total = 2
+    api.categorization.similar.mockResolvedValue({ ...twoUberTrips, merchant_key: 'IFOOD' })
+    const { user } = await renderTab()
+    await user.click(screen.getByTestId('applied-source-confirmed'))
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'confirmed' })),
+    )
+    const store = screen.getByRole('button', { name: /iFood/i })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Undo/ })).not.toBeInTheDocument()
+
+    const row = screen.getByText('IFOOD *PEDIDO 1').closest('li') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: 'Restaurants' }))
+    await user.click(await screen.findByRole('option', { name: /Groceries/ }))
+    await waitFor(() => expect(api.transactions.update).toHaveBeenCalledWith('t1', { category_id: 'c2' }))
+    expect(await screen.findByText(t('categorization.similar.ask', { count: 2 }))).toBeInTheDocument()
+  })
+
+  it('o título e a dica dizem que vista é', async () => {
+    const { user } = await renderTab()
+    await user.click(screen.getByTestId('applied-source-user'))
+    expect(
+      await screen.findByText(
+        t('categorization.applied.viewTitle', { view: t('categorization.applied.filters.user'), count: 4 }),
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText(t('categorization.applied.viewHint.user'))).toBeInTheDocument()
+  })
+
+  it('criar categoria que não mudou a linha (já editada) não pergunta pelas parecidas', async () => {
+    api.categorization.choose.mockResolvedValue({
+      category_id: 'c9', created_group: false, created_category: true, applied: 0, event_ids: [], transaction_ids: [],
+    })
+    const { user } = renderWithProviders(
+      <WorkspaceContext.Provider value={{ canWrite: true } as unknown as React.ContextType<typeof WorkspaceContext>}>
+        <AppliedTab />
+      </WorkspaceContext.Provider>,
+    )
+    await screen.findByText('Today')
+    const store = screen.getByRole('button', { name: /Uber/i })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    const row = screen.getByText('UBER *TRIP').closest('li') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: 'Rides' }))
+    await user.type(await screen.findByPlaceholderText(t('transactions.searchCategory')), 'Carro')
+    await user.click(screen.getByText(t('categorization.create.inGroup', { name: 'Carro', group: 'Transport' })))
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith(t('categorization.applied.skipped', { count: 1 })))
+    expect(api.categorization.similar).not.toHaveBeenCalled()
+    expect(toast.success).not.toHaveBeenCalledWith(t('categorization.applied.corrected'))
   })
 })
 
@@ -359,6 +505,28 @@ describe('AppliedTab: barra das parecidas, bordas', () => {
     ) as HTMLElement
     expect(bar.closest('.fixed')).not.toBeNull()
   })
+
+  it('o conteúdo deixa a folga da altura real do rodapé (barras empilhadas no celular)', async () => {
+    api.categorization.similar.mockResolvedValue(twoUberTrips)
+    const original = HTMLElement.prototype.getBoundingClientRect
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute('data-applied-footer')
+        ? DOMRect.fromRect({ width: 360, height: 230 })
+        : original.call(this)
+    })
+    try {
+      const { user } = await renderTab()
+      const store = screen.getByRole('button', { name: /Uber/i })
+      if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+      const trip = screen.getByText('UBER *TRIP').closest('li') as HTMLElement
+      await user.click(within(trip).getByRole('button', { name: 'Rides' }))
+      await user.click(await screen.findByRole('option', { name: /Groceries/ }))
+      await screen.findByText(t('categorization.similar.ask', { count: 2 }))
+      await waitFor(() => expect(screen.getByTestId('categorization-applied').style.paddingBottom).toBe('246px'))
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })
 
 describe('AppliedTab: perguntar à IA', () => {
@@ -394,6 +562,7 @@ describe('AppliedTab: perguntar à IA', () => {
     })
     api.categorization.choose.mockResolvedValue({
       category_id: 'c2', created_group: false, created_category: false, applied: 1, event_ids: ['ch1'],
+      transaction_ids: ['t4'],
     })
   })
 

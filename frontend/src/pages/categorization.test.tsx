@@ -8,7 +8,7 @@ import { navItems } from '@/lib/nav-items'
 import { renderWithProviders, t } from '@/test/utils'
 
 const api = vi.hoisted(() => ({
-  categorization: { summary: vi.fn(), run: vi.fn(), review: vi.fn() },
+  categorization: { summary: vi.fn(), run: vi.fn(), review: vi.fn(), scoreboard: vi.fn() },
   categories: { list: vi.fn() },
   categoryGroups: { list: vi.fn() },
 }))
@@ -53,6 +53,7 @@ beforeEach(() => {
   workspace.canManage = true
   api.categorization.summary.mockResolvedValue(summary())
   api.categorization.review.mockResolvedValue({ groups: [], total: 0, new_category_proposals: [] })
+  api.categorization.scoreboard.mockResolvedValue({ total: 120, decided: 90, to_review: 30, waiting: 0 })
   api.categories.list.mockResolvedValue([])
   api.categoryGroups.list.mockResolvedValue([])
 })
@@ -103,6 +104,13 @@ describe('CategorizationPage', () => {
   it('opens the requested tab', async () => {
     renderWithProviders(<CategorizationPage />, { route: '/categorization?tab=organize' })
     expect(await screen.findByTestId('categorization-organize')).toBeInTheDocument()
+  })
+
+  it('shows the scoreboard next to the status line on every tab', async () => {
+    renderWithProviders(<CategorizationPage />, { route: '/categorization?tab=organize' })
+    expect(await screen.findByTestId('categorization-scoreboard')).toHaveTextContent(
+      '120 transactions · 75% decided · 25% to review',
+    )
   })
 
   it('shows the AI-off strip when no Claude connection is available', async () => {

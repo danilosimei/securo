@@ -18,6 +18,7 @@ import { ReviewTab } from '@/components/categorization/review-tab'
 import { AppliedTab } from '@/components/categorization/applied-tab'
 import { OrganizeTab } from '@/components/categorization/organize-tab'
 import { AskProvider } from '@/components/categorization/ask-provider'
+import { Scoreboard } from '@/components/categorization/scoreboard'
 
 type Tab = 'review' | 'applied' | 'organize'
 const TABS: Tab[] = ['review', 'applied', 'organize']
@@ -132,6 +133,7 @@ export default function CategorizationPage() {
             {statusLine}
           </p>
         )}
+        <Scoreboard />
       </div>
 
       {/* "Ask AI" opens from Review and Applied; its conversations last the visit. */}

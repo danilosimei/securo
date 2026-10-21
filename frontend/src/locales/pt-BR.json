@@ -2936,7 +2936,10 @@
         "accept": "aceitar",
         "navigate": "navegar",
         "expand": "abrir",
-        "ignore": "ignorar"
+        "ignore": "ignorar",
+        "applySimilar": "aplicar às parecidas",
+        "declineSimilar": "não",
+        "ask": "perguntar à IA"
       },
       "applying": "Aplicando…",
       "partialFailure_one": "{{count}} loja não foi aplicada: {{error}}",
@@ -2956,7 +2959,10 @@
         "rule": "Regra",
         "all": "Todas",
         "low": "< 90",
-        "high": "≥ 90"
+        "high": "≥ 90",
+        "confirmed": "Confirmadas",
+        "user": "Suas",
+        "other": "Outras origens"
       },
       "today": "Hoje",
       "yesterday": "Ontem",
@@ -2989,7 +2995,13 @@
       "emptyFiltered": "Nada combina com esses filtros",
       "loadMore": "Carregar mais",
       "showing": "Mostrando {{shown}} de {{total}}",
-      "loadError": "Não foi possível carregar as categorizações aplicadas"
+      "loadError": "Não foi possível carregar as categorizações aplicadas",
+      "viewTitle": "{{view}} · {{count}}",
+      "viewHint": {
+        "confirmed": "Onde a IA ou a memória concordaram com a categoria que a transação já tinha. Nada mudou, então não há o que desfazer; corrija as que estiverem erradas.",
+        "user": "As categorias que você escolheu, inclusive as definidas antes da categorização automática. Corrija qualquer uma aqui.",
+        "other": "Categorias vindas do banco, de importações, de recorrências e de parcelamentos. Corrija as que estiverem erradas."
+      }
     },
     "origin": {
       "ai": "IA",
@@ -3238,6 +3250,12 @@
         "not_found": "Nenhuma transação desta loja para conversar. Atualize a página.",
         "invalid_conversation": "Não foi possível ler esta conversa. Feche e comece de novo."
       }
+    },
+    "scoreboard": {
+      "summary_one": "{{total}} transação · {{decided}}% decididas · {{review}}% para revisar",
+      "summary_other": "{{total}} transações · {{decided}}% decididas · {{review}}% para revisar",
+      "waiting": " · {{waiting}}% aguardando a IA",
+      "excluded": "Conta as transações que podem ser categorizadas: transferências entre contas, pendentes e saldo inicial ficam de fora."
     }
   }
 }
