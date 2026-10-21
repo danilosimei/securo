@@ -5,6 +5,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from sqlalchemy import func, select
@@ -651,6 +652,11 @@ async def test_ask_store_name_only_from_this_stores_suggestions(
     assert "Hortifruti do Bairro" in fake_ai.calls[1]["system"][2]["text"]
 
 
+def _any(fake: object) -> Any:
+    """A stand-in typed as what it stands for."""
+    return fake
+
+
 class _SlowCommitSession:
     """Just enough of a session for `ask._book`: a commit that waits."""
 
@@ -679,7 +685,7 @@ async def test_book_waits_for_its_commit_through_repeated_cancellation():
     session = _SlowCommitSession()
     run = SimpleNamespace(status="running", error=None, finished_at=None, cost_usd=Decimal(0))
     task = asyncio.ensure_future(
-        ask._book(session, run, status="failed", error="CancelledError", cost=Decimal("0.01"))
+        ask._book(_any(session), _any(run), status="failed", error="CancelledError", cost=Decimal("0.01"))
     )
     await session.started.wait()
     for _ in range(3):
@@ -700,7 +706,7 @@ async def test_book_logs_a_cost_it_could_not_commit(caplog):
         id=uuid.uuid4(), status="running", error=None, finished_at=None, cost_usd=Decimal(0)
     )
     task = asyncio.ensure_future(
-        ask._book(session, run, status="failed", error="CancelledError", cost=Decimal("0.02"))
+        ask._book(_any(session), _any(run), status="failed", error="CancelledError", cost=Decimal("0.02"))
     )
     await session.started.wait()
     task.cancel()
