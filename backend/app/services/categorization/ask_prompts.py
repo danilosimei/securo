@@ -4,15 +4,19 @@ Pure functions, no database and no client. The request reuses the
 classifier's pieces and is ordered for prompt caching:
 
 1. fixed chat instructions (identical for every workspace);
-2. the workspace's category tree and the person's examples -- the very
-   block the classifier caches (`prompts.category_context`);
+2. the workspace's category tree and the person's examples, the same text
+   as the classifier's second block (`prompts.category_context`) -- the
+   cache itself is not shared with the batch, whose prefix starts with
+   other instructions;
 3. what the backend knows about this one store, readable labels plus a
    compact JSON line -- never its merchant key, since a hashed one
    (`PIX:#...`) is a brute-forceable CPF;
 
-each closing a cache breakpoint, followed by the short conversation the
+each closing a cache breakpoint (one below the model's minimum cacheable
+length is ignored without error), followed by the short conversation the
 client keeps (it is never stored on the server). Everything the person
-typed passes through `sanitize_text` before it is sent.
+typed passes through `sanitize_text` before it is sent; it drops any run of
+5+ digits, so amounts and dates written in full go too (privacy first).
 
 The answer is `{reply, suggestion, note}` under a per-workspace schema whose
 category field only accepts that workspace's short ids.
@@ -25,15 +29,17 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from typing import Any
 
-from app.services.categorization.memory import NOTE_LENGTH
 from app.services.categorization.merchant_key import sanitize_text
 from app.services.categorization.prompts import (
     CLASSIFIER_MODEL,
     CategoryIndex,
     category_context,
+    clean_note,
+    nullable,
+    prompt_amount,
     prompt_sample,
 )
 
@@ -50,19 +56,23 @@ HISTORY_WINDOW = 20
 SAMPLES = 3
 #: Each field of a new group/category the model proposes.
 NEW_CATEGORY_LENGTH = 100
+#: What a message becomes when cleaning leaves nothing (the API rejects an
+#: empty one, and dropping the turn would break the role alternation).
+REMOVED_MESSAGE = "[dados removidos]"
 #: Answers that cannot be used.
 _UNUSABLE_STOPS = frozenset({"refusal", "max_tokens"})
 _ROLES = ("user", "assistant")
-_CENT = Decimal("0.01")
 _COMPACT = (",", ":")
 _EPHEMERAL = {"type": "ephemeral"}
 
-ASK_INSTRUCTIONS = """Você ajuda uma pessoa no Brasil a escolher a categoria desta loja (ou pessoa) nas transações bancárias e de cartão dela. É só sobre esta loja: a lista de categorias da pessoa, os exemplos de como ela costuma categorizar e os dados da loja vêm a seguir.
+ASK_INSTRUCTIONS = """Você ajuda uma pessoa no Brasil a escolher a categoria desta loja (ou pessoa) nas transações bancárias e de cartão dela. A conversa é só sobre esta loja: a lista de categorias da pessoa, os exemplos de como ela costuma categorizar e os dados da loja vêm a seguir.
 
 ## Como conversar
 - Responda no idioma em que a pessoa escreve, em texto curto: até 3 frases, sem listas nem markdown.
 - Pode perguntar de volta quando faltar contexto (o que foi comprado, quem é a pessoa que recebeu, se é fixo todo mês).
-- Pedidos fora disso (outras lojas, criar ou mudar regras, relatórios, saldos, dados da conta) você recusa com educação, numa frase, dizendo onde fazer: regras automáticas na tela Regras; criar, renomear ou organizar categorias na tela Categorias.
+- Na reply, cite a categoria pelo nome, como "Grupo › Categoria" (ex.: "Casa › Jardim"), nunca pelo id (c1, c2...); não mencione os nomes dos campos (q, v, u, s, t, atual, sug, alt, h, nota, suggestion, note).
+- Para esta loja você pode propor uma categoria que já existe ou uma nova (em new), inclusive num grupo novo; ela é criada quando a pessoa aceitar.
+- Pedidos fora disso você recusa com educação, numa frase, dizendo onde fazer: outras lojas, relatórios, saldos e dados da conta ficam fora desta conversa; regras automáticas, na tela Regras; renomear, apagar ou reorganizar categorias que já existem, na tela Categorias.
 - Nunca peça CPF, CNPJ, documentos, número de conta ou de cartão, nem senhas.
 
 ## Formato da resposta
@@ -72,7 +82,7 @@ Um objeto JSON com estes campos, nesta ordem:
   - c: id da categoria da lista (ex.: "c4"). Use somente ids da lista desta pessoa; nunca invente um id.
   - new: só quando nenhuma categoria da lista serve: {"g": grupo, "name": nome}, curtos e em português, no estilo da árvore existente. Prefira um grupo que já existe; grupo novo só se nenhum serve. Com new, c fica null. Caso contrário, new é null.
   - p: probabilidade honesta, de 0 a 100, de que esta pessoa aceite a sugestão. Calibre: 95 ou mais só quando a loja é inconfundível e a categoria, óbvia para esta árvore; 70 a 90 com bom indício e alguma dúvida; abaixo de 60 quando é palpite.
-- note: resumo curto (no máximo 200 caracteres) do contexto que a pessoa deu sobre esta loja, para lembrar nas próximas vezes, no estilo "Aurino: jardineiro semanal". Sem documentos, contas ou cartões. Se a pessoa não contou nada novo, null.
+- note: a nota completa e atualizada desta loja, para lembrar nas próximas vezes: junte a nota já salva (campo nota dos dados da loja) com o que a pessoa contou agora, sem perder o que já estava nela. No máximo 200 caracteres, no estilo "Aurino: jardineiro semanal, vem toda sexta". Sem documentos, contas ou cartões. Se a pessoa não contou nada novo, null (a nota salva continua como está).
 
 ## Como decidir
 1. O que a pessoa conta na conversa é o sinal mais forte; depois, a nota já salva da loja e as escolhas anteriores dela (h) e os exemplos.
@@ -122,17 +132,6 @@ class ParsedAnswer:
     raw: str
 
 
-def _amount(value: Decimal) -> int | float:
-    cents = abs(value).quantize(_CENT, rounding=ROUND_HALF_UP)
-    return int(cents) if cents == cents.to_integral_value() else float(cents)
-
-
-def _clean_note(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    return sanitize_text(value)[:NOTE_LENGTH].strip() or None
-
-
 def _history(entries: Sequence[tuple[uuid.UUID, int]], index: CategoryIndex) -> list[list[Any]]:
     picks: list[list[Any]] = []
     for category_id, count in entries:
@@ -162,7 +161,7 @@ def render_store_context(ctx: StoreContext, index: CategoryIndex) -> str:
     kind = "pessoa" if ctx.is_person else "loja ou empresa"
     data = {
         "q": ctx.count,
-        "v": _amount(ctx.total),
+        "v": prompt_amount(ctx.total),
         "u": ctx.last_date.isoformat() if ctx.last_date else None,
         "s": samples,
         "t": "c" if ctx.kind == "c" else "d",
@@ -170,7 +169,7 @@ def render_store_context(ctx: StoreContext, index: CategoryIndex) -> str:
         "sug": index.to_short(ctx.suggested_category_id),
         "alt": index.to_short(ctx.alt_category_id),
         "h": _history(ctx.history, index),
-        "nota": _clean_note(ctx.note),
+        "nota": clean_note(ctx.note),
     }
     return (
         f"Esta conversa é sobre: {name} ({kind}).\n"
@@ -188,16 +187,12 @@ def build_ask_system_blocks(
     return [{"type": "text", "text": text, "cache_control": dict(_EPHEMERAL)} for text in texts]
 
 
-def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
-    return {"anyOf": [schema, {"type": "null"}]}
-
-
 def build_ask_schema(index: CategoryIndex) -> dict[str, Any]:
     """Strict output schema; `c` accepts only this workspace's ids. `reply`
     comes first so the model talks before it decides."""
     short_ids = index.short_ids
     category_ref: dict[str, Any] = (
-        _nullable({"type": "string", "enum": list(short_ids)}) if short_ids else {"type": "null"}
+        nullable({"type": "string", "enum": list(short_ids)}) if short_ids else {"type": "null"}
     )
     new_category = {
         "type": "object",
@@ -209,7 +204,7 @@ def build_ask_schema(index: CategoryIndex) -> dict[str, Any]:
         "type": "object",
         "properties": {
             "c": category_ref,
-            "new": _nullable(new_category),
+            "new": nullable(new_category),
             "p": {"type": "integer"},
         },
         "required": ["c", "new", "p"],
@@ -219,8 +214,8 @@ def build_ask_schema(index: CategoryIndex) -> dict[str, Any]:
         "type": "object",
         "properties": {
             "reply": {"type": "string"},
-            "suggestion": _nullable(suggestion),
-            "note": _nullable({"type": "string"}),
+            "suggestion": nullable(suggestion),
+            "note": nullable({"type": "string"}),
         },
         "required": ["reply", "suggestion", "note"],
         "additionalProperties": False,
@@ -229,13 +224,17 @@ def build_ask_schema(index: CategoryIndex) -> dict[str, Any]:
 
 def conversation_messages(turns: Sequence[tuple[str, str]]) -> list[dict[str, Any]]:
     """The last `HISTORY_WINDOW` turns as API messages, starting with the
-    person; each content sanitized and cut at `MESSAGE_LENGTH`."""
+    person; each content sanitized and cut at `MESSAGE_LENGTH`, or
+    `REMOVED_MESSAGE` when nothing is left of it."""
     kept = [(role, content) for role, content in turns if role in _ROLES]
     window = kept[-HISTORY_WINDOW:]
     while window and window[0][0] != "user":
         window = window[1:]
     return [
-        {"role": role, "content": sanitize_text(content or "")[:MESSAGE_LENGTH]}
+        {
+            "role": role,
+            "content": sanitize_text(content or "")[:MESSAGE_LENGTH].strip() or REMOVED_MESSAGE,
+        }
         for role, content in window
     ]
 
@@ -286,16 +285,21 @@ def _answer_data(message: Any) -> dict[str, Any] | None:
 
 def parse_answer(message: Any, index: CategoryIndex) -> ParsedAnswer | None:
     """The model's answer, or None when it cannot be used (refusal, cut at
-    `max_tokens`, not the JSON object asked for).
+    `max_tokens`, not the JSON object asked for, an empty reply).
 
-    An id outside the index is no category; a suggestion with neither a
-    category nor a new one is no suggestion (and `raw` carries it as null).
+    An id outside the index is no category; a new category wins over a
+    category sent with it (the prompt asks for `c` null with `new`, and
+    accepting needs exactly one); a suggestion left with neither is no
+    suggestion (confidence 0, null in `raw`). `note` is the store's whole
+    note, updated; None leaves the saved one as it is.
     """
     data = _answer_data(message)
     if data is None or not isinstance(data.get("reply"), str):
         return None
     reply = data["reply"].strip()[:REPLY_LENGTH].rstrip()
-    note = _clean_note(data.get("note"))
+    if not reply:
+        return None
+    note = clean_note(data["note"]) if isinstance(data.get("note"), str) else None
     category_id: uuid.UUID | None = None
     new_category: tuple[str, str] | None = None
     confidence = 0
@@ -309,7 +313,10 @@ def parse_answer(message: Any, index: CategoryIndex) -> ParsedAnswer | None:
             name = _field(new.get("name"), NEW_CATEGORY_LENGTH)
             if group is not None and name is not None:
                 new_category = (group, name)
-        confidence = _confidence(suggestion.get("p"))
+        if new_category is not None:
+            category_id = None
+        if category_id is not None or new_category is not None:
+            confidence = _confidence(suggestion.get("p"))
     clean_suggestion: dict[str, Any] | None = None
     if category_id is not None or new_category is not None:
         clean_suggestion = {

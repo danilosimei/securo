@@ -241,6 +241,13 @@ def _dominant(counts: dict[str, Any] | None) -> tuple[uuid.UUID, int] | None:
         return None
 
 
+def clean_note(text: str | None) -> str | None:
+    """A store note as the prompt carries it: no documents, no account or
+    card numbers, at most `NOTE_LENGTH` characters; None when nothing is
+    left."""
+    return sanitize_text(text or "")[:NOTE_LENGTH].strip() or None
+
+
 def build_examples(
     memory_rows: Iterable[MerchantMemory], index: CategoryIndex, limit: int = EXAMPLES_LIMIT
 ) -> str:
@@ -293,7 +300,8 @@ def build_system_blocks(index: CategoryIndex, examples: str) -> list[dict[str, A
     ]
 
 
-def _amount(value: Decimal) -> int | float:
+def prompt_amount(value: Decimal) -> int | float:
+    """A value in reais as the prompt carries it: positive, to the cent."""
     cents = abs(value).quantize(_CENT, rounding=ROUND_HALF_UP)
     return int(cents) if cents == cents.to_integral_value() else float(cents)
 
@@ -355,7 +363,7 @@ def build_user_message(
             "k": item_id,
             "s": samples,
             "q": grp.count,
-            "v": _amount(grp.median_amount),
+            "v": prompt_amount(grp.median_amount),
             "t": "c" if grp.type == "credit" else "d",
             "m": 1 if grp.recurring else 0,
             "a": _ACCOUNT_KINDS.get(grp.account_type or "", "o"),
@@ -363,14 +371,14 @@ def build_user_message(
         previous = _history_entries((history or {}).get(grp.key, []))
         if previous:
             item["h"] = previous
-        note = sanitize_text((notes or {}).get(grp.key) or "")[:NOTE_LENGTH].strip()
+        note = clean_note((notes or {}).get(grp.key))
         if note:
             item["o"] = note
         items.append(item)
     return json.dumps(items, ensure_ascii=False, separators=(",", ":")), ids
 
 
-def _nullable(schema: dict[str, Any]) -> dict[str, Any]:
+def nullable(schema: dict[str, Any]) -> dict[str, Any]:
     return {"anyOf": [schema, {"type": "null"}]}
 
 
@@ -385,7 +393,7 @@ def build_result_schema(index: CategoryIndex) -> dict[str, Any]:
     def category_ref() -> dict[str, Any]:
         if not short_ids:
             return {"type": "null"}
-        return _nullable({"type": "string", "enum": list(short_ids)})
+        return nullable({"type": "string", "enum": list(short_ids)})
 
     new_category = {
         "type": "object",
@@ -402,7 +410,7 @@ def build_result_schema(index: CategoryIndex) -> dict[str, Any]:
             "c": category_ref(),
             "alt": category_ref(),
             "p": {"type": "integer"},
-            "new": _nullable(new_category),
+            "new": nullable(new_category),
         },
         "required": list(OUTPUT_FIELDS),
         "additionalProperties": False,

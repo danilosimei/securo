@@ -17,6 +17,7 @@ from app.services.categorization.ask_prompts import (
     ASK_MODEL,
     HISTORY_WINDOW,
     MESSAGE_LENGTH,
+    REMOVED_MESSAGE,
     REPLY_LENGTH,
     SAMPLES,
     StoreContext,
@@ -139,6 +140,30 @@ def test_instructions_cover_scope_and_note():
         assert needle in ASK_INSTRUCTIONS
 
 
+def test_instructions_let_the_model_create_a_category_for_this_store():
+    lines = ASK_INSTRUCTIONS.splitlines()
+    [refusal] = [line for line in lines if line.startswith("- Pedidos fora disso")]
+    assert "criar" not in refusal
+    assert "renomear, apagar ou reorganizar categorias que já existem" in refusal
+    assert any("uma nova (em new)" in line for line in lines)
+
+
+def test_instructions_name_categories_not_ids():
+    [line] = [line for line in ASK_INSTRUCTIONS.splitlines() if line.startswith("- Na reply")]
+    assert '"Grupo › Categoria"' in line and "nunca pelo id" in line
+    assert "não mencione os nomes dos campos" in line
+
+
+def test_note_merges_with_the_saved_one():
+    index, ids = _index()
+    [line] = [line for line in ASK_INSTRUCTIONS.splitlines() if line.startswith("- note:")]
+    assert "nota completa e atualizada" in line and "junte a nota já salva" in line
+    assert "null (a nota salva continua como está)" in line
+    # The saved note reaches the model, so it can merge.
+    blocks = build_ask_system_blocks(index, "", _ctx(ids, note="Aurino: jardineiro"))
+    assert '"nota":"Aurino: jardineiro"' in blocks[2]["text"]
+
+
 # --- messages ---------------------------------------------------------------------
 
 
@@ -152,6 +177,16 @@ def test_person_text_is_sanitized():
     for secret in ("123.456.789-09", "4111", "12345-6"):
         assert secret not in sent
     assert messages[0]["role"] == "user" and "cpf" in messages[0]["content"]
+
+
+def test_message_left_empty_by_cleaning_becomes_a_placeholder():
+    messages = conversation_messages([
+        ("user", "123.456.789-09"),
+        ("assistant", "   "),
+        ("user", "4111 1111 1111 1111"),
+    ])
+    assert [m["content"] for m in messages] == [REMOVED_MESSAGE] * 3
+    assert REMOVED_MESSAGE.strip()
 
 
 def test_message_is_cut_to_length():
@@ -222,7 +257,40 @@ def test_parse_drops_unknown_category_and_clamps():
     }), index)
     assert parsed is not None
     assert parsed.category_id is None and parsed.new_category is None
-    assert parsed.confidence == 100
+    # Nothing survived: no suggestion, so no confidence either.
+    assert parsed.confidence == 0
+    assert json.loads(parsed.raw)["suggestion"] is None
+
+
+def test_parse_clamps_confidence():
+    index, ids = _index()
+    high = parse_answer(_message({
+        "reply": "Jardim.", "suggestion": {"c": "c1", "new": None, "p": 180}, "note": None,
+    }), index)
+    assert high is not None
+    assert (high.category_id, high.confidence) == (ids["Jardim"], 100)
+
+
+def test_parse_new_category_wins_over_c():
+    index, _ = _index()
+    parsed = parse_answer(_message({
+        "reply": "Crio Casa › Jardineiro.",
+        "suggestion": {"c": "c1", "new": {"g": "Casa", "name": "Jardineiro"}, "p": 80},
+        "note": None,
+    }), index)
+    assert parsed is not None
+    assert (parsed.category_id, parsed.new_category, parsed.confidence) == (
+        None, ("Casa", "Jardineiro"), 80,
+    )
+    assert json.loads(parsed.raw)["suggestion"] == {
+        "c": None, "new": {"g": "Casa", "name": "Jardineiro"}, "p": 80,
+    }
+    # A broken `new` leaves the category.
+    kept = parse_answer(_message({
+        "reply": "Jardim.", "suggestion": {"c": "c1", "new": {"g": " ", "name": "X"}, "p": 80},
+        "note": None,
+    }), index)
+    assert kept is not None and kept.category_id is not None and kept.new_category is None
 
 
 def test_parse_reads_category_and_new():
@@ -265,6 +333,7 @@ def test_parse_without_suggestion():
     }), index)
     assert both_null is not None
     assert json.loads(both_null.raw)["suggestion"] is None
+    assert both_null.confidence == 0
 
 
 def test_parse_refusal_is_none():
@@ -275,6 +344,9 @@ def test_parse_refusal_is_none():
     assert parse_answer(_message("{not json"), index) is None
     assert parse_answer(_message([1, 2]), index) is None
     assert parse_answer(SimpleNamespace(content=[], stop_reason="end_turn"), index) is None
+    for empty in ("", "   \n "):
+        assert parse_answer(_message({**good, "reply": empty}), index) is None
+    assert parse_answer(_message({**good, "reply": None}), index) is None
 
 
 def test_parse_note_cut_to_200():
