@@ -35,7 +35,7 @@ async def _account(session, user, name) -> Account:
 async def _txn(session, user, account, amount, typ):
     session.add(Transaction(
         id=uuid.uuid4(), user_id=user.id, account_id=account.id,
-        description="t", amount=Decimal(str(amount)),
+        description="t", amount=Decimal(str(amount)), currency="BRL",
         date=date.today().replace(day=min(5, date.today().day)),
         type=typ, source="manual", created_at=datetime.now(timezone.utc),
     ))
