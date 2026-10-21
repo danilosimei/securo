@@ -215,10 +215,12 @@ describe('ReviewTab', () => {
 
     await user.click(within(row('iFood')).getByRole('button', { name: /Food › Restaurants/ }))
 
+    // No transaction_ids, as "Other…" and Ask AI: the store's pending rows
+    // as they are now (a row filed by hand meanwhile is left alone), so a
+    // row that arrived since the page loaded does not bring the store back.
     expect(api.categorization.accept).toHaveBeenCalledWith({
       merchant_key: 'IFOOD',
       category_id: 'c1',
-      transaction_ids: ['t1', 't2'],
     })
     await waitFor(() => expect(screen.queryByText('iFood')).not.toBeInTheDocument())
     await waitFor(() =>
@@ -503,6 +505,7 @@ describe('ReviewTab', () => {
     await act(async () => release())
 
     await waitFor(() => expect(api.categorization.accept).toHaveBeenCalledTimes(2))
+    for (const [body] of api.categorization.accept.mock.calls) expect(body).not.toHaveProperty('transaction_ids')
     await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1))
     expect(toast.success).toHaveBeenCalledWith(
       t('categorization.review.applied', { count: 17 }),

@@ -376,21 +376,20 @@ export function ReviewTab() {
     [appliedToast, canWrite, dropFromCache, invalidateReview, markPending, queryClient, releaseAnswered, t],
   )
 
+  /** Every answer in Revisar (accept, "Other…", Ask AI) covers the store's
+   *  pending rows as they are now (no `transaction_ids`): a row categorized
+   *  by hand meanwhile is left alone, and one that arrived since the page
+   *  loaded is answered too, so the store does not come back half done. */
   const accept = useCallback(
     (group: ReviewGroup, categoryId: string) =>
       answerStore(group, () =>
-        categorizationApi.accept({
-          merchant_key: group.merchant_key,
-          category_id: categoryId,
-          transaction_ids: group.transaction_ids,
-        }),
+        categorizationApi.accept({ merchant_key: group.merchant_key, category_id: categoryId }),
       ),
     [answerStore],
   )
 
   /** "Other…" beyond an existing category (a new one, made on the spot):
-   *  over the store's pending rows as they are now (no `transaction_ids`),
-   *  so a row categorized meanwhile is left alone. */
+   *  over the store's pending rows as they are now, like `accept`. */
   const choose = useCallback(
     (group: ReviewGroup, payload: Omit<ChooseRequest, 'merchant_key'>) =>
       answerStore(
@@ -611,11 +610,7 @@ export function ReviewTab() {
     toggleKeys(setApplying, keys, true)
     await queryClient.cancelQueries({ queryKey: [...REVIEW_QUERY_KEY] })
     const results = await settleLimited(batch, ACCEPT_ALL_CONCURRENCY, (g) =>
-      categorizationApi.accept({
-        merchant_key: g.merchant_key,
-        category_id: g.suggestion!.category_id!,
-        transaction_ids: g.transaction_ids,
-      }),
+      categorizationApi.accept({ merchant_key: g.merchant_key, category_id: g.suggestion!.category_id! }),
     )
     const done: AppliedResult[] = []
     const doneKeys: string[] = []
