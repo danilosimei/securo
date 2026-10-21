@@ -137,11 +137,12 @@ async def test_applied_user_lists_rows_by_origin(
     _tx(session, test_user, test_account, "PARA CONTA", source="user", category_id=food,
         transfer_pair_id=uuid.uuid4())
     await session.flush()
-    undone = _event(session, mine, source="user", previous=None, new=transport,
-                    created_at=now - timedelta(minutes=5))
-    undone.undone_at = now - timedelta(minutes=4)
     standing = _event(session, mine, source="user", previous=None, new=food, confidence=None,
-                      reason=None, created_at=now - timedelta(minutes=3))
+                      reason=None, created_at=now - timedelta(minutes=5))
+    # Newer than the standing one, but undone: it does not describe the row.
+    undone = _event(session, mine, source="user", previous=food, new=transport,
+                    created_at=now - timedelta(minutes=3))
+    undone.undone_at = now - timedelta(minutes=2)
     await session.commit()
 
     body = await _applied(client, auth_headers, "user")
@@ -352,3 +353,124 @@ async def test_scoreboard_and_origin_rows_on_postgres(postgres_sessions):
         assert total == 1 and [i["event_id"] for i in items] == [confirmation.id]
         items, total = await review.applied_events(session, ws, confirmed=True)
         assert total == 1 and [i["transaction"]["id"] for i in items] == [bank.id]
+
+
+# --- review round: shared base, order, superseded events --------------------------
+
+
+@pytest.mark.asyncio
+async def test_applied_confirmed_leaves_out_confirming_no_category(
+    client, auth_headers, session, test_user, test_account, test_categories,
+):
+    food = test_categories[0].id
+    kept = _tx(session, test_user, test_account, "PADARIA", source="ai", category_id=food)
+    empty = _tx(session, test_user, test_account, "SEM NADA", source="ai")
+    await session.flush()
+    _event(session, kept, source="ai", previous=food, new=food)
+    _event(session, empty, source="ai", previous=None, new=None)
+    await session.commit()
+
+    body = await _applied(client, auth_headers, "confirmed")
+    assert [i["transaction"]["id"] for i in body["items"]] == [str(kept.id)]
+    assert body["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_superseded_events_leave_both_event_views(
+    client, auth_headers, session, test_user, test_account, test_categories,
+):
+    """An event a later standing decision on the same row replaced shows a
+    category the row may no longer have, and its undo would be skipped."""
+    food, transport = test_categories[0].id, test_categories[1].id
+    now = datetime.now(timezone.utc)
+    changed = _tx(session, test_user, test_account, "UBER", source="user", category_id=food)
+    confirmed = _tx(session, test_user, test_account, "MERCADO", source="user", category_id=transport)
+    still = _tx(session, test_user, test_account, "POSTO", source="ai", category_id=transport)
+    reopened = _tx(session, test_user, test_account, "FEIRA", source="memory", category_id=food)
+    await session.flush()
+    _event(session, changed, source="ai", previous=None, new=transport, created_at=now - timedelta(hours=2))
+    _event(session, changed, source="user", previous=transport, new=food, created_at=now - timedelta(hours=1))
+    _event(session, confirmed, source="memory", previous=food, new=food, created_at=now - timedelta(hours=2))
+    _event(session, confirmed, source="user", previous=food, new=transport, created_at=now - timedelta(hours=1))
+    kept_change = _event(session, still, source="ai", previous=None, new=transport)
+    # A later decision that was undone supersedes nothing.
+    kept_confirmation = _event(session, reopened, source="memory", previous=food, new=food,
+                               created_at=now - timedelta(hours=2))
+    gone = _event(session, reopened, source="user", previous=food, new=transport,
+                  created_at=now - timedelta(hours=1))
+    gone.undone_at = now
+    await session.commit()
+
+    default = (await client.get(f"{API}/applied", headers=auth_headers)).json()
+    assert [i["event_id"] for i in default["items"]] == [str(kept_change.id)]
+    assert default["total"] == 1
+    summary = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+    assert summary["applied_last_7d"] == default["total"]
+    body = await _applied(client, auth_headers, "confirmed")
+    assert [i["event_id"] for i in body["items"]] == [str(kept_confirmation.id)]
+    assert body["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_pending_over_rows_that_left_the_base_is_not_counted_anywhere(
+    client, auth_headers, session, test_user, test_account, test_categories,
+):
+    """A pending suggestion whose row later became one side of a transfer,
+    ignored or an opening balance asks nothing: Revisar, its badge and the
+    scoreboard leave it out, and accepting the store leaves the row alone."""
+    food = test_categories[0].id
+    open_tx = _tx(session, test_user, test_account, "PADARIA")
+    paired = _tx(session, test_user, test_account, "PADARIA", transfer_pair_id=uuid.uuid4())
+    ignored = _tx(session, test_user, test_account, "PADARIA", is_ignored=True)
+    opening = _tx(session, test_user, test_account, "PADARIA", tx_source="opening_balance")
+    await session.flush()
+    for tx in (open_tx, paired, ignored, opening):
+        _suggest(session, tx, "PADARIA", category_id=food)
+    await session.commit()
+
+    board = await _scoreboard(client, auth_headers)
+    summary = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+    queue = (await client.get(f"{API}/review", headers=auth_headers)).json()
+    assert board["to_review"] == 1
+    assert summary["pending_transactions"] == board["to_review"]
+    assert summary["pending_groups"] == 1
+    assert [g["transaction_ids"] for g in queue["groups"]] == [[str(open_tx.id)]]
+
+    accepted = await client.post(f"{API}/review/accept", headers=auth_headers, json={
+        "merchant_key": "PADARIA", "category_id": str(food),
+    })
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["transaction_ids"] == [str(open_tx.id)]
+    for tx in (paired, ignored, opening):
+        await session.refresh(tx)
+        assert tx.category_id is None and tx.category_source == "none"
+    after = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+    assert after["pending_transactions"] == 0
+
+
+@pytest.mark.asyncio
+async def test_accept_returns_rows_in_review_or_request_order(
+    client, auth_headers, session, test_user, test_account, test_categories,
+):
+    food = test_categories[0].id
+    now = datetime.now(timezone.utc)
+    rows = [_tx(session, test_user, test_account, "PADARIA") for _ in range(4)]
+    await session.flush()
+    for i, tx in enumerate(rows):
+        sug = _suggest(session, tx, "PADARIA", category_id=food)
+        sug.created_at = now - timedelta(minutes=i * 7 % 4)  # not the insertion order
+    await session.commit()
+
+    group = (await client.get(f"{API}/review", headers=auth_headers)).json()["groups"][0]
+    chosen = [group["transaction_ids"][2], group["transaction_ids"][0]]
+    picked = await client.post(f"{API}/review/accept", headers=auth_headers, json={
+        "merchant_key": "PADARIA", "category_id": str(food), "transaction_ids": chosen,
+    })
+    assert picked.status_code == 200, picked.text
+    assert picked.json()["transaction_ids"] == chosen
+
+    rest = [t for t in group["transaction_ids"] if t not in chosen]
+    accepted = await client.post(f"{API}/review/accept", headers=auth_headers, json={
+        "merchant_key": "PADARIA", "category_id": str(food),
+    })
+    assert accepted.json()["transaction_ids"] == rest

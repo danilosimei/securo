@@ -181,6 +181,19 @@ def blocking_suggestion() -> Any:
     )
 
 
+def categorizable(workspace_id: uuid.UUID) -> list[Any]:
+    """The rows categorization covers (its candidates, Revisar, Aplicadas by
+    origin, the scoreboard): posted, not one side of a transfer between
+    accounts, not an opening balance, not ignored."""
+    return [
+        Transaction.workspace_id == workspace_id,
+        Transaction.status == "posted",
+        Transaction.transfer_pair_id.is_(None),
+        Transaction.source != "opening_balance",
+        Transaction.is_ignored.is_(False),
+    ]
+
+
 async def collect_candidates(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -227,11 +240,7 @@ async def collect_candidates(
             and_(Payee.id == Transaction.payee_id, Payee.workspace_id == workspace_id),
         )
         .where(
-            Transaction.workspace_id == workspace_id,
-            Transaction.status == "posted",
-            Transaction.transfer_pair_id.is_(None),
-            Transaction.source != "opening_balance",
-            Transaction.is_ignored.is_(False),
+            *categorizable(workspace_id),
             Transaction.category_source.in_(REVIEWABLE_SOURCES),
             ~pending,
             *window,

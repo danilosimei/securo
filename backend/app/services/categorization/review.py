@@ -25,6 +25,7 @@ from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy import insert as sa_insert
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models.categorization import (
     CategorizationEvent,
@@ -50,7 +51,7 @@ from app.services.categorization.merchant_key import (
     sample_description,
     scrub_documents,
 )
-from app.services.categorization.pipeline import CHUNK, MAX_SAMPLES, stored_key
+from app.services.categorization.pipeline import CHUNK, MAX_SAMPLES, categorizable, stored_key
 from app.services.categorization.prompts import prompt_sample
 from app.services.categorization.settings import find_ai_connection, get_settings
 
@@ -100,13 +101,43 @@ _fold = creation.fold
 _norm_name = creation.norm_name
 
 
+def open_transaction(workspace_id: uuid.UUID) -> list[Any]:
+    """A row a pending suggestion may still ask about: categorizable (the
+    pipeline's base) and not categorized by hand since."""
+    return [
+        *categorizable(workspace_id),
+        Transaction.category_source.not_in(PROTECTED_SOURCES),
+    ]
+
+
 def open_row(workspace_id: uuid.UUID):
-    """Join a suggestion to its row, if nobody categorized that row by hand
-    since: a suggestion over a protected row is stale, not a question."""
+    """Join a suggestion to its row, if the row is still open: a suggestion
+    over a row someone categorized by hand since, or that became one side
+    of a transfer, an ignored row or an opening balance, is stale, not a
+    question (Revisar, its badge and the scoreboard agree on this)."""
     return and_(
         Transaction.id == CategorizationSuggestion.transaction_id,
-        Transaction.workspace_id == workspace_id,
-        Transaction.category_source.not_in(PROTECTED_SOURCES),
+        *open_transaction(workspace_id),
+    )
+
+
+def standing_event() -> Any:
+    """Events still in force: not undone, and no later standing event on
+    the same row (a person, or a later run, decided it since). The rule
+    `events.undo` applies: a superseded event cannot be undone either."""
+    later = aliased(CategorizationEvent)
+    return and_(
+        CategorizationEvent.undone_at.is_(None),
+        ~(
+            select(later.id)
+            .where(
+                later.transaction_id == CategorizationEvent.transaction_id,
+                later.undone_at.is_(None),
+                later.source != "undo",
+                later.created_at > CategorizationEvent.created_at,
+            )
+            .exists()
+        ),
     )
 
 
@@ -152,7 +183,8 @@ async def summary(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, A
         select(func.count(CategorizationEvent.id)).where(
             CategorizationEvent.workspace_id == workspace_id,
             CategorizationEvent.source.in_(AUTO_SOURCES),
-            CategorizationEvent.undone_at.is_(None),
+            # What the default Aplicadas list shows (`applied_events`).
+            standing_event(),
             CategorizationEvent.created_at >= _now() - APPLIED_WINDOW,
             changes_category(),
         )
@@ -410,16 +442,34 @@ async def apply_as_user(
 async def _pending_suggestions(
     session: AsyncSession, workspace_id: uuid.UUID, keys: list[str]
 ) -> list[CategorizationSuggestion]:
+    """The stores' pending suggestions, store by store in the order of
+    `keys`, each store's newest first (the order Revisar lists its rows)."""
     if not keys:
         return []
     result = await session.execute(
-        select(CategorizationSuggestion).where(
+        select(CategorizationSuggestion)
+        .where(
             CategorizationSuggestion.workspace_id == workspace_id,
             CategorizationSuggestion.status == "pending",
             CategorizationSuggestion.merchant_key.in_(keys),
         )
+        .order_by(CategorizationSuggestion.created_at.desc(), CategorizationSuggestion.id)
     )
-    return list(result.scalars().all())
+    rank = {key: i for i, key in enumerate(dict.fromkeys(keys))}
+    return sorted(result.scalars().all(), key=lambda s: rank[s.merchant_key])
+
+
+async def _load_open(
+    session: AsyncSession, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+) -> list[Transaction]:
+    """The rows among `ids` still open (`open_transaction`), in that order."""
+    found: dict[uuid.UUID, Transaction] = {}
+    for chunk in _chunks(ids):
+        result = await session.execute(
+            select(Transaction).where(Transaction.id.in_(chunk), *open_transaction(workspace_id))
+        )
+        found.update((tx.id, tx) for tx in result.scalars().all())
+    return [found[tx_id] for tx_id in dict.fromkeys(ids) if tx_id in found]
 
 
 async def resolve_suggestions(
@@ -454,21 +504,22 @@ async def _accept_keys(
     category_id: uuid.UUID,
     transaction_ids: list[uuid.UUID] | None = None,
 ) -> Applied:
-    """Accept stores' pending rows (or the chosen ones) under `category_id`.
+    """Accept stores' pending rows (or the chosen ones) under `category_id`,
+    in the order of `transaction_ids`, else in Revisar's (`_pending_suggestions`).
 
-    A row someone categorized by hand since the suggestion was made keeps
-    that choice, even when selected; its suggestion is settled all the same.
+    A row no longer open -- someone categorized it by hand since the
+    suggestion was made, or it left the categorizable base -- keeps what it
+    has, even when selected; its suggestion is settled all the same.
     """
     suggestions = await _pending_suggestions(session, workspace_id, keys)
     if transaction_ids is not None:
         wanted = set(transaction_ids)
         suggestions = [s for s in suggestions if s.transaction_id in wanted]
-    tx_ids = list(dict.fromkeys(s.transaction_id for s in suggestions))
-    txs = [
-        tx
-        for tx in await load_transactions(session, workspace_id, tx_ids)
-        if tx.category_source not in PROTECTED_SOURCES
-    ]
+        suggested = {s.transaction_id for s in suggestions}
+        tx_ids = [tx_id for tx_id in dict.fromkeys(transaction_ids) if tx_id in suggested]
+    else:
+        tx_ids = list(dict.fromkeys(s.transaction_id for s in suggestions))
+    txs = await _load_open(session, workspace_id, tx_ids)
     result = await apply_as_user(session, workspace_id, user_id, txs, category_id)
     # One pick per store, carried by one of the store's events. A store none
     # of whose rows was filed (all categorized by hand since) teaches
@@ -643,7 +694,10 @@ async def applied_events(
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Changes the pipeline made on its own and nobody undid, newest first.
+    """Changes the pipeline made on its own still in force, newest first:
+    one undone, or superseded by a later decision on the same row (it shows
+    a category the row may no longer have, and its undo would be skipped),
+    is left out.
 
     Confirmations (the category did not change) are no change to check, so
     they are left out -- unless `confirmed`, which lists only them: the AI
@@ -652,7 +706,7 @@ async def applied_events(
     """
     filters = [
         CategorizationEvent.workspace_id == workspace_id,
-        CategorizationEvent.undone_at.is_(None),
+        standing_event(),
     ]
     if confirmed:
         filters += [
@@ -693,19 +747,6 @@ async def applied_events(
         for ev, tx in pairs
     ]
     return items, total or 0
-
-
-def categorizable(workspace_id: uuid.UUID) -> list[Any]:
-    """The rows categorization covers, as the pipeline picks its candidates:
-    posted, not one side of a transfer between accounts, not an opening
-    balance, not ignored."""
-    return [
-        Transaction.workspace_id == workspace_id,
-        Transaction.status == "posted",
-        Transaction.transfer_pair_id.is_(None),
-        Transaction.source != "opening_balance",
-        Transaction.is_ignored.is_(False),
-    ]
 
 
 async def _standing_events(
