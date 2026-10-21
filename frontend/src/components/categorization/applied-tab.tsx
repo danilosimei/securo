@@ -14,7 +14,7 @@ import {
   transactions as transactionsApi,
 } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
-import { invalidateCategorizationQueries } from '@/lib/invalidate-queries'
+import { invalidateCategorizationQueries, invalidateCategoryQueries } from '@/lib/invalidate-queries'
 import { groupApplied, isToday, isYesterday, type StoreBucket } from '@/lib/categorization-applied'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useAuth } from '@/contexts/auth-context'
@@ -30,6 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/format'
 import { ORIGIN_STYLES } from '@/lib/categorization-origins'
 import { cn } from '@/lib/utils'
+import type { GroupedCreateDraft } from '@/lib/inline-create'
 import type { AppliedEvent, Category, CategoryGroup, CategorySource } from '@/types'
 
 const PAGE = 50
@@ -178,24 +179,51 @@ export function AppliedTab() {
     [busy, byId, canWrite, queryClient, t],
   )
 
+  /** The row leaves the list: it is the person's now. */
+  const markFixed = useCallback(
+    (event: AppliedEvent) => {
+      setFixed((prev) => new Set(prev).add(event.event_id))
+      setSelected((prev) => {
+        const next = new Set(prev)
+        next.delete(event.event_id)
+        return next
+      })
+      toast.success(t('categorization.applied.corrected'))
+      invalidateCategorizationQueries(queryClient)
+    },
+    [queryClient, t],
+  )
+
   const correct = useCallback(
     async (event: AppliedEvent, categoryId: string) => {
       if (!canWrite || !categoryId || categoryId === event.new_category_id) return
       try {
         await transactionsApi.update(event.transaction.id, { category_id: categoryId })
-        setFixed((prev) => new Set(prev).add(event.event_id))
-        setSelected((prev) => {
-          const next = new Set(prev)
-          next.delete(event.event_id)
-          return next
-        })
-        toast.success(t('categorization.applied.corrected'))
-        invalidateCategorizationQueries(queryClient)
+        markFixed(event)
       } catch (err) {
         toast.error(extractApiError(err, t('categorization.applied.correctError')))
       }
     },
-    [canWrite, queryClient, t],
+    [canWrite, markFixed, t],
+  )
+
+  /** A category made on the spot from the row's picker, for that row only. */
+  const createAndCorrect = useCallback(
+    async (event: AppliedEvent, draft: GroupedCreateDraft) => {
+      if (!canWrite) return
+      try {
+        const result = await categorizationApi.choose({
+          merchant_key: event.merchant_key,
+          transaction_ids: [event.transaction.id],
+          new_category: { group: draft.group, name: draft.name },
+        })
+        if (result.created_category || result.created_group) invalidateCategoryQueries(queryClient)
+        markFixed(event)
+      } catch (err) {
+        toast.error(extractApiError(err, t('categorization.applied.correctError')))
+      }
+    },
+    [canWrite, markFixed, queryClient, t],
   )
 
   const dayLabel = (date: Date) =>
@@ -351,6 +379,7 @@ export function AppliedTab() {
                       path={path}
                       money={money}
                       onCorrect={correct}
+                      onCreate={createAndCorrect}
                     />
                   ))}
                 </div>
@@ -496,10 +525,11 @@ interface StoreGroupProps {
   path: (id: string | null) => string | null
   money: (value: number | string, currency?: string) => string
   onCorrect: (event: AppliedEvent, categoryId: string) => void
+  onCreate: (event: AppliedEvent, draft: GroupedCreateDraft) => void
 }
 
 function StoreGroup({
-  store, open, onToggle, canWrite, selected, onSelect, catalog, categories, categoryGroups, path, money, onCorrect,
+  store, open, onToggle, canWrite, selected, onSelect, catalog, categories, categoryGroups, path, money, onCorrect, onCreate,
 }: StoreGroupProps) {
   const { t } = useTranslation()
   const ids = store.events.map((e) => e.event_id)
@@ -558,6 +588,7 @@ function StoreGroup({
               categoryGroups={categoryGroups}
               money={money}
               onCorrect={onCorrect}
+              onCreate={onCreate}
             />
           ))}
         </ul>
@@ -576,9 +607,12 @@ interface AppliedRowProps {
   categoryGroups: CategoryGroup[]
   money: (value: number | string, currency?: string) => string
   onCorrect: (event: AppliedEvent, categoryId: string) => void
+  onCreate: (event: AppliedEvent, draft: GroupedCreateDraft) => void
 }
 
-function AppliedRow({ event, canWrite, checked, onCheck, catalog, categories, categoryGroups, money, onCorrect }: AppliedRowProps) {
+function AppliedRow({
+  event, canWrite, checked, onCheck, catalog, categories, categoryGroups, money, onCorrect, onCreate,
+}: AppliedRowProps) {
   const { t } = useTranslation()
   const before = event.previous_category_id ? catalog.get(event.previous_category_id) : undefined
   const after = event.new_category_id ? catalog.get(event.new_category_id) : undefined
@@ -624,6 +658,8 @@ function AppliedRow({ event, canWrite, checked, onCheck, catalog, categories, ca
           <CategorySelect
             value={event.new_category_id ?? ''}
             onChange={(id) => onCorrect(event, id)}
+            onCreateInGroup={(draft) => onCreate(event, draft)}
+            suggestedGroupId={after?.category.group_id ?? null}
             categories={categories}
             groups={categoryGroups}
             currentCategory={after?.category ?? null}

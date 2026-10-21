@@ -18,7 +18,7 @@ import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { cn } from '@/lib/utils'
 import { StoreNote } from '@/components/categorization/store-note'
 import { storeName } from '@/lib/categorization-review'
-import type { Category, CategoryGroup, ReviewGroup, ReviewTransaction } from '@/types'
+import type { Category, CategoryGroup, ChooseRequest, ReviewGroup, ReviewTransaction } from '@/types'
 
 export interface CategoryInfo {
   category: Category
@@ -97,6 +97,8 @@ interface ReviewGroupRowProps {
   onToggle: () => void
   onFocusRow: () => void
   onAccept: (categoryId: string) => void
+  /** A choice made in "Other…" that is not a plain existing category. */
+  onChoose: (payload: Omit<ChooseRequest, 'merchant_key'>) => void
   onDismiss: () => void
   onCreateCategory: () => void
 }
@@ -118,6 +120,7 @@ export function ReviewGroupRow({
   onToggle,
   onFocusRow,
   onAccept,
+  onChoose,
   onDismiss,
   onCreateCategory,
 }: ReviewGroupRowProps) {
@@ -256,7 +259,8 @@ export function ReviewGroupRow({
               categories={categories}
               groups={categoryGroups}
               placeholder={t('categorization.review.other')}
-              creatable
+              onCreateInGroup={(d) => onChoose({ new_category: { group: d.group, name: d.name } })}
+              suggestedGroupId={guess?.category.group_id ?? null}
               tabIndex={inner}
               className="h-8 w-full px-2.5 text-xs sm:w-32"
               contentProps={{ className: 'w-72 p-0 overflow-hidden', align: 'end' }}

@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
     accept: vi.fn(),
     dismiss: vi.fn(),
     createCategory: vi.fn(),
+    choose: vi.fn(),
     undo: vi.fn(),
     setNote: vi.fn(),
   },
@@ -387,6 +388,64 @@ describe('ReviewTab', () => {
     expect(api.categorization.accept).toHaveBeenCalledWith(
       expect.objectContaining({ merchant_key: 'UBER', category_id: 'c2' }),
     )
+  })
+
+  it('"Outra…" cria a categoria no grupo sugerido e aplica às pendentes da loja', async () => {
+    api.categorization.choose.mockImplementation(async ({ merchant_key }: { merchant_key: string }) => {
+      serverGroups = serverGroups.filter((g) => g.merchant_key !== merchant_key)
+      return { category_id: 'c9', created_group: false, created_category: true, applied: 5, event_ids: ['UBER-e1'] }
+    })
+    const { user, queryClient } = renderWithProviders(
+      <WorkspaceContext.Provider value={{ canWrite: true } as unknown as React.ContextType<typeof WorkspaceContext>}>
+        <ReviewTab />
+      </WorkspaceContext.Provider>,
+    )
+    await screen.findByText('Uber')
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    await user.click(within(row('Uber')).getByRole('button', { name: t('categorization.review.other') }))
+    await user.type(await screen.findByPlaceholderText(t('transactions.searchCategory')), 'Carro')
+    // Uber's suggestion is Transport › Rides, so Transport comes first.
+    await user.click(screen.getByText(t('categorization.create.inGroup', { name: 'Carro', group: 'Transport' })))
+
+    // No transaction_ids: the store's pending rows, whatever they are by now.
+    expect(api.categorization.choose).toHaveBeenCalledWith({
+      merchant_key: 'UBER',
+      new_category: { group: 'Transport', name: 'Carro' },
+    })
+    expect(api.categorization.accept).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByText('Uber')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        t('categorization.create.created'),
+        expect.objectContaining({
+          description: t('categorization.review.applied', { count: 5 }),
+          action: expect.objectContaining({ label: t('common.undo') }),
+        }),
+      ),
+    )
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['categories'] })
+  })
+
+  it('"Outra…" com erro ao criar devolve a linha', async () => {
+    api.categorization.choose.mockRejectedValueOnce({
+      response: { status: 409, data: { detail: { code: 'x', message: 'Name taken' } } },
+    })
+    const { user } = renderWithProviders(
+      <WorkspaceContext.Provider value={{ canWrite: true } as unknown as React.ContextType<typeof WorkspaceContext>}>
+        <ReviewTab />
+      </WorkspaceContext.Provider>,
+    )
+    await screen.findByText('Uber')
+    await user.click(within(row('Uber')).getByRole('button', { name: t('categorization.review.other') }))
+    await user.type(await screen.findByPlaceholderText(t('transactions.searchCategory')), 'Carro')
+    await user.click(screen.getByText(t('categorization.create.newGroup', { name: 'Carro' })))
+
+    expect(api.categorization.choose).toHaveBeenCalledWith({
+      merchant_key: 'UBER',
+      new_category: { group: 'Carro', name: 'Carro' },
+    })
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(screen.getByText('Uber')).toBeInTheDocument()
   })
 
   it('aceitar todas pede confirmação e desfaz tudo de uma vez', async () => {

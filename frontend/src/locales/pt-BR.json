@@ -3162,6 +3162,14 @@
       "newProposalDescription_one": "A proposta atual e a {{count}} mudança pendente serão descartadas · leva ~1 min · ~US$ 0,20",
       "newProposalDescription_other": "A proposta atual e as {{count}} mudanças pendentes serão descartadas · leva ~1 min · ~US$ 0,20",
       "refreshError": "Não foi possível atualizar a proposta; mostrando a última versão carregada."
+    },
+    "create": {
+      "inGroup": "Criar \"{{name}}\" em {{group}}",
+      "pickGroup": "Criar \"{{name}}\" em outro grupo…",
+      "newGroup": "Criar \"{{name}}\" como grupo novo",
+      "inNewGroup": "Criar \"{{name}}\" no grupo novo {{group}}",
+      "chooseGroup": "Escolha o grupo",
+      "created": "Categoria criada e aplicada"
     }
   }
 }

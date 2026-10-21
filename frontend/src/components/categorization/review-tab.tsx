@@ -27,7 +27,7 @@ import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Kbd, ReviewGroupRow, type CategoryInfo } from '@/components/categorization/review-group-row'
 import { storeName } from '@/lib/categorization-review'
-import type { AppliedResult, NewCategoryProposal, ReviewGroup, ReviewQueue } from '@/types'
+import type { AppliedResult, ChooseRequest, NewCategoryProposal, ReviewGroup, ReviewQueue } from '@/types'
 
 export const REVIEW_QUERY_KEY = ['categorization', 'review'] as const
 /** The API's page ceiling: the whole queue on one screen in practice. */
@@ -266,6 +266,36 @@ export function ReviewTab() {
         })
         dropFromCache([key])
         appliedToast(result.applied, result.event_ids)
+        invalidateCategorizationQueries(queryClient)
+      } catch (err) {
+        toast.error(extractApiError(err, t('common.error')))
+        void invalidateReview()
+      } finally {
+        markPending([key], false)
+      }
+    },
+    [appliedToast, canWrite, dropFromCache, invalidateReview, markPending, queryClient, t],
+  )
+
+  /** "Other…" beyond an existing category (a new one, made on the spot):
+   *  same flow as `accept`, over the store's pending rows as they are now
+   *  (no `transaction_ids`), so a row categorized meanwhile is left alone. */
+  const choose = useCallback(
+    async (group: ReviewGroup, payload: Omit<ChooseRequest, 'merchant_key'>) => {
+      if (!canWrite) return
+      const key = group.merchant_key
+      markPending([key], true)
+      setOpenKey((open) => (open === key ? null : open))
+      await queryClient.cancelQueries({ queryKey: [...REVIEW_QUERY_KEY] })
+      try {
+        const result = await categorizationApi.choose({ merchant_key: key, ...payload })
+        dropFromCache([key])
+        appliedToast(
+          result.applied,
+          result.event_ids,
+          result.created_category ? t('categorization.create.created') : undefined,
+        )
+        if (result.created_category || result.created_group) invalidateCategoryQueries(queryClient)
         invalidateCategorizationQueries(queryClient)
       } catch (err) {
         toast.error(extractApiError(err, t('common.error')))
@@ -683,6 +713,10 @@ export function ReviewTab() {
                 onAccept={(categoryId) => {
                   focusAfter(i)
                   void accept(group, categoryId)
+                }}
+                onChoose={(payload) => {
+                  focusAfter(i)
+                  void choose(group, payload)
                 }}
                 onDismiss={() => {
                   focusAfter(i)

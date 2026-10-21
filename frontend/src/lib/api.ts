@@ -2,6 +2,8 @@ import axios from 'axios'
 import type { NumberFormat, DateFormat } from '@/lib/format'
 import type {
   AcceptRequest,
+  ChooseRequest,
+  ChooseResult,
   AppliedFilters,
   AppliedPage,
   AppliedResult,
@@ -2333,6 +2335,11 @@ export const categorization = {
   },
   createCategory: async (payload: CreateCategoryRequest): Promise<CreateCategoryResult> => {
     const { data } = await api.post('/categorization/review/create-category', payload)
+    return data
+  },
+  /** Choose an existing category or create one (and its group) for a store. */
+  choose: async (payload: ChooseRequest): Promise<ChooseResult> => {
+    const { data } = await api.post('/categorization/choose', payload)
     return data
   },
   applied: async (filters: AppliedFilters = {}): Promise<AppliedPage> => {

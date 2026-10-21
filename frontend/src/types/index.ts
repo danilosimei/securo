@@ -1919,6 +1919,33 @@ export interface CreateCategoryResult {
   event_ids: string[]
 }
 
+/** A category to create on the spot; the group is created too when no
+ *  group has that name. Names are matched without case or accents. */
+export interface NewCategoryDraft {
+  group: string
+  name: string
+}
+
+/** One choice for a store: exactly one of `category_id` and `new_category`.
+ *  Without `transaction_ids`, the store's pending rows (Review); with them,
+ *  exactly those rows. `note` left out keeps the store's note; null clears it. */
+export interface ChooseRequest {
+  merchant_key: string
+  category_id?: string
+  new_category?: NewCategoryDraft
+  transaction_ids?: string[]
+  note?: string | null
+}
+
+export interface ChooseResult {
+  category_id: string
+  created_group: boolean
+  created_category: boolean
+  applied: number
+  /** The events written, for undo. */
+  event_ids: string[]
+}
+
 export interface AppliedTransaction {
   id: string
   date: string

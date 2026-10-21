@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 
 import { AppliedTab } from '@/components/categorization/applied-tab'
-import { renderWithProviders } from '@/test/utils'
+import { WorkspaceContext } from '@/contexts/workspace-context'
+import { renderWithProviders, t } from '@/test/utils'
 import type { AppliedEvent } from '@/types'
 
 const api = vi.hoisted(() => ({
-  categorization: { applied: vi.fn(), undo: vi.fn() },
+  categorization: { applied: vi.fn(), undo: vi.fn(), choose: vi.fn() },
   categories: { list: vi.fn() },
   categoryGroups: { list: vi.fn() },
   transactions: { update: vi.fn() },
@@ -197,6 +198,38 @@ describe('AppliedTab', () => {
     await user.click(await screen.findByRole('option', { name: /Groceries/ }))
     await waitFor(() => expect(api.transactions.update).toHaveBeenCalledWith('t4', { category_id: 'c2' }))
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Fixed — memory learned this'))
+  })
+
+  it('criar categoria na linha aplica so a essa transacao', async () => {
+    api.categorization.choose.mockResolvedValue({
+      category_id: 'c9', created_group: false, created_category: true, applied: 1, event_ids: ['e9'],
+    })
+    const { user, queryClient } = renderWithProviders(
+      <WorkspaceContext.Provider value={{ canWrite: true } as unknown as React.ContextType<typeof WorkspaceContext>}>
+        <AppliedTab />
+      </WorkspaceContext.Provider>,
+    )
+    await screen.findByText('Today')
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
+    const store = screen.getByRole('button', { name: /Uber/i })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    const row = screen.getByText('UBER *TRIP').closest('li') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: 'Rides' }))
+    await user.type(await screen.findByPlaceholderText(t('transactions.searchCategory')), 'Carro')
+    // The row is in Transport › Rides, so Transport comes first.
+    await user.click(screen.getByText(t('categorization.create.inGroup', { name: 'Carro', group: 'Transport' })))
+
+    await waitFor(() =>
+      expect(api.categorization.choose).toHaveBeenCalledWith({
+        merchant_key: 'UBER',
+        transaction_ids: ['t4'],
+        new_category: { group: 'Transport', name: 'Carro' },
+      }),
+    )
+    expect(api.transactions.update).not.toHaveBeenCalled()
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Fixed — memory learned this'))
+    await waitFor(() => expect(screen.queryByText('UBER *TRIP')).not.toBeInTheDocument())
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['categories'] })
   })
 
   it('visualizador so le: sem selecao nem desfazer', async () => {

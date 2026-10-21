@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { renderWithProviders, t } from '@/test/utils'
 import { WorkspaceContext } from '@/contexts/workspace-context'
-import type { Category } from '@/types'
+import type { Category, CategoryGroup } from '@/types'
 
 const { create } = vi.hoisted(() => ({ create: vi.fn() }))
 vi.mock('@/lib/api', () => ({ categories: { create } }))
@@ -105,5 +105,182 @@ describe('CategorySelect inline creation', () => {
     await openAndType(user, 'Pet food')
 
     expect(screen.queryByText(t('common.createNamed', { name: 'Pet food' }))).not.toBeInTheDocument()
+  })
+})
+
+describe('CategorySelect creation in a group', () => {
+  const mercado = { ...groceries, id: 'cat-mercado', name: 'Mercado', group_id: 'g-casa' } as Category
+  const groupsFixture = [
+    { id: 'g-transporte', name: 'Transporte', categories: [] },
+    { id: 'g-casa', name: 'Casa', categories: [mercado] },
+  ] as unknown as CategoryGroup[]
+
+  function renderGrouped({
+    canWrite = true,
+    footerAction,
+  }: { canWrite?: boolean; footerAction?: React.ComponentProps<typeof CategorySelect>['footerAction'] } = {}) {
+    const onCreateInGroup = vi.fn()
+    const onChange = vi.fn()
+    const Workspace = withRole(canWrite)
+    const utils = renderWithProviders(
+      <Workspace>
+        <CategorySelect
+          value=""
+          onChange={onChange}
+          categories={[mercado]}
+          groups={groupsFixture}
+          placeholder="Other…"
+          creatable
+          onCreateInGroup={onCreateInGroup}
+          suggestedGroupId="g-transporte"
+          footerAction={footerAction}
+        />
+      </Workspace>,
+    )
+    return { ...utils, onCreateInGroup, onChange }
+  }
+
+  const inGroup = (name: string, group: string) => t('categorization.create.inGroup', { name, group })
+  const pickGroup = (name: string) => t('categorization.create.pickGroup', { name })
+
+  beforeEach(() => {
+    create.mockReset()
+  })
+
+  it('creates the searched name in the suggested group', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    await openAndType(user, 'Carro')
+    expect(screen.getByText(pickGroup('Carro'))).toBeInTheDocument()
+    expect(screen.getByText(t('categorization.create.newGroup', { name: 'Carro' }))).toBeInTheDocument()
+    // The flat "Create" of `creatable` gives way to the grouped options.
+    expect(screen.queryByText(t('common.createNamed', { name: 'Carro' }))).not.toBeInTheDocument()
+    await user.click(screen.getByText(inGroup('Carro', 'Transporte')))
+
+    expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'Transporte', name: 'Carro', groupExists: true })
+    expect(create).not.toHaveBeenCalled()
+    // The popover closed.
+    expect(screen.queryByPlaceholderText(t('transactions.searchCategory'))).not.toBeInTheDocument()
+  })
+
+  it('Enter takes the first option when nothing else matches', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    await openAndType(user, 'Carro{Enter}')
+
+    expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'Transporte', name: 'Carro', groupExists: true })
+  })
+
+  it('"in another group" lists the groups, searchable, and Enter picks one', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    await openAndType(user, 'Carro')
+    await user.click(screen.getByText(pickGroup('Carro')))
+
+    const search = screen.getByPlaceholderText(t('categorization.create.chooseGroup'))
+    await waitFor(() => expect(search).toHaveFocus())
+    expect(screen.getByRole('option', { name: 'Casa' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Mercado/ })).not.toBeInTheDocument()
+    await user.type(search, 'cas{Enter}')
+
+    expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'Casa', name: 'Carro', groupExists: true })
+  })
+
+  it('clicking a group in the second step creates there', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    await openAndType(user, 'Carro')
+    await user.click(screen.getByText(pickGroup('Carro')))
+    await user.click(screen.getByRole('option', { name: 'Casa' }))
+
+    expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'Casa', name: 'Carro', groupExists: true })
+  })
+
+  it('Escape in the second step goes back to the first, search kept', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    await openAndType(user, 'Carro')
+    await user.click(screen.getByText(pickGroup('Carro')))
+    await user.keyboard('{Escape}')
+
+    const search = screen.getByPlaceholderText(t('transactions.searchCategory'))
+    expect(search).toHaveValue('Carro')
+    await waitFor(() => expect(search).toHaveFocus())
+    expect(screen.getByText(inGroup('Carro', 'Transporte'))).toBeInTheDocument()
+    expect(onCreateInGroup).not.toHaveBeenCalled()
+
+    // A second Escape closes the picker as usual.
+    await user.keyboard('{Escape}')
+    expect(screen.queryByPlaceholderText(t('transactions.searchCategory'))).not.toBeInTheDocument()
+  })
+
+  it('Backspace on an empty group search goes back too', async () => {
+    const { user } = renderGrouped()
+
+    await openAndType(user, 'Carro')
+    await user.click(screen.getByText(pickGroup('Carro')))
+    await user.type(screen.getByPlaceholderText(t('categorization.create.chooseGroup')), 'c{Backspace}{Backspace}')
+
+    expect(screen.getByPlaceholderText(t('transactions.searchCategory'))).toHaveValue('Carro')
+  })
+
+  it('"Group / Name" offers one option, creating the group when it is new', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    await openAndType(user, 'Jardim / Rosas')
+    expect(screen.queryByText(pickGroup('Rosas'))).not.toBeInTheDocument()
+    await user.click(screen.getByText(t('categorization.create.inNewGroup', { name: 'Rosas', group: 'Jardim' })))
+
+    expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'Jardim', name: 'Rosas', groupExists: false })
+  })
+
+  it('a name that already exists offers no creation', async () => {
+    const { user } = renderGrouped()
+
+    await openAndType(user, 'mercado')
+
+    expect(screen.queryByText(inGroup('mercado', 'Transporte'))).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /Mercado/ })).toBeInTheDocument()
+  })
+
+  it('a viewer sees no create option', async () => {
+    const { user } = renderGrouped({ canWrite: false })
+
+    await openAndType(user, 'Carro')
+
+    expect(screen.queryByText(inGroup('Carro', 'Transporte'))).not.toBeInTheDocument()
+    expect(screen.queryByText(pickGroup('Carro'))).not.toBeInTheDocument()
+    expect(screen.queryByText(t('categorization.create.newGroup', { name: 'Carro' }))).not.toBeInTheDocument()
+  })
+
+  it('the footer action is always the last item and runs on select', async () => {
+    const onSelect = vi.fn()
+    const { user } = renderGrouped({ footerAction: { label: 'Ask the AI', onSelect } })
+
+    await openAndType(user, 'Carro')
+    const options = screen.getAllByRole('option')
+    expect(options[options.length - 1]).toHaveTextContent('Ask the AI')
+    await user.clear(screen.getByPlaceholderText(t('transactions.searchCategory')))
+    await user.type(screen.getByPlaceholderText(t('transactions.searchCategory')), 'zzz')
+    await user.click(screen.getByRole('option', { name: 'Ask the AI' }))
+
+    expect(onSelect).toHaveBeenCalledTimes(1)
+    expect(screen.queryByPlaceholderText(t('transactions.searchCategory'))).not.toBeInTheDocument()
+  })
+
+  it('a disabled footer action explains why and does nothing', async () => {
+    const onSelect = vi.fn()
+    const { user } = renderGrouped({
+      canWrite: false,
+      footerAction: { label: 'Ask the AI', disabled: true, hint: 'Read-only access', onSelect },
+    })
+
+    await user.click(screen.getByRole('button'))
+    const action = screen.getByRole('option', { name: 'Ask the AI' })
+    expect(action).toHaveAttribute('aria-disabled', 'true')
+    expect(action).toHaveAttribute('title', 'Read-only access')
+    await user.click(action)
+
+    expect(onSelect).not.toHaveBeenCalled()
   })
 })

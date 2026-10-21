@@ -3270,6 +3270,14 @@
       "newProposalDescription_one": "The current proposal and its {{count}} pending change will be discarded · takes ~1 min · ~US$ 0.20",
       "newProposalDescription_other": "The current proposal and its {{count}} pending changes will be discarded · takes ~1 min · ~US$ 0.20",
       "refreshError": "Couldn't refresh the proposal; showing the last version loaded."
+    },
+    "create": {
+      "inGroup": "Create \"{{name}}\" in {{group}}",
+      "pickGroup": "Create \"{{name}}\" in another group…",
+      "newGroup": "Create \"{{name}}\" as a new group",
+      "inNewGroup": "Create \"{{name}}\" in new group {{group}}",
+      "chooseGroup": "Choose the group",
+      "created": "Category created and applied"
     }
   }
 }
