@@ -10,7 +10,8 @@ from app.services.categorization.merchant_key import (
 
 NO_NAME_LABEL = "Sem nome"
 HASHED_PERSON_LABEL = "Pix sem nome"
-ACRONYM_MAX = 3
+#: Two letters at most: "XP" is an acronym, but "Pet", "Bar" and "Sol" are words.
+ACRONYM_MAX = 2
 #: Portuguese connectors stay lower case inside a name.
 CONNECTORS = frozenset({"DE", "DA", "DO", "DAS", "DOS", "E"})
 
@@ -32,7 +33,7 @@ def readable_label(key: Optional[str]) -> str:
         if index and word in CONNECTORS:
             out.append(word.lower())
         elif len(word) <= ACRONYM_MAX:
-            # Short words ("XP", "TAP") are usually acronyms.
+            # Very short words ("XP") are usually acronyms.
             out.append(word.upper())
         else:
             out.append(word.capitalize())
