@@ -175,6 +175,7 @@ async def list_transactions(
     sort_by: Optional[str] = Query(None, description="Column to sort by (date|amount|description|payee|category|account|type|status). Default: date desc."),
     sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
     category_source: Optional[str] = Query(None, description="Comma-separated category origins (ai, memory, rule, user, ...)."),
+    merchant_key: Optional[str] = Query(None, description="Exact store key (`transactions.merchant_key`)."),
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
@@ -199,6 +200,7 @@ async def list_transactions(
         min_amount=min_amount,
         max_amount=max_amount,
         category_sources=_category_sources(category_source),
+        merchant_key=merchant_key,
         include_summary=True,
     )
     primary_currency = ctx.user.primary_currency
