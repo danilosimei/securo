@@ -1,19 +1,20 @@
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery } from '@tanstack/react-query'
 import { transactions as transactionsApi, dashboard, admin } from '@/lib/api'
-import { AlertTriangle, Clock, Info, Paperclip, X } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, Info, Paperclip, X } from 'lucide-react'
 import { CategoryIcon } from '@/components/category-icon'
 import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
 import { ProjectedTransactionBadge } from '@/components/projected-transaction-badge'
-import { sumDrillDownTotals } from '@/lib/drill-down-totals'
+import { drillDownServerTotal } from '@/lib/drill-down-totals'
 import { hasOpenDialog, isInsideOverlayLayer } from '@/lib/overlay-layers'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAuth } from '@/contexts/auth-context'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import type { Transaction } from '@/types'
 import { formatCurrency } from '@/lib/format'
+
+export const DRILL_DOWN_PAGE_SIZE = 50
 
 export type DrillDownFilter = {
   title: string
@@ -39,7 +40,6 @@ type DisplayItem = {
   categoryName: string | null
   categoryColor: string | null
   isProjected: boolean
-  isPending: boolean
   attachmentCount: number
   transaction: Transaction | null
 }
@@ -61,8 +61,15 @@ export function TransactionDrillDown({
   const dateLocale = useDateLocale()
   const panelRef = useRef<HTMLDivElement>(null)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['drill-down', filter],
+  // The page belongs to the filter it was picked under: a new filter starts on
+  // page 1 without an effect. The parent hands over a fresh filter object on
+  // every render, so identity is no signal; the serialised filter is.
+  const filterKey = JSON.stringify(filter)
+  const [pageState, setPageState] = useState({ key: filterKey, page: 1 })
+  const page = pageState.key === filterKey ? pageState.page : 1
+
+  const { data, isLoading, isPlaceholderData: isChangingPage } = useQuery({
+    queryKey: ['drill-down', filter, page],
     queryFn: () =>
       transactionsApi.list({
         category_id: filter?.category_id,
@@ -72,10 +79,17 @@ export function TransactionDrillDown({
         type: filter?.type,
         from: filter?.from,
         to: filter?.to,
-        limit: 200,
+        // Posted rows only, like the Dashboard cards the panel opens from.
+        status: 'posted',
+        page,
+        limit: DRILL_DOWN_PAGE_SIZE,
         user_pnl_only: true,
       }),
     enabled: !!filter,
+    // Keep the previous page up while the next one loads, but never another
+    // filter's rows under this filter's title.
+    placeholderData: (previous, previousQuery) =>
+      JSON.stringify(previousQuery?.queryKey[1]) === filterKey ? previous : undefined,
   })
 
   // Derive month param from filter.from for projected transactions
@@ -94,12 +108,9 @@ export function TransactionDrillDown({
   })
   const isAccrual = accountingModeData?.mode === 'accrual'
 
-  // Merge real + projected transactions, filtering projected by drill-down criteria
-  const displayItems = useMemo((): DisplayItem[] => {
-    const items: DisplayItem[] = []
-
-    for (const tx of data?.items ?? []) {
-      items.push({
+  const items = useMemo(
+    (): DisplayItem[] =>
+      (data?.items ?? []).map((tx) => ({
         key: tx.id,
         description: tx.description,
         date: tx.date,
@@ -111,21 +122,24 @@ export function TransactionDrillDown({
         categoryName: tx.category?.name ?? null,
         categoryColor: tx.category?.color ?? null,
         isProjected: false,
-        isPending: tx.status === 'pending',
         attachmentCount: tx.attachment_count ?? 0,
         transaction: tx,
-      })
-    }
+      })),
+    [data],
+  )
 
+  // Planned transactions that match the filter. Listed apart and kept out of
+  // the total, which is the server's sum of what has actually posted.
+  const plannedItems = useMemo((): DisplayItem[] => {
+    const planned: DisplayItem[] = []
     for (const pt of projectedTxs ?? []) {
-      // Filter projected txs by drill-down criteria
       if (filter?.type && pt.type !== filter.type) continue
       if (filter?.category_id && String(pt.category_id) !== filter.category_id) continue
       if (filter?.uncategorized && pt.category_id != null) continue
       if (filter?.from && pt.date < filter.from) continue
       if (filter?.to && pt.date > filter.to) continue
 
-      items.push({
+      planned.push({
         key: `proj-${pt.recurring_id}-${pt.date}`,
         description: pt.description,
         date: pt.date,
@@ -137,15 +151,12 @@ export function TransactionDrillDown({
         categoryName: pt.category_name,
         categoryColor: pt.category_color ?? null,
         isProjected: true,
-        isPending: false,
         attachmentCount: 0,
         transaction: null,
       })
     }
-
-    items.sort((a, b) => a.date.localeCompare(b.date))
-    return items
-  }, [data, projectedTxs, filter])
+    return planned.sort((a, b) => a.date.localeCompare(b.date))
+  }, [projectedTxs, filter])
 
   // Close on Escape, unless the key belongs to a dialog opened from the
   // panel (Radix marks the Escape it handled as defaultPrevented).
@@ -179,18 +190,67 @@ export function TransactionDrillDown({
     }
   }, [filter, onClose])
 
-  // Sum in user's primary currency. For foreign-currency rows we need
-  // amount_primary; if it's missing we can't convert, so skip the row
-  // instead of adding a raw foreign amount as if it were primary. This
-  // matches how get_summary computes monthly_*_primary on the backend.
-  const { absTotal, postedTotal, pendingTotal, projectedTotal } =
-    sumDrillDownTotals(displayItems, userCurrency)
+  const total = data?.total ?? 0
+  const pages = Math.max(1, Math.ceil(total / DRILL_DOWN_PAGE_SIZE))
+  const serverTotal = data?.summary
+    ? drillDownServerTotal(data.summary, { type: filter?.type, uncategorized: filter?.uncategorized })
+    : null
+  const totalCurrency = data?.summary?.currency ?? userCurrency
+  const isEmpty = items.length === 0 && plannedItems.length === 0
 
-  // Break the total down whenever some of it is money that has not settled,
-  // whether it is pending or still only projected. Gating on pending alone
-  // hid the projected line from a panel that happened to have no pending row,
-  // even though the total it sits under already counted the projection.
-  const hasUnsettledTotal = pendingTotal > 0 || projectedTotal > 0
+  const renderRow = (item: DisplayItem) => (
+    <div
+      key={item.key}
+      className={`flex items-center gap-3 px-5 py-3 hover:bg-muted transition-colors ${!item.isProjected ? 'cursor-pointer' : ''}`}
+      onClick={() => {
+        if (!item.isProjected && item.transaction) {
+          onTransactionClick?.(item.transaction)
+        }
+      }}
+    >
+      <CategoryIcon icon={item.categoryIcon} color={item.categoryColor} size="lg" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-foreground truncate">{item.description}</p>
+          {item.isProjected && <ProjectedTransactionBadge />}
+          {item.transaction && (
+            <CategorizationOriginBadge
+              source={item.transaction.category_source}
+              pending={!!item.transaction.categorization_pending}
+              compact
+            />
+          )}
+          {item.attachmentCount > 0 && (
+            <Paperclip size={12} className="text-muted-foreground shrink-0" />
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {new Date(item.date + 'T00:00:00').toLocaleDateString(dateLocale)}
+          {item.categoryName && ` · ${item.categoryName}`}
+        </p>
+      </div>
+      <div className="text-right shrink-0">
+        <span
+          className={`text-sm font-semibold tabular-nums ${
+            item.type === 'credit' ? 'text-emerald-600' : 'text-rose-500'
+          }`}
+        >
+          {item.type === 'credit' ? '+' : '-'}
+          {mask(formatCurrency(Math.abs(item.amount), item.currency ?? userCurrency, locale))}
+        </span>
+        {item.currency !== userCurrency && item.amountPrimary != null && (
+          <div className="flex items-center justify-end gap-1">
+            {item.transaction?.fx_fallback && (
+              <span title={t('transactions.fxFallbackTooltip')}><AlertTriangle size={11} className="text-amber-500 shrink-0" /></span>
+            )}
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              {mask(formatCurrency(Math.abs(item.amountPrimary), userCurrency, locale))}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <>
@@ -230,127 +290,70 @@ export function TransactionDrillDown({
         )}
 
         {/* Transaction list */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto" aria-busy={isChangingPage}>
           {isLoading ? (
             <div className="p-5 space-y-3">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div key={i} className="h-12 bg-muted rounded-lg animate-pulse" />
               ))}
             </div>
-          ) : displayItems.length === 0 ? (
+          ) : isEmpty ? (
             <p className="text-muted-foreground text-sm text-center py-12">
               {t('dashboard.drillDownEmpty')}
             </p>
           ) : (
-            <div className="divide-y divide-border">
-              {displayItems.map((item) => (
-                <div
-                  key={item.key}
-                  className={`flex items-center gap-3 px-5 py-3 hover:bg-muted transition-colors ${!item.isProjected ? 'cursor-pointer' : ''}`}
-                  onClick={() => {
-                    if (!item.isProjected && item.transaction) {
-                      onTransactionClick?.(item.transaction)
-                    }
-                  }}
-                >
-                  <CategoryIcon
-                    icon={item.categoryIcon}
-                    color={item.categoryColor}
-                    size="lg"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-foreground truncate">{item.description}</p>
-                      {item.isProjected && (
-                        <ProjectedTransactionBadge />
-                      )}
-                      {item.transaction && (
-                        <CategorizationOriginBadge
-                          source={item.transaction.category_source}
-                          pending={!!item.transaction.categorization_pending}
-                          compact
-                        />
-                      )}
-                      {item.isPending && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="shrink-0 inline-flex items-center justify-center rounded-full border border-amber-200 bg-amber-50 p-0.5 dark:border-amber-500/30 dark:bg-amber-500/10">
-                              <Clock size={12} className="text-amber-500" role="img" aria-label={t('transactions.pending')} />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>{t('transactions.pending')}</TooltipContent>
-                        </Tooltip>
-                      )}
-                      {item.attachmentCount > 0 && (
-                        <Paperclip size={12} className="text-muted-foreground shrink-0" />
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(item.date + 'T00:00:00').toLocaleDateString(dateLocale)}
-                      {item.categoryName && ` · ${item.categoryName}`}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span
-                      className={`text-sm font-semibold tabular-nums ${
-                        item.type === 'credit' ? 'text-emerald-600' : 'text-rose-500'
-                      }`}
-                    >
-                      {item.type === 'credit' ? '+' : '-'}
-                      {mask(formatCurrency(Math.abs(item.amount), item.currency ?? userCurrency, locale))}
-                    </span>
-                    {item.currency !== userCurrency && item.amountPrimary != null && (
-                      <div className="flex items-center justify-end gap-1">
-                        {item.transaction?.fx_fallback && (
-                          <span title={t('transactions.fxFallbackTooltip')}><AlertTriangle size={11} className="text-amber-500 shrink-0" /></span>
-                        )}
-                        <span className="text-[10px] text-muted-foreground tabular-nums">
-                          {mask(formatCurrency(Math.abs(item.amountPrimary), userCurrency, locale))}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+            <>
+              {items.length > 0 && (
+                <div className={`divide-y divide-border transition-opacity ${isChangingPage ? 'opacity-60' : ''}`}>
+                  {items.map(renderRow)}
                 </div>
-              ))}
-            </div>
+              )}
+              {plannedItems.length > 0 && (
+                <section aria-label={t('dashboard.drillDownPlanned')}>
+                  <h3 className="px-5 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/40 border-y border-border">
+                    {t('dashboard.drillDownPlanned')}
+                  </h3>
+                  <div className="divide-y divide-border">{plannedItems.map(renderRow)}</div>
+                </section>
+              )}
+            </>
           )}
         </div>
 
-        {/* Footer */}
-        {displayItems.length > 0 && (
-          <div className="px-5 py-3 border-t border-border bg-muted/50 shrink-0">
-            {hasUnsettledTotal ? (
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-4 text-xs text-muted-foreground">
-                  <span>{t('dashboard.drillDownSettledTotal')}</span>
-                  <span className="tabular-nums text-foreground">{mask(formatCurrency(postedTotal, userCurrency, locale))}</span>
-                </div>
-                <div className="flex items-center justify-between gap-4 text-xs text-muted-foreground">
-                  <span>{t('dashboard.drillDownPendingTotal')}</span>
-                  <span className="tabular-nums text-foreground">{mask(formatCurrency(pendingTotal, userCurrency, locale))}</span>
-                </div>
-                {projectedTotal > 0 && (
-                  <div className="flex items-center justify-between gap-4 text-xs text-muted-foreground">
-                    <span>{t('transactions.projected')}</span>
-                    <span className="tabular-nums text-foreground">{mask(formatCurrency(projectedTotal, userCurrency, locale))}</span>
-                  </div>
-                )}
-                <div className="flex items-center justify-between gap-4 border-t border-border pt-2 mt-2">
-                  <span className="text-xs font-medium text-muted-foreground">{t('dashboard.drillDownShownTotal')}</span>
-                  <span className="text-sm font-bold tabular-nums text-foreground">{mask(formatCurrency(absTotal, userCurrency, locale))}</span>
-                </div>
-              </div>
-            ) : (
+        {/* Footer: the server's total for the whole filter, then the pager */}
+        {total > 0 && serverTotal !== null && (
+          <div className="px-5 py-3 border-t border-border bg-muted/50 shrink-0 space-y-2">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs text-muted-foreground">
+                {t('dashboard.drillDownCount', { count: total })}
+              </span>
+              <span className="text-sm font-bold tabular-nums text-foreground" data-testid="drill-down-total">
+                {mask(formatCurrency(serverTotal, totalCurrency, locale))}
+              </span>
+            </div>
+            {pages > 1 && (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">
-                  {t('dashboard.drillDownTotal', {
-                    count: displayItems.length,
-                    total: mask(formatCurrency(absTotal, userCurrency, locale)),
-                  })}
+                <button
+                  type="button"
+                  aria-label={t('reports.explore.prevPage')}
+                  disabled={page <= 1}
+                  onClick={() => setPageState({ key: filterKey, page: page - 1 })}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {t('reports.explore.pageOf', { page, pages })}
                 </span>
-                <span className="text-sm font-bold tabular-nums text-foreground">
-                  {mask(formatCurrency(absTotal, userCurrency, locale))}
-                </span>
+                <button
+                  type="button"
+                  aria-label={t('reports.explore.nextPage')}
+                  disabled={page >= pages}
+                  onClick={() => setPageState({ key: filterKey, page: page + 1 })}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:pointer-events-none"
+                >
+                  <ChevronRight size={16} />
+                </button>
               </div>
             )}
           </div>
