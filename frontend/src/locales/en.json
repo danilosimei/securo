@@ -1997,7 +1997,36 @@
     "range30d": "30D",
     "customRange": "Custom range",
     "pickCustomRange": "Pick a start and end date",
-    "loadError": "Failed to load report"
+    "loadError": "Failed to load report",
+    "explore": {
+      "tab": "Explore",
+      "period": {
+        "this_month": "This month",
+        "last_month": "Last month",
+        "last_3m": "3 months",
+        "last_6m": "6 months",
+        "last_12m": "12 months",
+        "ytd": "Year to date",
+        "custom": "Custom…"
+      },
+      "rangeClosed": "{{from}} – {{to}}, closed months",
+      "rangePartial": "{{from}} – {{to}}, partial",
+      "spending": "Spending",
+      "vsPrevious": "{{change}} vs previous",
+      "col": {
+        "group": "Group",
+        "total": "Total",
+        "share": "Share",
+        "change": "Change",
+        "count": "Transactions",
+        "trend": "12 months"
+      },
+      "offsets": "offsets",
+      "empty": "No spending between {{from}} and {{to}}.",
+      "error": "Could not load Explore.",
+      "retry": "Try again",
+      "unconverted": "Transactions in another currency without an exchange rate were left out of the total: {{n}}."
+    }
   },
   "payees": {
     "noPayeeFound": "No payee found.",

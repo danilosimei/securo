@@ -2129,7 +2129,36 @@
     "range30d": "30D",
     "customRange": "Vlastní rozsah",
     "pickCustomRange": "Vybrat datum začátku a konce",
-    "loadError": "Nepodařilo se načíst přehled"
+    "loadError": "Nepodařilo se načíst přehled",
+    "explore": {
+      "tab": "Prozkoumat",
+      "period": {
+        "this_month": "Tento měsíc",
+        "last_month": "Minulý měsíc",
+        "last_3m": "3 měsíce",
+        "last_6m": "6 měsíců",
+        "last_12m": "12 měsíců",
+        "ytd": "Letošní rok",
+        "custom": "Vlastní…"
+      },
+      "rangeClosed": "{{from}} – {{to}}, uzavřené měsíce",
+      "rangePartial": "{{from}} – {{to}}, částečně",
+      "spending": "Výdaje",
+      "vsPrevious": "{{change}} oproti předchozímu",
+      "col": {
+        "group": "Skupina",
+        "total": "Celkem",
+        "share": "%",
+        "change": "Změna",
+        "count": "Transakce",
+        "trend": "12 měs."
+      },
+      "offsets": "snižuje",
+      "empty": "Žádné výdaje mezi {{from}} a {{to}}.",
+      "error": "Prozkoumat se nepodařilo načíst.",
+      "retry": "Zkusit znovu",
+      "unconverted": "Transakce v jiné měně bez kurzu nejsou v součtu: {{n}}."
+    }
   },
   "payees": {
     "noPayeeFound": "Příjemce nebyl nalezen.",

@@ -2001,7 +2001,36 @@
     "range30d": "30J",
     "customRange": "Plage personnalisée",
     "pickCustomRange": "Choisir une date de début et de fin",
-    "loadError": "Échec du chargement du rapport"
+    "loadError": "Échec du chargement du rapport",
+    "explore": {
+      "tab": "Explorer",
+      "period": {
+        "this_month": "Ce mois-ci",
+        "last_month": "Mois dernier",
+        "last_3m": "3 mois",
+        "last_6m": "6 mois",
+        "last_12m": "12 mois",
+        "ytd": "Année en cours",
+        "custom": "Personnalisé…"
+      },
+      "rangeClosed": "{{from}} – {{to}}, mois clos",
+      "rangePartial": "{{from}} – {{to}}, partiel",
+      "spending": "Dépenses",
+      "vsPrevious": "{{change}} vs précédent",
+      "col": {
+        "group": "Groupe",
+        "total": "Total",
+        "share": "%",
+        "change": "Variation",
+        "count": "Transactions",
+        "trend": "12 mois"
+      },
+      "offsets": "déduit",
+      "empty": "Aucune dépense entre {{from}} et {{to}}.",
+      "error": "Impossible de charger Explorer.",
+      "retry": "Réessayer",
+      "unconverted": "Des transactions dans une autre devise sans taux de change sont exclues du total : {{n}}."
+    }
   },
   "payees": {
     "noPayeeFound": "Aucun bénéficiaire trouvé.",

@@ -2086,7 +2086,36 @@
     "range30d": "30D",
     "customRange": "Zakres niestandardowy",
     "pickCustomRange": "Wybierz datę początkową i końcową",
-    "loadError": "Nie udało się załadować raportu"
+    "loadError": "Nie udało się załadować raportu",
+    "explore": {
+      "tab": "Przeglądaj",
+      "period": {
+        "this_month": "Ten miesiąc",
+        "last_month": "Poprzedni miesiąc",
+        "last_3m": "3 miesiące",
+        "last_6m": "6 miesięcy",
+        "last_12m": "12 miesięcy",
+        "ytd": "Bieżący rok",
+        "custom": "Własny…"
+      },
+      "rangeClosed": "{{from}} – {{to}}, zamknięte miesiące",
+      "rangePartial": "{{from}} – {{to}}, częściowo",
+      "spending": "Wydatki",
+      "vsPrevious": "{{change}} vs poprzedni",
+      "col": {
+        "group": "Grupa",
+        "total": "Suma",
+        "share": "%",
+        "change": "Zmiana",
+        "count": "Transakcje",
+        "trend": "12 mies."
+      },
+      "offsets": "zmniejsza",
+      "empty": "Brak wydatków między {{from}} a {{to}}.",
+      "error": "Nie udało się wczytać widoku Przeglądaj.",
+      "retry": "Spróbuj ponownie",
+      "unconverted": "Transakcje w innej walucie bez kursu pominięto w sumie: {{n}}."
+    }
   },
   "payees": {
     "noPayeeFound": "Nie znaleziono odbiorcy.",

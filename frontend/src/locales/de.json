@@ -1998,7 +1998,36 @@
     "range30d": "30T",
     "customRange": "Benutzerdefinierter Zeitraum",
     "pickCustomRange": "Start- und Enddatum wählen",
-    "loadError": "Bericht konnte nicht geladen werden"
+    "loadError": "Bericht konnte nicht geladen werden",
+    "explore": {
+      "tab": "Erkunden",
+      "period": {
+        "this_month": "Dieser Monat",
+        "last_month": "Letzter Monat",
+        "last_3m": "3 Monate",
+        "last_6m": "6 Monate",
+        "last_12m": "12 Monate",
+        "ytd": "Laufendes Jahr",
+        "custom": "Benutzerdefiniert…"
+      },
+      "rangeClosed": "{{from}} – {{to}}, abgeschlossene Monate",
+      "rangePartial": "{{from}} – {{to}}, teilweise",
+      "spending": "Ausgaben",
+      "vsPrevious": "{{change}} ggü. Vorperiode",
+      "col": {
+        "group": "Gruppe",
+        "total": "Summe",
+        "share": "%",
+        "change": "Änderung",
+        "count": "Buchungen",
+        "trend": "12 Monate"
+      },
+      "offsets": "mindert",
+      "empty": "Keine Ausgaben zwischen {{from}} und {{to}}.",
+      "error": "Erkunden konnte nicht geladen werden.",
+      "retry": "Erneut versuchen",
+      "unconverted": "Buchungen in anderer Währung ohne Wechselkurs fehlen in der Summe: {{n}}."
+    }
   },
   "payees": {
     "noPayeeFound": "Kein Zahlungsempfänger gefunden.",

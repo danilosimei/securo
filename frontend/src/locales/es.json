@@ -2001,7 +2001,36 @@
     "range30d": "30D",
     "customRange": "Rango personalizado",
     "pickCustomRange": "Elige una fecha de inicio y fin",
-    "loadError": "No se pudo cargar el informe"
+    "loadError": "No se pudo cargar el informe",
+    "explore": {
+      "tab": "Explorar",
+      "period": {
+        "this_month": "Este mes",
+        "last_month": "Mes pasado",
+        "last_3m": "3 meses",
+        "last_6m": "6 meses",
+        "last_12m": "12 meses",
+        "ytd": "Año actual",
+        "custom": "Personalizado…"
+      },
+      "rangeClosed": "{{from}} – {{to}}, meses cerrados",
+      "rangePartial": "{{from}} – {{to}}, parcial",
+      "spending": "Gasto",
+      "vsPrevious": "{{change}} vs anterior",
+      "col": {
+        "group": "Grupo",
+        "total": "Total",
+        "share": "%",
+        "change": "Variación",
+        "count": "Transacciones",
+        "trend": "12 meses"
+      },
+      "offsets": "descuenta",
+      "empty": "Ningún gasto entre {{from}} y {{to}}.",
+      "error": "No se pudo cargar Explorar.",
+      "retry": "Reintentar",
+      "unconverted": "Transacciones en otra moneda sin cotización quedaron fuera del total: {{n}}."
+    }
   },
   "payees": {
     "noPayeeFound": "No se encontró ningún beneficiario.",

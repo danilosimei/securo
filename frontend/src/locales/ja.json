@@ -1997,7 +1997,36 @@
     "range30d": "30日",
     "customRange": "期間を指定",
     "pickCustomRange": "開始日と終了日を選択",
-    "loadError": "レポートの読み込みに失敗しました"
+    "loadError": "レポートの読み込みに失敗しました",
+    "explore": {
+      "tab": "探索",
+      "period": {
+        "this_month": "今月",
+        "last_month": "先月",
+        "last_3m": "3か月",
+        "last_6m": "6か月",
+        "last_12m": "12か月",
+        "ytd": "今年",
+        "custom": "期間指定…"
+      },
+      "rangeClosed": "{{from}} – {{to}}、締め済みの月",
+      "rangePartial": "{{from}} – {{to}}、途中経過",
+      "spending": "支出",
+      "vsPrevious": "前期比 {{change}}",
+      "col": {
+        "group": "グループ",
+        "total": "合計",
+        "share": "%",
+        "change": "増減",
+        "count": "取引数",
+        "trend": "12か月"
+      },
+      "offsets": "相殺",
+      "empty": "{{from}} から {{to}} までの支出はありません。",
+      "error": "探索を読み込めませんでした。",
+      "retry": "再試行",
+      "unconverted": "為替レートのない他通貨の取引は合計に含まれていません: {{n}}件。"
+    }
   },
   "payees": {
     "noPayeeFound": "取引相手が見つかりません。",

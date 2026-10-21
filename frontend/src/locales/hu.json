@@ -1997,7 +1997,36 @@
     "range30d": "30 nap",
     "customRange": "Egyéni időszak",
     "pickCustomRange": "Válassz kezdő és záró dátumot",
-    "loadError": "Nem sikerült betölteni a jelentést"
+    "loadError": "Nem sikerült betölteni a jelentést",
+    "explore": {
+      "tab": "Felfedezés",
+      "period": {
+        "this_month": "Ez a hónap",
+        "last_month": "Előző hónap",
+        "last_3m": "3 hónap",
+        "last_6m": "6 hónap",
+        "last_12m": "12 hónap",
+        "ytd": "Idei év",
+        "custom": "Egyéni…"
+      },
+      "rangeClosed": "{{from}} – {{to}}, lezárt hónapok",
+      "rangePartial": "{{from}} – {{to}}, részleges",
+      "spending": "Kiadás",
+      "vsPrevious": "{{change}} az előzőhöz képest",
+      "col": {
+        "group": "Csoport",
+        "total": "Összesen",
+        "share": "%",
+        "change": "Változás",
+        "count": "Tranzakciók",
+        "trend": "12 hónap"
+      },
+      "offsets": "csökkenti",
+      "empty": "Nincs kiadás {{from}} és {{to}} között.",
+      "error": "A Felfedezés nem tölthető be.",
+      "retry": "Újra",
+      "unconverted": "Árfolyam nélküli, más pénznemű tranzakciók kimaradtak az összegből: {{n}}."
+    }
   },
   "payees": {
     "noPayeeFound": "Nincs ilyen partner.",

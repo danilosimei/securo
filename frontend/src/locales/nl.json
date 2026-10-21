@@ -1999,7 +1999,36 @@
     "range30d": "30D",
     "customRange": "Aangepast bereik",
     "pickCustomRange": "Kies een start- en einddatum",
-    "loadError": "Rapport laden mislukt"
+    "loadError": "Rapport laden mislukt",
+    "explore": {
+      "tab": "Verkennen",
+      "period": {
+        "this_month": "Deze maand",
+        "last_month": "Vorige maand",
+        "last_3m": "3 maanden",
+        "last_6m": "6 maanden",
+        "last_12m": "12 maanden",
+        "ytd": "Dit jaar",
+        "custom": "Aangepast…"
+      },
+      "rangeClosed": "{{from}} – {{to}}, afgesloten maanden",
+      "rangePartial": "{{from}} – {{to}}, gedeeltelijk",
+      "spending": "Uitgaven",
+      "vsPrevious": "{{change}} t.o.v. vorige",
+      "col": {
+        "group": "Groep",
+        "total": "Totaal",
+        "share": "%",
+        "change": "Verschil",
+        "count": "Transacties",
+        "trend": "12 maanden"
+      },
+      "offsets": "verlaagt",
+      "empty": "Geen uitgaven tussen {{from}} en {{to}}.",
+      "error": "Verkennen kon niet worden geladen.",
+      "retry": "Opnieuw proberen",
+      "unconverted": "Transacties in een andere valuta zonder koers zijn niet meegeteld: {{n}}."
+    }
   },
   "payees": {
     "noPayeeFound": "Geen begunstigde gevonden.",
