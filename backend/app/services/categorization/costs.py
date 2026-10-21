@@ -76,7 +76,7 @@ def cost_usd(model: str, usage, *, batch: bool) -> Decimal:
     return total.quantize(_QUANTUM)
 
 
-def _month_bounds(now: datetime) -> tuple[datetime, datetime]:
+def month_bounds(now: datetime) -> tuple[datetime, datetime]:
     """[start, end) of `now`'s month, in `now`'s timezone, as UTC."""
     start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     if start.month == 12:
@@ -89,7 +89,7 @@ def _month_bounds(now: datetime) -> tuple[datetime, datetime]:
 async def month_spend(session: AsyncSession, workspace_id: uuid.UUID) -> Decimal:
     """US$ spent by this workspace's runs in the current (local) month."""
     tz = await get_workspace_timezone(session, workspace_id)
-    start, end = _month_bounds(datetime.now(tz))
+    start, end = month_bounds(datetime.now(tz))
     total = await session.scalar(
         select(func.coalesce(func.sum(CategorizationRun.cost_usd), 0)).where(
             CategorizationRun.workspace_id == workspace_id,

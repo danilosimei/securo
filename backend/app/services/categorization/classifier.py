@@ -61,7 +61,7 @@ from app.services.categorization.claude_client import (
     create_message,
     resolve_client,
 )
-from app.services.categorization.costs import _month_bounds, cost_usd
+from app.services.categorization.costs import cost_usd, month_bounds
 from app.services.categorization.events import (
     PROTECTED_SOURCES,
     UNSET,
@@ -605,7 +605,7 @@ async def committed_spend(session: AsyncSession, workspace_id: uuid.UUID) -> Dec
     lock, not the workspace lock `collect_batch` takes).
     """
     tz = await get_workspace_timezone(session, workspace_id)
-    start, end = _month_bounds(datetime.now(tz))
+    start, end = month_bounds(datetime.now(tz))
     in_month = and_(CategorizationRun.created_at >= start, CategorizationRun.created_at < end)
     in_flight = and_(
         CategorizationRun.kind.in_(BATCH_KINDS),
@@ -949,17 +949,19 @@ async def _submit_batch(
     # The batch is paid from here on: its tracking is committed before any
     # other work, so nothing failing later can roll it back (the run then
     # stays `processing_batch` and the beat collects it, see
-    # `tasks.record_failure`). The commit also frees the spend lock.
+    # `tasks.record_failure`). The commit also frees the spend lock. The
+    # write runs in a savepoint: when it fails, the spend lock is still held
+    # while the fallback writes the same tracking.
     run_id = run.id
     try:
-        await tasks.lock_workspace(session, workspace_id)
-        for name, value in tracking.items():
-            setattr(run, name, value)
-        await _merge_detail(session, run, patch)
+        async with session.begin_nested():
+            await tasks.lock_workspace(session, workspace_id)
+            for name, value in tracking.items():
+                setattr(run, name, value)
+            await _merge_detail(session, run, patch)
         await session.commit()
     except Exception:
-        await session.rollback()
-        await _track_batch(session, run_id, workspace_id, tracking, patch)
+        await _recover_tracking(session, run_id, workspace_id, tracking, patch)
         raise
     # Held until the task commits, as before the commit above: this run's
     # row is written again (stats, status) after this point.
@@ -970,6 +972,33 @@ async def _submit_batch(
         )
 
 
+async def _recover_tracking(
+    session: AsyncSession,
+    run_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    tracking: dict[str, Any],
+    patch: dict[str, Any],
+) -> None:
+    """`_track_batch` after the regular tracking write failed: first in the
+    same transaction (only the savepoint was lost, the spend lock is still
+    held), then, when that transaction is gone too (a failed commit), in a
+    new one. A batch still untracked after both is logged: it is paid and
+    nothing will collect it."""
+    try:
+        await _track_batch(session, run_id, workspace_id, tracking, patch)
+        return
+    except Exception:  # noqa: BLE001 - retried in a new transaction
+        await session.rollback()
+    try:
+        await _track_batch(session, run_id, workspace_id, tracking, patch)
+    except Exception:  # noqa: BLE001 - the original error is raised by the caller
+        await session.rollback()
+        logger.exception(
+            "categorization run %s: batch %s was sent but could not be tracked",
+            run_id, tracking.get("batch_id"),
+        )
+
+
 async def _track_batch(
     session: AsyncSession,
     run_id: uuid.UUID,
@@ -977,10 +1006,11 @@ async def _track_batch(
     tracking: dict[str, Any],
     patch: dict[str, Any],
 ) -> None:
-    """Write a sent batch's tracking with a direct UPDATE, in a transaction
-    of its own, when the regular write failed: the batch is paid and must
-    stay collectable. Same locks and order as `_submit_batch` (spend, then
-    workspace), and the stored `detail` is merged, not replaced."""
+    """Write a sent batch's tracking with a direct UPDATE and commit, when
+    the regular write failed: the batch is paid and must stay collectable.
+    Same locks and order as `_submit_batch` (spend, then workspace; taking
+    one again in the same transaction is a no-op), and the stored `detail`
+    is merged, not replaced."""
     from app.tasks import categorization_tasks as tasks
 
     await tasks.lock_spend(session, workspace_id)
@@ -1123,6 +1153,9 @@ async def _collect(
     close_stats(stats)
     run.stats = stats
     run.status = "capped" if info.get("capped") else "done"
+    # A failure after the batch was sent was recorded here and the run kept
+    # waiting (`tasks.record_failure`); collected, the run is no longer that.
+    run.error = None
     run.finished_at = datetime.now(timezone.utc)
     patch: dict[str, Any] = {}
     # Only a redistribution has rows to name: they stay in the first child,

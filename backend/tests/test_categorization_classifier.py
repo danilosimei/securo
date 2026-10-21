@@ -1428,6 +1428,8 @@ async def test_batch_stays_collectable_when_work_after_send_fails(
     assert summary == {"collected": 1, "pending": 0, "failed": 0}
     run = await session.get(CategorizationRun, run_id, populate_existing=True)
     assert run is not None and run.status == "capped" and run.finished_at is not None
+    # Collected: the failure it waited through is no longer its state.
+    assert run.error is None
 
 
 @pytest.mark.asyncio
@@ -1451,9 +1453,20 @@ async def test_batch_tracked_when_writing_tracking_fails_once(
     )
     await session.commit()
     monkeypatch.setattr(classifier, "_merge_detail", _raise_once(classifier._merge_detail))
+    rollbacks = []
+    real_rollback = session.rollback
+
+    async def counting_rollback():
+        rollbacks.append(1)
+        await real_rollback()
+
+    monkeypatch.setattr(session, "rollback", counting_rollback)
 
     with pytest.raises(RuntimeError, match="write failed"):
         await pipeline.complete_run(session, ws, prepared, use_ai=True)
+    # Only the savepoint was lost: the fallback wrote in the same
+    # transaction, still holding the spend lock.
+    assert rollbacks == []
     await session.rollback()
 
     run = await session.get(CategorizationRun, run_id, populate_existing=True)
@@ -1465,6 +1478,34 @@ async def test_batch_tracked_when_writing_tracking_fails_once(
     assert run.detail["batch"]["estimated_cost_usd"] == "0.20"
     assert len(run.detail["batch"]["chunks"]) == 2
     assert await classifier.committed_spend(session, ws) == Decimal("0.20")
+
+
+@pytest.mark.asyncio
+async def test_batch_that_cannot_be_tracked_at_all_is_logged(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire, monkeypatch,
+    caplog,
+):
+    ws = test_workspace.id
+    for name in _names(120):
+        _tx(session, test_user, test_account, name)
+    await session.commit()
+    wire(fake_client())
+    prepared = await pipeline.prepare_run(session, ws, trigger="backlog", use_ai=True)
+    await session.commit()
+    run_id = prepared.run.id
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("database gone")
+
+    monkeypatch.setattr(classifier, "_merge_detail", boom)
+    monkeypatch.setattr(classifier, "_track_batch", boom)
+
+    with caplog.at_level("ERROR", logger=classifier.logger.name):
+        with pytest.raises(RuntimeError, match="database gone"):
+            await pipeline.complete_run(session, ws, prepared, use_ai=True)
+
+    assert f"{run_id}: batch batch_1 was sent but could not be tracked" in caplog.text
+    await session.rollback()
 
 
 @pytest.mark.asyncio
