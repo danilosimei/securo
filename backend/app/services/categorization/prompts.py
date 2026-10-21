@@ -27,14 +27,14 @@ from typing import Any
 from app.models.categorization import MerchantMemory
 from app.models.category import Category
 from app.models.category_group import CategoryGroup
-from app.services.categorization.memory import DOMINANCE, NOTE_LENGTH
+from app.services.categorization.memory import DOMINANCE
 from app.services.categorization.merchant_key import (
     PAYEE_PREFIX,
     PERSON_PREFIX,
     TRAILING_JUNK,
+    clean_note,
     is_unnamed_key,
     sample_description,
-    sanitize_text,
     scrub_documents,
     strip_account_numbers,
 )
@@ -239,13 +239,6 @@ def _dominant(counts: dict[str, Any] | None) -> tuple[uuid.UUID, int] | None:
         return uuid.UUID(top_id), total
     except ValueError:
         return None
-
-
-def clean_note(text: str | None) -> str | None:
-    """A store note as the prompt carries it: no documents, no account or
-    card numbers, at most `NOTE_LENGTH` characters; None when nothing is
-    left."""
-    return sanitize_text(text or "")[:NOTE_LENGTH].strip() or None
 
 
 def build_examples(

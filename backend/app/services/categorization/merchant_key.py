@@ -201,6 +201,17 @@ def sanitize_text(text: str) -> str:
     return strip_account_numbers(scrub_documents(text))
 
 
+#: Longest store note kept (the `merchant_memory.note` column is `String(200)`).
+NOTE_LENGTH = 200
+
+
+def clean_note(text: str | None) -> str | None:
+    """A store note as it is saved and as the prompt carries it: no
+    documents, no account or card numbers, at most `NOTE_LENGTH` characters;
+    None when nothing is left."""
+    return sanitize_text(text or "")[:NOTE_LENGTH].strip() or None
+
+
 def scrub_documents(text: str) -> str:
     """Remove CPF/CNPJ (11 ou 14 digitos), com ou sem pontuacao ou espacos."""
 

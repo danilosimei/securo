@@ -585,6 +585,23 @@ async def test_set_note_scrubs_documents_and_truncates(session, test_workspace):
 
 
 @pytest.mark.asyncio
+async def test_saved_note_and_prompt_note_are_cleaned_by_one_function(
+    session, test_workspace, monkeypatch
+):
+    """The note saved and the note sent to the model are the same text: one
+    cleaning, shared by the memory and the prompts."""
+    from app.services.categorization import memory, merchant_key, prompts
+
+    assert prompts.clean_note is merchant_key.clean_note
+    assert memory.NOTE_LENGTH == merchant_key.NOTE_LENGTH == 200
+    monkeypatch.setattr(memory, "clean_note", lambda text: "limpa")
+
+    row = await memory.set_note(session, test_workspace.id, "AURINO", "qualquer")
+
+    assert row is not None and row.note == "limpa"
+
+
+@pytest.mark.asyncio
 async def test_set_note_forgets_ai_decision(session, test_workspace, test_categories):
     from app.services.categorization.memory import set_note
 

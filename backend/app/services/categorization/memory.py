@@ -25,7 +25,8 @@ from app.models.categorization import MerchantMemory
 from app.models.payee import Payee
 from app.models.transaction import Transaction
 from app.services.categorization import events
-from app.services.categorization.merchant_key import merchant_key, sanitize_text
+from app.services.categorization.merchant_key import NOTE_LENGTH as NOTE_LENGTH  # re-exported
+from app.services.categorization.merchant_key import clean_note, merchant_key
 
 #: Choices needed before the memory is trusted.
 MIN_CHOICES = 2
@@ -33,8 +34,6 @@ MIN_CHOICES = 2
 DOMINANCE = 0.8
 #: `merchant_key` column width (memory and suggestions).
 KEY_WIDTH = 255
-#: Longest store note kept (the column is `String(200)`).
-NOTE_LENGTH = 200
 #: Ids per `IN (...)` (asyncpg caps a statement at 32767 parameters).
 CHUNK = 1000
 
@@ -232,13 +231,14 @@ async def set_note(
 ) -> MerchantMemory | None:
     """Set (or clear, with empty text) what the person says about a store.
 
-    The text is stripped of documents and account numbers and cut at
-    `NOTE_LENGTH`. A changed note makes the store's cached AI decision stale,
-    so it is dropped; an unchanged one touches nothing. It is not a choice:
-    `counts` stay as they are and no pick is counted. Clearing the note of a
-    store the memory never saw creates nothing and returns None.
+    The text is cleaned as the prompt carries it (`clean_note`: no
+    documents or account numbers, at most `NOTE_LENGTH`). A changed note
+    makes the store's cached AI decision stale, so it is dropped; an
+    unchanged one touches nothing. It is not a choice: `counts` stay as they
+    are and no pick is counted. Clearing the note of a store the memory never
+    saw creates nothing and returns None.
     """
-    clean = sanitize_text(note or "")[:NOTE_LENGTH].strip() or None
+    clean = clean_note(note)
     key = stored_key(key)
     if clean is None:
         row = (
