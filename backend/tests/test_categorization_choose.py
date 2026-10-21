@@ -453,6 +453,12 @@ async def test_choose_unknown_category_is_404(client, auth_headers, session, tes
     ("Petróleo", "Abc", None, "circle-help", None),
     ("Autônomo", "Abc", None, "circle-help", None),
     ("Casamento", "Abc", None, "circle-help", None),
+    ("Petisco", "Abc", None, "circle-help", None),
+    ("Petiscaria", "Abc", None, "circle-help", None),
+    ("Casaco", "Abc", None, "circle-help", None),
+    # The stems themselves still count.
+    ("Petshop", "Abc", None, "dog", None),
+    ("Casa de praia", "Abc", None, "house", None),
 ])
 def test_suggest_style(name, group, color, icon, expected_color):
     got_icon, got_color = suggest_style(name, group, color)

@@ -57,7 +57,7 @@ STYLE_KEYWORDS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("MANUTEN", "REFORM"), "wrench"),
 )
 #: Word starts that look like a stem but mean something else.
-FALSE_STEMS: tuple[str, ...] = ("AGUARD", "PETRO", "AUTONOM", "CASAMENT")
+FALSE_STEMS: tuple[str, ...] = ("AGUARD", "PETRO", "PETISC", "AUTONOM", "CASAMENT", "CASAC")
 #: Colors a new group (and its categories) can get, picked by its name.
 PALETTE: tuple[str, ...] = (
     "#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#a855f7", "#ec4899", "#14b8a6",
