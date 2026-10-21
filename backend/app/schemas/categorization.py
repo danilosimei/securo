@@ -193,6 +193,8 @@ class AppliedResult(BaseModel):
     applied: int
     #: The events written, for "undo" (`POST /undo {event_ids}`).
     event_ids: list[uuid.UUID]
+    #: The rows that changed, in order (the first is where "similar" starts).
+    transaction_ids: list[uuid.UUID]
     #: Always null: a person's action is not a run. Kept for the contract;
     #: undo goes through `event_ids`.
     event_run_id: Optional[uuid.UUID] = None
@@ -216,6 +218,8 @@ class CreateCategoryResult(BaseModel):
     category_id: uuid.UUID
     applied: int
     event_ids: list[uuid.UUID]
+    #: The rows that changed, in order.
+    transaction_ids: list[uuid.UUID]
 
 
 #: A name with something besides spaces in it, stripped.
@@ -249,6 +253,8 @@ class ChooseResult(BaseModel):
     applied: int
     #: The events written, for "undo" (`POST /undo {event_ids}`).
     event_ids: list[uuid.UUID]
+    #: The rows that changed, in order.
+    transaction_ids: list[uuid.UUID]
 
 
 class AskMessage(BaseModel):
@@ -300,7 +306,8 @@ class AppliedTransaction(BaseModel):
 
 
 class AppliedEvent(BaseModel):
-    event_id: uuid.UUID
+    #: None for a row listed by origin with no standing event (no undo).
+    event_id: Optional[uuid.UUID] = None
     run_id: Optional[uuid.UUID] = None
     transaction: AppliedTransaction
     source: str
@@ -318,6 +325,19 @@ class AppliedEvent(BaseModel):
 class AppliedPage(BaseModel):
     items: list[AppliedEvent]
     total: int
+
+
+class Scoreboard(BaseModel):
+    """Categorizable rows (posted, no transfer pair, no opening balance, not
+    ignored); `decided + to_review + waiting == total`."""
+
+    total: int
+    #: With a category and nothing pending to review.
+    decided: int
+    #: With a pending suggestion Revisar shows.
+    to_review: int
+    #: No category and nothing to review yet.
+    waiting: int
 
 
 class UndoRequest(BaseModel):

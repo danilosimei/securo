@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy import insert as sa_insert
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,6 +56,12 @@ from app.services.categorization.settings import find_ai_connection, get_setting
 
 #: Origins of the changes the pipeline made on its own (the audit list).
 AUTO_SOURCES: tuple[str, ...] = ("ai", "memory", "rule")
+#: Origins of the decisions that confirm a category (Aplicadas > Confirmadas).
+CONFIRMING_SOURCES: tuple[str, ...] = ("ai", "memory")
+#: Row origins of Aplicadas > Suas: the person's, then or before the feature.
+USER_ORIGINS: tuple[str, ...] = ("user", "legacy")
+#: Row origins of Aplicadas > Outras origens: the bank, imports, series.
+OTHER_ORIGINS: tuple[str, ...] = ("provider", "import", "recurring", "installment")
 #: Pipeline decisions an undo sends back to review instead of to the pipeline.
 REVIEWED_ON_UNDO: tuple[str, ...] = ("ai", "memory")
 #: `reason` of the suggestion an undone pipeline decision leaves behind.
@@ -335,21 +341,24 @@ class Applied:
     event_ids: list[uuid.UUID]
     #: Transaction id -> the event written for it.
     by_tx: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
+    #: The rows that changed, in the order they were given.
+    transaction_ids: list[uuid.UUID] = field(default_factory=list)
 
 
 async def load_transactions(
     session: AsyncSession, workspace_id: uuid.UUID, ids: list[uuid.UUID]
 ) -> list[Transaction]:
-    """The workspace's rows among `ids` (others are left out), per chunk."""
-    found: list[Transaction] = []
+    """The workspace's rows among `ids` (others are left out), per chunk,
+    in the order of `ids`."""
+    found: dict[uuid.UUID, Transaction] = {}
     for chunk in _chunks(ids):
         result = await session.execute(
             select(Transaction).where(
                 Transaction.workspace_id == workspace_id, Transaction.id.in_(chunk)
             )
         )
-        found.extend(result.scalars().all())
-    return found
+        found.update((tx.id, tx) for tx in result.scalars().all())
+    return [found[tx_id] for tx_id in dict.fromkeys(ids) if tx_id in found]
 
 
 async def apply_as_user(
@@ -389,7 +398,13 @@ async def apply_as_user(
                 )
             ).all()
         )
-    return Applied(applied=applied, event_ids=list(by_tx.values()), by_tx=by_tx)
+    changed = list(dict.fromkeys(tx.id for tx in txs if tx.id in by_tx))
+    return Applied(
+        applied=applied,
+        event_ids=[by_tx[tx_id] for tx_id in changed],
+        by_tx=by_tx,
+        transaction_ids=changed,
+    )
 
 
 async def _pending_suggestions(
@@ -585,6 +600,37 @@ async def _store_labels(
     return out
 
 
+def _applied_item(
+    tx: Transaction,
+    ev: CategorizationEvent | None,
+    label: tuple[str, str],
+    *,
+    source: str,
+    new_category_id: uuid.UUID | None,
+    created_at: datetime,
+) -> dict[str, Any]:
+    """One line of Aplicadas: the row, the event behind it (if any), the store."""
+    return {
+        "event_id": ev.id if ev is not None else None,
+        "run_id": ev.run_id if ev is not None else None,
+        "transaction": {
+            "id": tx.id,
+            "date": tx.date,
+            "description": tx.description,
+            "amount": tx.amount,
+            "currency": tx.currency,
+        },
+        "source": source,
+        "previous_category_id": ev.previous_category_id if ev is not None else None,
+        "new_category_id": new_category_id,
+        "confidence": ev.confidence if ev is not None else None,
+        "reason": ev.reason if ev is not None else None,
+        "created_at": created_at,
+        "merchant_key": label[0],
+        "store_name": label[1],
+    }
+
+
 async def applied_events(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -593,19 +639,29 @@ async def applied_events(
     min_confidence: int | None = None,
     max_confidence: int | None = None,
     since: datetime | None = None,
+    confirmed: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
     """Changes the pipeline made on its own and nobody undid, newest first.
 
-    Confirmations (the category did not change) are no change to check.
+    Confirmations (the category did not change) are no change to check, so
+    they are left out -- unless `confirmed`, which lists only them: the AI
+    or the memory settling a row at the category it already held (from the
+    bank, say). A "confirmation" of no category is none, and stays out.
     """
     filters = [
         CategorizationEvent.workspace_id == workspace_id,
-        CategorizationEvent.source.in_(sources),
         CategorizationEvent.undone_at.is_(None),
-        changes_category(),
     ]
+    if confirmed:
+        filters += [
+            CategorizationEvent.source.in_(CONFIRMING_SOURCES),
+            ~changes_category(),
+            CategorizationEvent.new_category_id.is_not(None),
+        ]
+    else:
+        filters += [CategorizationEvent.source.in_(sources), changes_category()]
     if min_confidence is not None:
         filters.append(CategorizationEvent.confidence >= min_confidence)
     if max_confidence is not None:
@@ -630,28 +686,130 @@ async def applied_events(
     pairs = rows.all()
     labels = await _store_labels(session, workspace_id, [tx for _, tx in pairs])
     items = [
-        {
-            "event_id": ev.id,
-            "run_id": ev.run_id,
-            "transaction": {
-                "id": tx.id,
-                "date": tx.date,
-                "description": tx.description,
-                "amount": tx.amount,
-                "currency": tx.currency,
-            },
-            "source": ev.source,
-            "previous_category_id": ev.previous_category_id,
-            "new_category_id": ev.new_category_id,
-            "confidence": ev.confidence,
-            "reason": ev.reason,
-            "created_at": ev.created_at,
-            "merchant_key": labels[tx.id][0],
-            "store_name": labels[tx.id][1],
-        }
+        _applied_item(
+            tx, ev, labels[tx.id],
+            source=ev.source, new_category_id=ev.new_category_id, created_at=ev.created_at,
+        )
         for ev, tx in pairs
     ]
     return items, total or 0
+
+
+def categorizable(workspace_id: uuid.UUID) -> list[Any]:
+    """The rows categorization covers, as the pipeline picks its candidates:
+    posted, not one side of a transfer between accounts, not an opening
+    balance, not ignored."""
+    return [
+        Transaction.workspace_id == workspace_id,
+        Transaction.status == "posted",
+        Transaction.transfer_pair_id.is_(None),
+        Transaction.source != "opening_balance",
+        Transaction.is_ignored.is_(False),
+    ]
+
+
+async def _standing_events(
+    session: AsyncSession, workspace_id: uuid.UUID, tx_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, CategorizationEvent]:
+    """Each row's latest standing event (not undone, not an undo)."""
+    latest: dict[uuid.UUID, CategorizationEvent] = {}
+    for chunk in _chunks(tx_ids):
+        result = await session.execute(
+            select(CategorizationEvent)
+            .where(
+                CategorizationEvent.workspace_id == workspace_id,
+                CategorizationEvent.transaction_id.in_(chunk),
+                CategorizationEvent.undone_at.is_(None),
+                CategorizationEvent.source != "undo",
+            )
+            .order_by(CategorizationEvent.created_at.desc(), CategorizationEvent.id.desc())
+        )
+        for ev in result.scalars().all():
+            latest.setdefault(ev.transaction_id, ev)
+    return latest
+
+
+async def origin_rows(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    *,
+    origins: tuple[str, ...],
+    limit: int,
+    offset: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """Categorizable rows with a category from `origins`, newest first.
+
+    By origin, not by event, so a choice made before events existed (or by
+    the bank, an import, a series) is listed too. Each line carries the
+    row's latest standing event when it has one (else no `event_id`: no
+    undo), its origin as `source` and its current category.
+    """
+    filters = [
+        *categorizable(workspace_id),
+        Transaction.category_id.is_not(None),
+        Transaction.category_source.in_(origins),
+    ]
+    total = await session.scalar(select(func.count(Transaction.id)).where(*filters))
+    txs = list(
+        (
+            await session.execute(
+                select(Transaction)
+                .where(*filters)
+                .order_by(Transaction.created_at.desc(), Transaction.id.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+        ).scalars().all()
+    )
+    latest = await _standing_events(session, workspace_id, [tx.id for tx in txs])
+    labels = await _store_labels(session, workspace_id, txs)
+    items = [
+        _applied_item(
+            tx, latest.get(tx.id), labels[tx.id],
+            source=tx.category_source, new_category_id=tx.category_id, created_at=tx.created_at,
+        )
+        for tx in txs
+    ]
+    return items, total or 0
+
+
+async def scoreboard(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, int]:
+    """How far categorization got over the categorizable rows.
+
+    `to_review`: rows with a pending suggestion Revisar shows (over an open
+    row: one over a row the person categorized since is stale). `decided`:
+    the other rows with a category, whatever it is -- one that keeps money
+    out of spending (`treat_as_transfer`, e.g. buying a flat) is a decision
+    all the same. `waiting`: no category and nothing to review yet. The
+    three always add up to `total`.
+    """
+    pending = (
+        select(CategorizationSuggestion.id)
+        .where(
+            CategorizationSuggestion.workspace_id == workspace_id,
+            CategorizationSuggestion.status == "pending",
+            open_row(workspace_id),
+        )
+        .exists()
+    )
+    to_review = case((pending, 1), else_=0)
+    decided = case((and_(~pending, Transaction.category_id.is_not(None)), 1), else_=0)
+    total, review_count, decided_count = (
+        await session.execute(
+            select(
+                func.count(Transaction.id),
+                func.coalesce(func.sum(to_review), 0),
+                func.coalesce(func.sum(decided), 0),
+            ).where(*categorizable(workspace_id))
+        )
+    ).one()
+    total, review_count, decided_count = int(total or 0), int(review_count), int(decided_count)
+    return {
+        "total": total,
+        "decided": decided_count,
+        "to_review": review_count,
+        "waiting": total - decided_count - review_count,
+    }
 
 
 def _utc(value: datetime) -> datetime:

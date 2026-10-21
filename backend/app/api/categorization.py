@@ -45,6 +45,7 @@ from app.schemas.categorization import (
     RuleDraft,
     RunRead,
     RunRequest,
+    Scoreboard,
     SimilarRequest,
     SimilarResult,
     SimilarTransaction,
@@ -66,15 +67,35 @@ def _not_found(exc: review.NotFound) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
+#: Aplicadas views that stand alone (never combined with another source):
+#: confirmations, and rows by origin.
+_CONFIRMED = "confirmed"
+_ORIGIN_VIEWS: dict[str, tuple[str, ...]] = {
+    "user": review.USER_ORIGINS,
+    "other": review.OTHER_ORIGINS,
+}
+
+
 def _sources(raw: Optional[str]) -> tuple[str, ...]:
+    """`source` of `GET /applied`: any of ai, memory, rule together, or one
+    of confirmed, user, other alone."""
     if not raw:
         return review.AUTO_SOURCES
     wanted = tuple(dict.fromkeys(s.strip() for s in raw.split(",") if s.strip()))
+    alone = (_CONFIRMED, *_ORIGIN_VIEWS)
+    if len(wanted) == 1 and wanted[0] in alone:
+        return wanted
     unknown = [s for s in wanted if s not in review.AUTO_SOURCES]
     if unknown or not wanted:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=f"source must be among {', '.join(review.AUTO_SOURCES)}",
+            detail={
+                "code": "invalid_source",
+                "message": (
+                    f"source must be among {', '.join(review.AUTO_SOURCES)}, "
+                    f"or one of {', '.join(alone)} alone"
+                ),
+            },
         )
     return wanted
 
@@ -119,7 +140,11 @@ async def accept_review(
     except review.NotFound as exc:
         raise _not_found(exc)
     await session.commit()
-    return AppliedResult(applied=result.applied, event_ids=result.event_ids)
+    return AppliedResult(
+        applied=result.applied,
+        event_ids=result.event_ids,
+        transaction_ids=result.transaction_ids,
+    )
 
 
 @router.post("/review/dismiss", response_model=DismissResult)
@@ -149,7 +174,10 @@ async def create_category_from_review(
     )
     await session.commit()
     return CreateCategoryResult(
-        category_id=category_id, applied=result.applied, event_ids=result.event_ids
+        category_id=category_id,
+        applied=result.applied,
+        event_ids=result.event_ids,
+        transaction_ids=result.transaction_ids,
     )
 
 
@@ -195,6 +223,7 @@ async def choose_category(
         created_category=outcome.created_category,
         applied=outcome.applied.applied,
         event_ids=outcome.applied.event_ids,
+        transaction_ids=outcome.applied.transaction_ids,
     )
 
 
@@ -320,7 +349,10 @@ async def put_note(
 
 @router.get("/applied", response_model=AppliedPage)
 async def list_applied(
-    source: Optional[str] = Query(None, description="Comma-separated: ai, memory, rule"),
+    source: Optional[str] = Query(
+        None,
+        description="Comma-separated: ai, memory, rule; or one of confirmed, user, other alone",
+    ),
     min_confidence: Optional[int] = Query(None, ge=0, le=100),
     max_confidence: Optional[int] = Query(None, ge=0, le=100),
     since: Optional[datetime] = Query(None),
@@ -329,17 +361,39 @@ async def list_applied(
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    items, total = await review.applied_events(
-        session,
-        ctx.workspace.id,
-        sources=_sources(source),
-        min_confidence=min_confidence,
-        max_confidence=max_confidence,
-        since=since,
-        limit=limit,
-        offset=offset,
-    )
+    """What has a category besides the pending: by default the pipeline's
+    changes; `confirmed`, its confirmations; `user` and `other`, rows by
+    origin (confidence and `since` describe events, so they do not apply)."""
+    sources = _sources(source)
+    if sources[0] in _ORIGIN_VIEWS:
+        items, total = await review.origin_rows(
+            session,
+            ctx.workspace.id,
+            origins=_ORIGIN_VIEWS[sources[0]],
+            limit=limit,
+            offset=offset,
+        )
+    else:
+        items, total = await review.applied_events(
+            session,
+            ctx.workspace.id,
+            sources=sources,
+            confirmed=sources == (_CONFIRMED,),
+            min_confidence=min_confidence,
+            max_confidence=max_confidence,
+            since=since,
+            limit=limit,
+            offset=offset,
+        )
     return {"items": items, "total": total}
+
+
+@router.get("/scoreboard", response_model=Scoreboard)
+async def get_scoreboard(
+    ctx: WorkspaceContext = Depends(current_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return await review.scoreboard(session, ctx.workspace.id)
 
 
 @router.post("/undo", response_model=UndoResultRead)
@@ -411,7 +465,11 @@ async def apply_similar(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
     await session.commit()
-    return AppliedResult(applied=result.applied, event_ids=result.event_ids)
+    return AppliedResult(
+        applied=result.applied,
+        event_ids=result.event_ids,
+        transaction_ids=result.transaction_ids,
+    )
 
 
 @router.get("/rule-draft/{tx_id}", response_model=RuleDraft)
