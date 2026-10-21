@@ -1197,6 +1197,10 @@ def _add_months(d: date, months: int) -> date:
 
 
 _BASELINE_MAX_LOOKBACK_MONTHS = 12
+_NOT_AN_INSTALLMENT = (
+    Transaction.total_installments.is_(None),
+    Transaction.installment_series_id.is_(None),
+)
 _PAST_HISTORY_MONTHS = 1
 
 
@@ -1223,6 +1227,11 @@ async def _get_baseline_projection(
     3 years gets a 12-month average. More history → more stable estimate;
     less history → still works, just noisier.
 
+    Installment rows (``total_installments`` or ``installment_series_id`` set)
+    stay out of the average: the future ones are already booked and added to
+    the walk once, so counting the past ones in the mean too would charge each
+    instalment twice.
+
     Symmetric for income and expense — fixes the "no recurring salary set
     up, chart looks catastrophic" case as well as the "no recurring expenses
     set up, chart looks rosy" case.
@@ -1242,6 +1251,7 @@ async def _get_baseline_projection(
             Transaction.source != "opening_balance",
             Transaction.status == "posted",
             counts_as_pnl(),
+            *_NOT_AN_INSTALLMENT,
             *acct_filter,
         )
     )
@@ -1266,6 +1276,7 @@ async def _get_baseline_projection(
             Transaction.source != "opening_balance",
             Transaction.status == "posted",
             counts_as_pnl(),
+            *_NOT_AN_INSTALLMENT,
             *acct_filter,
         )
     )

@@ -2828,3 +2828,39 @@ async def test_custom_dates_override_indian_yearly_ytd(
         assert service.call_args.kwargs['financial_year_start_month'] == 4
     finally:
         app.dependency_overrides.pop(current_workspace, None)
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_baseline_does_not_count_installments_twice(
+    session: AsyncSession, test_user, test_workspace: User
+):
+    """The baseline average leaves installment rows out: the future ones are
+    already booked and added once, so an R$100 monthly installment adds R$100
+    to the projection, not R$100 plus its share of the average."""
+    today = date.today()
+    account = await _make_manual_account(session, test_user.id, "CF Installments")
+    for offset in range(1, 31):
+        await _add_txn(session, test_user.id, account.id, 10, "debit", today - timedelta(days=offset))
+
+    async def projected_expenses() -> float:
+        report = await get_cash_flow_report(
+            session, test_workspace.id, test_user.id, months=3, interval="daily", baseline=True,
+        )
+        assert report.meta.baseline_lookback_days == 30
+        return next(b for b in report.summary.breakdowns if b.key == "projectedExpenses").value
+
+    without = await projected_expenses()
+    series = uuid.uuid4()
+    for number, day in enumerate(
+        (today - timedelta(days=20), today + timedelta(days=10), today + timedelta(days=40)),
+        start=1,
+    ):
+        tx = await _add_txn(session, test_user.id, account.id, 100, "debit", day)
+        tx.installment_number = number
+        tx.total_installments = 3
+        tx.installment_series_id = series
+    await session.commit()
+    with_installments = await projected_expenses()
+    # Only the two future installments (R$200) are added; the past one does
+    # not raise the daily average.
+    assert with_installments - without == pytest.approx(200.0, abs=0.01)
