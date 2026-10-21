@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.category import Category
@@ -418,6 +418,6 @@ async def test_default_categories_income_group_is_report_kind_income(
         kinds = {c.name: c.report_kind for c in categories}
         assert kinds[income_name] == "income"
         assert [n for n, k in kinds.items() if k != "normal"] == [income_name]
-        await session.execute(Category.__table__.delete())
-        await session.execute(CategoryGroup.__table__.delete())
+        await session.execute(delete(Category))
+        await session.execute(delete(CategoryGroup))
         await session.commit()
