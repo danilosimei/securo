@@ -2019,6 +2019,8 @@
       "vsPrevious": "{{change}} vs anterior",
       "col": {
         "group": "Grupo",
+        "category": "Categoria",
+        "merchant": "Loja",
         "total": "Total",
         "share": "%",
         "change": "Variação",
@@ -2029,7 +2031,16 @@
       "empty": "Nenhum gasto entre {{from}} e {{to}}.",
       "error": "Não deu para carregar o Explorar.",
       "retry": "Tentar de novo",
-      "unconverted": "Transações em outra moeda sem cotação ficaram fora do total: {{n}}."
+      "unconverted": "Transações em outra moeda sem cotação ficaram fora do total: {{n}}.",
+      "root": "Relatórios",
+      "breadcrumb": "Caminho",
+      "txTitle": "Transações de {{merchant}} ({{total}})",
+      "openInTransactions": "Abrir em Transações",
+      "txError": "Não foi possível carregar as transações.",
+      "txEmpty": "Nenhuma transação nesta loja.",
+      "prevPage": "Página anterior",
+      "nextPage": "Próxima página",
+      "pageOf": "Página {{page}} de {{pages}}"
     }
   },
   "payees": {

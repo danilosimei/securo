@@ -2017,6 +2017,8 @@
       "vsPrevious": "{{change}} t.o.v. vorige",
       "col": {
         "group": "Groep",
+        "category": "Categorie",
+        "merchant": "Winkel",
         "total": "Totaal",
         "share": "%",
         "change": "Verschil",
@@ -2027,7 +2029,16 @@
       "empty": "Geen uitgaven tussen {{from}} en {{to}}.",
       "error": "Verkennen kon niet worden geladen.",
       "retry": "Opnieuw proberen",
-      "unconverted": "Transacties in een andere valuta zonder koers zijn niet meegeteld: {{n}}."
+      "unconverted": "Transacties in een andere valuta zonder koers zijn niet meegeteld: {{n}}.",
+      "root": "Rapporten",
+      "breadcrumb": "Pad",
+      "txTitle": "Transacties bij {{merchant}} ({{total}})",
+      "openInTransactions": "Openen in Transacties",
+      "txError": "Transacties konden niet worden geladen.",
+      "txEmpty": "Geen transacties bij deze winkel.",
+      "prevPage": "Vorige pagina",
+      "nextPage": "Volgende pagina",
+      "pageOf": "Pagina {{page}} van {{pages}}"
     }
   },
   "payees": {

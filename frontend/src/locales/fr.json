@@ -2019,6 +2019,8 @@
       "vsPrevious": "{{change}} vs précédent",
       "col": {
         "group": "Groupe",
+        "category": "Catégorie",
+        "merchant": "Commerce",
         "total": "Total",
         "share": "%",
         "change": "Variation",
@@ -2029,7 +2031,16 @@
       "empty": "Aucune dépense entre {{from}} et {{to}}.",
       "error": "Impossible de charger Explorer.",
       "retry": "Réessayer",
-      "unconverted": "Des transactions dans une autre devise sans taux de change sont exclues du total : {{n}}."
+      "unconverted": "Des transactions dans une autre devise sans taux de change sont exclues du total : {{n}}.",
+      "root": "Rapports",
+      "breadcrumb": "Chemin",
+      "txTitle": "Transactions chez {{merchant}} ({{total}})",
+      "openInTransactions": "Ouvrir dans Transactions",
+      "txError": "Impossible de charger les transactions.",
+      "txEmpty": "Aucune transaction pour ce commerce.",
+      "prevPage": "Page précédente",
+      "nextPage": "Page suivante",
+      "pageOf": "Page {{page}} sur {{pages}}"
     }
   },
   "payees": {

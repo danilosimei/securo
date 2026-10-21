@@ -1,12 +1,13 @@
-/** Reports > Explore: where the money went, one level at a time. This slice
- *  covers the top level (groups). The period lives in the URL
- *  (`?tab=explore&period=last_12m`, plus `from`/`to` for a custom range) so a
- *  link or a reload lands on the same view. A period switch keeps the previous
- *  table up, dimmed, until the new one lands. */
+/** Reports > Explore: where the money went, one level at a time (group,
+ *  category, store, then the store's transactions). The whole position lives
+ *  in the URL (`?tab=explore&period=last_12m&group=…&category=…&merchant=…`,
+ *  plus `from`/`to` for a custom range) so a link, a reload or the browser's
+ *  Back lands on the same view. A period switch keeps the previous table up,
+ *  dimmed, until the new one lands. */
 import { useTranslation } from 'react-i18next'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
-import { AlertCircle } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { useLocation, useSearchParams } from 'react-router-dom'
+import { AlertCircle, ChevronRight } from 'lucide-react'
 import { reports, type BreakdownParams, type BreakdownRow, type ReportPeriod } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { localDateString } from '@/lib/date-utils'
@@ -16,7 +17,10 @@ import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { Button } from '@/components/ui/button'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { Skeleton } from '@/components/ui/skeleton'
+import { FadePanel } from '@/components/ui/fade-panel'
 import { Sparkline } from '@/components/reports/explore/sparkline'
+import { MerchantTransactions } from '@/components/reports/explore/merchant-transactions'
+import { nextStep } from '@/components/reports/explore/drilldown'
 
 const PERIODS: ReportPeriod[] = ['this_month', 'last_month', 'last_3m', 'last_6m', 'last_12m', 'ytd', 'custom']
 const DEFAULT_PERIOD: ReportPeriod = 'last_12m'
@@ -45,16 +49,28 @@ function changeTone(change: number) {
   return 'text-muted-foreground'
 }
 
-interface ExploreTabProps {
-  /** Reserved for drilling down a level; rows are not clickable without it. */
-  onSelectRow?: (row: BreakdownRow) => void
+type Level = 'group' | 'category' | 'merchant'
+
+/** Names of the levels already opened, carried in the navigation state so the
+ *  breadcrumb can show them. A link opened cold has none: "…" stands in. */
+interface Labels {
+  group?: string
+  category?: string
+  merchant?: string
 }
 
-export function ExploreTab({ onSelectRow }: ExploreTabProps = {}) {
+export function ExploreTab() {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
+  const stateLabels: Labels = (location.state as { exploreLabels?: Labels } | null)?.exploreLabels ?? {}
+
+  const group = searchParams.get('group')
+  const category = searchParams.get('category')
+  const merchant = category ? searchParams.get('merchant') : null
+  const level: Level = category ? 'merchant' : group ? 'category' : 'group'
 
   const requested = searchParams.get('period')
   const from = searchParams.get('from') ?? ''
@@ -78,18 +94,42 @@ export function ExploreTab({ onSelectRow }: ExploreTabProps = {}) {
         }
         return params
       },
-      { replace: true },
+      { replace: true, state: location.state },
+    )
+
+  // Going down (or up) pushes a history entry, so Back climbs one level.
+  const go = (patch: Record<string, string | null>, labels: Labels) =>
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        for (const [key, value] of Object.entries(patch)) {
+          if (value === null) params.delete(key)
+          else params.set(key, value)
+        }
+        return params
+      },
+      { state: { exploreLabels: labels } },
     )
 
   const params: BreakdownParams = {
-    level: 'group',
+    level,
+    ...(level === 'category' && group ? { group_id: group } : {}),
+    ...(level === 'merchant' && category ? { category_id: category } : {}),
     period,
     ...(period === 'custom' ? { from, to } : {}),
   }
   const query = useQuery({
     queryKey: ['reports', 'breakdown', params],
     queryFn: () => reports.breakdown(params),
-    placeholderData: keepPreviousData,
+    // Only a period switch keeps the old table; another level is another table.
+    placeholderData: (previous, previousQuery) => {
+      const before = previousQuery?.queryKey[2] as BreakdownParams | undefined
+      return before?.level === params.level &&
+        before.group_id === params.group_id &&
+        before.category_id === params.category_id
+        ? previous
+        : undefined
+    },
   })
   const data = query.data
   const stale = query.isPlaceholderData
@@ -103,6 +143,40 @@ export function ExploreTab({ onSelectRow }: ExploreTabProps = {}) {
         to: monthLabel(data.period.to, locale),
       })
     : null
+
+  const open = (row: BreakdownRow) => {
+    const step = nextStep(level, row)
+    if (!step) return
+    if ('group' in step) go({ group: step.group, category: null, merchant: null }, { group: row.label })
+    else if ('category' in step) {
+      go({ category: step.category, merchant: null }, { group: stateLabels.group, category: row.label })
+    } else go({ merchant: step.merchant }, { ...stateLabels, merchant: row.label })
+  }
+
+  const merchantRow = merchant ? data?.rows.find((r) => r.id === merchant) : undefined
+  const merchantLabel = merchantRow?.label ?? stateLabels.merchant ?? '…'
+  const crumbs: { key: string; label: string; onClick?: () => void }[] = [
+    {
+      key: 'root',
+      label: t('reports.explore.root'),
+      onClick: () => go({ group: null, category: null, merchant: null }, {}),
+    },
+  ]
+  if (group) {
+    crumbs.push({
+      key: 'group',
+      label: stateLabels.group ?? '…',
+      onClick: level === 'category' ? undefined : () => go({ category: null, merchant: null }, { group: stateLabels.group }),
+    })
+  }
+  if (category) {
+    crumbs.push({
+      key: 'category',
+      label: stateLabels.category ?? '…',
+      onClick: merchant ? () => go({ merchant: null }, { ...stateLabels, merchant: undefined }) : undefined,
+    })
+  }
+  if (merchant) crumbs.push({ key: 'merchant', label: merchantLabel })
 
   const total = data ? Number(data.total) : 0
   const previous = data?.previous_total != null ? Number(data.previous_total) : 0
@@ -150,6 +224,31 @@ export function ExploreTab({ onSelectRow }: ExploreTabProps = {}) {
         {rangeText && <p className="text-xs text-muted-foreground">{rangeText}</p>}
       </div>
 
+      {level !== 'group' && (
+        <nav aria-label={t('reports.explore.breadcrumb')}>
+          <ol className="flex flex-wrap items-center gap-1 text-sm">
+            {crumbs.map((crumb, i) => (
+              <li key={crumb.key} className="flex items-center gap-1">
+                {i > 0 && <ChevronRight size={14} className="text-muted-foreground" aria-hidden="true" />}
+                {crumb.onClick ? (
+                  <button
+                    type="button"
+                    onClick={crumb.onClick}
+                    className="rounded text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    {crumb.label}
+                  </button>
+                ) : (
+                  <span aria-current="page" className="font-medium text-foreground">
+                    {crumb.label}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
       {query.isError ? (
         <div
           role="alert"
@@ -171,6 +270,7 @@ export function ExploreTab({ onSelectRow }: ExploreTabProps = {}) {
           ))}
         </div>
       ) : (
+        <FadePanel panelKey={`${level}:${group ?? ''}:${category ?? ''}`} className="space-y-4">
         <div
           aria-busy={stale}
           data-testid="explore-content"
@@ -210,7 +310,7 @@ export function ExploreTab({ onSelectRow }: ExploreTabProps = {}) {
               <table className="w-full table-fixed text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
-                    <th className="px-3 py-2.5 sm:px-4">{t('reports.explore.col.group')}</th>
+                    <th className="px-3 py-2.5 sm:px-4">{t(`reports.explore.col.${level}`)}</th>
                     <th className="w-24 px-2 py-2.5 text-right sm:w-32">{t('reports.explore.col.total')}</th>
                     <th className="w-14 px-2 py-2.5 text-right sm:w-16">{t('reports.explore.col.share')}</th>
                     <th className="w-16 px-2 py-2.5 text-right sm:w-20">{t('reports.explore.col.change')}</th>
@@ -225,8 +325,16 @@ export function ExploreTab({ onSelectRow }: ExploreTabProps = {}) {
                     return (
                       <tr
                         key={row.id ?? row.label}
-                        onClick={onSelectRow ? () => onSelectRow(row) : undefined}
-                        className="border-b border-border last:border-b-0"
+                        tabIndex={0}
+                        data-selected={merchant !== null && row.id === merchant}
+                        onClick={() => open(row)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') open(row)
+                        }}
+                        className={cn(
+                          'cursor-pointer border-b border-border last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none',
+                          merchant !== null && row.id === merchant && 'bg-primary/5',
+                        )}
                       >
                         <td className="truncate px-3 py-2.5 font-medium text-foreground sm:px-4">{row.label}</td>
                         <td className="px-2 py-2.5 text-right tabular-nums">
@@ -257,6 +365,16 @@ export function ExploreTab({ onSelectRow }: ExploreTabProps = {}) {
             </div>
           )}
         </div>
+        {merchant && (
+          <MerchantTransactions
+            key={`${category}:${merchant}:${data.period.from}:${data.period.to}`}
+            merchantLabel={merchantLabel}
+            merchantKey={merchant}
+            categoryId={category!}
+            range={{ from: data.period.from, to: data.period.to }}
+          />
+        )}
+        </FadePanel>
       )}
     </div>
   )

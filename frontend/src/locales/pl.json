@@ -2104,6 +2104,8 @@
       "vsPrevious": "{{change}} vs poprzedni",
       "col": {
         "group": "Grupa",
+        "category": "Kategoria",
+        "merchant": "Sklep",
         "total": "Suma",
         "share": "%",
         "change": "Zmiana",
@@ -2114,7 +2116,16 @@
       "empty": "Brak wydatków między {{from}} a {{to}}.",
       "error": "Nie udało się wczytać widoku Przeglądaj.",
       "retry": "Spróbuj ponownie",
-      "unconverted": "Transakcje w innej walucie bez kursu pominięto w sumie: {{n}}."
+      "unconverted": "Transakcje w innej walucie bez kursu pominięto w sumie: {{n}}.",
+      "root": "Raporty",
+      "breadcrumb": "Ścieżka",
+      "txTitle": "Transakcje: {{merchant}} ({{total}})",
+      "openInTransactions": "Otwórz w Transakcjach",
+      "txError": "Nie udało się wczytać transakcji.",
+      "txEmpty": "Brak transakcji w tym sklepie.",
+      "prevPage": "Poprzednia strona",
+      "nextPage": "Następna strona",
+      "pageOf": "Strona {{page}} z {{pages}}"
     }
   },
   "payees": {

@@ -133,12 +133,4 @@ describe('ExploreTab', () => {
     await screen.findByText('Compras')
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'custom', from: '2026-01-01', to: '2026-03-31' })
   })
-
-  it('calls onSelectRow when a row is clicked', async () => {
-    const onSelectRow = vi.fn()
-    const { user, unmount } = renderWithProviders(<ExploreTab onSelectRow={onSelectRow} />)
-    await user.click((await screen.findByText('Compras')).closest('tr') as HTMLElement)
-    expect(onSelectRow).toHaveBeenCalledWith(expect.objectContaining({ id: 'g1' }))
-    unmount()
-  })
 })

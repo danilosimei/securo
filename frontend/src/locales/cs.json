@@ -2147,6 +2147,8 @@
       "vsPrevious": "{{change}} oproti předchozímu",
       "col": {
         "group": "Skupina",
+        "category": "Kategorie",
+        "merchant": "Obchod",
         "total": "Celkem",
         "share": "%",
         "change": "Změna",
@@ -2157,7 +2159,16 @@
       "empty": "Žádné výdaje mezi {{from}} a {{to}}.",
       "error": "Prozkoumat se nepodařilo načíst.",
       "retry": "Zkusit znovu",
-      "unconverted": "Transakce v jiné měně bez kurzu nejsou v součtu: {{n}}."
+      "unconverted": "Transakce v jiné měně bez kurzu nejsou v součtu: {{n}}.",
+      "root": "Přehledy",
+      "breadcrumb": "Cesta",
+      "txTitle": "Transakce: {{merchant}} ({{total}})",
+      "openInTransactions": "Otevřít v Transakcích",
+      "txError": "Transakce se nepodařilo načíst.",
+      "txEmpty": "V tomto obchodě nejsou žádné transakce.",
+      "prevPage": "Předchozí strana",
+      "nextPage": "Další strana",
+      "pageOf": "Strana {{page}} z {{pages}}"
     }
   },
   "payees": {

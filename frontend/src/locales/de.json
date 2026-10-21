@@ -2016,6 +2016,8 @@
       "vsPrevious": "{{change}} ggü. Vorperiode",
       "col": {
         "group": "Gruppe",
+        "category": "Kategorie",
+        "merchant": "Geschäft",
         "total": "Summe",
         "share": "%",
         "change": "Änderung",
@@ -2026,7 +2028,16 @@
       "empty": "Keine Ausgaben zwischen {{from}} und {{to}}.",
       "error": "Erkunden konnte nicht geladen werden.",
       "retry": "Erneut versuchen",
-      "unconverted": "Buchungen in anderer Währung ohne Wechselkurs fehlen in der Summe: {{n}}."
+      "unconverted": "Buchungen in anderer Währung ohne Wechselkurs fehlen in der Summe: {{n}}.",
+      "root": "Berichte",
+      "breadcrumb": "Pfad",
+      "txTitle": "Transaktionen bei {{merchant}} ({{total}})",
+      "openInTransactions": "In Transaktionen öffnen",
+      "txError": "Transaktionen konnten nicht geladen werden.",
+      "txEmpty": "Keine Transaktionen bei diesem Geschäft.",
+      "prevPage": "Vorherige Seite",
+      "nextPage": "Nächste Seite",
+      "pageOf": "Seite {{page}} von {{pages}}"
     }
   },
   "payees": {
