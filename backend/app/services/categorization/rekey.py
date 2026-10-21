@@ -10,11 +10,11 @@ This module rewrites them once, at deploy, after `alembic upgrade head`
 Per workspace, under the workspace lock, and only when no `classify` or
 `redistribute` run is busy (those write suggestions and memory; a busy
 workspace is skipped and reported with the run that holds it, to be run
-again later). The *facts* are the pipeline's candidate transactions
-(posted, not a transfer pair, not an opening balance, not ignored), each
-with its v1 and v2 key, the payee read within the workspace as the
-pipeline reads it. A key is *dead* when some candidate had it under v1 and
-none has it under v2.
+again later). Every transaction gets its v1 and v2 key, the payee read
+within the workspace as the pipeline reads it. Which keys change is told
+by the pipeline's candidates (posted, not a transfer pair, not an opening
+balance, not ignored): a key is *dead* when some candidate had it under v1
+and none has it under v2.
 
 **Which memory keys are touched.** A memory row `K` that some candidate had
 as its v1 key has as destinations the v2 keys of those candidates, plus
@@ -26,15 +26,24 @@ is ever modified.
 
 **Touched keys are recomputed from the facts**, not by combining counts
 (adding or taking the larger of old numbers drifts from what an undo takes
-back). For each touched key still in use, over the candidates that now
-carry it:
+back). For each touched key still in use, over **every** transaction that
+now carries it (candidate or not: the live memory learns from any row a
+person files, and no stale mark may survive on any of them):
 
 - `counts[category]` = the person's standing decisions for it (R16, one
-  pick per decision, not per row). A row's decision is the standing `user`
-  event that gave it its current category; events of one store, category
-  and person less than `DECISION_GAP` apart are one decision (one bulk
-  write stamps each row as it goes); a `user` row with no such event
-  (older than the events) is a decision of its own.
+  pick per decision, not per row). A `user` row's decision is the event
+  that caused its current category: its latest standing event (undos and
+  undone events aside), passing over category merges (`record_moves`
+  re-files a store's rows in one write; the choices were made before). It
+  counts only when it is a person's `user` event (`user_id` set): a sync
+  inheriting a parcel's category from the first one writes a `user` event
+  with no person, which the live memory never counted. Decisions of one
+  store, category and person less than `DECISION_GAP` apart are one (one
+  bulk write stamps each row as it goes); a `user` row with no event at
+  all (older than the events) is a decision of its own. A decision whose
+  acceptance settled a suggestion under a key the re-key does not touch
+  belongs to that key (its undo takes the pick there): not counted, its
+  mark kept.
 - `memory_pick`: exactly one event of each counted decision carries it
   (one already marked if any, else the earliest); every other marked event
   of those rows loses it (a superseded edit, a clear, a second mark of the
@@ -57,9 +66,10 @@ no row, so the note and id stay).
 
 **Suggestions** (every status: a dismissed one is what keeps a store
 "ignored"; any transaction, candidate or not) whose key is the v1 key of
-their transaction, a dead key, or whose transaction now has a touched key,
-take the transaction's v2 key, which is the key an undo of an accepted one
-takes the pick from. **Organizer proposals** still pending (`organize`
+their transaction, a dead key, or a touched key, take the transaction's v2
+key, which is the key an undo of an accepted one takes the pick from. A
+suggestion under an untouched key (a payee's `P:...`) stays where its pick
+is. **Organizer proposals** still pending (`organize`
 runs, `create_category` ops not decided) naming a store by a dead key take
 the v2 key most of the store's transactions now have, so approving one
 later repoints memory that exists (a store that mixed several repoints
@@ -93,6 +103,7 @@ from app.models.payee import Payee
 from app.models.transaction import Transaction
 from app.models.workspace import Workspace
 from app.services.categorization import memory
+from app.services.categorization.events import CATEGORY_MERGE_REASON
 from app.services.categorization.merchant_key import merchant_key
 
 OLD_VERSION = 1
@@ -138,6 +149,18 @@ class RekeyReport:
     #: The run that made the workspace busy (kind, status, id, age).
     busy_run: str | None = None
     changes: list[KeyChange] = field(default_factory=list)
+    #: Every recomputed row that changed: (key, picks before or None when
+    #: created, picks after).
+    recounts: list[tuple[str, int | None, int]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class _Owner:
+    """The accepted suggestion an undo of the row's decision takes the pick
+    back from (`review._take_back`): its key, and when it was settled."""
+
+    key: str
+    resolved_at: datetime
 
 
 @dataclass(frozen=True)
@@ -157,6 +180,9 @@ class _Event:
     at: datetime
     user_id: uuid.UUID | None
     memory_pick: bool
+    source: str = "user"
+    new_category_id: uuid.UUID | None = None
+    reason: str | None = None
 
 
 @dataclass
@@ -294,7 +320,15 @@ async def _rekey_suggestions(
     by_tx: dict[uuid.UUID, _Row],
     dead: dict[str, str | None],
     touched: set[str],
-) -> int:
+) -> tuple[int, dict[uuid.UUID, _Owner]]:
+    """Re-key suggestions; returns how many moved and, per transaction, the
+    latest accepted suggestion as it now stands.
+
+    A suggestion moves to its row's v2 key when its key is the row's v1 key,
+    a dead key, or a key the re-key touches. A key the re-key does not touch
+    (a payee's `P:...` set before the row changed store, say) stays: the
+    pick its acceptance gave lives there, and its undo takes it from there.
+    """
     suggestions = (
         await session.execute(
             select(CategorizationSuggestion)
@@ -303,19 +337,24 @@ async def _rekey_suggestions(
         )
     ).scalars().all()
     moved = 0
+    owners: dict[uuid.UUID, _Owner] = {}
     for sug in suggestions:
         key = sug.merchant_key
         row = by_tx.get(sug.transaction_id)
-        if row is not None and (key == row.old or key in dead or row.new in touched):
-            target: str | None = row.new
+        target: str | None = None
+        if row is not None and (key == row.old or key in dead or key in touched):
+            target = row.new
         elif row is None and key in dead:
             target = dead[key]
-        else:
-            continue
         if target is not None and target != key:
             sug.merchant_key = target
             moved += 1
-    return moved
+        resolved = _utc(sug.resolved_at)
+        if sug.status == "accepted" and resolved is not None:
+            owner = owners.get(sug.transaction_id)
+            if owner is None or resolved > owner.resolved_at:
+                owners[sug.transaction_id] = _Owner(sug.merchant_key, resolved)
+    return moved, owners
 
 
 async def _rekey_proposals(
@@ -376,46 +415,86 @@ async def _rekey_proposals(
 
 
 async def _facts(
-    session: AsyncSession, workspace_id: uuid.UUID, rows: list[_Row]
-) -> dict[str, _Facts]:
-    """Per store key, the person's standing decisions behind its `user` rows."""
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    rows: list[_Row],
+    owners: dict[uuid.UUID, _Owner],
+) -> tuple[dict[str, _Facts], set[uuid.UUID]]:
+    """Per store key, the person's standing decisions behind its `user` rows,
+    and the events whose pick belongs to a key the re-key leaves alone.
+
+    A row's decision is the event that caused its current category: its
+    latest standing event (undos and undone events aside), passing over
+    category merges (`record_moves` re-files a store's rows in one write; the
+    choice is still the one made before). It counts when it is a person's
+    `user` event (`user_id` set): a sync inheriting a parcel's category from
+    the first one writes a `user` event with no person, which the live
+    memory never counted, and neither does this. A row with no such event at
+    all (filed before the events) is a decision of its own. A decision whose
+    acceptance settled a suggestion under another, untouched key is that
+    key's (its undo takes the pick there): not counted here, mark kept.
+    """
     chosen = [row for row in rows if row.source == "user" and row.category_id is not None]
-    wanted = {row.id: row.category_id for row in chosen}
-    decided: dict[uuid.UUID, _Event] = {}
-    ids = list(wanted)
+    by_tx: dict[uuid.UUID, list[tuple[_Event, datetime | None]]] = defaultdict(list)
+    ids = [row.id for row in chosen]
     for start in range(0, len(ids), memory.CHUNK):
         found = await session.execute(
             select(
                 CategorizationEvent.id,
                 CategorizationEvent.transaction_id,
+                CategorizationEvent.source,
+                CategorizationEvent.user_id,
                 CategorizationEvent.new_category_id,
                 CategorizationEvent.created_at,
-                CategorizationEvent.user_id,
+                CategorizationEvent.undone_at,
+                CategorizationEvent.reason,
                 CategorizationEvent.memory_pick,
             ).where(
                 CategorizationEvent.workspace_id == workspace_id,
                 CategorizationEvent.transaction_id.in_(ids[start:start + memory.CHUNK]),
-                CategorizationEvent.source == "user",
-                CategorizationEvent.undone_at.is_(None),
             )
         )
-        for ev_id, tx_id, category_id, created_at, user_id, pick in found.all():
+        for ev_id, tx_id, source, user_id, category_id, created_at, undone_at, reason, pick in (
+            found.all()
+        ):
             at = _utc(created_at)
-            # The standing event that gave the row its current category.
-            if at is None or category_id != wanted[tx_id]:
+            if at is None:
                 continue
-            if tx_id not in decided or at > decided[tx_id].at:
-                decided[tx_id] = _Event(ev_id, at, user_id, bool(pick))
+            event = _Event(ev_id, at, user_id, bool(pick), source, category_id, reason)
+            by_tx[tx_id].append((event, undone_at))
 
     facts: dict[str, _Facts] = defaultdict(_Facts)
+    owned: set[uuid.UUID] = set()
     bursts: dict[tuple[str, str, uuid.UUID | None], list[tuple[_Event, date]]] = defaultdict(list)
     for row in chosen:
         category = str(row.category_id)
-        event = decided.get(row.id)
-        if event is None:
+        standing = sorted(
+            (
+                ev for ev, undone_at in by_tx.get(row.id, [])
+                if undone_at is None and ev.source != "undo"
+            ),
+            key=lambda ev: (ev.at, ev.id),
+        )
+        merged = False
+        cause: _Event | None = None
+        for ev in reversed(standing):
+            if ev.reason == CATEGORY_MERGE_REASON:
+                merged = True
+                continue
+            cause = ev
+            break
+        if cause is None:
             facts[row.new].decisions.append(_Decision(category, [], row.day))
-        else:
-            bursts[(row.new, category, event.user_id)].append((event, row.day))
+            continue
+        if cause.source != "user" or cause.user_id is None:
+            continue  # inherited, or not a person's choice: no pick
+        if not merged and cause.new_category_id != row.category_id:
+            continue
+        owner = owners.get(row.id)
+        if owner is not None and owner.key != row.new and owner.resolved_at >= cause.at:
+            owned.add(cause.id)
+            continue
+        bursts[(row.new, category, cause.user_id)].append((cause, row.day))
     for (key, category, _user), found_events in bursts.items():
         found_events.sort(key=lambda pair: (pair[0].at, pair[0].id))
         current: _Decision | None = None
@@ -425,7 +504,7 @@ async def _facts(
                 facts[key].decisions.append(current)
             current.events.append(event)
             current.day = max(current.day, day)
-    return dict(facts)
+    return dict(facts), owned
 
 
 async def _set_picks(
@@ -433,9 +512,11 @@ async def _set_picks(
     workspace_id: uuid.UUID,
     tx_ids: list[uuid.UUID],
     facts: list[_Facts],
+    owned: set[uuid.UUID],
 ) -> tuple[int, int]:
     """One `memory_pick` per counted decision, none on any other event of
-    `tx_ids`; returns (marked, unmarked)."""
+    `tx_ids` (except the `owned` ones, whose pick lives under an untouched
+    key); returns (marked, unmarked)."""
     carriers: dict[uuid.UUID, bool] = {}
     for found in facts:
         for decision in found.decisions:
@@ -457,7 +538,7 @@ async def _set_picks(
                     )
                 )
             ).scalars()
-            if ev_id not in carriers
+            if ev_id not in carriers and ev_id not in owned
         )
     mark = [ev_id for ev_id, already in carriers.items() if not already]
     for ids, value in ((mark, True), (stale, False)):
@@ -488,6 +569,8 @@ async def _rekey_memory(
     session: AsyncSession,
     workspace_id: uuid.UUID,
     rows: list[_Row],
+    every: list[_Row],
+    owners: dict[uuid.UUID, _Owner],
     stored: dict[str, MerchantMemory],
     merges: dict[str, list[str]],
     splits: dict[str, set[str]],
@@ -500,8 +583,10 @@ async def _rekey_memory(
     for destinations in splits.values():
         touched.update(destinations)
     live = touched & current
-    facts_rows = [row for row in rows if row.new in live]
-    facts = await _facts(session, workspace_id, facts_rows)
+    # Every row now carrying a touched key, candidate or not: the live
+    # memory learns from any row a person files, and no stale mark may stay.
+    facts_rows = [row for row in every if row.new in live]
+    facts, owned = await _facts(session, workspace_id, facts_rows, owners)
     notes: dict[str, list[str]] = defaultdict(list)
     picks = {key: _picks(stored[key]) for key in touched if key in stored}
 
@@ -544,6 +629,7 @@ async def _rekey_memory(
         found = facts.get(key) or _Facts()
         counts, last = found.counts(), found.last()
         row = stored.get(key)
+        before = _picks(row) if row is not None else None
         if row is None:
             if not counts:
                 continue
@@ -571,9 +657,10 @@ async def _rekey_memory(
             continue
         changed.add(key)
         report.seeded += 1
+        report.recounts.append((key, before, sum(counts.values())))
     report.marked, report.unmarked = await _set_picks(
         session, workspace_id, [row.id for row in facts_rows],
-        [facts[key] for key in sorted(live) if key in facts],
+        [facts[key] for key in sorted(live) if key in facts], owned,
     )
 
     for key in sorted(splits):
@@ -648,13 +735,15 @@ async def rekey_workspace(
         for destinations in splits.values():
             touched.update(destinations)
 
-        report.suggestions = await _rekey_suggestions(
-            session, workspace_id, {row.id: row for row in every}, dead, touched & current
+        report.suggestions, owners = await _rekey_suggestions(
+            session, workspace_id, {row.id: row for row in every}, dead, touched
         )
         report.proposals = await _rekey_proposals(
             session, workspace_id, {row.id: row for row in every}, dead
         )
-        await _rekey_memory(session, workspace_id, rows, stored, dict(merges), splits, report)
+        await _rekey_memory(
+            session, workspace_id, rows, every, owners, stored, dict(merges), splits, report
+        )
         await session.flush()
     if dry_run:
         await session.rollback()

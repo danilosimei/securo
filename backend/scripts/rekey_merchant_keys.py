@@ -44,6 +44,11 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def after_minus_before(recount: tuple[str, int | None, int]) -> int:
+    _key, before, after = recount
+    return after - (before or 0)
+
+
 def format_report(report: RekeyReport) -> list[str]:
     line = (
         f"{report.workspace_id} sugestões={report.suggestions} fundidas={report.merged}"
@@ -63,6 +68,13 @@ def format_report(report: RekeyReport) -> list[str]:
         )
     if len(ranked) > TOP:
         lines.append(f"  … e mais {len(ranked) - TOP}")
+    # Every recomputed store, biggest losses first: picks no row shows any
+    # more are dropped by design, and this is where that shows.
+    for key, before, after in sorted(
+        report.recounts, key=lambda r: (after_minus_before(r), r[0])
+    ):
+        was = "nova" if before is None else str(before)
+        lines.append(f"  recontar {key}: {was} → {after} escolhas")
     # Every dropped note, not only the top ones: the text exists nowhere else.
     for change in sorted(report.changes, key=lambda c: c.old):
         for note in change.notes:

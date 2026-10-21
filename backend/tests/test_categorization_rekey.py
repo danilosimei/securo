@@ -36,11 +36,16 @@ def _memory(session, ws_id, key, counts, *, note=None, note_at=None, updated_at=
     return row
 
 
-def _user_event(session, tx, category_id, at, *, user_id=None, pick=False):
+_PERSON = object()
+
+
+def _user_event(session, tx, category_id, at, *, user_id=_PERSON, pick=False, **extra):
+    """A `user` event; by default the person who owns the row made it."""
     ev = CategorizationEvent(
         id=uuid.uuid4(), workspace_id=tx.workspace_id, transaction_id=tx.id,
-        source="user", previous_source="none", new_category_id=category_id, created_at=at,
-        user_id=user_id, memory_pick=pick,
+        source=extra.pop("source", "user"), previous_source="none",
+        new_category_id=category_id, created_at=at,
+        user_id=tx.user_id if user_id is _PERSON else user_id, memory_pick=pick, **extra,
     )
     session.add(ev)
     return ev
@@ -549,7 +554,8 @@ async def test_rekey_script_parses_args(monkeypatch, capsys):
             rekey.KeyChange("merge", f"K{i:02d}", ("N",), i) for i in range(25)
         ] + [rekey.KeyChange("split", "MLP", ("KABUM", "NETSHOES"), 99, ("loja do Rafa",))]
         return [
-            rekey.RekeyReport(ws, suggestions=12, merged=25, split=1, seeded=2, changes=changes),
+            rekey.RekeyReport(ws, suggestions=12, merged=25, split=1, seeded=2, changes=changes,
+                              recounts=[("KABUM", None, 1), ("NETSHOES", 5, 2)]),
             rekey.RekeyReport(uuid.uuid4(), skipped="busy", busy_run="classify running abc, criada há 0h05m"),
         ]
 
@@ -568,6 +574,9 @@ async def test_rekey_script_parses_args(monkeypatch, capsys):
     assert "fundir  K24 (24 escolhas) → N" in out
     assert "K05" not in out  # top 20 only
     assert "e mais 6" in out
+    assert "recontar NETSHOES: 5 → 2 escolhas" in out
+    assert "recontar KABUM: nova → 1 escolhas" in out
+    assert out.index("recontar NETSHOES") < out.index("recontar KABUM")  # losses first
     assert "simulação" in out
 
 
@@ -647,7 +656,13 @@ async def test_rekey_bulk_across_a_second_boundary_is_one_decision(
     # The bulk goes on, each row a moment after the previous one.
     _user_event(session, three, cat_a.id, edge + timedelta(seconds=1.5), user_id=test_user.id)
     # Someone else deciding at the same moment is a decision of their own.
-    _user_event(session, other, cat_a.id, edge, user_id=None)
+    from app.models.user import User
+
+    partner = User(id=uuid.uuid4(), email=f"p{uuid.uuid4().hex[:6]}@x.com",
+                   hashed_password="x", is_active=True, is_superuser=False, is_verified=True)
+    session.add(partner)
+    await session.flush()
+    _user_event(session, other, cat_a.id, edge, user_id=partner.id)
     _memory(session, ws, "MLP", {str(cat_a.id): 1})
     await session.commit()
 
@@ -928,3 +943,181 @@ async def test_rekey_suggestion_on_a_row_no_longer_a_candidate(
     await session.refresh(sug)
     assert sug.merchant_key == "NETSHOES"
     assert report.suggestions == 1
+
+
+async def _marked(session, tx_ids):
+    return (
+        await session.execute(
+            select(CategorizationEvent.id).where(
+                CategorizationEvent.transaction_id.in_(tx_ids),
+                CategorizationEvent.memory_pick.is_(True),
+            )
+        )
+    ).scalars().all()
+
+
+async def test_rekey_inherited_parcels_are_not_decisions(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """A sync files the later parcels of a purchase under the category the
+    person gave the first one, as `user` with no person: one choice, one
+    pick, one mark, however many parcels."""
+    cat_a = test_categories[0]
+    ws = test_workspace.id
+    parcels = [
+        _tx(session, test_user, test_account, f"Ebn *Spotify {n}/4", source="user",
+            category_id=cat_a.id, day=NOON.date() + timedelta(days=30 * (n - 1)))
+        for n in range(1, 5)
+    ]
+    await session.flush()
+    _user_event(session, parcels[0], cat_a.id, NOON)
+    for n, parcel in enumerate(parcels[1:], start=1):
+        _user_event(session, parcel, cat_a.id, NOON + timedelta(days=30 * n), user_id=None)
+    _memory(session, ws, "EBN", {str(cat_a.id): 1})
+    await session.commit()
+
+    report = await rekey.rekey_workspace(session, ws)
+    await session.commit()
+
+    assert (await _rows(session, ws))["SPOTIFY"].counts == {str(cat_a.id): 1}
+    assert report.marked == 1
+    assert len(await _marked(session, [p.id for p in parcels])) == 1
+
+
+async def test_rekey_resets_marks_on_rows_that_are_not_candidates(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """One bulk filed N and S (one store), its mark on N; the person then
+    cleared N (the clear took the pick) and N was ignored. The store holds
+    one decision (S's); no mark may stay on N, so undoing N's clear gives
+    nothing back."""
+    from app.services.categorization import review
+
+    cat_a = test_categories[0]
+    ws, user_id, a = test_workspace.id, test_user.id, str(cat_a.id)
+    n_row = _tx(session, test_user, test_account, "Mlp*Netshoes", is_ignored=True)
+    s_row = _tx(session, test_user, test_account, "Mlp*Netshoes", source="user",
+                category_id=cat_a.id)
+    await session.flush()
+    _user_event(session, n_row, cat_a.id, NOON, pick=True)
+    _user_event(session, s_row, cat_a.id, NOON + timedelta(milliseconds=5))
+    clear = CategorizationEvent(
+        id=uuid.uuid4(), workspace_id=ws, transaction_id=n_row.id, source="none",
+        previous_source="user", previous_category_id=cat_a.id, new_category_id=None,
+        user_id=user_id, memory_pick=True, created_at=NOON + timedelta(hours=1),
+    )
+    session.add(clear)
+    clear_id = clear.id
+    _memory(session, ws, "MLP", {a: 1})
+    await session.commit()
+
+    report = await rekey.rekey_workspace(session, ws)
+    await session.commit()
+    assert (await _rows(session, ws))["NETSHOES"].counts == {a: 1}
+    assert (report.marked, report.unmarked) == (1, 2)
+    assert await _marked(session, [n_row.id]) == []
+
+    session.expire_all()
+    await review.undo(session, ws, event_ids=[clear_id], user_id=user_id)
+    await session.commit()
+
+    assert (await _rows(session, ws))["NETSHOES"].counts == {a: 1}
+
+
+async def test_rekey_category_merge_keeps_each_decision(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """Merging category A into B re-files the store's rows in one write; the
+    person's five decisions made before are still five."""
+    from app.services.categorization.events import CATEGORY_MERGE_REASON
+
+    cat_a, cat_b, _ = test_categories
+    ws = test_workspace.id
+    rows = [
+        _tx(session, test_user, test_account, "Spotify", source="user", category_id=cat_b.id)
+        for _ in range(5)
+    ]
+    _tx(session, test_user, test_account, "Ebn *Spotify")
+    await session.flush()
+    merge_at = NOON + timedelta(days=200)
+    merges = []
+    for n, row in enumerate(rows):
+        _user_event(session, row, cat_a.id, NOON + timedelta(days=30 * n))
+        merges.append(_user_event(session, row, cat_b.id, merge_at, reason=CATEGORY_MERGE_REASON,
+                                  pick=n == 0))
+    _memory(session, ws, "EBN", {str(cat_a.id): 1})
+    _memory(session, ws, "SPOTIFY", {str(cat_b.id): 5})
+    await session.commit()
+
+    await rekey.rekey_workspace(session, ws)
+    await session.commit()
+
+    spotify = (await _rows(session, ws))["SPOTIFY"]
+    assert spotify.counts == {str(cat_b.id): 5}
+    assert spotify.last_user_category_id == cat_b.id
+    for ev in merges:
+        await session.refresh(ev)
+    assert not any(ev.memory_pick for ev in merges)
+    assert len(await _marked(session, [r.id for r in rows])) == 5
+
+
+async def test_rekey_reports_counts_before_and_after(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    cat_a, cat_b, cat_c = test_categories
+    ws = test_workspace.id
+    _tx(session, test_user, test_account, "Netshoes", source="user", category_id=cat_a.id)
+    _tx(session, test_user, test_account, "Mlp*Netshoes", source="user", category_id=cat_a.id)
+    _tx(session, test_user, test_account, "Mlp*Kabum", source="user", category_id=cat_b.id)
+    _memory(session, ws, "NETSHOES", {str(cat_a.id): 4, str(cat_c.id): 1})
+    _memory(session, ws, "MLP", {str(cat_a.id): 3})
+    await session.commit()
+
+    report = await rekey.rekey_workspace(session, ws)
+
+    assert sorted(report.recounts) == [("KABUM", None, 1), ("NETSHOES", 5, 2)]
+
+
+async def test_rekey_keeps_the_pick_of_a_suggestion_under_an_untouched_key(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """A row accepted under `P:LOJA X` (a payee it had then) that now falls
+    in a touched store: the pick lives under `P:LOJA X`, untouched, and the
+    undo takes it from there. The touched store does not count it, and its
+    mark stays."""
+    from app.services.categorization import review
+
+    cat_a = test_categories[0]
+    ws, user_id, a = test_workspace.id, test_user.id, str(cat_a.id)
+    accepted = _tx(session, test_user, test_account, "Mlp*Netshoes", source="user",
+                   category_id=cat_a.id)
+    other = _tx(session, test_user, test_account, "Mlp*Netshoes", source="user",
+                category_id=cat_a.id)
+    await session.flush()
+    decision = _user_event(session, accepted, cat_a.id, NOON, pick=True)
+    _user_event(session, other, cat_a.id, NOON + timedelta(hours=1), pick=True)
+    sug = _suggest(session, accepted, "P:LOJA X")
+    sug.status, sug.resolved_at = "accepted", NOON + timedelta(seconds=1)
+    _memory(session, ws, "P:LOJA X", {a: 1})
+    _memory(session, ws, "MLP", {a: 2})
+    await session.commit()
+    decision_id = decision.id
+
+    await rekey.rekey_workspace(session, ws)
+    await session.commit()
+
+    rows = await _rows(session, ws)
+    assert rows["NETSHOES"].counts == {a: 1}
+    assert rows["P:LOJA X"].counts == {a: 1}
+    await session.refresh(sug)
+    await session.refresh(decision)
+    assert sug.merchant_key == "P:LOJA X"
+    assert decision.memory_pick is True
+
+    session.expire_all()
+    await review.undo(session, ws, event_ids=[decision_id], user_id=user_id)
+    await session.commit()
+
+    rows = await _rows(session, ws)
+    assert rows["P:LOJA X"].counts == {}
+    assert rows["NETSHOES"].counts == {a: 1}
