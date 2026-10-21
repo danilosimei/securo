@@ -45,6 +45,7 @@ from app.services.categorization.merchant_key import (
     PAYEE_PREFIX,
     PERSON_PREFIX,
     UNKNOWN_KEY,
+    is_unnamed_key,
     merchant_key,
     sample_description,
     scrub_documents,
@@ -67,7 +68,6 @@ APPLIED_WINDOW = timedelta(days=7)
 #: `error` of a manual run the broker refused.
 ENQUEUE_FAILED = "enqueue_failed"
 #: Prefix of a person key built from a document hash: never a rule pattern.
-HASHED_PERSON_PREFIX = PERSON_PREFIX + "#"
 #: Rows of a store the review queue carries, so opening it costs no request.
 REVIEW_PREVIEW = 10
 
@@ -520,13 +520,21 @@ async def create_category(
 # --- audit list, undo, provenance ---------------------------------------------
 
 
-def _readable_key(key: str) -> str:
+def readable_key(key: str) -> str:
     """A store key as a person would write it: no prefix, title case."""
     for prefix in (PAYEE_PREFIX, PERSON_PREFIX):
         if key.startswith(prefix):
             key = key[len(prefix):]
             break
     return key.strip().title()
+
+
+def key_name(key: str) -> str | None:
+    """`readable_key`, or None for a key that must not name anybody
+    (`merchant_key.is_unnamed_key`)."""
+    if is_unnamed_key(key):
+        return None
+    return readable_key(key) or None
 
 
 async def _store_labels(
@@ -569,10 +577,10 @@ async def _store_labels(
             name = clean[tx.id]
         elif key.startswith(PAYEE_PREFIX) and payee_name and payee_name.strip():
             name = payee_name.strip()
-        elif key == UNKNOWN_KEY or key.startswith(f"{PERSON_PREFIX}#"):
-            name = prompt_sample(tx.description) or _readable_key(key)
+        elif is_unnamed_key(key):
+            name = prompt_sample(tx.description) or readable_key(key)
         else:
-            name = _readable_key(key)
+            name = readable_key(key)
         out[tx.id] = (stored_key(key), name)
     return out
 
@@ -1024,7 +1032,7 @@ async def rule_draft(
             by_payee = {"field": "payee_id", "op": "equals", "value": str(tx.payee_id)}
     description = _fold(tx.description or "")
 
-    if key.startswith(HASHED_PERSON_PREFIX) or key == UNKNOWN_KEY:
+    if is_unnamed_key(key):
         if by_payee is None:
             raise NoSafePattern("sem padrão seguro para esta transação")
         name = scrub_documents(payee_name or "").strip() or "Pix"

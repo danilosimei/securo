@@ -56,7 +56,7 @@ def fake_ai(monkeypatch):
     """A client that always resolves and a model that answers `state.answer`."""
     state = SimpleNamespace(
         calls=[], answer={"reply": "Ok.", "suggestion": None, "note": None},
-        client=_FakeClient(), delay=0.0, error=None,
+        client=_FakeClient(), delay=0.0, error=None, hook=None,
     )
 
     async def resolve(session, settings):
@@ -64,6 +64,8 @@ def fake_ai(monkeypatch):
 
     async def create(client, params):
         state.calls.append(params)
+        if state.hook is not None:
+            state.hook()
         if state.delay:
             await asyncio.sleep(state.delay)
         if state.error is not None:
@@ -530,6 +532,7 @@ async def test_ask_rejects_bad_bodies(client, auth_headers, test_workspace, fake
     await _ask(client, auth_headers, {
         "merchant_key": "PADARIA", "messages": [{"role": "user", "content": "x"}] * 81,
     }, status=422)
+    await _ask(client, auth_headers, _body("PADARIA", transaction_ids=[]), status=422)
 
 
 @pytest.mark.asyncio
@@ -552,3 +555,97 @@ def test_limits():
     assert ask.TIMEOUT_SECONDS == 15
     assert ask.RATE_LIMIT == (20, 60)
 
+
+
+# --- the call holds no transaction; the run always reaches the ledger ---------
+
+
+def _service_ask(session, workspace_id, key="PADARIA"):
+    return ask.ask(
+        session, workspace_id, merchant_key=key, transaction_ids=None, turns=[("user", "oi")],
+    )
+
+
+@pytest.mark.asyncio
+async def test_ask_holds_no_transaction_during_the_call(
+    session, test_user, test_account, test_workspace, fake_ai
+):
+    await _pending(session, test_user, test_account, "PADARIA", "PADARIA", n=1)
+    seen = []
+    fake_ai.hook = lambda: seen.append(session.in_transaction())
+
+    await _service_ask(session, test_workspace.id)
+
+    assert seen == [False]
+    await session.rollback()  # the run was committed by the service itself
+    assert [r.status for r in await _runs(session, test_workspace.id)] == ["done"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [asyncio.CancelledError, RuntimeError])
+async def test_ask_cancelled_or_unexpected_after_sending_books_estimate(
+    session, test_user, test_account, test_workspace, fake_ai, error
+):
+    await _pending(session, test_user, test_account, "PADARIA", "PADARIA", n=1)
+    fake_ai.error = error()
+
+    with pytest.raises(error):
+        await _service_ask(session, test_workspace.id)
+
+    await session.rollback()
+    runs = await _runs(session, test_workspace.id)
+    assert [(r.status, r.error) for r in runs] == [("failed", error.__name__)]
+    assert runs[0].cost_usd == classifier.estimate_cost(fake_ai.calls[0], batch=False)
+    assert runs[0].cost_usd > 0
+    assert fake_ai.client.closed is True
+
+
+@pytest.mark.asyncio
+async def test_ask_failure_after_the_answer_keeps_its_run(
+    session, test_user, test_account, test_workspace, fake_ai, monkeypatch
+):
+    await _pending(session, test_user, test_account, "PADARIA", "PADARIA", n=1)
+    fake_ai.answer = {
+        "reply": "Nova.", "suggestion": {"c": None, "new": {"g": "Casa", "name": "Pão"}, "p": 70},
+        "note": None,
+    }
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(ask, "_resolve_new", broken)
+    with pytest.raises(RuntimeError):
+        await _service_ask(session, test_workspace.id)
+
+    await session.rollback()
+    runs = await _runs(session, test_workspace.id)
+    assert [r.status for r in runs] == ["done"]
+    assert runs[0].cost_usd > 0
+
+
+@pytest.mark.asyncio
+async def test_ask_store_name_only_from_this_stores_suggestions(
+    client, auth_headers, session, test_user, test_account, test_workspace, fake_ai
+):
+    rows = [
+        _tx(session, test_user, test_account, "HORTIFRUTI BOM", source="ai") for _ in range(2)
+    ]
+    await session.flush()
+    other = _suggest(session, rows[0], "OUTRA LOJA", clean_name="Outra Loja")
+    other.status = "accepted"
+    await session.commit()
+
+    await _ask(client, auth_headers, _body(
+        "HORTIFRUTI BOM", transaction_ids=[str(tx.id) for tx in rows],
+    ))
+    store = fake_ai.calls[0]["system"][2]["text"]
+    assert "Outra Loja" not in store
+    assert "Hortifruti Bom" in store
+
+    mine = _suggest(session, rows[1], "HORTIFRUTI BOM", clean_name="Hortifruti do Bairro")
+    mine.status = "accepted"
+    await session.commit()
+    await _ask(client, auth_headers, _body(
+        "HORTIFRUTI BOM", transaction_ids=[str(tx.id) for tx in rows],
+    ))
+    assert "Hortifruti do Bairro" in fake_ai.calls[1]["system"][2]["text"]

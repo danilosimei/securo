@@ -10,17 +10,28 @@ here on what it sends:
     AI off / no key                   -> Unavailable("disabled" | "no_connection")
     store context + params
     month's spend + estimate > cap    -> Unavailable("capped"), nothing sent
+    commit (ends the reads' transaction: no connection or lock is held
+    while the model answers)
     one Messages call, TIMEOUT_SECONDS, no retries
-      -> a `CategorizationRun(kind="ask")` with what it cost (a timeout books
-         the estimate: the call may have been billed); an API error a failed
-         run and `ModelError` (a refused key: `Unavailable("no_connection")`)
+      -> a `CategorizationRun(kind="ask")` with what it cost, committed on
+         its own (shielded from cancellation) as soon as the call returns:
+         a timeout, a cancellation (the person went away) or any unexpected
+         error after sending books the estimate, since the call may have
+         been billed; an API error a failed run at no cost and `ModelError`
+         (a refused key: `Unavailable("no_connection")`)
       -> the answer, a suggestion with how many rows it applies to
 
-The rate per workspace (`RATE_LIMIT`) is the API's. The answer never
-writes anything but its run: no cached AI decision (`MerchantMemory.ai_*`),
-no suggestion, no event -- accepting it goes through `choose`. Nothing
-here commits (the API commits even on a failure, so the run stays in the
-ledger); nothing logs the conversation, the answer or the key.
+The rate per workspace (`RATE_LIMIT`) is the API's. The monthly cap is
+checked without the spend lock: holding it through the call would
+serialize the workspace's messages and stall its batches, and the most it
+lets through is one estimate per message in flight (fractions of a cent,
+bounded by the rate). The answer never writes anything but its run: no
+cached AI decision (`MerchantMemory.ai_*`), no suggestion, no event --
+accepting it goes through `choose`. Unlike the rest of the package this
+module commits, twice (before the call, and the run), on purpose: the
+brief's "flush only" would hold a transaction open through the call and
+let a lost request take a paid call out of the ledger. Nothing logs the
+conversation, the answer or the key.
 """
 from __future__ import annotations
 
@@ -64,7 +75,7 @@ from app.services.categorization.classifier import (
     estimate_cost,
 )
 from app.services.categorization.claude_client import create_message, resolve_client
-from app.services.categorization.merchant_key import PERSON_PREFIX, UNKNOWN_KEY
+from app.services.categorization.merchant_key import PERSON_PREFIX
 from app.services.categorization.prompts import build_examples, prompt_sample
 from app.services.categorization.settings import get_settings
 
@@ -187,16 +198,16 @@ async def _suggestions_of(
 def _store_name(
     key: str, suggestions: Sequence[CategorizationSuggestion], hit: memory.MemoryHit
 ) -> str | None:
-    """The latest suggestion's clean name, the memory's, then the readable key."""
+    """The clean name of the latest suggestion made for this store (a row may
+    have been suggested under another key before), the memory's, then the
+    readable key (none for a key that names nobody)."""
+    stored = memory.stored_key(key)
     for sug in suggestions:
-        if sug.clean_name and sug.clean_name.strip():
+        if sug.merchant_key == stored and sug.clean_name and sug.clean_name.strip():
             return sug.clean_name.strip()
     if hit.ai_clean_name and hit.ai_clean_name.strip():
         return hit.ai_clean_name.strip()
-    # A hashed Pix key is a CPF digest and UNKNOWN is no name at all.
-    if key == UNKNOWN_KEY or key.startswith(review.HASHED_PERSON_PREFIX):
-        return None
-    return review._readable_key(key) or None
+    return review.key_name(key)
 
 
 def _samples(rows: Sequence[Transaction]) -> tuple[str, ...]:
@@ -304,6 +315,25 @@ def _fallback_turn() -> str:
     )
 
 
+async def _book(
+    session: AsyncSession,
+    run: CategorizationRun,
+    *,
+    status: str,
+    error: str | None = None,
+    cost: Decimal | None = None,
+) -> None:
+    """Close `run` and commit it on its own, shielded: a paid call must reach
+    the ledger even when the request is being cancelled."""
+    run.status = status
+    run.error = error
+    run.finished_at = _now()
+    if cost is not None:
+        run.cost_usd = cost
+    session.add(run)
+    await asyncio.shield(session.commit())
+
+
 def _timed_out(exc: BaseException) -> bool:
     """A timeout, ours or the SDK's (which surfaces as `LLMUnavailableError`)."""
     return isinstance(exc, TimeoutError) or isinstance(exc.__cause__, anthropic.APITimeoutError)
@@ -353,35 +383,34 @@ async def ask(
             workspace_id=workspace_id,
             kind="ask",
             trigger="manual",
-            status="done",
+            status="running",
             model=ASK_MODEL,
+            cost_usd=Decimal(0),
             stats={},
             detail={},
         )
+        # Only reads (and maybe the default settings row, worth keeping) so
+        # far: end the transaction before the network.
+        await session.commit()
         try:
             async with asyncio.timeout(TIMEOUT_SECONDS):
                 message = await create_message(
                     client.with_options(timeout=TIMEOUT_SECONDS, max_retries=0), params
                 )
         except (TimeoutError, LLMError) as exc:
-            run.status = "failed"
-            run.finished_at = _now()
             if _timed_out(exc):
-                run.error = TIMEOUT_ERROR
-                run.cost_usd = estimate
-                session.add(run)
-                await session.flush()
+                await _book(session, run, status="failed", error=TIMEOUT_ERROR, cost=estimate)
                 raise AskTimeout() from exc
-            run.error = type(exc).__name__
-            session.add(run)
-            await session.flush()
+            await _book(session, run, status="failed", error=type(exc).__name__)
             if isinstance(exc, LLMAuthError):
                 raise Unavailable("no_connection") from exc
             raise ModelError() from exc
+        except BaseException as exc:
+            # Cancelled or failed after sending: the call may have been billed.
+            await _book(session, run, status="failed", error=type(exc).__name__, cost=estimate)
+            raise
         account_usage(run, getattr(message, "usage", None), batch=False)
-        run.finished_at = _now()
-        session.add(run)
-        await session.flush()
+        await _book(session, run, status="done")
     finally:
         await client.close()
 

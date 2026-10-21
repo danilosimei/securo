@@ -32,6 +32,9 @@ UNKNOWN_KEY = "UNKNOWN"
 SAMPLE_MAX_LENGTH = 60
 PERSON_PREFIX = "PIX:"
 PAYEE_PREFIX = "P:"
+#: A person key built from a document digest (`PIX:#...`): brute-forceable
+#: into a CPF, so it never names anybody, to a person or to the model.
+HASHED_PERSON_PREFIX = PERSON_PREFIX + "#"
 # Origens de payee que nao definem a loja: o nome veio da propria descricao
 # (sync com payee_source="description") ou foi o nome limpo que a IA deu a
 # partir dela. Usa-los como chave mudaria a chave da linha depois de
@@ -323,7 +326,13 @@ def _person_key(name_source: str) -> str:
         return PERSON_PREFIX + _squeeze(scrubbed)
     digits = re.sub(r"\D", "", name_source)
     digest = hashlib.sha1((digits or name_source).encode()).hexdigest()[:10]
-    return f"{PERSON_PREFIX}#{digest}"
+    return f"{HASHED_PERSON_PREFIX}{digest}"
+
+
+def is_unnamed_key(key: str) -> bool:
+    """Whether the key carries no name that may be shown: `UNKNOWN` or a
+    hashed person key."""
+    return key == UNKNOWN_KEY or key.startswith(HASHED_PERSON_PREFIX)
 
 
 def _has_letters(text: str) -> bool:

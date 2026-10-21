@@ -265,7 +265,7 @@ class AskRequest(BaseModel):
     """
 
     merchant_key: str = Field(min_length=1, max_length=255)
-    transaction_ids: Optional[list[uuid.UUID]] = Field(default=None, max_length=500)
+    transaction_ids: Optional[list[uuid.UUID]] = Field(default=None, min_length=1, max_length=500)
     messages: list[AskMessage] = Field(min_length=1, max_length=80)
 
 

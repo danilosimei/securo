@@ -32,7 +32,7 @@ from app.services.categorization.merchant_key import (
     PAYEE_PREFIX,
     PERSON_PREFIX,
     TRAILING_JUNK,
-    UNKNOWN_KEY,
+    is_unnamed_key,
     sample_description,
     sanitize_text,
     scrub_documents,
@@ -207,7 +207,7 @@ def _example_name(key: str) -> str | None:
     Hashed person keys (`PIX:#...`, a CPF digest) and `UNKNOWN` never leave
     the backend; the `P:` marker is dropped and `PIX:` becomes "Pix ".
     """
-    if key == UNKNOWN_KEY or key.startswith(PERSON_PREFIX + "#"):
+    if is_unnamed_key(key):
         return None
     if key.startswith(PERSON_PREFIX):
         name = "Pix " + key.removeprefix(PERSON_PREFIX)
