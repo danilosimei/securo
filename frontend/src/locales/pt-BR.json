@@ -3192,7 +3192,15 @@
       "chooseGroup": "Escolha o grupo",
       "created": "Categoria criada e aplicada",
       "tooLong": "Nome longo demais (até {{max}} caracteres)",
-      "noGroup": "Nenhum grupo encontrado"
+      "noGroup": "Nenhum grupo encontrado",
+      "searchOrCreate": "Buscar ou criar categoria…",
+      "start": "Nova categoria ou grupo…",
+      "naming": "Nova categoria",
+      "namePlaceholder": "Nome (ou Grupo / Nome)",
+      "typeName": "Digite o nome. Use Grupo / Nome para escolher o grupo.",
+      "exists": "Já existe uma categoria com esse nome. Volte e escolha na lista.",
+      "nameOnly": "Nome da categoria",
+      "typeNameOnly": "Digite o nome da categoria."
     },
     "similar": {
       "ask_one": "Aplicar também à {{count}} parecida desta loja?",

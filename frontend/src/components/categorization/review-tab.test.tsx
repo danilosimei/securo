@@ -430,7 +430,7 @@ describe('ReviewTab', () => {
     await screen.findByText('Uber')
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
     await user.click(within(row('Uber')).getByRole('button', { name: t('categorization.review.other') }))
-    await user.type(await screen.findByPlaceholderText(t('transactions.searchCategory')), 'Carro')
+    await user.type(await screen.findByPlaceholderText(t('categorization.create.searchOrCreate')), 'Carro')
     // Uber's suggestion is Transport › Rides, so Transport comes first.
     await user.click(screen.getByText(t('categorization.create.inGroup', { name: 'Carro', group: 'Transport' })))
 
@@ -466,7 +466,7 @@ describe('ReviewTab', () => {
     )
     await screen.findByText('Uber')
     await user.click(within(row('Uber')).getByRole('button', { name: t('categorization.review.other') }))
-    await user.type(await screen.findByPlaceholderText(t('transactions.searchCategory')), 'Carro')
+    await user.type(await screen.findByPlaceholderText(t('categorization.create.searchOrCreate')), 'Carro')
     await user.click(screen.getByText(t('categorization.create.newGroup', { name: 'Carro' })))
 
     await waitFor(() =>

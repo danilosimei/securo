@@ -3188,7 +3188,15 @@
       "chooseGroup": "Choose the group",
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
-      "noGroup": "No group found"
+      "noGroup": "No group found",
+      "searchOrCreate": "Kategória keresése vagy létrehozása…",
+      "start": "Új kategória vagy csoport…",
+      "naming": "Új kategória",
+      "namePlaceholder": "Név (vagy Csoport / Név)",
+      "typeName": "Írd be a nevet. A Csoport / Név formával választhatsz csoportot.",
+      "exists": "Már van ilyen nevű kategória. Lépj vissza, és válaszd ki a listából.",
+      "nameOnly": "Kategória neve",
+      "typeNameOnly": "Írd be a kategória nevét."
     },
     "similar": {
       "ask_one": "Also apply to {{count}} similar transaction from this store?",

@@ -3334,7 +3334,15 @@
       "chooseGroup": "Choose the group",
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
-      "noGroup": "No group found"
+      "noGroup": "No group found",
+      "searchOrCreate": "Hľadať alebo vytvoriť kategóriu…",
+      "start": "Nová kategória alebo skupina…",
+      "naming": "Nová kategória",
+      "namePlaceholder": "Názov (alebo Skupina / Názov)",
+      "typeName": "Napíšte názov. Skupinu zvolíte zápisom Skupina / Názov.",
+      "exists": "Kategória s týmto názvom už existuje. Vráťte sa a vyberte ju zo zoznamu.",
+      "nameOnly": "Názov kategórie",
+      "typeNameOnly": "Napíšte názov kategórie."
     },
     "similar": {
       "ask_one": "Also apply to {{count}} similar transaction from this store?",

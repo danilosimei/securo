@@ -3188,7 +3188,15 @@
       "chooseGroup": "Choose the group",
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
-      "noGroup": "No group found"
+      "noGroup": "No group found",
+      "searchOrCreate": "श्रेणी खोजें या बनाएँ…",
+      "start": "नई श्रेणी या समूह…",
+      "naming": "नई श्रेणी",
+      "namePlaceholder": "नाम (या समूह / नाम)",
+      "typeName": "नाम लिखें। समूह चुनने के लिए समूह / नाम लिखें।",
+      "exists": "इस नाम की श्रेणी पहले से है। वापस जाएँ और सूची से चुनें।",
+      "nameOnly": "श्रेणी का नाम",
+      "typeNameOnly": "श्रेणी का नाम लिखें।"
     },
     "similar": {
       "ask_one": "Also apply to {{count}} similar transaction from this store?",

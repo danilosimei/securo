@@ -58,9 +58,12 @@ function renderSelect({ canWrite = true, creatable = true } = {}) {
   return { ...utils, onChange }
 }
 
+// The picker's one search box, whatever its placeholder says.
+const searchBox = () => screen.getByRole('combobox')
+
 async function openAndType(user: ReturnType<typeof renderWithProviders>['user'], text: string) {
   await user.click(screen.getByRole('button'))
-  await user.type(screen.getByPlaceholderText(t('transactions.searchCategory')), text)
+  await user.type(searchBox(), text)
 }
 
 describe('CategorySelect inline creation', () => {
@@ -160,7 +163,7 @@ describe('CategorySelect creation in a group', () => {
     expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'Transporte', name: 'Carro', groupExists: true })
     expect(create).not.toHaveBeenCalled()
     // The popover closed.
-    expect(screen.queryByPlaceholderText(t('transactions.searchCategory'))).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 
   it('Enter takes the first option when nothing else matches', async () => {
@@ -203,7 +206,7 @@ describe('CategorySelect creation in a group', () => {
     await user.click(screen.getByText(pickGroup('Carro')))
     await user.keyboard('{Escape}')
 
-    const search = screen.getByPlaceholderText(t('transactions.searchCategory'))
+    const search = searchBox()
     expect(search).toHaveValue('Carro')
     await waitFor(() => expect(search).toHaveFocus())
     expect(screen.getByText(inGroup('Carro', 'Transporte'))).toBeInTheDocument()
@@ -211,7 +214,7 @@ describe('CategorySelect creation in a group', () => {
 
     // A second Escape closes the picker as usual.
     await user.keyboard('{Escape}')
-    expect(screen.queryByPlaceholderText(t('transactions.searchCategory'))).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 
   it('Backspace on an empty group search goes back too', async () => {
@@ -221,7 +224,7 @@ describe('CategorySelect creation in a group', () => {
     await user.click(screen.getByText(pickGroup('Carro')))
     await user.type(screen.getByPlaceholderText(t('categorization.create.chooseGroup')), 'c{Backspace}{Backspace}')
 
-    expect(screen.getByPlaceholderText(t('transactions.searchCategory'))).toHaveValue('Carro')
+    expect(searchBox()).toHaveValue('Carro')
   })
 
   it('"Group / Name" offers one option, creating the group when it is new', async () => {
@@ -260,12 +263,12 @@ describe('CategorySelect creation in a group', () => {
     await openAndType(user, 'Carro')
     const options = screen.getAllByRole('option')
     expect(options[options.length - 1]).toHaveTextContent('Ask the AI')
-    await user.clear(screen.getByPlaceholderText(t('transactions.searchCategory')))
-    await user.type(screen.getByPlaceholderText(t('transactions.searchCategory')), 'zzz')
+    await user.clear(searchBox())
+    await user.type(searchBox(), 'zzz')
     await user.click(screen.getByRole('option', { name: 'Ask the AI' }))
 
     expect(onSelect).toHaveBeenCalledTimes(1)
-    expect(screen.queryByPlaceholderText(t('transactions.searchCategory'))).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 
   it('a disabled footer action explains why and does nothing', async () => {
@@ -326,7 +329,7 @@ describe('CategorySelect creation in a group: limits and hidden groups', () => {
 
     await user.click(screen.getByRole('button'))
     // Pasted rather than typed: 101 key presses add nothing to the test.
-    screen.getByPlaceholderText(t('transactions.searchCategory')).focus()
+    searchBox().focus()
     await user.paste(over)
 
     const reason = screen.getByRole('option', { name: tooLong() })
@@ -343,7 +346,7 @@ describe('CategorySelect creation in a group: limits and hidden groups', () => {
     const max = 'a'.repeat(100)
 
     await user.click(screen.getByRole('button'))
-    screen.getByPlaceholderText(t('transactions.searchCategory')).focus()
+    searchBox().focus()
     await user.paste(max)
 
     expect(screen.getByText(pickGroup(max))).toBeInTheDocument()
@@ -401,5 +404,136 @@ describe('CategorySelect creation in a group: limits and hidden groups', () => {
     await user.click(screen.getByText(t('categorization.create.inNewGroup', { name: 'Carro', group: 'velho' })))
 
     expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'velho', name: 'Carro', groupExists: false })
+  })
+})
+
+describe('CategorySelect: creation is visible before typing', () => {
+  const mercado = { ...groceries, id: 'cat-mercado', name: 'Mercado', group_id: 'g-casa' } as Category
+  const groupsFixture = [
+    { id: 'g-transporte', name: 'Transporte', categories: [] },
+    { id: 'g-casa', name: 'Casa', categories: [mercado] },
+  ] as unknown as CategoryGroup[]
+  const start = () => t('categorization.create.start')
+
+  function renderGrouped({ canWrite = true } = {}) {
+    const onCreateInGroup = vi.fn()
+    const onChange = vi.fn()
+    const Workspace = withRole(canWrite)
+    const utils = renderWithProviders(
+      <Workspace>
+        <CategorySelect
+          value=""
+          onChange={onChange}
+          categories={[mercado]}
+          groups={groupsFixture}
+          placeholder="Other…"
+          onCreateInGroup={onCreateInGroup}
+          suggestedGroupId="g-transporte"
+          footerAction={{ label: 'Ask the AI', onSelect: vi.fn() }}
+        />
+      </Workspace>,
+    )
+    return { ...utils, onCreateInGroup, onChange }
+  }
+
+  it('opens with "New category or group" first and a search that says it creates', async () => {
+    const { user } = renderGrouped()
+
+    await user.click(screen.getByRole('button'))
+
+    expect(searchBox()).toHaveAttribute('placeholder', t('categorization.create.searchOrCreate'))
+    expect(screen.getAllByRole('option')[0]).toHaveTextContent(start())
+  })
+
+  it('the start row leaves while searching, so Enter still picks a match', async () => {
+    const { user, onChange, onCreateInGroup } = renderGrouped()
+
+    await openAndType(user, 'merc')
+    expect(screen.queryByRole('option', { name: start() })).not.toBeInTheDocument()
+    await user.keyboard('{Enter}')
+
+    expect(onChange).toHaveBeenCalledWith('cat-mercado')
+    expect(onCreateInGroup).not.toHaveBeenCalled()
+  })
+
+  it('the start row opens a naming step that lists only the ways to create', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    await user.click(screen.getByRole('button'))
+    await user.click(screen.getByRole('option', { name: start() }))
+
+    const name = searchBox()
+    expect(name).toHaveAttribute('placeholder', t('categorization.create.namePlaceholder'))
+    await waitFor(() => expect(name).toHaveFocus())
+    expect(screen.getByText(t('categorization.create.typeName'))).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Mercado/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'Ask the AI' })).not.toBeInTheDocument()
+
+    await user.type(name, 'Jardinagem')
+    expect(screen.getByText(t('categorization.create.pickGroup', { name: 'Jardinagem' }))).toBeInTheDocument()
+    expect(screen.getByText(t('categorization.create.newGroup', { name: 'Jardinagem' }))).toBeInTheDocument()
+    await user.keyboard('{Enter}')
+
+    expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'Transporte', name: 'Jardinagem', groupExists: true })
+  })
+
+  it('a name that already exists says so in the naming step', async () => {
+    const { user } = renderGrouped()
+
+    await user.click(screen.getByRole('button'))
+    await user.click(screen.getByRole('option', { name: start() }))
+    await user.type(searchBox(), 'mercado')
+
+    expect(screen.getByText(t('categorization.create.exists'))).toBeInTheDocument()
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+  })
+
+  it('Escape in the naming step goes back to the list, then closes', async () => {
+    const { user } = renderGrouped()
+
+    await user.click(screen.getByRole('button'))
+    await user.click(screen.getByRole('option', { name: start() }))
+    await user.keyboard('{Escape}')
+
+    expect(searchBox()).toHaveAttribute('placeholder', t('categorization.create.searchOrCreate'))
+    expect(screen.getByRole('option', { name: /Mercado/ })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  })
+
+  it('the group step goes back to the naming step with the name kept', async () => {
+    const { user } = renderGrouped()
+
+    await user.click(screen.getByRole('button'))
+    await user.click(screen.getByRole('option', { name: start() }))
+    await user.type(searchBox(), 'Jardinagem')
+    await user.click(screen.getByText(t('categorization.create.pickGroup', { name: 'Jardinagem' })))
+    await user.keyboard('{Escape}')
+
+    expect(searchBox()).toHaveAttribute('placeholder', t('categorization.create.namePlaceholder'))
+    expect(searchBox()).toHaveValue('Jardinagem')
+  })
+
+  it('a viewer gets neither the start row nor the create wording', async () => {
+    const { user } = renderGrouped({ canWrite: false })
+
+    await user.click(screen.getByRole('button'))
+
+    expect(screen.queryByRole('option', { name: start() })).not.toBeInTheDocument()
+    expect(searchBox()).toHaveAttribute('placeholder', t('transactions.searchCategory'))
+  })
+
+  it('a flat creatable picker gets the start row too and creates the typed name', async () => {
+    create.mockReset()
+    create.mockResolvedValue({ ...groceries, id: 'cat-new', name: 'Pet food', color: '#6366f1' })
+    const { user, onChange } = renderSelect()
+
+    await user.click(screen.getByRole('button'))
+    await user.click(screen.getByRole('option', { name: `${t('categorization.create.naming')}…` }))
+    expect(searchBox()).toHaveAttribute('placeholder', t('categorization.create.nameOnly'))
+    expect(screen.getByText(t('categorization.create.typeNameOnly'))).toBeInTheDocument()
+    await user.type(searchBox(), 'Pet food{Enter}')
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('cat-new'))
   })
 })

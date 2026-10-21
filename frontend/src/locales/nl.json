@@ -3190,7 +3190,15 @@
       "chooseGroup": "Choose the group",
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
-      "noGroup": "No group found"
+      "noGroup": "No group found",
+      "searchOrCreate": "Categorie zoeken of maken…",
+      "start": "Nieuwe categorie of groep…",
+      "naming": "Nieuwe categorie",
+      "namePlaceholder": "Naam (of Groep / Naam)",
+      "typeName": "Typ de naam. Gebruik Groep / Naam om de groep te kiezen.",
+      "exists": "Er bestaat al een categorie met deze naam. Ga terug en kies hem uit de lijst.",
+      "nameOnly": "Naam van de categorie",
+      "typeNameOnly": "Typ de naam van de categorie."
     },
     "similar": {
       "ask_one": "Also apply to {{count}} similar transaction from this store?",

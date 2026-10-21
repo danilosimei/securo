@@ -3207,7 +3207,15 @@
       "chooseGroup": "Choose the group",
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
-      "noGroup": "No group found"
+      "noGroup": "No group found",
+      "searchOrCreate": "Найти или создать категорию…",
+      "start": "Новая категория или группа…",
+      "naming": "Новая категория",
+      "namePlaceholder": "Название (или Группа / Название)",
+      "typeName": "Введите название. Группу можно указать как Группа / Название.",
+      "exists": "Категория с таким названием уже есть. Вернитесь и выберите её в списке.",
+      "nameOnly": "Название категории",
+      "typeNameOnly": "Введите название категории."
     },
     "similar": {
       "ask_one": "Also apply to {{count}} similar transaction from this store?",

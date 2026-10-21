@@ -3192,7 +3192,15 @@
       "chooseGroup": "Choose the group",
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
-      "noGroup": "No group found"
+      "noGroup": "No group found",
+      "searchOrCreate": "Cerca o crea categoria…",
+      "start": "Nuova categoria o gruppo…",
+      "naming": "Nuova categoria",
+      "namePlaceholder": "Nome (o Gruppo / Nome)",
+      "typeName": "Scrivi il nome. Usa Gruppo / Nome per scegliere il gruppo.",
+      "exists": "Esiste già una categoria con questo nome. Torna indietro e sceglila dall'elenco.",
+      "nameOnly": "Nome della categoria",
+      "typeNameOnly": "Scrivi il nome della categoria."
     },
     "similar": {
       "ask_one": "Also apply to {{count}} similar transaction from this store?",

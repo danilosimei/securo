@@ -106,6 +106,9 @@ export function CategorySelect({
   // search over the groups. Null is the ordinary list.
   const [pickingFor, setPickingFor] = useState<string | null>(null)
   const [groupSearch, setGroupSearch] = useState('')
+  // "New category or group": the search box takes the new name and the list
+  // shows only the ways to create it.
+  const [naming, setNaming] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   // The category just created here. The list catches up once the refetch
   // lands; until then this keeps the trigger showing the new name.
@@ -117,6 +120,7 @@ export function CategorySelect({
   const canWrite = useContext(WorkspaceContext)?.canWrite ?? false
   const createsInGroup = !!onCreateInGroup && canWrite
   const canCreate = creatable && canWrite && !onCreateInGroup
+  const offersCreate = createsInGroup || canCreate
 
   const createMutation = useMutation({
     mutationFn: (name: string) =>
@@ -139,7 +143,13 @@ export function CategorySelect({
       setSearch('')
       setPickingFor(null)
       setGroupSearch('')
+      setNaming(false)
     }
+  }
+
+  function leaveNamingStep() {
+    setNaming(false)
+    setSearch('')
   }
 
   function leaveGroupStep() {
@@ -151,7 +161,7 @@ export function CategorySelect({
   // click on a row or on the back arrow took the focus away.
   useEffect(() => {
     if (open) inputRef.current?.focus()
-  }, [open, pickingFor])
+  }, [open, pickingFor, naming])
 
   function createInGroup(draft: GroupedCreateDraft) {
     handleOpenChange(false)
@@ -227,6 +237,63 @@ export function CategorySelect({
     selectedCategory !== created
     && isCategoryHiddenFromSelection(categories ?? [], selectedCategory)
 
+  // The ways to create the searched name: at the end of the list, or the
+  // whole list in the naming step.
+  const createItems = (
+    <>
+      {createName && (
+        <CommandGroup>
+          <CommandItem
+            value={inlineCreateItemValue(search)}
+            disabled={createMutation.isPending}
+            onSelect={() => createMutation.mutate(createName)}
+            className="cursor-pointer"
+          >
+            <PlusIcon className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate">{t('common.createNamed', { name: createName })}</span>
+          </CommandItem>
+        </CommandGroup>
+      )}
+      {createOptions.length > 0 && (
+        <CommandGroup>
+          {createOptions.map((option) => {
+            const label = createOptionLabel(option)
+            const Icon =
+              option.kind === 'pickGroup'
+                ? FolderInputIcon
+                : option.kind === 'newGroup' || !option.draft.groupExists
+                  ? FolderPlusIcon
+                  : PlusIcon
+            return (
+              <CommandItem
+                key={option.kind}
+                // Carries the search text so the filter keeps the row.
+                value={`${inlineCreateItemValue(search)} ${option.kind}`}
+                onSelect={() => selectCreateOption(option)}
+                title={label}
+                className="cursor-pointer"
+              >
+                <Icon className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+                {option.kind === 'pickGroup' && (
+                  <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+                )}
+              </CommandItem>
+            )
+          })}
+        </CommandGroup>
+      )}
+      {searchTooLong && (
+        <CommandGroup>
+          <CommandItem value={inlineCreateItemValue(search)} disabled title={tooLongLabel}>
+            <CircleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate">{tooLongLabel}</span>
+          </CommandItem>
+        </CommandGroup>
+      )}
+    </>
+  )
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
@@ -270,10 +337,13 @@ export function CategorySelect({
         {...contentProps}
         onEscapeKeyDown={(e) => {
           contentProps?.onEscapeKeyDown?.(e)
-          // Escape on the group step steps back instead of closing.
+          // Escape on a step steps back instead of closing.
           if (pickingFor !== null) {
             e.preventDefault()
             leaveGroupStep()
+          } else if (naming) {
+            e.preventDefault()
+            leaveNamingStep()
           }
         }}
       >
@@ -297,10 +367,29 @@ export function CategorySelect({
               </span>
             </div>
           )}
+          {pickingFor === null && naming && (
+            <div className="flex items-center gap-1 border-b border-border px-1.5 py-1 text-xs text-muted-foreground">
+              <button
+                type="button"
+                aria-label={t('common.back')}
+                onClick={leaveNamingStep}
+                className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-sm hover:bg-muted hover:text-foreground"
+              >
+                <ChevronLeftIcon className="size-4" />
+              </button>
+              <span className="truncate">{t('categorization.create.naming')}</span>
+            </div>
+          )}
           <CommandInput
             ref={inputRef}
             placeholder={
-              pickingFor !== null ? t('categorization.create.chooseGroup') : t('transactions.searchCategory')
+              pickingFor !== null
+                ? t('categorization.create.chooseGroup')
+                : naming
+                  ? t(createsInGroup ? 'categorization.create.namePlaceholder' : 'categorization.create.nameOnly')
+                  : offersCreate
+                    ? t('categorization.create.searchOrCreate')
+                    : t('transactions.searchCategory')
             }
             value={pickingFor !== null ? groupSearch : search}
             onValueChange={pickingFor !== null ? setGroupSearch : setSearch}
@@ -309,6 +398,9 @@ export function CategorySelect({
               if (pickingFor !== null && e.key === 'Backspace' && groupSearch === '') {
                 e.preventDefault()
                 leaveGroupStep()
+              } else if (pickingFor === null && naming && e.key === 'Backspace' && search === '') {
+                e.preventDefault()
+                leaveNamingStep()
               }
             }}
           />
@@ -350,9 +442,33 @@ export function CategorySelect({
                 )}
               </CommandGroup>
             </CommandList>
+          ) : naming ? (
+            <CommandList>
+              <CommandEmpty>
+                {search.trim() !== ''
+                  ? t('categorization.create.exists')
+                  : t(createsInGroup ? 'categorization.create.typeName' : 'categorization.create.typeNameOnly')}
+              </CommandEmpty>
+              {createItems}
+            </CommandList>
           ) : (
             <CommandList>
               <CommandEmpty>{t('transactions.noCategoryFound')}</CommandEmpty>
+              {offersCreate && search.trim() === '' && (
+                <CommandGroup>
+                  <CommandItem
+                    value="__start_create__"
+                    onSelect={() => setNaming(true)}
+                    className="cursor-pointer"
+                  >
+                    <PlusIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate">
+                      {createsInGroup ? t('categorization.create.start') : `${t('categorization.create.naming')}…`}
+                    </span>
+                    <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+                  </CommandItem>
+                </CommandGroup>
+              )}
               {allowNone && (
                 <CommandGroup>
                   <CommandItem
@@ -397,56 +513,7 @@ export function CategorySelect({
                   ))}
                 </CommandGroup>
               ))}
-              {createName && (
-                <CommandGroup>
-                  <CommandItem
-                    value={inlineCreateItemValue(search)}
-                    disabled={createMutation.isPending}
-                    onSelect={() => createMutation.mutate(createName)}
-                    className="cursor-pointer"
-                  >
-                    <PlusIcon className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{t('common.createNamed', { name: createName })}</span>
-                  </CommandItem>
-                </CommandGroup>
-              )}
-              {createOptions.length > 0 && (
-                <CommandGroup>
-                  {createOptions.map((option) => {
-                    const label = createOptionLabel(option)
-                    const Icon =
-                      option.kind === 'pickGroup'
-                        ? FolderInputIcon
-                        : option.kind === 'newGroup' || !option.draft.groupExists
-                          ? FolderPlusIcon
-                          : PlusIcon
-                    return (
-                      <CommandItem
-                        key={option.kind}
-                        // Carries the search text so the filter keeps the row.
-                        value={`${inlineCreateItemValue(search)} ${option.kind}`}
-                        onSelect={() => selectCreateOption(option)}
-                        title={label}
-                        className="cursor-pointer"
-                      >
-                        <Icon className="size-4 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1 truncate">{label}</span>
-                        {option.kind === 'pickGroup' && (
-                          <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
-                        )}
-                      </CommandItem>
-                    )
-                  })}
-                </CommandGroup>
-              )}
-              {searchTooLong && (
-                <CommandGroup>
-                  <CommandItem value={inlineCreateItemValue(search)} disabled title={tooLongLabel}>
-                    <CircleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{tooLongLabel}</span>
-                  </CommandItem>
-                </CommandGroup>
-              )}
+              {createItems}
               {footerAction && (
                 <CommandGroup forceMount className="border-t border-border">
                   <CommandItem

@@ -3207,7 +3207,15 @@
       "chooseGroup": "Choose the group",
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
-      "noGroup": "No group found"
+      "noGroup": "No group found",
+      "searchOrCreate": "Знайти або створити категорію…",
+      "start": "Нова категорія або група…",
+      "naming": "Нова категорія",
+      "namePlaceholder": "Назва (або Група / Назва)",
+      "typeName": "Введіть назву. Групу можна вказати як Група / Назва.",
+      "exists": "Категорія з такою назвою вже є. Поверніться й виберіть її у списку.",
+      "nameOnly": "Назва категорії",
+      "typeNameOnly": "Введіть назву категорії."
     },
     "similar": {
       "ask_one": "Also apply to {{count}} similar transaction from this store?",

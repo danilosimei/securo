@@ -239,7 +239,7 @@ describe('AppliedTab', () => {
     if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
     const row = screen.getByText('UBER *TRIP').closest('li') as HTMLElement
     await user.click(within(row).getByRole('button', { name: 'Rides' }))
-    await user.type(await screen.findByPlaceholderText(t('transactions.searchCategory')), 'Carro')
+    await user.type(await screen.findByPlaceholderText(t('categorization.create.searchOrCreate')), 'Carro')
     // The row is in Transport › Rides, so Transport comes first.
     await user.click(screen.getByText(t('categorization.create.inGroup', { name: 'Carro', group: 'Transport' })))
 
@@ -471,7 +471,7 @@ describe('AppliedTab: confirmadas, suas e outras origens', () => {
     if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
     const row = screen.getByText('UBER *TRIP').closest('li') as HTMLElement
     await user.click(within(row).getByRole('button', { name: 'Rides' }))
-    await user.type(await screen.findByPlaceholderText(t('transactions.searchCategory')), 'Carro')
+    await user.type(await screen.findByPlaceholderText(t('categorization.create.searchOrCreate')), 'Carro')
     await user.click(screen.getByText(t('categorization.create.inGroup', { name: 'Carro', group: 'Transport' })))
     await waitFor(() => expect(toast.info).toHaveBeenCalledWith(t('categorization.applied.skipped', { count: 1 })))
     expect(api.categorization.similar).not.toHaveBeenCalled()

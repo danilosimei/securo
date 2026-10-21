@@ -3188,7 +3188,15 @@
       "chooseGroup": "Choose the group",
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
-      "noGroup": "No group found"
+      "noGroup": "No group found",
+      "searchOrCreate": "Αναζήτηση ή δημιουργία κατηγορίας…",
+      "start": "Νέα κατηγορία ή ομάδα…",
+      "naming": "Νέα κατηγορία",
+      "namePlaceholder": "Όνομα (ή Ομάδα / Όνομα)",
+      "typeName": "Πληκτρολογήστε το όνομα. Με Ομάδα / Όνομα επιλέγετε ομάδα.",
+      "exists": "Υπάρχει ήδη κατηγορία με αυτό το όνομα. Επιστρέψτε και επιλέξτε την από τη λίστα.",
+      "nameOnly": "Όνομα κατηγορίας",
+      "typeNameOnly": "Πληκτρολογήστε το όνομα της κατηγορίας."
     },
     "similar": {
       "ask_one": "Also apply to {{count}} similar transaction from this store?",

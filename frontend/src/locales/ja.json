@@ -3188,7 +3188,15 @@
       "chooseGroup": "Choose the group",
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
-      "noGroup": "No group found"
+      "noGroup": "No group found",
+      "searchOrCreate": "カテゴリを検索または作成…",
+      "start": "新しいカテゴリまたはグループ…",
+      "naming": "新しいカテゴリ",
+      "namePlaceholder": "名前（または グループ / 名前）",
+      "typeName": "名前を入力してください。グループを選ぶには「グループ / 名前」と入力します。",
+      "exists": "この名前のカテゴリはすでにあります。戻って一覧から選んでください。",
+      "nameOnly": "カテゴリ名",
+      "typeNameOnly": "カテゴリ名を入力してください。"
     },
     "similar": {
       "ask_one": "Also apply to {{count}} similar transaction from this store?",
