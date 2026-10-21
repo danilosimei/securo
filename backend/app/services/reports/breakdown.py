@@ -1,29 +1,34 @@
-"""Spending broken down by group (and, next, by category and store).
+"""Spending broken down by group, by category and by store.
 
-The levels share everything but the row a category falls into, so a level is
-one function from "category" to "row"; the sums, the comparison period and
-the sparkline are the same for all of them.
+The levels share everything but the row a transaction falls into, so a level
+is one function from "category" (or store key) to "row"; the sums, the
+comparison period and the sparkline are the same for all of them.
 """
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.categorization import CategorizationSuggestion, MerchantMemory
 from app.models.category import Category
 from app.models.category_group import CategoryGroup
+from app.services.reports.merchant_labels import readable_label
 from app.services.reports.periods import Period, _month_end, _shift_months
 from app.services.reports.rules import (
     CENT,
+    KIND_INCOME,
+    KIND_NORMAL,
     ZERO,
     RangeTotals,
     SegmentFlows,
     collect_flows,
     load_category_kinds,
+    spend_of,
     totals_from,
 )
 
@@ -43,22 +48,17 @@ class RowRef:
     kind: str
 
 
-#: category id (None = no category) -> the row its spending lands in.
-RowOf = Callable[[Optional[uuid.UUID]], RowRef]
+#: category id (None = no category) or store key -> the row its spending lands
+#: in; None leaves it out of the level.
+RowOf = Callable[[Any], Optional[RowRef]]
 
 
 def _money(value: Decimal) -> str:
     return f"{value.quantize(CENT):.2f}"
 
 
-def _level_not_available(level: str) -> HTTPException:
-    return HTTPException(
-        status_code=422,
-        detail={
-            "code": "level_not_available",
-            "message": f"The breakdown level '{level}' is not available yet",
-        },
-    )
+def _bad_request(code: str, message: str) -> HTTPException:
+    return HTTPException(status_code=422, detail={"code": code, "message": message})
 
 
 async def _group_level(session: AsyncSession, workspace_id: uuid.UUID) -> RowOf:
@@ -84,7 +84,7 @@ async def _group_level(session: AsyncSession, workspace_id: uuid.UUID) -> RowOf:
         ).all()
     }
 
-    def row_of(category_id: Optional[uuid.UUID]) -> RowRef:
+    def row_of(category_id: Any) -> Optional[RowRef]:
         if category_id is None:
             return RowRef(None, NO_CATEGORY_LABEL, "group")
         if category_id in refunds:
@@ -97,10 +97,107 @@ async def _group_level(session: AsyncSession, workspace_id: uuid.UUID) -> RowOf:
     return row_of
 
 
+async def _category_level(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    group_id: Optional[uuid.UUID],
+    no_group: bool,
+) -> RowOf:
+    """The categories of one group (or of no group). Income categories are not
+    spending and refund categories have their own line on the group level, so
+    neither belongs to the group's total."""
+    rows = (
+        await session.execute(
+            select(Category.id, Category.group_id, Category.name, Category.report_kind).where(
+                Category.workspace_id == workspace_id
+            )
+        )
+    ).all()
+    group_ids = set(
+        (
+            await session.execute(
+                select(CategoryGroup.id).where(CategoryGroup.workspace_id == workspace_id)
+            )
+        ).scalars()
+    )
+    members: dict[uuid.UUID, str] = {}
+    for cid, gid, name, kind in rows:
+        if kind != KIND_NORMAL:
+            continue
+        in_group = (gid is None or gid not in group_ids) if no_group else gid == group_id
+        if in_group:
+            members[cid] = name
+
+    def row_of(category_id: Any) -> Optional[RowRef]:
+        if category_id not in members:
+            return None
+        return RowRef(str(category_id), members[category_id], "category")
+
+    return row_of
+
+
+async def _store_names(
+    session: AsyncSession, workspace_id: uuid.UUID, keys: set[str]
+) -> dict[str, str]:
+    """Clean names the workspace already has for these store keys: the memory's
+    first, then the latest suggestion's. Two queries, whatever the keys."""
+    if not keys:
+        return {}
+    names: dict[str, str] = {}
+    suggestions = await session.execute(
+        select(CategorizationSuggestion.merchant_key, CategorizationSuggestion.clean_name)
+        .where(
+            CategorizationSuggestion.workspace_id == workspace_id,
+            CategorizationSuggestion.merchant_key.in_(keys),
+            CategorizationSuggestion.clean_name.is_not(None),
+        )
+        .order_by(CategorizationSuggestion.created_at)
+    )
+    for key, name in suggestions.all():
+        if name and name.strip():
+            names[key] = name.strip()  # later rows win
+    memories = await session.execute(
+        select(MerchantMemory.merchant_key, MerchantMemory.ai_clean_name).where(
+            MerchantMemory.workspace_id == workspace_id,
+            MerchantMemory.merchant_key.in_(keys),
+            MerchantMemory.ai_clean_name.is_not(None),
+        )
+    )
+    for key, name in memories.all():
+        if name and name.strip():
+            names[key] = name.strip()
+    return names
+
+
+def _store_totals(
+    segments: list[SegmentFlows], scope_kind: Optional[str], scope_is_category: bool
+) -> RangeTotals:
+    """Spending per store key. Without a category only debits are spending,
+    as on the group level; credits stay out."""
+    spend: dict[Any, Decimal] = {}
+    count: dict[Any, int] = {}
+    unconverted = 0
+    for seg in segments:
+        unconverted += seg.unconverted_count
+        for key, flow in seg.by_category.items():
+            value = spend_of(flow, scope_kind) if scope_is_category else flow.debit
+            spend[key] = spend.get(key, ZERO) + value
+            count[key] = count.get(key, 0) + flow.count
+    return RangeTotals(
+        spend_by_category={k: v.quantize(CENT) for k, v in spend.items()},
+        count_by_category=count,
+        income_by_category={},
+        uncategorized_income=ZERO,
+        unconverted_count=unconverted,
+    )
+
+
 def _spend_by_row(totals: RangeTotals, row_of: RowOf) -> dict[RowRef, Decimal]:
     out: dict[RowRef, Decimal] = {}
     for category_id, value in totals.spend_by_category.items():
         ref = row_of(category_id)
+        if ref is None:
+            continue
         out[ref] = out.get(ref, ZERO) + value
     return out
 
@@ -110,6 +207,8 @@ def _count_by_row(totals: RangeTotals, row_of: RowOf) -> dict[RowRef, int]:
     for category_id, count in totals.count_by_category.items():
         if category_id in totals.spend_by_category:  # income categories are not spending
             ref = row_of(category_id)
+            if ref is None:
+                continue
             out[ref] = out.get(ref, 0) + count
     return out
 
@@ -132,32 +231,64 @@ async def breakdown(
     period: Period,
     level: str,
     group_id: Optional[uuid.UUID] = None,
+    no_group: bool = False,
     category_id: Optional[uuid.UUID] = None,
+    no_category: bool = False,
 ) -> dict:
-    if level != "group":
-        # Category and store levels arrive in the next slice, filtered by
-        # `group_id` / `category_id` and grouped by another column.
-        raise _level_not_available(level)
-    row_of = await _group_level(session, workspace_id)
-    kinds = await load_category_kinds(session, workspace_id)
+    if level not in LEVELS:
+        raise _bad_request("level_unknown", f"Unknown breakdown level '{level}'")
+    if level == "category" and group_id is None and not no_group:
+        raise _bad_request("group_required", "The category level needs a group_id")
+    if level == "merchant" and category_id is None and not no_category:
+        raise _bad_request("category_required", "The store level needs a category_id")
 
-    current_flows, previous_flows = await collect_flows(
-        session,
-        workspace_id=workspace_id,
-        user_id=user_id,
-        primary_currency=primary_currency,
-        segments=[(period.from_, period.to), (period.previous_from, period.previous_to)],
-    )
-    current = totals_from([current_flows], kinds)
-    previous = totals_from([previous_flows], kinds)
-    monthly: list[SegmentFlows] = await collect_flows(
-        session,
-        workspace_id=workspace_id,
-        user_id=user_id,
-        primary_currency=primary_currency,
-        segments=_month_segments(period),
-    )
-    monthly_by_row = [_spend_by_row(totals_from([seg], kinds), row_of) for seg in monthly]
+    kinds = await load_category_kinds(session, workspace_id)
+    flow_kwargs: dict[str, Any] = {
+        "workspace_id": workspace_id,
+        "user_id": user_id,
+        "primary_currency": primary_currency,
+    }
+    month_segments = _month_segments(period)
+    row_of: RowOf
+    if level == "merchant":
+        scope = (None if no_category else category_id,)
+        scope_kind = None if no_category else kinds.get(category_id, KIND_NORMAL)
+        if scope_kind == KIND_INCOME:  # income is not spending: nothing to list
+            scope = (uuid.UUID(int=0),)
+
+        def fold(seg_flows: list[SegmentFlows]) -> RangeTotals:
+            return _store_totals(seg_flows, scope_kind, not no_category)
+
+        current_flows, previous_flows = await collect_flows(
+            session, segments=[(period.from_, period.to), (period.previous_from, period.previous_to)],
+            store_scope=scope, **flow_kwargs,
+        )
+        monthly = await collect_flows(
+            session, segments=month_segments, store_scope=scope, **flow_kwargs
+        )
+        current = fold([current_flows])
+        previous = fold([previous_flows])
+        monthly_totals = [fold([seg]) for seg in monthly]
+        keys: set[str] = {k for k in current.count_by_category if isinstance(k, str)}
+        names = await _store_names(session, workspace_id, keys)
+
+        def row_of(key: Any) -> Optional[RowRef]:
+            store = key if isinstance(key, str) else None
+            return RowRef(store, names.get(key) or readable_label(store), "merchant")
+    else:
+        if level == "group":
+            row_of = await _group_level(session, workspace_id)
+        else:
+            row_of = await _category_level(session, workspace_id, group_id, no_group)
+        current_flows, previous_flows = await collect_flows(
+            session, segments=[(period.from_, period.to), (period.previous_from, period.previous_to)],
+            **flow_kwargs,
+        )
+        monthly = await collect_flows(session, segments=month_segments, **flow_kwargs)
+        current = totals_from([current_flows], kinds)
+        previous = totals_from([previous_flows], kinds)
+        monthly_totals = [totals_from([seg], kinds) for seg in monthly]
+    monthly_by_row = [_spend_by_row(totals, row_of) for totals in monthly_totals]
 
     totals_by_row = _spend_by_row(current, row_of)
     previous_by_row = _spend_by_row(previous, row_of)

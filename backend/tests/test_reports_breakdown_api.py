@@ -129,14 +129,6 @@ async def test_this_month_is_partial(client, auth_headers, world):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("level", ["category", "merchant"])
-async def test_levels_not_built_yet_are_refused(client, auth_headers, world, level):
-    response = await client.get(URL, params={"level": level, **SEP}, headers=auth_headers)
-    assert response.status_code == 422
-    assert response.json()["detail"]["code"] == "level_not_available"
-
-
-@pytest.mark.asyncio
 async def test_unknown_level_or_period_is_refused(client, auth_headers, world):
     assert (await client.get(URL, params={"level": "x", **SEP}, headers=auth_headers)).status_code == 422
     assert (

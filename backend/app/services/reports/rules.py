@@ -23,7 +23,7 @@ from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,10 +62,11 @@ class Flow:
 
 @dataclass
 class SegmentFlows:
-    by_category: dict[Optional[uuid.UUID], Flow] = field(default_factory=dict)
+    #: Keyed by category id; by store key in store mode (`store_scope`).
+    by_category: dict[Any, Flow] = field(default_factory=dict)
     unconverted_count: int = 0
 
-    def flow(self, category_id: Optional[uuid.UUID]) -> Flow:
+    def flow(self, category_id: Any) -> Flow:
         return self.by_category.setdefault(category_id, Flow())
 
 
@@ -99,10 +100,15 @@ async def collect_flows(
     user_id: uuid.UUID,
     primary_currency: str,
     segments: list[Segment],
+    store_scope: Optional[tuple[Optional[uuid.UUID]]] = None,
 ) -> list[SegmentFlows]:
     """Debits and credits per category for each (disjoint) segment, one pass
     over the rows. Callers choose the segments: a period, its comparison
-    period and the monthly slices of a sparkline are all just segments."""
+    period and the monthly slices of a sparkline are all just segments.
+
+    `store_scope=(category_id,)` (None inside = no category) narrows to that
+    category and keys the flows by store (`merchant_key`) instead. Split
+    offsets are per category, so they are not applied in that mode."""
     out = [SegmentFlows() for _ in segments]
     if not segments:
         return out
@@ -121,9 +127,18 @@ async def collect_flows(
         else_=False,
     )
     day = report_date.label("day")
+    key_col = Transaction.merchant_key if store_scope is not None else Transaction.category_id
+    scope_filter = []
+    if store_scope is not None:
+        (scope_category,) = store_scope
+        scope_filter.append(
+            Transaction.category_id.is_(None)
+            if scope_category is None
+            else Transaction.category_id == scope_category
+        )
     rows = await session.execute(
         select(
-            Transaction.category_id,
+            key_col,
             Transaction.type,
             unconverted.label("unconverted"),
             day,
@@ -137,8 +152,9 @@ async def collect_flows(
             report_date >= lo,
             report_date <= hi,
             counts_as_user_pnl(),
+            *scope_filter,
         )
-        .group_by(Transaction.category_id, Transaction.type, unconverted, report_date)
+        .group_by(key_col, Transaction.type, unconverted, report_date)
     )
 
     order = sorted(range(len(segments)), key=lambda i: segments[i][0])
@@ -161,7 +177,8 @@ async def collect_flows(
             flow.debit += value
         flow.count += count
 
-    await _apply_split_offsets(session, workspace_id, user_id, primary_currency, segments, out)
+    if store_scope is None:
+        await _apply_split_offsets(session, workspace_id, user_id, primary_currency, segments, out)
     return out
 
 
