@@ -134,3 +134,21 @@ describe('organizing with AI', () => {
     expect(link).toHaveAttribute('href', '/categorization?tab=organize')
   })
 })
+
+describe('creating a group', () => {
+  it('defaults the icon to one the icon set has', async () => {
+    api.categoryGroups.create.mockResolvedValue({ id: 'g1' })
+    const { user } = renderWithProviders(<CategoriesPage />)
+
+    await user.click(await screen.findByRole('button', { name: /Add Group/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getAllByRole('textbox')[0], 'Viagens')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(api.categoryGroups.create).toHaveBeenCalled())
+    expect(api.categoryGroups.create.mock.calls[0][0]).toMatchObject({
+      name: 'Viagens',
+      icon: 'circle-help',
+    })
+  })
+})

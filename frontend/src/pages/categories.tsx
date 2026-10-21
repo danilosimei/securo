@@ -58,7 +58,7 @@ export default function CategoriesPage() {
   const [formIgnoreTransfer, setFormIgnoreTransfer] = useState(false)
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<CategoryGroup | null>(null)
-  const [groupFormIcon, setGroupFormIcon] = useState('folder')
+  const [groupFormIcon, setGroupFormIcon] = useState('circle-help')
   const [groupFormColor, setGroupFormColor] = useState('#6B7280')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null)
@@ -243,7 +243,7 @@ export default function CategoriesPage() {
 
   const openGroupDialog = (group: CategoryGroup | null) => {
     setEditingGroup(group)
-    setGroupFormIcon(group?.icon ?? 'folder')
+    setGroupFormIcon(group?.icon ?? 'circle-help')
     setGroupFormColor(group?.color ?? '#6B7280')
     setGroupDialogOpen(true)
   }

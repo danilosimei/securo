@@ -92,7 +92,7 @@ function TreeGroup({
         ) : (
           <ChevronRight size={14} className="shrink-0 text-muted-foreground" />
         )}
-        {group.name !== null && <CategoryIcon icon={group.icon ?? 'folder'} color={group.color ?? '#10b981'} size="sm" />}
+        {group.name !== null && <CategoryIcon icon={group.icon ?? 'circle-help'} color={group.color ?? '#10b981'} size="sm" />}
         <span
           className={cn(
             'truncate text-sm font-semibold',
