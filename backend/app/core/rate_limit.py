@@ -26,6 +26,30 @@ def resolve_client_ip(request: Request, trusted_proxy_hops: int) -> str:
     return hops[-trusted_proxy_hops]
 
 
+async def hit(key: str, max_requests: int, window_seconds: int) -> None:
+    """Count one request under `key` in a sliding window; 429 past `max_requests`."""
+    r = await get_redis()
+    now = time.time()
+    window_start = now - window_seconds
+
+    pipe = r.pipeline()
+    pipe.zremrangebyscore(key, 0, window_start)
+    pipe.zcard(key)
+    pipe.zadd(key, {str(now): now})
+    pipe.expire(key, window_seconds)
+    results = await pipe.execute()
+
+    request_count = results[1]
+
+    if request_count >= max_requests:
+        retry_after = window_seconds
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
 class RateLimiter:
     def __init__(self, max_requests: int, window_seconds: int):
         self.max_requests = max_requests
@@ -33,28 +57,7 @@ class RateLimiter:
 
     async def __call__(self, request: Request) -> None:
         client_ip = resolve_client_ip(request, get_settings().trusted_proxy_hops)
-        key = f"rate_limit:{request.url.path}:{client_ip}"
-
-        r = await get_redis()
-        now = time.time()
-        window_start = now - self.window_seconds
-
-        pipe = r.pipeline()
-        pipe.zremrangebyscore(key, 0, window_start)
-        pipe.zcard(key)
-        pipe.zadd(key, {str(now): now})
-        pipe.expire(key, self.window_seconds)
-        results = await pipe.execute()
-
-        request_count = results[1]
-
-        if request_count >= self.max_requests:
-            retry_after = self.window_seconds
-            raise HTTPException(
-                status_code=429,
-                detail="Too many requests",
-                headers={"Retry-After": str(retry_after)},
-            )
+        await hit(f"rate_limit:{request.url.path}:{client_ip}", self.max_requests, self.window_seconds)
 
 
 login_rate_limit = RateLimiter(max_requests=5, window_seconds=60)

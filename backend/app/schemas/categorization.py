@@ -108,6 +108,8 @@ class CategorizationSummary(BaseModel):
     applied_last_7d: int
     last_run: Optional[LastRun] = None
     ai_available: bool
+    #: The workspace's "categorize with AI" switch.
+    ai_enabled: bool
     month_cost_usd: Decimal
     monthly_cap_usd: Decimal
 
@@ -247,6 +249,46 @@ class ChooseResult(BaseModel):
     applied: int
     #: The events written, for "undo" (`POST /undo {event_ids}`).
     event_ids: list[uuid.UUID]
+
+
+class AskMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class AskRequest(BaseModel):
+    """One message of the conversation about a store: the whole conversation
+    so far (kept by the client, never stored), ending with the person's.
+
+    Without `transaction_ids`, about the store's pending rows (Revisar); with
+    them, about exactly those rows (Aplicadas).
+    """
+
+    merchant_key: str = Field(min_length=1, max_length=255)
+    transaction_ids: Optional[list[uuid.UUID]] = Field(default=None, max_length=500)
+    messages: list[AskMessage] = Field(min_length=1, max_length=80)
+
+
+class AskSuggestionRead(BaseModel):
+    #: An existing category, or null with `new_category`.
+    category_id: Optional[uuid.UUID] = None
+    #: A category to create on Accept (`POST /choose new_category`).
+    new_category: Optional[NewCategory] = None
+    #: Whether the group of `new_category` already exists.
+    group_exists: bool
+    confidence: int
+    #: Rows an Accept would file.
+    applies_to: int
+
+
+class AskResponse(BaseModel):
+    reply: str
+    suggestion: Optional[AskSuggestionRead] = None
+    #: The store's whole note, updated; null leaves the saved one as it is.
+    note: Optional[str] = None
+    #: Send it back as the next `assistant` message.
+    assistant_turn: str
+    person_messages_left: int
 
 
 class AppliedTransaction(BaseModel):

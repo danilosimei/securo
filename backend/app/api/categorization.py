@@ -1,6 +1,8 @@
 """Automatic categorization: review queue, audit list, undo, settings, runs.
 
-Nothing here calls the model: runs are queued for the worker.
+Nothing here calls the model -- runs are queued for the worker -- except
+`POST /ask`, the conversation about one store, where the person waits for
+the answer (bounded per message, per conversation and per minute).
 """
 import uuid
 from dataclasses import asdict
@@ -10,6 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import rate_limit
 from app.core.database import get_async_session
 from app.core.workspace_context import (
     WorkspaceContext,
@@ -20,6 +23,9 @@ from app.schemas.categorization import (
     AcceptRequest,
     AppliedPage,
     AppliedResult,
+    AskRequest,
+    AskResponse,
+    AskSuggestionRead,
     CategorizationSettingsRead,
     CategorizationSettingsUpdate,
     CategorizationSummary,
@@ -46,7 +52,7 @@ from app.schemas.categorization import (
     UndoResultRead,
 )
 from app.models.categorization import CategorizationRun
-from app.services.categorization import choose, creation, memory, organizer, review
+from app.services.categorization import ask, choose, creation, memory, organizer, review
 from app.services.categorization.events import UNSET
 from app.services.categorization import settings as categorization_settings
 from app.tasks import categorization_tasks
@@ -189,6 +195,112 @@ async def choose_category(
         created_category=outcome.created_category,
         applied=outcome.applied.applied,
         event_ids=outcome.applied.event_ids,
+    )
+
+
+# --- the conversation about a store ---------------------------------------------
+
+#: Status and pt-BR message of each reason a message got no answer.
+_ASK_ERRORS: dict[str, tuple[int, str]] = {
+    "conversation_limit": (
+        status.HTTP_409_CONFLICT,
+        f"Esta conversa chegou ao limite de {ask.MAX_PERSON_MESSAGES} mensagens; "
+        "feche e abra de novo para recomeçar.",
+    ),
+    "capped": (
+        status.HTTP_409_CONFLICT,
+        "O teto mensal de gastos com a IA foi atingido; ajuste-o nas configurações.",
+    ),
+    "disabled": (
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "A categorização com IA está desligada nas configurações.",
+    ),
+    "no_connection": (
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "Não há uma conexão com a Anthropic que funcione; confira a chave nas configurações.",
+    ),
+    "timeout": (
+        status.HTTP_504_GATEWAY_TIMEOUT,
+        "A IA demorou demais para responder; tente de novo.",
+    ),
+    "model_error": (
+        status.HTTP_502_BAD_GATEWAY,
+        "A IA não conseguiu responder agora; tente de novo em instantes.",
+    ),
+}
+
+
+async def ask_rate_limit(ctx: WorkspaceContext = Depends(current_writable_workspace)) -> None:
+    """`ask.RATE_LIMIT` messages per workspace (not per IP: the money is the
+    workspace's)."""
+    try:
+        await rate_limit.hit(f"rate_limit:categorization-ask:{ctx.workspace.id}", *ask.RATE_LIMIT)
+    except HTTPException as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "code": "rate_limited",
+                "message": "Muitas mensagens em pouco tempo; espere um minuto e tente de novo.",
+            },
+            headers=exc.headers,
+        ) from exc
+
+
+@router.post(
+    "/ask", response_model=AskResponse, dependencies=[Depends(ask_rate_limit)]
+)
+async def ask_about_store(
+    data: AskRequest,
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Answer the person's last message about a store; nothing is applied.
+
+    Every error commits first: a failed call is still a run in the ledger
+    the monthly cap reads.
+    """
+    try:
+        answer = await ask.ask(
+            session,
+            ctx.workspace.id,
+            merchant_key=data.merchant_key,
+            transaction_ids=data.transaction_ids,
+            turns=[(m.role, m.content) for m in data.messages],
+        )
+    except ask.AskError as exc:
+        await session.commit()
+        code, message = _ASK_ERRORS.get(
+            exc.code, (status.HTTP_502_BAD_GATEWAY, _ASK_ERRORS["model_error"][1])
+        )
+        raise HTTPException(status_code=code, detail={"code": exc.code, "message": message})
+    except review.NotFound:
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "not_found",
+                "message": "Nenhuma transação desta loja para conversar; atualize a página.",
+            },
+        )
+    except ask.InvalidConversation:
+        await session.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "code": "invalid_conversation",
+                "message": "A última mensagem da conversa precisa ser sua.",
+            },
+        )
+    await session.commit()
+    suggestion = answer.suggestion
+    return AskResponse(
+        reply=answer.reply,
+        suggestion=(
+            AskSuggestionRead.model_validate(asdict(suggestion)) if suggestion is not None else None
+        ),
+        note=answer.note,
+        assistant_turn=answer.assistant_turn,
+        person_messages_left=answer.person_messages_left,
     )
 
 

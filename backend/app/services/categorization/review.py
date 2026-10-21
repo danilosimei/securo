@@ -178,6 +178,7 @@ async def summary(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, A
             else None
         ),
         "ai_available": await find_ai_connection(session, settings) is not None,
+        "ai_enabled": settings.enabled,
         "month_cost_usd": await month_spend(session, workspace_id),
         "monthly_cap_usd": settings.monthly_cap_usd,
     }
