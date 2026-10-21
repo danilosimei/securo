@@ -1,6 +1,7 @@
 import pytest
 
 from app.services.categorization.merchant_key import (
+    MERCHANT_KEY_VERSION,
     merchant_key,
     sample_description,
     scrub_documents,
@@ -244,3 +245,133 @@ def test_spaced_groups_need_document_shape():
     assert scrub_documents("PARC 03 DE 10") == "PARC 03 DE 10"
     assert scrub_documents("TED 341 0001 JOAO") == "TED 341 0001 JOAO"
     assert scrub_documents("1234 456 789 09") == "1234 456 789 09"
+
+
+# Descricao -> chave v2 (spec 2026-10-20 §5). Os exemplos com loja real vem das
+# descricoes de producao; os demais sao continuacoes ilustrativas do mesmo
+# prefixo. A Task 13 (regravacao das chaves) importa esta lista.
+REAL_PREFIX_CASES: list[tuple[str, str]] = [
+    ("Mlp*Netshoes", "NETSHOES"),
+    ("Mlp*Kabum", "KABUM"),
+    ("Dl*Aliexpress", "ALIEXPRESS"),
+    ("Ebn *Amazon", "AMAZON"),
+    ("Ebn *Spotify", "SPOTIFY"),
+    ("Ebn*Spotify", "SPOTIFY"),
+    ("Ubr* Pending.Uber.Com", "UBER"),
+    ("UBER * PENDING", "UBER"),
+    ("Uber *Trip", "UBER"),
+    ("Pb*Ubiquiti 1/3", "UBIQUITI"),
+    ("Zig*Op Henio Polinesia", "OP HENIO POLINESIA"),
+    ("Tst*Coco Bambu", "COCO BAMBU"),
+    ("Vindi*Smartfit", "SMARTFIT"),
+    ("Sq *Padaria Real", "PADARIA REAL"),
+    ("Tm *Ticketmaster", "TICKETMASTER"),
+    ("Evo*Bodytech", "BODYTECH"),
+    ("NYX*Cosmeticos", "COSMETICOS"),
+    ("Zp *Restaurante Bom", "RESTAURANTE BOM"),
+    ("Dm*Loja Teste", "LOJA TESTE"),
+    ("Vmt*Estacionamento", "ESTACIONAMENTO"),
+    ("Wow*Acai", "ACAI"),
+    ("Bkg*Hotel At Booking", "HOTEL AT BOOKING"),
+    ("CTLP*FIRST CLASS VENDI", "FIRST CLASS VENDI"),
+    ("CTLP*FIRST CLASS VENDI (IOF)", "FIRST CLASS VENDI IOF"),
+    ("Casar *Pre*Sente", "CASAR"),
+    ("Ec *Padaria", "PADARIA"),
+    ("Pg *Primepassapor", "PRIMEPASSAPOR"),
+    ("Mp *Aliexpress 3/3", "ALIEXPRESS"),
+    ("Ifd*Baker Bar e Restau", "BAKER BAR E RESTAU"),
+    ("IFD*BR", "IFOOD"),
+    ("Pag*Steam 3/3", "STEAM"),
+    ("Sumup *Amici e Cucina", "AMICI E CUCINA"),
+    ("Mlp*", "MLP"),
+    # Descricoes de producao, uma por prefixo.
+    ("Mp *Aliexpress", "ALIEXPRESS"),
+    ("Ifd*Arupema Comercio D", "ARUPEMA COMERCIO D"),
+    ("Ebn *Amazon Retail", "AMAZON RETAIL"),
+    ("Pg *Locked 1/3", "LOCKED"),
+    ("Ec *Ritadecassiag 1/8", "RITADECASSIAG"),
+    ("Pag*Steam", "STEAM"),
+    ("Pb*Ubiquiti", "UBIQUITI"),
+    ("Tst*Ri Ra - Las Vegas", "RI RA LAS VEGAS"),
+    ("Mlp *Kabum-Kabum", "KABUM KABUM"),
+    ("Mlp*Netshoes-Netshoes 1/2", "NETSHOES NETSHOES"),
+    ("Vindi*Minimalclub 1/3", "MINIMALCLUB"),
+    ("Sq *Shake Shack", "SHAKE SHACK"),
+    ("Tm *The Wizard Of Oz A", "THE WIZARD OF OZ A"),
+    ("Evo*Carmem Cerqu 1/2", "CARMEM CERQU"),
+    ("NYX*SMARTE CARTE, INC.", "SMARTE CARTE INC"),
+    ("Zp *Cp", "CP"),
+    ("Dm*Kiwicom", "KIWICOM"),
+    ("Vmt*Redmart", "REDMART"),
+    ("Wow*Wowintegra Comerci", "WOWINTEGRA COMERCI"),
+    ("Bkg*Hotel At Booking.C", "HOTEL AT BOOKING.C"),
+]
+
+
+@pytest.mark.parametrize("raw,expected", REAL_PREFIX_CASES)
+def test_real_acquirer_prefixes(raw, expected):
+    assert merchant_key(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("IFOOD *REST 8812", "IFOOD"),
+        ("Petlove Saud*Petlove S", "PETLOVE SAUD"),
+        ("99food *99food", "99FOOD"),
+        ("Anthropic* Claude Sub", "ANTHROPIC"),
+        ("Mercadolivre*Mercadol 2/2", "MERCADOLIVRE"),
+        ("Zee Now *Zee Dog 2/3", "ZEE NOW"),
+        ("New Balance *0104", "NEW BALANCE"),
+        ("99*", "99"),
+        ("Flexpag*Celpe", "CELPE"),
+        ("IOF de volta de Ubr* Pending.Uber.Com", "IOF DE VOLTA DE UBR"),
+    ],
+)
+def test_star_heads_that_stay(raw, expected):
+    assert merchant_key(raw) == expected
+    assert merchant_key(raw, version=1) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Mlp*Netshoes", "MLP"),
+        ("Ebn *Spotify", "EBN"),
+        ("IFD*BR", "BR"),
+        ("Bkg*Hotel At Booking", "BKG"),
+    ],
+)
+def test_version_1_keeps_previous_keys(raw, expected):
+    assert merchant_key(raw, version=1) == expected
+
+
+def test_current_version_is_2():
+    assert MERCHANT_KEY_VERSION == 2
+    assert merchant_key("Mlp*Netshoes") == merchant_key("Mlp*Netshoes", version=2)
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Pg *", "PG"),
+        ("Zig*12345", "ZIG"),
+        ("Tst*SP", "TST"),
+        ("Ubr* Pendente", "UBER"),
+        ("Pg *Mlp*Netshoes", "NETSHOES"),
+        ("Mlp*Ebn*Spotify", "EBN"),
+    ],
+)
+def test_generic_rest_falls_back_to_prefix(raw, expected):
+    assert merchant_key(raw) == expected
+
+
+def test_payee_and_pix_ignore_prefix_rule():
+    assert (
+        merchant_key("Mlp*Netshoes", payee_name="Netshoes Ltda", payee_source="sync")
+        == "P:NETSHOES"
+    )
+    assert merchant_key("Mlp*Netshoes", payee_name="X", payee_source="description") == "NETSHOES"
+    assert merchant_key("PIX ENVIADO MLP*JOAO", is_person_transfer=True) == merchant_key(
+        "PIX ENVIADO MLP*JOAO", is_person_transfer=True, version=1
+    )

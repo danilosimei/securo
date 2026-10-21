@@ -10,12 +10,22 @@ Precedencia da chave (merchant_key):
    is_person_transfer) -> "PIX:<NOME>" (so documento -> "PIX:#<sha1[:10]>");
 3. descricao normalizada (prefixos, parcelas, ids, cidade/UF removidos);
 4. "UNKNOWN".
+
+Versoes da regra da descricao (payee e Pix nao mudam entre elas):
+- 1: so os prefixos de STAR_PREFIXES saem; outro "<CABECA>*" vira a loja
+  ("Mlp*Netshoes" -> "MLP", juntando lojas diferentes).
+- 2 (atual): um prefixo curto de 2 a 5 letras antes do "*" tambem sai
+  ("Mlp*Netshoes" -> "NETSHOES"), salvo marcas (BRAND_STAR_PREFIXES); se o
+  resto e generico (vazio, "PENDING...", so pais/UF/numeros) a loja e a
+  marca do prefixo (PREFIX_BRANDS) ou o proprio prefixo ("IFD*BR" -> "IFOOD").
+  A versao 1 continua disponivel para achar as chaves gravadas antes.
 """
 
 import hashlib
 import re
 import unicodedata
 
+MERCHANT_KEY_VERSION = 2
 UNKNOWN_KEY = "UNKNOWN"
 SAMPLE_MAX_LENGTH = 60
 PERSON_PREFIX = "PIX:"
@@ -47,6 +57,11 @@ STAR_PREFIXES = (
     "EC",
     "DL",
 )
+
+# v2: cabecas curtas antes do "*" que sao a propria marca (ficam como a loja).
+BRAND_STAR_PREFIXES = frozenset({"UBER", "IFOOD", "CASAR"})
+# v2: marca de um prefixo quando o resto da descricao e generico.
+PREFIX_BRANDS = {"UBR": "UBER", "IFD": "IFOOD"}
 
 # Frases genericas de inicio de descricao (sem "*").
 LEADING_PHRASES = (
@@ -101,7 +116,10 @@ KNOWN_CITIES = (
     "CAMPO GRANDE",
 )
 
-_STAR_PREFIX_RE = re.compile(r"^(?:" + "|".join(STAR_PREFIXES) + r")\s*\*\s*")
+_STAR_PREFIX_RE = re.compile(r"^(" + "|".join(STAR_PREFIXES) + r")\s*\*\s*")
+# v2, depois de _clean (que ja colou o "*"): um token unico de 2 a 5 letras.
+_SHORT_STAR_PREFIX_RE = re.compile(r"^([A-Z]{2,5})\*")
+_PENDING_REST_RE = re.compile(r"^(?:PENDING|PENDENTE)\b")
 _LEADING_PHRASE_RE = re.compile(r"^(?:" + "|".join(LEADING_PHRASES) + r")\b\s*")
 # Aplicado antes da limpeza de pontuacao (precisa do "/").
 _INSTALLMENT_RE = re.compile(
@@ -194,13 +212,23 @@ def _clean(text: str) -> str:
     return _squeeze(re.sub(r"\s*\*\s*", "*", folded.replace("*", " * ")))
 
 
-def _strip_leading(text: str) -> str:
+def _strip_leading_tracked(text: str) -> tuple[str, str | None]:
+    """Tira frases e prefixos de STAR_PREFIXES do inicio; devolve tambem o
+    ultimo prefixo retirado."""
+    prefix = None
     previous = None
     while previous != text:
         previous = text
         text = _LEADING_PHRASE_RE.sub("", text, count=1)
-        text = _STAR_PREFIX_RE.sub("", text, count=1)
-    return text.strip()
+        match = _STAR_PREFIX_RE.match(text)
+        if match:
+            prefix = match.group(1)
+            text = text[match.end() :]
+    return text.strip(), prefix
+
+
+def _strip_leading(text: str) -> str:
+    return _strip_leading_tracked(text)[0]
 
 
 def _cut_star(text: str) -> str:
@@ -248,11 +276,33 @@ def _drop_quantities(text: str) -> str:
     return " ".join(out)
 
 
-def _normalize_description(text: str) -> str:
+def _finish(text: str) -> str:
+    return _strip_trailing(_drop_quantities(_cut_star(text)))
+
+
+def _is_generic_rest(key: str) -> bool:
+    """Resto que nao identifica loja: vazio, "PENDING..." ou so pais/UF/numeros."""
+    if _PENDING_REST_RE.match(key):
+        return True
+    return all(
+        token in COUNTRY_CODES or token in UF_CODES or _NUMERIC_TOKEN_RE.match(token)
+        for token in key.split()
+    )
+
+
+def _normalize_description(text: str, version: int) -> str:
     folded = _INSTALLMENT_RE.sub(" ", _fold(scrub_documents(text)))
-    cleaned = _strip_leading(_clean(folded))
-    cleaned = _cut_star(cleaned)
-    return _strip_trailing(_drop_quantities(cleaned))
+    cleaned, prefix = _strip_leading_tracked(_clean(folded))
+    if version < 2:
+        return _finish(cleaned)
+    match = _SHORT_STAR_PREFIX_RE.match(cleaned)
+    if match and match.group(1) not in BRAND_STAR_PREFIXES:
+        prefix = match.group(1)
+        cleaned = cleaned[match.end() :]
+    key = _finish(cleaned)
+    if prefix and _is_generic_rest(key):
+        return PREFIX_BRANDS.get(prefix, prefix)
+    return key
 
 
 def _plain_name(text: str) -> str:
@@ -296,8 +346,10 @@ def merchant_key(
     payee_name: str | None = None,
     payee_source: str | None = None,
     is_person_transfer: bool = False,
+    version: int = MERCHANT_KEY_VERSION,
 ) -> str:
-    """Chave estavel da loja; nunca vazia."""
+    """Chave estavel da loja; nunca vazia. version=1 reproduz as chaves
+    gravadas antes da regra de prefixo curto (ver docstring do modulo)."""
     if description is not None and _fold(description).strip() in EMPTY_WORDS:
         description = None
     parts = _split_counterpart(description) if description else None
@@ -334,7 +386,7 @@ def merchant_key(
         if _TRANSFER_KIND_RE.match(kind):
             return _person_key(counterpart)
         description = counterpart
-    key = _normalize_description(description)
+    key = _normalize_description(description, version)
     if key:
         return key
     return _plain_name(scrub_documents(description)) or UNKNOWN_KEY
