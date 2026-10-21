@@ -3207,6 +3207,50 @@
       "applied_one": "{{count}} similar transaction updated",
       "applied_other": "{{count}} similar transactions updated",
       "store": "At {{store}}"
+    },
+    "ask": {
+      "button": "Ask AI",
+      "title": "Ask AI about {{name}}",
+      "context_one": "{{count}} transaction · {{total}} · last on {{date}}",
+      "context_other": "{{count}} transactions · {{total}} · last on {{date}}",
+      "contextNoDate_one": "{{count}} transaction · {{total}}",
+      "contextNoDate_other": "{{count}} transactions · {{total}}",
+      "samples": "Examples from the bank",
+      "conversation": "Conversation",
+      "intro": "Tell the AI what this store is: who you pay and what for. It suggests a category and keeps a short note of what you said.",
+      "message": "Your message",
+      "placeholder": "E.g.: it's my gardener, every week",
+      "send": "Send",
+      "keys": "Enter sends · Shift+Enter new line",
+      "counter": "{{used}} of {{max}}",
+      "limitReached": "This conversation reached its limit of {{max}} messages. Accept a suggestion or pick another category.",
+      "thinking": "Thinking…",
+      "appliesTo_one": "applies to the {{count}} transaction from this store",
+      "appliesTo_other": "applies to the {{count}} transactions from this store",
+      "newCategory": "new",
+      "newGroup": "new group",
+      "confidence": "{{value}}% sure",
+      "accept": "Accept",
+      "other": "Another category",
+      "accepted": "AI answer applied",
+      "you": "You",
+      "ai": "AI",
+      "blocked": {
+        "readOnly": "You can only view this workspace",
+        "disabled": "AI categorization is turned off in the settings",
+        "noConnection": "No AI connection is set up",
+        "capped": "This month's AI spending cap was reached"
+      },
+      "errors": {
+        "conversation_limit": "This conversation reached its message limit.",
+        "capped": "This month's AI spending cap was reached.",
+        "disabled": "AI categorization is turned off.",
+        "no_connection": "The AI connection is missing or was refused.",
+        "timeout": "The AI took too long to answer. Try again.",
+        "model_error": "The AI could not answer right now. Try again.",
+        "rateLimited": "Too many messages in a minute. Wait a moment and try again.",
+        "generic": "The message could not be sent. Try again."
+      }
     }
   }
 }

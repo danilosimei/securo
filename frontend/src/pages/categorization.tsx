@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { ReviewTab } from '@/components/categorization/review-tab'
 import { AppliedTab } from '@/components/categorization/applied-tab'
 import { OrganizeTab } from '@/components/categorization/organize-tab'
+import { AskProvider } from '@/components/categorization/ask-provider'
 
 type Tab = 'review' | 'applied' | 'organize'
 const TABS: Tab[] = ['review', 'applied', 'organize']
@@ -133,9 +134,12 @@ export default function CategorizationPage() {
         )}
       </div>
 
-      {tab === 'review' && <ReviewTab />}
-      {tab === 'applied' && <AppliedTab />}
-      {tab === 'organize' && <OrganizeTab />}
+      {/* "Ask AI" opens from Review and Applied; its conversations last the visit. */}
+      <AskProvider>
+        {tab === 'review' && <ReviewTab />}
+        {tab === 'applied' && <AppliedTab />}
+        {tab === 'organize' && <OrganizeTab />}
+      </AskProvider>
     </div>
   )
 }

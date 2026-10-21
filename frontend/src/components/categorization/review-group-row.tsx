@@ -8,10 +8,14 @@
  *  that row, so Tab need not walk every button of every store.
  *
  *  Once answered, the row keeps its place and its focus, and the answers
- *  give way to the question about the store's similar rows. */
+ *  give way to the question about the store's similar rows.
+ *
+ *  "Ask AI" (the sparkles, and the last line of "Other…") opens the
+ *  conversation about the store; it shows disabled, with the reason, to
+ *  whoever cannot use it (a viewer included). */
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronRight, FolderPlus, Loader2, X } from 'lucide-react'
+import { ChevronRight, FolderPlus, Loader2, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CategoryIcon } from '@/components/category-icon'
 import { CategorySelect } from '@/components/category-select'
@@ -99,6 +103,10 @@ interface ReviewGroupRowProps {
   onAnswerDone?: () => void
   /** Lets the list route Enter / Escape on the row to the question. */
   promptHandle?: React.Ref<SimilarPromptHandle>
+  /** Opens "Ask AI" about the store; left out, there is no such button. */
+  onAsk?: () => void
+  /** Why "Ask AI" is disabled (null: it is not). */
+  askBlockedReason?: string | null
 }
 
 export function ReviewGroupRow({
@@ -124,6 +132,8 @@ export function ReviewGroupRow({
   answer,
   onAnswerDone,
   promptHandle,
+  onAsk,
+  askBlockedReason = null,
 }: ReviewGroupRowProps) {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
@@ -150,6 +160,24 @@ export function ReviewGroupRow({
     const sample = group.samples.find((s) => s && s !== name)
     note = sample ? t('categorization.review.example', { text: sample }) : null
   }
+
+  const askLabel = t('categorization.ask.button')
+  const askButton = onAsk && (
+    <Button
+      variant="ghost"
+      size="sm"
+      // Phone: a full-width line of its own, under "Other…" and "Ignore".
+      className="order-last col-span-2 h-8 w-full gap-1.5 text-muted-foreground sm:order-none sm:w-8 sm:px-0"
+      tabIndex={inner}
+      aria-label={askLabel}
+      title={askBlockedReason ?? askLabel}
+      disabled={!!askBlockedReason}
+      onClick={onAsk}
+    >
+      <Sparkles size={14} className="text-violet-600 dark:text-violet-400" />
+      <span className="sm:hidden">{askLabel}</span>
+    </Button>
+  )
 
   return (
     <li
@@ -243,7 +271,7 @@ export function ReviewGroupRow({
               />
             )}
           </div>
-        ) : canWrite && (
+        ) : canWrite ? (
           <div
             // Phone: suggestions full width, then "Other…" and "Ignore" side by side.
             className="grid grid-cols-2 gap-1.5 pl-5 sm:flex sm:shrink-0 sm:items-center sm:pl-0"
@@ -288,10 +316,22 @@ export function ReviewGroupRow({
               placeholder={t('categorization.review.other')}
               onCreateInGroup={(d) => onChoose({ new_category: { group: d.group, name: d.name } })}
               suggestedGroupId={guess?.category.group_id ?? null}
+              footerAction={
+                onAsk
+                  ? {
+                      label: askLabel,
+                      icon: Sparkles,
+                      disabled: !!askBlockedReason,
+                      hint: askBlockedReason ?? undefined,
+                      onSelect: onAsk,
+                    }
+                  : undefined
+              }
               tabIndex={inner}
               className="h-8 w-full px-2.5 text-xs sm:w-32"
               contentProps={{ className: 'w-72 p-0 overflow-hidden', align: 'end' }}
             />
+            {askButton}
             <Button
               variant="ghost"
               size="sm"
@@ -306,6 +346,13 @@ export function ReviewGroupRow({
               <span className="sm:hidden">{t('categorization.review.ignore')}</span>
             </Button>
           </div>
+        ) : (
+          askButton && (
+            // A viewer sees why the conversation is not for them.
+            <div className="grid grid-cols-2 pl-5 sm:flex sm:shrink-0 sm:pl-0" onClick={(e) => e.stopPropagation()}>
+              {askButton}
+            </div>
+          )
         )}
       </div>
 

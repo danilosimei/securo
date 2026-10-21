@@ -3,6 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 
 import { WorkspaceContext } from '@/contexts/workspace-context'
 import { ReviewTab } from '@/components/categorization/review-tab'
+import { AskProvider } from '@/components/categorization/ask-provider'
 import { renderWithProviders, t } from '@/test/utils'
 import type { NewCategoryProposal, ReviewGroup, ReviewTransaction, SimilarResult, SimilarTransaction } from '@/types'
 
@@ -17,6 +18,8 @@ const api = vi.hoisted(() => ({
     setNote: vi.fn(),
     similar: vi.fn(),
     applySimilar: vi.fn(),
+    summary: vi.fn(),
+    ask: vi.fn(),
   },
   categories: { list: vi.fn() },
   categoryGroups: { list: vi.fn() },
@@ -874,5 +877,96 @@ describe('ReviewTab: parecidas da loja, bordas', () => {
     expect(
       screen.queryByText(t('categorization.review.proposal', { path: 'Leisure › Delivery' })),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('ReviewTab: perguntar à IA', () => {
+  const summary = (overrides: Record<string, unknown> = {}) => ({
+    pending_groups: 3, pending_transactions: 19, applied_last_7d: 0, last_run: null,
+    ai_available: true, ai_enabled: true, month_cost_usd: '0', monthly_cap_usd: '2', ...overrides,
+  })
+  const askButton = (name: string) =>
+    within(row(name)).getByRole('button', { name: t('categorization.ask.button') })
+
+  async function renderAsk() {
+    const utils = renderWithProviders(
+      <AskProvider>
+        <ReviewTab />
+      </AskProvider>,
+    )
+    await screen.findByText('iFood')
+    return utils
+  }
+
+  beforeEach(() => {
+    api.categorization.summary.mockResolvedValue(summary())
+    api.categorization.ask.mockResolvedValue({
+      reply: 'Mercado, então.',
+      suggestion: { category_id: 'c2', new_category: null, group_exists: true, confidence: 90, applies_to: 2 },
+      note: 'compras do mês',
+      assistant_turn: '{"reply":"Mercado, então."}',
+      person_messages_left: 29,
+    })
+    api.categorization.choose.mockImplementation(async () => {
+      serverGroups = serverGroups.filter((g) => g.merchant_key !== 'IFOOD')
+      return { category_id: 'c2', created_group: false, created_category: false, applied: 12, event_ids: ['ch1'] }
+    })
+    api.categorization.similar.mockImplementation(async (id: string) => (id === 't1' ? twoSimilar : noSimilar))
+  })
+
+  it('com a IA desligada o botão fica desabilitado com o motivo', async () => {
+    api.categorization.summary.mockResolvedValue(summary({ ai_enabled: false }))
+    await renderAsk()
+    await waitFor(() => expect(askButton('iFood')).toBeDisabled())
+    expect(askButton('iFood')).toHaveAttribute('title', t('categorization.ask.blocked.disabled'))
+  })
+
+  it('quem só lê vê o botão desabilitado com blocked.readOnly', async () => {
+    workspace.canWrite = false
+    await renderAsk()
+    expect(askButton('iFood')).toBeDisabled()
+    expect(askButton('iFood')).toHaveAttribute('title', t('categorization.ask.blocked.readOnly'))
+  })
+
+  it('aceitar no chat aplica pela loja, pergunta pelas parecidas e devolve o foco à linha', async () => {
+    const { user } = await renderAsk()
+    await waitFor(() => expect(askButton('iFood')).toBeEnabled())
+    await user.click(askButton('iFood'))
+    const dialog = await screen.findByRole('dialog', { name: t('categorization.ask.title', { name: 'iFood' }) })
+    expect(dialog).toHaveTextContent(t('categorization.ask.context', { count: 12, total: 'R$340.50', date: '10/1/2026' }))
+
+    await user.type(within(dialog).getByRole('textbox'), 'é mercado{Enter}')
+    expect(api.categorization.ask).toHaveBeenCalledWith({
+      merchant_key: 'IFOOD',
+      messages: [{ role: 'user', content: 'é mercado' }],
+    })
+    const card = await within(dialog).findByTestId('ask-suggestion')
+    expect(card).toHaveTextContent('Food › Groceries')
+    await user.click(within(card).getByRole('button', { name: t('categorization.ask.accept') }))
+
+    expect(api.categorization.choose).toHaveBeenCalledWith({
+      merchant_key: 'IFOOD',
+      category_id: 'c2',
+      note: 'compras do mês',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await within(row('iFood')).findByText(t('categorization.similar.ask', { count: 2 }))).toBeInTheDocument()
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        t('categorization.ask.accepted'),
+        expect.objectContaining({ action: expect.objectContaining({ label: t('common.undo') }) }),
+      ),
+    )
+    await waitFor(() => expect(row('iFood')).toHaveFocus())
+  })
+
+  it('"Perguntar à IA" no rodapé do "Outra..." abre o diálogo da loja', async () => {
+    const { user } = await renderAsk()
+    await waitFor(() => expect(askButton('Uber')).toBeEnabled())
+    await user.click(within(row('Uber')).getByRole('button', { name: t('categorization.review.other') }))
+    await user.click(await screen.findByRole('option', { name: t('categorization.ask.button') }))
+    expect(
+      await screen.findByRole('dialog', { name: t('categorization.ask.title', { name: 'Uber' }) }),
+    ).toBeInTheDocument()
   })
 })

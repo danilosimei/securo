@@ -1823,6 +1823,8 @@ export interface CategorizationSummary {
   applied_last_7d: number
   last_run: CategorizationLastRun | null
   ai_available: boolean
+  /** The workspace's "categorize with AI" switch. */
+  ai_enabled: boolean
   month_cost_usd: number | string
   monthly_cap_usd: number | string
 }
@@ -1944,6 +1946,42 @@ export interface ChooseResult {
   applied: number
   /** The events written, for undo. */
   event_ids: string[]
+}
+
+/** One turn of the conversation about a store, as the API takes it. */
+export interface AskMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+/** The whole conversation so far (kept by the client), ending with the
+ *  person's message. Without `transaction_ids`, about the store's pending
+ *  rows (Review); with them, about exactly those rows (Applied). */
+export interface AskRequest {
+  merchant_key: string
+  transaction_ids?: string[]
+  messages: AskMessage[]
+}
+
+/** A category the AI proposes: an existing one, or one to create on Accept. */
+export interface AskSuggestion {
+  category_id: string | null
+  new_category: NewCategoryDraft | null
+  /** Whether the group of `new_category` already exists. */
+  group_exists: boolean
+  confidence: number
+  /** Rows an Accept would file. */
+  applies_to: number
+}
+
+export interface AskResponse {
+  reply: string
+  suggestion: AskSuggestion | null
+  /** The store's whole note, updated; null leaves the saved one as it is. */
+  note: string | null
+  /** Send it back as the next `assistant` message. */
+  assistant_turn: string
+  person_messages_left: number
 }
 
 export interface AppliedTransaction {

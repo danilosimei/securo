@@ -3192,6 +3192,50 @@
       "applied_one": "{{count}} parecida atualizada",
       "applied_other": "{{count}} parecidas atualizadas",
       "store": "Em {{store}}"
+    },
+    "ask": {
+      "button": "Perguntar à IA",
+      "title": "Perguntar à IA sobre {{name}}",
+      "context_one": "{{count}} transação · {{total}} · última em {{date}}",
+      "context_other": "{{count}} transações · {{total}} · última em {{date}}",
+      "contextNoDate_one": "{{count}} transação · {{total}}",
+      "contextNoDate_other": "{{count}} transações · {{total}}",
+      "samples": "Exemplos do banco",
+      "conversation": "Conversa",
+      "intro": "Conte à IA o que é essa loja: quem você paga e para quê. Ela sugere a categoria e guarda uma nota curta do que você disse.",
+      "message": "Sua mensagem",
+      "placeholder": "Ex.: é o jardineiro, toda semana",
+      "send": "Enviar",
+      "keys": "Enter envia · Shift+Enter quebra a linha",
+      "counter": "{{used}} de {{max}}",
+      "limitReached": "Esta conversa chegou ao limite de {{max}} mensagens. Aceite uma sugestão ou escolha outra categoria.",
+      "thinking": "Pensando…",
+      "appliesTo_one": "aplica na {{count}} transação desta loja",
+      "appliesTo_other": "aplica nas {{count}} transações desta loja",
+      "newCategory": "nova",
+      "newGroup": "grupo novo",
+      "confidence": "{{value}}% de certeza",
+      "accept": "Aceitar",
+      "other": "Outra categoria",
+      "accepted": "Resposta da IA aplicada",
+      "you": "Você",
+      "ai": "IA",
+      "blocked": {
+        "readOnly": "Você só pode ver este espaço de trabalho",
+        "disabled": "A categorização com IA está desligada nas configurações",
+        "noConnection": "Nenhuma conexão de IA configurada",
+        "capped": "O teto de gasto com IA deste mês foi atingido"
+      },
+      "errors": {
+        "conversation_limit": "Esta conversa chegou ao limite de mensagens.",
+        "capped": "O teto de gasto com IA deste mês foi atingido.",
+        "disabled": "A categorização com IA está desligada.",
+        "no_connection": "A conexão com a IA está faltando ou foi recusada.",
+        "timeout": "A IA demorou demais para responder. Tente de novo.",
+        "model_error": "A IA não conseguiu responder agora. Tente de novo.",
+        "rateLimited": "Mensagens demais em um minuto. Espere um pouco e tente de novo.",
+        "generic": "Não foi possível enviar a mensagem. Tente de novo."
+      }
     }
   }
 }

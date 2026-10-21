@@ -5,7 +5,9 @@
  *  whole store and can be undone from the toast. The memory learns each
  *  answer, so this list is meant to shrink over time. When the store has
  *  other rows a person never decided on, the answered row stays in place and
- *  asks whether to file them too (Enter / Escape); otherwise it leaves. */
+ *  asks whether to file them too (Enter / Escape); otherwise it leaves.
+ *  "Ask AI" answers the store from a conversation: its Accept goes through
+ *  the same answer (toast with undo, the question, the focus on the row). */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -31,6 +33,7 @@ import { cn } from '@/lib/utils'
 import { ReviewGroupRow, type CategoryInfo } from '@/components/categorization/review-group-row'
 import { Kbd } from '@/components/categorization/kbd'
 import type { SimilarPromptHandle } from '@/components/categorization/similar-prompt'
+import { useAsk } from '@/components/categorization/ask-provider'
 import { storeName } from '@/lib/categorization-review'
 import type { AppliedResult, ChooseRequest, NewCategoryProposal, ReviewGroup, ReviewQueue } from '@/types'
 
@@ -134,6 +137,7 @@ export function ReviewTab() {
   const currency = user?.preferences?.currency_display ?? 'USD'
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
+  const ask = useAsk()
 
   const review = useQuery({
     queryKey: [...REVIEW_QUERY_KEY],
@@ -418,6 +422,49 @@ export function ReviewTab() {
     },
     [answerStore, queryClient, t],
   )
+
+  /** The store's row takes the focus back (the conversation is closing). */
+  const focusRow = useCallback((key: string) => {
+    const idx = visibleRef.current.findIndex((g) => g.merchant_key === key)
+    if (idx < 0) return
+    setFocus({ key, idx })
+    rowRefs.current[idx]?.focus()
+  }, [])
+
+  /** "Ask AI" about one store, over its pending rows; the choice made there
+   *  is this store's answer like any other (`answerStore`). */
+  const askAbout = useCallback(
+    (group: ReviewGroup) => {
+      const key = group.merchant_key
+      const guessId = group.suggestion?.category_id
+      const lastDate = group.transactions.reduce<string | null>(
+        (latest, tx) => (!latest || tx.date > latest ? tx.date : latest),
+        null,
+      )
+      ask.open({
+        merchantKey: key,
+        storeName: storeName(group) ?? t('categorization.review.whoIsUnknown'),
+        count: group.count,
+        total: Number(group.total),
+        currency,
+        lastDate,
+        samples: group.samples.slice(0, 3),
+        suggestedGroupId: (guessId && catalog.get(guessId)?.category.group_id) || null,
+        onAccepted: (result) =>
+          void answerStore(
+            group,
+            async () => result,
+            (r) => {
+              if (r.created_category || r.created_group) invalidateCategoryQueries(queryClient)
+              return t(r.created_category ? 'categorization.create.created' : 'categorization.ask.accepted')
+            },
+          ),
+        restoreFocus: () => focusRow(key),
+      })
+    },
+    [answerStore, ask, catalog, currency, focusRow, queryClient, t],
+  )
+  const askBlockedReason = ask.blocked ? t(`categorization.ask.blocked.${ask.blocked}`) : null
 
   /** Send a queued "Ignore"; a no-op once undone or already sent. */
   const commitDismiss = useCallback(
@@ -876,6 +923,8 @@ export function ReviewTab() {
                     focusAfter(i)
                     createForStore(group, group.new_category)
                   }}
+                  onAsk={ask.available ? () => askAbout(group) : undefined}
+                  askBlockedReason={askBlockedReason}
                 />
               )
             })}

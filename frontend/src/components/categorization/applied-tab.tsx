@@ -5,12 +5,13 @@
  *  A fix leaves the list, so the question about the store's similar rows
  *  shows in a bar with the store's name, docked at the bottom of the screen
  *  (above the selection bar): in sight wherever the fix was made, without
- *  scrolling the page. */
+ *  scrolling the page. "Ask AI" on a row talks about that one transaction,
+ *  and its Accept is a fix like any other. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ChevronRight, ListChecks, Loader2, Undo2, X, type LucideIcon } from 'lucide-react'
+import { ChevronRight, ListChecks, Loader2, Sparkles, Undo2, X, type LucideIcon } from 'lucide-react'
 import {
   categories as categoriesApi,
   categoryGroups as categoryGroupsApi,
@@ -29,6 +30,7 @@ import { SectionCard, SectionHeader, Segmented } from '@/components/invoice-ui'
 import { CategoryIcon } from '@/components/category-icon'
 import { CategorySelect } from '@/components/category-select'
 import { SimilarPrompt } from '@/components/categorization/similar-prompt'
+import { useAsk } from '@/components/categorization/ask-provider'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -71,6 +73,7 @@ export function AppliedTab() {
   const locale = useDisplayLocale()
   const dateLocale = useDateLocale()
   const { mask } = usePrivacyMode()
+  const ask = useAsk()
 
   const [sources, setSources] = useState<Set<SourceFilter>>(() => new Set())
   const [confidence, setConfidence] = useState<ConfidenceFilter>('all')
@@ -234,6 +237,31 @@ export function AppliedTab() {
     [canWrite, markFixed, queryClient, t],
   )
 
+  /** "Ask AI" about one row: the answer files that row only. */
+  const askAbout = useCallback(
+    (event: AppliedEvent, restoreFocus: () => void) => {
+      const after = event.new_category_id ? catalog.get(event.new_category_id) : undefined
+      ask.open({
+        merchantKey: event.merchant_key,
+        storeName: event.store_name,
+        count: 1,
+        total: Math.abs(Number(event.transaction.amount)),
+        currency: event.transaction.currency,
+        lastDate: event.transaction.date,
+        samples: [event.transaction.description],
+        transactionIds: [event.transaction.id],
+        suggestedGroupId: after?.category.group_id ?? null,
+        onAccepted: (result) => {
+          if (result.created_category || result.created_group) invalidateCategoryQueries(queryClient)
+          markFixed(event)
+        },
+        restoreFocus,
+      })
+    },
+    [ask, catalog, markFixed, queryClient],
+  )
+  const askBlockedReason = ask.blocked ? t(`categorization.ask.blocked.${ask.blocked}`) : null
+
   const dayLabel = (date: Date) =>
     isToday(date)
       ? t('categorization.applied.today')
@@ -394,6 +422,8 @@ export function AppliedTab() {
                       money={money}
                       onCorrect={correct}
                       onCreate={createAndCorrect}
+                      onAsk={ask.available ? askAbout : undefined}
+                      askBlockedReason={askBlockedReason}
                     />
                   ))}
                 </div>
@@ -556,10 +586,13 @@ interface StoreGroupProps {
   money: (value: number | string, currency?: string) => string
   onCorrect: (event: AppliedEvent, categoryId: string) => void
   onCreate: (event: AppliedEvent, draft: GroupedCreateDraft) => void
+  onAsk?: (event: AppliedEvent, restoreFocus: () => void) => void
+  askBlockedReason: string | null
 }
 
 function StoreGroup({
   store, open, onToggle, canWrite, selected, onSelect, catalog, categories, categoryGroups, path, money, onCorrect, onCreate,
+  onAsk, askBlockedReason,
 }: StoreGroupProps) {
   const { t } = useTranslation()
   const ids = store.events.map((e) => e.event_id)
@@ -619,6 +652,8 @@ function StoreGroup({
               money={money}
               onCorrect={onCorrect}
               onCreate={onCreate}
+              onAsk={onAsk}
+              askBlockedReason={askBlockedReason}
             />
           ))}
         </ul>
@@ -638,12 +673,22 @@ interface AppliedRowProps {
   money: (value: number | string, currency?: string) => string
   onCorrect: (event: AppliedEvent, categoryId: string) => void
   onCreate: (event: AppliedEvent, draft: GroupedCreateDraft) => void
+  onAsk?: (event: AppliedEvent, restoreFocus: () => void) => void
+  askBlockedReason: string | null
 }
 
 function AppliedRow({
   event, canWrite, checked, onCheck, catalog, categories, categoryGroups, money, onCorrect, onCreate,
+  onAsk, askBlockedReason,
 }: AppliedRowProps) {
   const { t } = useTranslation()
+  const askRef = useRef<HTMLButtonElement>(null)
+  const askLabel = t('categorization.ask.button')
+  // A fixed row leaves the list: the focus then stays for the similar bar.
+  const openAsk = () =>
+    onAsk?.(event, () => {
+      if (askRef.current?.isConnected) askRef.current.focus()
+    })
   const before = event.previous_category_id ? catalog.get(event.previous_category_id) : undefined
   const after = event.new_category_id ? catalog.get(event.new_category_id) : undefined
   const origin = ORIGIN[event.source] ?? ORIGIN.rule
@@ -676,7 +721,7 @@ function AppliedRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 pl-6 sm:pl-0">
+      <div className="flex flex-wrap items-center gap-2 pl-6 sm:flex-nowrap sm:pl-0">
         <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
           {before && <CategoryIcon icon={before.category.icon} color={before.category.color} size="sm" />}
           <span className={cn(!before && 'italic')}>
@@ -693,6 +738,17 @@ function AppliedRow({
             categories={categories}
             groups={categoryGroups}
             currentCategory={after?.category ?? null}
+            footerAction={
+              onAsk
+                ? {
+                    label: askLabel,
+                    icon: Sparkles,
+                    disabled: !!askBlockedReason,
+                    hint: askBlockedReason ?? undefined,
+                    onSelect: openAsk,
+                  }
+                : undefined
+            }
             className="h-8 w-40 px-2 text-xs"
             contentProps={{ className: 'w-72 p-0 overflow-hidden' }}
           />
@@ -701,6 +757,20 @@ function AppliedRow({
             {after && <CategoryIcon icon={after.category.icon} color={after.category.color} size="sm" />}
             {after ? after.category.name : t('categorization.applied.noCategory')}
           </span>
+        )}
+        {onAsk && (
+          <Button
+            ref={askRef}
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 text-muted-foreground"
+            aria-label={askLabel}
+            title={askBlockedReason ?? askLabel}
+            disabled={!!askBlockedReason}
+            onClick={openAsk}
+          >
+            <Sparkles size={14} className="text-violet-600 dark:text-violet-400" />
+          </Button>
         )}
         <span className="ml-auto w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
           {money(tx.amount, tx.currency)}

@@ -2,6 +2,8 @@ import axios from 'axios'
 import type { NumberFormat, DateFormat } from '@/lib/format'
 import type {
   AcceptRequest,
+  AskRequest,
+  AskResponse,
   ChooseRequest,
   ChooseResult,
   AppliedFilters,
@@ -2306,7 +2308,7 @@ export const publicInvoices = {
 }
 
 // Automatic categorization: review queue, audit list, undo, settings, runs.
-// Nothing here calls the model; runs are queued for the worker.
+// Nothing here calls the model but `ask`; runs are queued for the worker.
 export const categorization = {
   summary: async (): Promise<CategorizationSummary> => {
     const { data } = await api.get('/categorization/summary')
@@ -2340,6 +2342,12 @@ export const categorization = {
   /** Choose an existing category or create one (and its group) for a store. */
   choose: async (payload: ChooseRequest): Promise<ChooseResult> => {
     const { data } = await api.post('/categorization/choose', payload)
+    return data
+  },
+  /** One message of the conversation about a store (the one route that
+   *  calls the model while the person waits). Errors carry `detail.code`. */
+  ask: async (payload: AskRequest): Promise<AskResponse> => {
+    const { data } = await api.post('/categorization/ask', payload)
     return data
   },
   applied: async (filters: AppliedFilters = {}): Promise<AppliedPage> => {

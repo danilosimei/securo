@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 
 import { AppliedTab } from '@/components/categorization/applied-tab'
+import { AskProvider } from '@/components/categorization/ask-provider'
 import { WorkspaceContext } from '@/contexts/workspace-context'
 import { renderWithProviders, t } from '@/test/utils'
 import type { AppliedEvent } from '@/types'
 
 const api = vi.hoisted(() => ({
-  categorization: { applied: vi.fn(), undo: vi.fn(), choose: vi.fn(), similar: vi.fn(), applySimilar: vi.fn() },
+  categorization: {
+    applied: vi.fn(), undo: vi.fn(), choose: vi.fn(), similar: vi.fn(), applySimilar: vi.fn(),
+    summary: vi.fn(), ask: vi.fn(),
+  },
   categories: { list: vi.fn() },
   categoryGroups: { list: vi.fn() },
   transactions: { update: vi.fn() },
@@ -354,5 +358,89 @@ describe('AppliedTab: barra das parecidas, bordas', () => {
       '[data-similar-prompt]',
     ) as HTMLElement
     expect(bar.closest('.fixed')).not.toBeNull()
+  })
+})
+
+describe('AppliedTab: perguntar à IA', () => {
+  const summary = (overrides: Record<string, unknown> = {}) => ({
+    pending_groups: 0, pending_transactions: 0, applied_last_7d: 4, last_run: null,
+    ai_available: true, ai_enabled: true, month_cost_usd: '0', monthly_cap_usd: '2', ...overrides,
+  })
+
+  async function renderAsk() {
+    const utils = renderWithProviders(
+      <AskProvider>
+        <AppliedTab />
+      </AskProvider>,
+    )
+    await screen.findByText('Today')
+    return utils
+  }
+
+  async function uberRow(user: ReturnType<typeof renderWithProviders>['user']) {
+    const store = screen.getByRole('button', { name: /Uber/i })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    return screen.getByText('UBER *TRIP').closest('li') as HTMLElement
+  }
+
+  beforeEach(() => {
+    api.categorization.summary.mockResolvedValue(summary())
+    api.categorization.ask.mockResolvedValue({
+      reply: 'Corrida de app.',
+      suggestion: { category_id: 'c3', new_category: null, group_exists: true, confidence: 80, applies_to: 1 },
+      note: null,
+      assistant_turn: '{"reply":"Corrida de app."}',
+      person_messages_left: 29,
+    })
+    api.categorization.choose.mockResolvedValue({
+      category_id: 'c2', created_group: false, created_category: false, applied: 1, event_ids: ['ch1'],
+    })
+  })
+
+  it('a linha pergunta só sobre a própria transação e aceitar corrige com a barra das parecidas', async () => {
+    api.categorization.similar.mockResolvedValue(twoUberTrips)
+    const { user } = await renderAsk()
+    const r = await uberRow(user)
+    const button = within(r).getByRole('button', { name: t('categorization.ask.button') })
+    await waitFor(() => expect(button).toBeEnabled())
+    await user.click(button)
+    const dialog = await screen.findByRole('dialog', { name: t('categorization.ask.title', { name: 'Uber' }) })
+    await user.type(within(dialog).getByRole('textbox'), 'corrida{Enter}')
+    expect(api.categorization.ask).toHaveBeenCalledWith({
+      merchant_key: 'UBER',
+      transaction_ids: ['t4'],
+      messages: [{ role: 'user', content: 'corrida' }],
+    })
+    const card = await within(dialog).findByTestId('ask-suggestion')
+    // "Another category" in the card picks something else, with the same rows.
+    await user.click(within(card).getByRole('button', { name: t('categorization.ask.other') }))
+    await user.click(await screen.findByRole('option', { name: /Groceries/ }))
+    expect(api.categorization.choose).toHaveBeenCalledWith({
+      merchant_key: 'UBER',
+      transaction_ids: ['t4'],
+      category_id: 'c2',
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('UBER *TRIP')).not.toBeInTheDocument())
+    expect(await screen.findByText(t('categorization.similar.ask', { count: 2 }))).toBeInTheDocument()
+    expect(toast.success).toHaveBeenCalledWith(t('categorization.applied.corrected'))
+  })
+
+  it('sem conexão o botão da linha fica desabilitado com o motivo', async () => {
+    api.categorization.summary.mockResolvedValue(summary({ ai_available: false }))
+    const { user } = await renderAsk()
+    const r = await uberRow(user)
+    const button = within(r).getByRole('button', { name: t('categorization.ask.button') })
+    await waitFor(() => expect(button).toBeDisabled())
+    expect(button).toHaveAttribute('title', t('categorization.ask.blocked.noConnection'))
+  })
+
+  it('quem só lê vê o botão desabilitado com blocked.readOnly', async () => {
+    workspace.canWrite = false
+    const { user } = await renderAsk()
+    const r = await uberRow(user)
+    const button = within(r).getByRole('button', { name: t('categorization.ask.button') })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('title', t('categorization.ask.blocked.readOnly'))
   })
 })
