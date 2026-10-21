@@ -2015,6 +2015,10 @@ export interface AppliedEvent {
   new_category_id: string | null
   confidence: number | null
   reason: string | null
+  /** The event taught (or took back) one of the store's picks: undoing it
+   *  changes the memory even when the category stayed (a person confirming
+   *  a guess). */
+  memory_pick: boolean
   created_at: string
   /** Grouping id of the store; never shown. */
   merchant_key: string

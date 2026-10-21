@@ -514,3 +514,47 @@ async def test_event_views_keep_to_the_categorizable_base(
     assert summary["applied_last_7d"] == 1
     body = await _applied(client, auth_headers, "confirmed")
     assert [i["event_id"] for i in body["items"]] == [str(confirmation.id)]
+
+
+@pytest.mark.asyncio
+async def test_a_persons_bulk_confirmation_is_listed_as_the_pick_it_taught(
+    client, auth_headers, session, test_user, test_account, test_categories,
+):
+    """Re-picking, in bulk, the category the AI already gave makes the row
+    the person's and teaches the store a pick, though the category stays.
+    Suas says so (`memory_pick`), so the screen can offer its undo, which
+    takes the pick back like any other choice (ruling N9)."""
+    from app.services import transaction_service
+    from tests.test_categorization_api import _counts
+
+    food = test_categories[0].id
+    row = _tx(session, test_user, test_account, "PADARIA ESTRELA", source="ai", category_id=food)
+    await session.commit()
+
+    await transaction_service.bulk_update_category(
+        session, test_account.workspace_id, [row.id], food, user_id=test_user.id
+    )
+    [item] = (await _applied(client, auth_headers, "user"))["items"]
+    assert item["previous_category_id"] == item["new_category_id"] == str(food)
+    assert item["memory_pick"] is True
+    key = item["merchant_key"]
+    assert await _counts(session, key) == {str(food): 1}
+
+    resp = await client.post(f"{API}/undo", headers=auth_headers, json={"event_ids": [item["event_id"]]})
+    assert resp.json() == {"restored": 1, "skipped": 0}
+    assert await _counts(session, key) == {}
+    await session.refresh(row)
+    assert (row.category_id, row.category_source) == (food, "ai")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_lines_carry_no_pick(
+    client, auth_headers, session, test_user, test_account, test_categories,
+):
+    food = test_categories[0].id
+    tx = _tx(session, test_user, test_account, "POSTO", source="ai", category_id=food)
+    await session.flush()
+    _event(session, tx, source="ai", new=food)
+    await session.commit()
+    [item] = (await client.get(f"{API}/applied", headers=auth_headers)).json()["items"]
+    assert item["memory_pick"] is False

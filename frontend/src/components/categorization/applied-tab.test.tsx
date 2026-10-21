@@ -60,6 +60,7 @@ function ev(n: number, overrides: Partial<AppliedEvent> & { description?: string
     new_category_id: 'c1',
     confidence: 95,
     reason: 'Food delivery app',
+    memory_pick: false,
     created_at: now.toISOString(),
     merchant_key: uber ? 'UBER' : 'IFOOD',
     store_name: uber ? 'Uber' : 'iFood',
@@ -423,6 +424,26 @@ describe('AppliedTab: confirmadas, suas e outras origens', () => {
     await user.click(await screen.findByRole('option', { name: /Groceries/ }))
     await waitFor(() => expect(api.transactions.update).toHaveBeenCalledWith('t1', { category_id: 'c2' }))
     expect(await screen.findByText(t('categorization.similar.ask', { count: 2 }))).toBeInTheDocument()
+  })
+
+  it('em Suas, a confirmação da pessoa que ensinou a loja se desfaz', async () => {
+    items = [
+      ev(1, { source: 'user', run_id: null, previous_category_id: 'c1', new_category_id: 'c1', memory_pick: true }),
+      ev(2, { source: 'user', run_id: null, previous_category_id: 'c1', new_category_id: 'c1' }),
+    ]
+    total = 2
+    const { user } = await renderTab()
+    await user.click(screen.getByTestId('applied-source-user'))
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(expect.objectContaining({ source: 'user' })),
+    )
+    const store = await screen.findByRole('button', { name: /iFood/i })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    expect(screen.getByRole('checkbox', { name: /IFOOD \*PEDIDO 1/ })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /IFOOD \*PEDIDO 2/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', { name: /IFOOD \*PEDIDO 1/ }))
+    await user.click(screen.getByRole('button', { name: 'Undo selected' }))
+    await waitFor(() => expect(api.categorization.undo).toHaveBeenCalledWith({ event_ids: ['e1'] }))
   })
 
   it('o título e a dica dizem que vista é', async () => {

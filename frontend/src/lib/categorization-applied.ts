@@ -23,10 +23,14 @@ export function rowKey(event: AppliedEvent): string {
 }
 
 /** Undo changes something: the line has an event and that event changed the
- *  category (a confirmation changed nothing; undoing it would only send the
- *  row back to Review with the same category). */
+ *  category, or taught the store a pick (a person confirming a guess: undoing
+ *  it takes the pick back). A pipeline confirmation changed nothing; undoing
+ *  it would only send the row back to Review with the same category. */
 export function isUndoable(event: AppliedEvent): event is AppliedEvent & { event_id: string } {
-  return event.event_id !== null && event.previous_category_id !== event.new_category_id
+  return (
+    event.event_id !== null &&
+    (event.previous_category_id !== event.new_category_id || event.memory_pick)
+  )
 }
 
 function dayKey(d: Date) {

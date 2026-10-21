@@ -321,6 +321,10 @@ class AppliedEvent(BaseModel):
     new_category_id: Optional[uuid.UUID] = None
     confidence: Optional[int] = None
     reason: Optional[str] = None
+    #: The event taught (or took back) one of the store's picks: undoing it
+    #: changes the memory even when the category stays (a person confirming
+    #: a guess).
+    memory_pick: bool = False
     created_at: datetime
     #: Grouping id of the store; never shown to people.
     merchant_key: str

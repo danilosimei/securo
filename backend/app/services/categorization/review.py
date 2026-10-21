@@ -680,6 +680,7 @@ def _applied_item(
         "new_category_id": new_category_id,
         "confidence": ev.confidence if ev is not None else None,
         "reason": ev.reason if ev is not None else None,
+        "memory_pick": bool(ev is not None and ev.memory_pick),
         "created_at": created_at,
         "merchant_key": label[0],
         "store_name": label[1],
