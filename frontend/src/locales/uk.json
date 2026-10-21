@@ -2977,7 +2977,8 @@
         "high": "≥ 90",
         "confirmed": "Confirmed",
         "user": "Yours",
-        "other": "Other sources"
+        "other": "Other sources",
+        "confidenceNotHere": "Confidence does not apply to this view"
       },
       "today": "Today",
       "yesterday": "Yesterday",
@@ -3218,7 +3219,9 @@
       "no": "No",
       "applied_one": "{{count}} similar transaction updated",
       "applied_other": "{{count}} similar transactions updated",
-      "store": "At {{store}}"
+      "store": "At {{store}}",
+      "skipped_one": " · {{count}} had already changed",
+      "skipped_other": " · {{count}} had already changed"
     },
     "ask": {
       "button": "Ask AI",
@@ -3267,10 +3270,15 @@
       }
     },
     "scoreboard": {
-      "summary_one": "{{total}} transaction · {{decided}}% decided · {{review}}% to review",
-      "summary_other": "{{total}} transactions · {{decided}}% decided · {{review}}% to review",
-      "waiting": " · {{waiting}}% waiting for the AI",
-      "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out."
+      "summary_one": "{{total}} transaction · {{decided}}% decided",
+      "summary_other": "{{total}} transactions · {{decided}}% decided",
+      "review_one": " · {{review}} to review",
+      "review_other": " · {{review}} to review",
+      "allReviewed": " · all reviewed",
+      "waiting_one": " · {{waiting}} waiting for the AI",
+      "waiting_other": " · {{waiting}} waiting for the AI",
+      "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
+      "about": "What is counted"
     }
   }
 }

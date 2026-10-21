@@ -26,7 +26,7 @@ import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { Kbd } from '@/components/categorization/kbd'
-import type { AppliedResult, SimilarTransaction } from '@/types'
+import type { SimilarAppliedResult, SimilarTransaction } from '@/types'
 
 /** Long enough to read the result and reach for "Undo". */
 const TOAST_MS = 8000
@@ -134,18 +134,26 @@ export function SimilarPrompt({
 
   const undo = (eventIds: string[]) => undoWithToast(eventIds, { t, queryClient })
 
-  const appliedToast = (applied: number, eventIds: string[]) =>
-    toast.success(t('categorization.similar.applied', { count: applied }), {
+  /** How many were updated, and how many of the shown ones had changed
+   *  meanwhile (left as they were); none updated is a notice, not a success. */
+  const appliedToast = (applied: number, eventIds: string[], skipped: number) => {
+    const title =
+      t('categorization.similar.applied', { count: applied }) +
+      (skipped > 0 ? t('categorization.similar.skipped', { count: skipped }) : '')
+    const options = {
       duration: TOAST_MS,
       action:
         eventIds.length > 0 ? { label: t('common.undo'), onClick: () => void undo(eventIds) } : undefined,
-    })
+    }
+    if (applied === 0 && skipped > 0) toast.info(title, options)
+    else toast.success(title, options)
+  }
 
   const apply = async () => {
     if (!data || data.count === 0 || applying || finished.current) return
     setApplying(true)
     const ids = data.transaction_ids
-    const done: AppliedResult[] = []
+    const done: SimilarAppliedResult[] = []
     try {
       for (let i = 0; i < ids.length; i += APPLY_CHUNK) {
         done.push(
@@ -167,6 +175,8 @@ export function SimilarPrompt({
     appliedToast(
       done.reduce((sum, r) => sum + r.applied, 0),
       done.flatMap((r) => r.event_ids),
+      // An older server does not say.
+      done.reduce((sum, r) => sum + (r.skipped?.length ?? 0), 0),
     )
     invalidateCategorizationQueries(queryClient)
     finish()

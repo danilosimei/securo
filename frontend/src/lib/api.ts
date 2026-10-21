@@ -9,6 +9,7 @@ import type {
   AppliedFilters,
   AppliedPage,
   Scoreboard,
+  SimilarAppliedResult,
   AppliedResult,
   CategorizationRun,
   CategorizationSettings,
@@ -2388,7 +2389,7 @@ export const categorization = {
   applySimilar: async (
     transactionId: string,
     opts: { excludeRule?: boolean; transactionIds?: string[] } = {},
-  ): Promise<AppliedResult> => {
+  ): Promise<SimilarAppliedResult> => {
     const { data } = await api.post('/categorization/similar/apply', {
       transaction_id: transactionId,
       exclude_rule: opts.excludeRule ?? false,

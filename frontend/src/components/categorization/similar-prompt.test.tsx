@@ -8,7 +8,7 @@ import type { SimilarResult, SimilarTransaction } from '@/types'
 const api = vi.hoisted(() => ({
   categorization: { similar: vi.fn(), applySimilar: vi.fn(), undo: vi.fn() },
 }))
-const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }))
 const workspace = vi.hoisted(() => ({ canWrite: true }))
 
 vi.mock('@/lib/api', () => api)
@@ -89,6 +89,35 @@ describe('SimilarPrompt', () => {
     const options = toast.success.mock.calls[0][1] as { action: { onClick: () => void } }
     await act(async () => options.action.onClick())
     expect(api.categorization.undo).toHaveBeenCalledWith({ event_ids: ['e1', 'e2'] })
+  })
+
+  it('as que mudaram desde que foram mostradas aparecem no toast', async () => {
+    api.categorization.applySimilar.mockResolvedValue({
+      applied: 1, event_ids: ['e1'], event_run_id: null, transaction_ids: ['a'], skipped: ['b'],
+    })
+    const { user } = renderPrompt()
+    await user.click(await screen.findByRole('button', { name: t('categorization.similar.apply', { count: 2 }) }))
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        `${t('categorization.similar.applied', { count: 1 })}${t('categorization.similar.skipped', { count: 1 })}`,
+        expect.objectContaining({ action: expect.objectContaining({ label: t('common.undo') }) }),
+      ),
+    )
+    expect(t('categorization.similar.skipped', { count: 1 })).toBe(' · 1 had already changed')
+  })
+
+  it('nenhuma aplicada porque todas mudaram: aviso, sem desfazer', async () => {
+    api.categorization.applySimilar.mockResolvedValue({
+      applied: 0, event_ids: [], event_run_id: null, transaction_ids: [], skipped: ['a', 'b'],
+    })
+    const { user, onDone } = renderPrompt()
+    await user.click(await screen.findByRole('button', { name: t('categorization.similar.apply', { count: 2 }) }))
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    expect(toast.info).toHaveBeenCalledWith(
+      `${t('categorization.similar.applied', { count: 0 })}${t('categorization.similar.skipped', { count: 2 })}`,
+      expect.objectContaining({ action: undefined }),
+    )
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it('erro ao aplicar mostra o erro e mantém a pergunta', async () => {

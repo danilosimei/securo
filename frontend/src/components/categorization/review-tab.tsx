@@ -195,6 +195,7 @@ export function ReviewTab() {
   const refocus = useRef(false)
   const pointerDown = useRef(false)
   const legendId = useId()
+  const [focusInList, setFocusInList] = useState(false)
 
   const data = review.data
   const visible = useMemo(() => {
@@ -807,8 +808,10 @@ export function ReviewTab() {
   const paged = data.total > data.groups.length
   const showShortcuts = canWrite && visible.length > 0
   // On an answered row, Enter and Escape answer the question about the
-  // store's similar rows: the legend says so instead of the usual keys.
-  const answeringCurrent = answered.get(visible[current]?.merchant_key ?? '')?.phase === 'asking'
+  // store's similar rows: the legend says so instead of the usual keys
+  // (only while the focus is in the list, where those keys go).
+  const answeringCurrent =
+    focusInList && answered.get(visible[current]?.merchant_key ?? '')?.phase === 'asking'
   const money = (value: number | string) => mask(formatCurrency(Number(value), currency, locale))
 
   return (
@@ -897,7 +900,13 @@ export function ReviewTab() {
             className="divide-y divide-border"
             aria-label={t('categorization.review.listLabel')}
             onKeyDown={onKeyDown}
-            onFocus={onListFocus}
+            onFocus={(e) => {
+              setFocusInList(true)
+              onListFocus(e)
+            }}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocusInList(false)
+            }}
             onPointerDownCapture={() => {
               pointerDown.current = true
             }}

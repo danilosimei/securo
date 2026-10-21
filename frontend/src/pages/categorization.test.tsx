@@ -109,7 +109,7 @@ describe('CategorizationPage', () => {
   it('shows the scoreboard next to the status line on every tab', async () => {
     renderWithProviders(<CategorizationPage />, { route: '/categorization?tab=organize' })
     expect(await screen.findByTestId('categorization-scoreboard')).toHaveTextContent(
-      '120 transactions · 75% decided · 25% to review',
+      '120 transactions · 75% decided · 30 to review',
     )
   })
 

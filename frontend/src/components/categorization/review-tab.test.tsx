@@ -688,6 +688,9 @@ describe('ReviewTab: parecidas da loja', () => {
     expect(legend).toHaveTextContent(t('categorization.review.keys.applySimilar'))
     expect(legend).toHaveTextContent(t('categorization.review.keys.declineSimilar'))
     expect(legend).not.toHaveTextContent(t('categorization.review.keys.accept'))
+    // The focus left the list: the legend goes back to the usual keys.
+    act(() => row('iFood').blur())
+    expect(legend).toHaveTextContent(t('categorization.review.keys.accept'))
   })
 
   it('pelo teclado: o foco fica na loja respondida e Enter aplica às N', async () => {

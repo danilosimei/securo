@@ -16,7 +16,7 @@
  *  and its Accept is a fix like any other. */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   BadgeCheck,
@@ -64,7 +64,7 @@ import { formatCurrency } from '@/lib/format'
 import { ORIGIN_STYLES } from '@/lib/categorization-origins'
 import { cn } from '@/lib/utils'
 import type { GroupedCreateDraft } from '@/lib/inline-create'
-import type { AppliedEvent, AppliedView, Category, CategoryGroup, CategorySource } from '@/types'
+import type { AppliedEvent, AppliedPage, AppliedView, Category, CategoryGroup, CategorySource } from '@/types'
 
 const PAGE = 50
 /** Stores with this many rows or fewer start open; bigger ones start closed. */
@@ -145,15 +145,14 @@ export function AppliedTab() {
 
   const byOrigin = !!view && BY_ORIGIN.includes(view)
   const sourceParam = view ?? ([...sources].sort().join(',') || undefined)
-  const level: ConfidenceFilter = byOrigin ? 'all' : confidence
   const applied = useInfiniteQuery({
-    queryKey: ['categorization', 'applied', { source: sourceParam ?? null, confidence: level }],
+    queryKey: ['categorization', 'applied', { source: sourceParam ?? null, confidence }],
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
       categorizationApi.applied({
         source: sourceParam,
-        min_confidence: level === 'high' ? CUT : undefined,
-        max_confidence: level === 'low' ? CUT - 1 : undefined,
+        min_confidence: confidence === 'high' ? CUT : undefined,
+        max_confidence: confidence === 'low' ? CUT - 1 : undefined,
         limit: PAGE,
         offset: pageParam,
       }),
@@ -213,9 +212,17 @@ export function AppliedTab() {
     })
   }
   const toggleView = (next: AppliedView) => {
+    const to = view === next ? null : next
     setSources(new Set())
     setSelected(new Set())
-    setView((cur) => (cur === next ? null : next))
+    // By origin, confidence does not apply: cleared, so it is not back on
+    // unasked when the next view counts it again.
+    if (to && BY_ORIGIN.includes(to)) setConfidence('all')
+    setView(to)
+  }
+  const changeConfidence = (next: ConfidenceFilter) => {
+    setSelected(new Set())
+    setConfidence(next)
   }
 
   const toggleIds = useCallback((ids: string[], on: boolean) => {
@@ -260,12 +267,25 @@ export function AppliedTab() {
   )
 
   /** The row is the person's now: it leaves the list (in Yours it stays,
-   *  with its new category once the list is fetched again) and the bar asks
-   *  about the store's similar rows. */
+   *  with its new category at once) and the bar asks about the store's
+   *  similar rows. */
   const markFixed = useCallback(
-    (event: AppliedEvent) => {
+    (event: AppliedEvent, categoryId: string) => {
       const key = rowKey(event)
-      if (view !== 'user') setFixed((prev) => new Set(prev).add(key))
+      if (view === 'user') {
+        // Shown before the refetch lands, which confirms it.
+        queryClient.setQueriesData<InfiniteData<AppliedPage>>({ queryKey: ['categorization', 'applied'] }, (old) =>
+          old && {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              items: page.items.map((e) => (rowKey(e) === key ? { ...e, new_category_id: categoryId } : e)),
+            })),
+          },
+        )
+      } else {
+        setFixed((prev) => new Set(prev).add(key))
+      }
       setSelected((prev) => {
         const next = new Set(prev)
         next.delete(key)
@@ -281,9 +301,9 @@ export function AppliedTab() {
   /** A choice through the API: only a row it changed is fixed. One it left
    *  alone (edited by hand meanwhile) asks nothing; the list catches up. */
   const settleChoice = useCallback(
-    (event: AppliedEvent, changed: string[]) => {
-      if (changed.includes(event.transaction.id)) {
-        markFixed(event)
+    (event: AppliedEvent, result: { category_id: string; transaction_ids: string[] }) => {
+      if (result.transaction_ids.includes(event.transaction.id)) {
+        markFixed(event, result.category_id)
         return
       }
       toast.info(t('categorization.applied.skipped', { count: 1 }))
@@ -297,7 +317,7 @@ export function AppliedTab() {
       if (!canWrite || !categoryId || categoryId === event.new_category_id) return
       try {
         await transactionsApi.update(event.transaction.id, { category_id: categoryId })
-        markFixed(event)
+        markFixed(event, categoryId)
       } catch (err) {
         toast.error(extractApiError(err, t('categorization.applied.correctError')))
       }
@@ -316,7 +336,7 @@ export function AppliedTab() {
           new_category: { group: draft.group, name: draft.name },
         })
         if (result.created_category || result.created_group) invalidateCategoryQueries(queryClient)
-        settleChoice(event, result.transaction_ids)
+        settleChoice(event, result)
       } catch (err) {
         toast.error(extractApiError(err, t('categorization.applied.correctError')))
       }
@@ -335,7 +355,11 @@ export function AppliedTab() {
     if (!el) return
     const observer = new ResizeObserver(() => setFooterHeight(el.getBoundingClientRect().height))
     observer.observe(el)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      // Gone: the next bars start from pb-24 until they are measured.
+      setFooterHeight(0)
+    }
   }, [showFooter])
 
   /** "Ask AI" about one row: the answer files that row only. When the
@@ -356,7 +380,7 @@ export function AppliedTab() {
         transactionIds: [event.transaction.id],
         suggestedGroupId: after?.category.group_id ?? null,
         // The dialog already refreshed the categories it created.
-        onAccepted: (result) => settleChoice(event, result.transaction_ids),
+        onAccepted: (result) => settleChoice(event, result),
         restoreFocus: () => {
           if (focusRow()) return
           const apply = rootRef.current?.querySelector<HTMLButtonElement>('[data-similar-prompt] button')
@@ -406,17 +430,19 @@ export function AppliedTab() {
         <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border" />
         {VIEWS.map((v) => chip(v, view === v, VIEW_ICON[v], 'text-muted-foreground', () => toggleView(v)))}
       </div>
-      <Segmented<ConfidenceFilter>
-        value={level}
-        onChange={setConfidence}
-        disabled={byOrigin}
-        testIdPrefix="applied-confidence"
-        options={[
-          { value: 'all', label: t('categorization.applied.filters.all') },
-          { value: 'low', label: t('categorization.applied.filters.low') },
-          { value: 'high', label: t('categorization.applied.filters.high') },
-        ]}
-      />
+      <span title={byOrigin ? t('categorization.applied.filters.confidenceNotHere') : undefined}>
+        <Segmented<ConfidenceFilter>
+          value={confidence}
+          onChange={changeConfidence}
+          disabled={byOrigin}
+          testIdPrefix="applied-confidence"
+          options={[
+            { value: 'all', label: t('categorization.applied.filters.all') },
+            { value: 'low', label: t('categorization.applied.filters.low') },
+            { value: 'high', label: t('categorization.applied.filters.high') },
+          ]}
+        />
+      </span>
     </div>
   )
 
@@ -459,7 +485,7 @@ export function AppliedTab() {
     )
   }
 
-  const filtered = sources.size > 0 || !!view || level !== 'all'
+  const filtered = sources.size > 0 || !!view || confidence !== 'all'
   const footerPad = showFooter && footerHeight > 0 ? footerHeight + FOOTER_GAP : undefined
 
   return (

@@ -1911,6 +1911,12 @@ export interface AppliedResult {
   transaction_ids: string[]
 }
 
+/** "Apply to the N similar": also the shown rows left as they were, since
+ *  they changed after being shown. */
+export interface SimilarAppliedResult extends AppliedResult {
+  skipped: string[]
+}
+
 export interface CreateCategoryRequest {
   group: string
   name: string

@@ -17,27 +17,46 @@ beforeEach(() => {
 })
 
 describe('Scoreboard', () => {
-  it('mostra o total, as decididas e as para revisar, sem aguardando quando é zero', async () => {
-    api.categorization.scoreboard.mockResolvedValue({ total: 120, decided: 90, to_review: 30, waiting: 0 })
+  it('decididas em %, para revisar em número, sem aguardando quando é zero', async () => {
+    api.categorization.scoreboard.mockResolvedValue({ total: 3693, decided: 3681, to_review: 12, waiting: 0 })
     renderWithProviders(<Scoreboard />)
     const line = await screen.findByTestId('categorization-scoreboard')
-    expect(line).toHaveTextContent('120 transactions · 75% decided · 25% to review')
+    expect(line).toHaveTextContent('3,693 transactions · 99% decided · 12 to review')
     expect(line).not.toHaveTextContent(/waiting/i)
   })
 
-  it('aguardando a IA aparece só quando há alguma', async () => {
-    api.categorization.scoreboard.mockResolvedValue({ total: 1200, decided: 600, to_review: 300, waiting: 300 })
+  it('aguardando a IA aparece, em número, só quando há alguma', async () => {
+    api.categorization.scoreboard.mockResolvedValue({ total: 3693, decided: 3678, to_review: 12, waiting: 3 })
     renderWithProviders(<Scoreboard />)
     const line = await screen.findByTestId('categorization-scoreboard')
-    expect(line).toHaveTextContent('1,200 transactions · 50% decided · 25% to review · 25% waiting for the AI')
+    expect(line).toHaveTextContent('3,693 transactions · 99% decided · 12 to review · 3 waiting for the AI')
   })
 
-  it('explica o que fica de fora da base', async () => {
+  it('nada para revisar: tudo revisado', async () => {
+    api.categorization.scoreboard.mockResolvedValue({ total: 120, decided: 120, to_review: 0, waiting: 0 })
+    renderWithProviders(<Scoreboard />)
+    const line = await screen.findByTestId('categorization-scoreboard')
+    expect(line).toHaveTextContent('120 transactions · 100% decided · all reviewed')
+  })
+
+  it('a barra mostra a fatia das decididas e uma lasca visível para revisar, mesmo abaixo de 1%', async () => {
+    api.categorization.scoreboard.mockResolvedValue({ total: 3693, decided: 3690, to_review: 3, waiting: 0 })
+    renderWithProviders(<Scoreboard />)
+    await screen.findByTestId('categorization-scoreboard')
+    const review = document.querySelector('[data-bar="review"]') as HTMLElement
+    expect(review).not.toBeNull()
+    expect(review.style.minWidth).not.toBe('')
+    expect(document.querySelector('[data-bar="decided"]')).not.toBeNull()
+  })
+
+  it('o (i) tem nome curto, abre ao tocar e fecha ao tocar de novo', async () => {
     api.categorization.scoreboard.mockResolvedValue({ total: 4, decided: 3, to_review: 1, waiting: 0 })
     const { user } = renderWithProviders(<Scoreboard />)
-    const about = await screen.findByRole('button', { name: t('categorization.scoreboard.excluded') })
+    const about = await screen.findByRole('button', { name: t('categorization.scoreboard.about') })
     await user.click(about)
     expect(await screen.findByRole('tooltip')).toHaveTextContent(t('categorization.scoreboard.excluded'))
+    await user.click(about)
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument())
   })
 
   it('sem nada na base não mostra nada', async () => {

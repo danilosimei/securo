@@ -2962,7 +2962,8 @@
         "high": "≥ 90",
         "confirmed": "Confirmadas",
         "user": "Suas",
-        "other": "Outras origens"
+        "other": "Outras origens",
+        "confidenceNotHere": "A confiança não vale nesta vista"
       },
       "today": "Hoje",
       "yesterday": "Ontem",
@@ -3203,7 +3204,9 @@
       "no": "Não",
       "applied_one": "{{count}} parecida atualizada",
       "applied_other": "{{count}} parecidas atualizadas",
-      "store": "Em {{store}}"
+      "store": "Em {{store}}",
+      "skipped_one": " · {{count}} já tinha mudado",
+      "skipped_other": " · {{count}} já tinham mudado"
     },
     "ask": {
       "button": "Perguntar à IA",
@@ -3252,10 +3255,15 @@
       }
     },
     "scoreboard": {
-      "summary_one": "{{total}} transação · {{decided}}% decididas · {{review}}% para revisar",
-      "summary_other": "{{total}} transações · {{decided}}% decididas · {{review}}% para revisar",
-      "waiting": " · {{waiting}}% aguardando a IA",
-      "excluded": "Conta as transações que podem ser categorizadas: transferências entre contas, pendentes e saldo inicial ficam de fora."
+      "summary_one": "{{total}} transação · {{decided}}% decididas",
+      "summary_other": "{{total}} transações · {{decided}}% decididas",
+      "review_one": " · {{review}} para revisar",
+      "review_other": " · {{review}} para revisar",
+      "allReviewed": " · tudo revisado",
+      "waiting_one": " · {{waiting}} aguardando a IA",
+      "waiting_other": " · {{waiting}} aguardando a IA",
+      "excluded": "Conta as transações que podem ser categorizadas: transferências entre contas, pendentes e saldo inicial ficam de fora.",
+      "about": "O que entra na conta"
     }
   }
 }

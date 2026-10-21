@@ -325,9 +325,48 @@ describe('AppliedTab: confirmadas, suas e outras origens', () => {
       ),
     )
     expect(screen.getByTestId('applied-confidence-high')).toBeDisabled()
-    // Confirmadas are events: the confidence counts again.
+    expect(screen.getByTestId('applied-confidence-high').parentElement?.parentElement).toHaveAttribute(
+      'title',
+      t('categorization.applied.filters.confidenceNotHere'),
+    )
+    // Confirmadas are events: the confidence counts again, cleared (not the old "≥ 90").
     await user.click(screen.getByTestId('applied-source-confirmed'))
     expect(screen.getByTestId('applied-confidence-high')).toBeEnabled()
+    await waitFor(() =>
+      expect(api.categorization.applied).toHaveBeenLastCalledWith(
+        expect.objectContaining({ source: 'confirmed', min_confidence: undefined, max_confidence: undefined }),
+      ),
+    )
+  })
+
+  it('trocar a confiança limpa a seleção, como os outros filtros', async () => {
+    const { user } = await renderTab()
+    const store = screen.getByRole('button', { name: /iFood/i })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    await user.click(screen.getByRole('checkbox', { name: /IFOOD \*PEDIDO 1/ }))
+    expect(screen.getByRole('button', { name: 'Undo selected' })).toBeInTheDocument()
+    await user.click(screen.getByTestId('applied-confidence-low'))
+    expect(screen.queryByRole('button', { name: 'Undo selected' })).not.toBeInTheDocument()
+  })
+
+  it('corrigir em Suas mostra a categoria nova na hora, sem esperar a lista voltar', async () => {
+    items = [
+      ev(1, { event_id: null, run_id: null, source: 'user', confidence: null, reason: null,
+        description: 'PADARIA DO ZE', merchant_key: 'PADARIA', store_name: 'Padaria do Zé' }),
+    ]
+    total = 1
+    const { user } = await renderTab()
+    await user.click(screen.getByTestId('applied-source-user'))
+    const store = await screen.findByRole('button', { name: /Padaria do Zé/ })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    // The refetch after the fix never lands here: what shows is the patch.
+    api.categorization.applied.mockImplementation(() => new Promise(() => {}))
+    const row = screen.getByText('PADARIA DO ZE').closest('li') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: 'Restaurants' }))
+    await user.click(await screen.findByRole('option', { name: /Groceries/ }))
+    await waitFor(() => expect(api.transactions.update).toHaveBeenCalledWith('t1', { category_id: 'c2' }))
+    const after = (await screen.findByText('PADARIA DO ZE')).closest('li') as HTMLElement
+    expect(within(after).getByRole('button', { name: 'Groceries' })).toBeInTheDocument()
   })
 
   it('linha sem evento (event_id null) não tem caixa de seleção nem desfazer, mas corrige e pergunta à IA', async () => {
