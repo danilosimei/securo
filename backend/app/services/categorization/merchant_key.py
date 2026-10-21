@@ -18,6 +18,8 @@ Versoes da regra da descricao (payee e Pix nao mudam entre elas):
   ("Mlp*Netshoes" -> "NETSHOES"), salvo marcas (BRAND_STAR_PREFIXES); se o
   resto e generico (vazio, "PENDING...", so pais/UF/numeros) a loja e a
   marca do prefixo (PREFIX_BRANDS) ou o proprio prefixo ("IFD*BR" -> "IFOOD").
+  O nome repetido em volta de um hifen fica uma vez so
+  ("Mlp *Kabum-Kabum" -> "KABUM", como "Mlp*Kabum").
   A versao 1 continua disponivel para achar as chaves gravadas antes.
 """
 
@@ -120,6 +122,10 @@ _STAR_PREFIX_RE = re.compile(r"^(" + "|".join(STAR_PREFIXES) + r")\s*\*\s*")
 # v2, depois de _clean (que ja colou o "*"): um token unico de 2 a 5 letras.
 _SHORT_STAR_PREFIX_RE = re.compile(r"^([A-Z]{2,5})\*")
 _PENDING_REST_RE = re.compile(r"^(?:PENDING|PENDENTE)\b")
+# v2, no texto dobrado (antes de _clean, que apaga o hifen): o mesmo nome
+# repetido dos dois lados de um hifen ("KABUM-KABUM", "PAO DOCE - PAO DOCE")
+# fica uma vez so. Repeticao sem hifen ("PAO PAO DOCE") nao muda.
+_HYPHEN_REPEAT_RE = re.compile(r"(?<![A-Z0-9])([A-Z0-9]+(?: [A-Z0-9]+)*) ?- ?\1(?![A-Z0-9])")
 _LEADING_PHRASE_RE = re.compile(r"^(?:" + "|".join(LEADING_PHRASES) + r")\b\s*")
 # Aplicado antes da limpeza de pontuacao (precisa do "/").
 _INSTALLMENT_RE = re.compile(
@@ -292,6 +298,8 @@ def _is_generic_rest(key: str) -> bool:
 
 def _normalize_description(text: str, version: int) -> str:
     folded = _INSTALLMENT_RE.sub(" ", _fold(scrub_documents(text)))
+    if version >= 2:
+        folded = _HYPHEN_REPEAT_RE.sub(r"\1", _squeeze(folded))
     cleaned, prefix = _strip_leading_tracked(_clean(folded))
     if version < 2:
         return _finish(cleaned)

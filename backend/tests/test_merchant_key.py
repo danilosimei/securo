@@ -293,8 +293,8 @@ REAL_PREFIX_CASES: list[tuple[str, str]] = [
     ("Pag*Steam", "STEAM"),
     ("Pb*Ubiquiti", "UBIQUITI"),
     ("Tst*Ri Ra - Las Vegas", "RI RA LAS VEGAS"),
-    ("Mlp *Kabum-Kabum", "KABUM KABUM"),
-    ("Mlp*Netshoes-Netshoes 1/2", "NETSHOES NETSHOES"),
+    ("Mlp *Kabum-Kabum", "KABUM"),
+    ("Mlp*Netshoes-Netshoes 1/2", "NETSHOES"),
     ("Vindi*Minimalclub 1/3", "MINIMALCLUB"),
     ("Sq *Shake Shack", "SHAKE SHACK"),
     ("Tm *The Wizard Of Oz A", "THE WIZARD OF OZ A"),
@@ -348,7 +348,40 @@ def test_version_1_keeps_previous_keys(raw, expected):
 
 def test_current_version_is_2():
     assert MERCHANT_KEY_VERSION == 2
-    assert merchant_key("Mlp*Netshoes") == merchant_key("Mlp*Netshoes", version=2)
+
+
+@pytest.mark.parametrize(
+    "variants",
+    [
+        ("Mlp*Kabum", "Mlp *Kabum-Kabum"),
+        ("Mlp*Netshoes", "Mlp*Netshoes-Netshoes 1/2", "Mlp*Netshoes - Netshoes"),
+        ("Pao Doce", "Pao Doce-Pao Doce"),
+    ],
+)
+def test_hyphen_repeat_is_the_same_store(variants):
+    keys = {merchant_key(raw) for raw in variants}
+    assert len(keys) == 1
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Pao Pao Doce", "PAO PAO DOCE"),
+        ("Bye Bye", "BYE BYE"),
+        ("Casa Pao-Pao", "CASA PAO"),
+        ("Kabum-Kabumx", "KABUM KABUMX"),
+        ("Coca-Cola", "COCA COLA"),
+    ],
+)
+def test_hyphen_repeat_collapse_is_narrow(raw, expected):
+    assert merchant_key(raw) == expected
+    assert merchant_key(expected) == expected
+
+
+def test_hyphen_repeat_kept_in_version_1():
+    assert merchant_key("Mlp *Kabum-Kabum", version=1) == "MLP"
+    assert merchant_key("Kabum-Kabum", version=1) == "KABUM KABUM"
+    assert merchant_key("Kabum-Kabum") == "KABUM"
 
 
 @pytest.mark.parametrize(
