@@ -422,15 +422,19 @@ async def test_migration_099_round_trip_postgres():
                 "INSERT INTO categorization_runs (id, workspace_id, kind, trigger, status)"
                 " SELECT gen_random_uuid(), id, 'ask', 'manual', 'done' FROM workspaces"
             ))
-        icon_default = (
-            "SELECT column_default FROM information_schema.columns"
-            " WHERE table_name='category_groups' AND column_name='icon'"
-        )
-        assert "circle-help" in await scalar(scratch, icon_default)
+        def icon_default(table):
+            return (
+                "SELECT column_default FROM information_schema.columns"
+                f" WHERE table_name='{table}' AND column_name='icon'"
+            )
+
+        for table in ("category_groups", "collections"):
+            assert "circle-help" in await scalar(scratch, icon_default(table))
         await asyncio.to_thread(alembic, "downgrade", "098")
         assert await scalar(scratch, cols) == 0
         assert await scalar(scratch, "SELECT count(*) FROM categorization_runs") == 0
-        assert "folder" in await scalar(scratch, icon_default)
+        for table in ("category_groups", "collections"):
+            assert "folder" in await scalar(scratch, icon_default(table))
         await asyncio.to_thread(alembic, "upgrade", "head")
         assert await scalar(scratch, cols) == 2
     finally:
@@ -498,13 +502,17 @@ async def test_migration_098_window_edge_and_accept_without_event_postgres(postg
         accepted(at_resolved, "K_AT", resolved)
         accepted(no_event, "K_NOEV", resolved)
         edge = event(at_edge, resolved - timedelta(minutes=2))
+        # The accept's own event on the same row: its carrier. With the edge
+        # inside the window (`>=`), the edge event would be a non-carrier of
+        # the accept and stay unmarked.
+        edge_carrier = event(at_edge, resolved - timedelta(seconds=1))
         past = event(past_edge, resolved - timedelta(minutes=3))
         carrier = event(at_resolved, resolved)
         await session.commit()
 
         marked = await _run_098_marks(session, migration)
 
-        assert marked == {edge.id, past.id, carrier.id}
+        assert marked == {edge.id, edge_carrier.id, past.id, carrier.id}
         events_of_no_event_row = (await session.execute(
             select(func.count(CategorizationEvent.id))
             .where(CategorizationEvent.transaction_id == no_event.id)
@@ -645,33 +653,44 @@ async def test_migration_099_moves_folder_group_icons_to_circle_help(monkeypatch
 
     migration.upgrade()
 
-    assert ("sql", migration._FIX_GROUP_ICONS) in calls
-    assert ("alter", ("category_groups", "icon"), {"server_default": "circle-help"}) in calls
+    for table, fix in (
+        ("category_groups", migration._FIX_GROUP_ICONS),
+        ("collections", migration._FIX_COLLECTION_ICONS),
+    ):
+        assert ("sql", fix) in calls
+        assert ("alter", (table, "icon"), {"server_default": "circle-help"}) in calls
     calls.clear()
     migration.downgrade()
-    assert ("alter", ("category_groups", "icon"), {"server_default": "folder"}) in calls
-    assert ("sql", migration._FIX_GROUP_ICONS) not in calls
+    for table, fix in (
+        ("category_groups", migration._FIX_GROUP_ICONS),
+        ("collections", migration._FIX_COLLECTION_ICONS),
+    ):
+        assert ("alter", (table, "icon"), {"server_default": "folder"}) in calls
+        assert ("sql", fix) not in calls
 
 
-async def test_migration_099_icon_fix_touches_only_folder_groups_postgres(postgres_sessions):
+async def test_migration_099_icon_fix_touches_only_folder_rows_postgres(postgres_sessions):
     from app.models.category_group import CategoryGroup
+    from app.models.collection import Collection
 
     migration = _migration_099()
     async with postgres_sessions() as session:
         ws, category, seed = await _seed_pg(session)
-        folder, chosen = (
-            CategoryGroup(user_id=seed.user_id, workspace_id=ws, name=name, icon=icon)
-            for name, icon in (("Antigo", "folder"), ("Casa", "house"))
-        )
-        session.add_all([folder, chosen])
+        for model in (CategoryGroup, Collection):
+            session.add_all([
+                model(user_id=seed.user_id, workspace_id=ws, name=name, icon=icon)
+                for name, icon in (("Antigo", "folder"), ("Casa", "house"))
+            ])
         await session.commit()
 
         schema = session.get_bind().get_execution_options()["schema_translate_map"][None]
         await session.execute(text(f'SET LOCAL search_path TO "{schema}"'))
         await session.execute(text(migration._FIX_GROUP_ICONS))
+        await session.execute(text(migration._FIX_COLLECTION_ICONS))
         await session.commit()
 
-        icons = dict((await session.execute(
-            select(CategoryGroup.name, CategoryGroup.icon).where(CategoryGroup.workspace_id == ws)
-        )).all())
-        assert icons == {"Antigo": "circle-help", "Casa": "house"}
+        for model in (CategoryGroup, Collection):
+            icons = dict((await session.execute(
+                select(model.name, model.icon).where(model.workspace_id == ws)
+            )).all())
+            assert icons == {"Antigo": "circle-help", "Casa": "house"}, model.__name__
