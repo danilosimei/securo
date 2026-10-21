@@ -121,6 +121,8 @@ export default function TransactionsPage() {
     return initial ? [initial] : []
   })
   const [filterUncategorized, setFilterUncategorized] = useState<boolean>(false)
+  // Set by the link from Reports > Explore; there is no control for it here.
+  const [filterMerchantKey, setFilterMerchantKey] = useState<string>(() => searchParams.get('merchant_key') ?? '')
   // Seed the date range from the URL, else the range last used on this page
   // (issue #1053), else the current month. Done in the initializer so it
   // survives effect re-runs (e.g. React StrictMode's double-invoke in
@@ -249,6 +251,7 @@ export default function TransactionsPage() {
     const tags = searchParams.get('tags');
     setTagFilters(tags ? tags.split(',') : []);
     setFilterPayee(searchParams.get('payee_id') ?? '')
+    setFilterMerchantKey(searchParams.get('merchant_key') ?? '')
     setFilterGroupId(searchParams.get('group_id') ?? '')
     setFilterType(searchParams.get('type') ?? '')
     setFilterStatus(searchParams.get('status') ?? '')
@@ -287,6 +290,7 @@ export default function TransactionsPage() {
         ['day', viewMode === 'calendar' ? calendarSelectedDate : ''],
         ['tags', tagFilters.join(',')],
         ['payee_id', filterPayee],
+        ['merchant_key', filterMerchantKey],
         ['group_id', filterGroupId],
         ['type', filterType],
         ['status', filterStatus],
@@ -313,6 +317,7 @@ export default function TransactionsPage() {
     calendarSelectedDate,
     tagFilters,
     filterPayee,
+    filterMerchantKey,
     filterGroupId,
     filterType,
     filterStatus,
@@ -391,7 +396,7 @@ export default function TransactionsPage() {
     && activeAccountIds !== null && activeAccountIds.length === 0
 
   const { data, isLoading } = useQuery({
-    queryKey: ['transactions', page, limit, effectiveAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterGroupId, filterType, filterStatus, filterCategorySource, filterFrom, filterTo, filterMinAmount, filterMaxAmount, hideIgnored, searchQuery, tagFilters, isMobile ? 'date' : grid.sortBy, isMobile ? 'desc' : grid.sortDir],
+    queryKey: ['transactions', page, limit, effectiveAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterMerchantKey, filterGroupId, filterType, filterStatus, filterCategorySource, filterFrom, filterTo, filterMinAmount, filterMaxAmount, hideIgnored, searchQuery, tagFilters, isMobile ? 'date' : grid.sortBy, isMobile ? 'desc' : grid.sortDir],
     enabled: !noAccounts,
     queryFn: () =>
       transactions.list({
@@ -400,6 +405,7 @@ export default function TransactionsPage() {
         account_ids: effectiveAccountIds.length > 0 ? effectiveAccountIds : undefined,
         category_ids: filterCategoryIds.length > 0 ? filterCategoryIds : undefined,
         payee_id: filterPayee || undefined,
+        merchant_key: filterMerchantKey || undefined,
         group_id: filterGroupId || undefined,
         type: filterType || undefined,
         status: filterStatus || undefined,

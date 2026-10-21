@@ -535,6 +535,8 @@ export const transactions = {
     category_id?: string
     category_ids?: string[]
     payee_id?: string
+    /** Store key from Reports > Explore. */
+    merchant_key?: string
     uncategorized?: boolean
     type?: string
     status?: string
