@@ -18,6 +18,7 @@ import {
 } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { invalidateCategorizationQueries, invalidateCategoryQueries } from '@/lib/invalidate-queries'
+import { undoWithToast } from '@/lib/categorization-undo'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useAuth } from '@/contexts/auth-context'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
@@ -39,8 +40,6 @@ const PAGE = 200
 const CONFIRM_MS = 4000
 /** Parallel requests when accepting everything at once. */
 const ACCEPT_ALL_CONCURRENCY = 4
-/** The undo endpoint takes at most this many event ids per call. */
-const UNDO_CHUNK = 5000
 /** How long "Ignore" can be taken back before it reaches the server. */
 const DISMISS_UNDO_MS = 6000
 const HIDDEN_PROPOSALS_KEY = 'categorization.review.hiddenProposals'
@@ -50,8 +49,22 @@ const HIDDEN_PROPOSALS_KEY = 'categorization.review.hiddenProposals'
 interface Answered {
   group: ReviewGroup
   index: number
-  referenceId: string
+  /** A row the answer was applied to; known once the answer is in. */
+  referenceId: string | null
   phase: 'sending' | 'asking'
+}
+
+/** A row the answer surely went to: the server's applied rows when it says
+ *  which; otherwise the first pending row, but only when every pending row
+ *  was applied (a row categorized by hand meanwhile is skipped, and the
+ *  question would then spread that other category). Null: do not ask. */
+function appliedReference(
+  group: ReviewGroup,
+  result: { applied: number; transaction_ids?: string[] },
+): string | null {
+  if (result.transaction_ids && result.transaction_ids.length > 0) return result.transaction_ids[0]
+  const [first] = group.transaction_ids
+  return first && result.applied >= group.transaction_ids.length ? first : null
 }
 
 const proposalId = (p: { group: string; name: string }) =>
@@ -169,7 +182,9 @@ export function ReviewTab() {
 
   const [hiddenProposals, setHiddenProposals] = useState(readHiddenProposals)
   const [openKey, setOpenKey] = useState<string | null>(null)
-  const [focusIdx, setFocusIdx] = useState(0)
+  // The focused store, by key (the index is the fallback once it leaves):
+  // a row leaving above it must not move the roving tabindex off it.
+  const [focus, setFocus] = useState<{ key: string | null; idx: number }>({ key: null, idx: 0 })
   const rowRefs = useRef<(HTMLLIElement | null)[]>([])
   // Set by an answer: once the row leaves, the next one takes the focus.
   const refocus = useRef(false)
@@ -188,9 +203,14 @@ export function ReviewTab() {
     return rows
   }, [data, pending, ignored, answered])
   const visibleRef = useRef(visible)
-  useEffect(() => {
+  // Before the refocus below: a row focused there reads the new list.
+  useLayoutEffect(() => {
     visibleRef.current = visible
   })
+  const setFocusIdx = useCallback(
+    (idx: number) => setFocus({ key: visibleRef.current[idx]?.merchant_key ?? null, idx }),
+    [],
+  )
   const proposals = useMemo(
     () =>
       (data?.new_category_proposals ?? []).filter(
@@ -213,7 +233,8 @@ export function ReviewTab() {
       ),
     [visible, catalog, applying, answered],
   )
-  const current = Math.max(0, Math.min(focusIdx, visible.length - 1))
+  const focusedAt = focus.key ? visible.findIndex((g) => g.merchant_key === focus.key) : -1
+  const current = focusedAt >= 0 ? focusedAt : Math.max(0, Math.min(focus.idx, visible.length - 1))
 
   useLayoutEffect(() => {
     if (!refocus.current) return
@@ -247,18 +268,7 @@ export function ReviewTab() {
   )
 
   const undo = useCallback(
-    async (eventIds: string[]) => {
-      try {
-        for (let i = 0; i < eventIds.length; i += UNDO_CHUNK) {
-          await categorizationApi.undo({ event_ids: eventIds.slice(i, i + UNDO_CHUNK) })
-        }
-        toast.success(t('categorization.review.undone'))
-      } catch (err) {
-        toast.error(extractApiError(err, t('common.error')))
-      } finally {
-        invalidateCategorizationQueries(queryClient)
-      }
-    },
+    (eventIds: string[]) => undoWithToast(eventIds, { t, queryClient }),
     [queryClient, t],
   )
 
@@ -290,7 +300,8 @@ export function ReviewTab() {
     const heldFocus =
       idx >= 0 && (!active || active === document.body || Number(activeRow?.dataset.index) === idx)
     if (heldFocus) {
-      setFocusIdx(idx)
+      // By index: the store that takes this one's place.
+      setFocus({ key: null, idx })
       refocus.current = true
     }
     promptHandles.current.delete(key)
@@ -305,39 +316,42 @@ export function ReviewTab() {
   /** One answer for one store: the row stays where it is while it is sent,
    *  then the toast with undo and the question about the store's similar
    *  rows (the row leaves when there are none); on failure the row comes
-   *  back as it was. `done` runs on success and may return the toast's title. */
+   *  back as it was. `done` runs on success and may return the toast's title.
+   *  `proposal`: the store's new-category proposal this answer accepts. */
   const answerStore = useCallback(
-    async <R extends { applied: number; event_ids: string[] }>(
+    async <R extends { applied: number; event_ids: string[]; transaction_ids?: string[] }>(
       group: ReviewGroup,
       send: () => Promise<R>,
       done?: (result: R) => string | undefined,
+      proposal?: NewCategoryProposal,
     ) => {
       if (!canWrite) return
       const key = group.merchant_key
       const shown = visibleRef.current
       const at = shown.findIndex((g) => g.merchant_key === key)
-      const referenceId = group.transaction_ids[0]
       setAnswered((prev) =>
         new Map(prev).set(key, {
           group,
           index: at >= 0 ? at : shown.length,
-          referenceId,
+          referenceId: null,
           phase: 'sending',
         }),
       )
+      if (proposal) markPending([proposalPending(proposal)], true)
       setOpenKey((open) => (open === key ? null : open))
       // A refetch already on its way may still hold this store.
       await queryClient.cancelQueries({ queryKey: [...REVIEW_QUERY_KEY] })
       try {
         const result = await send()
-        dropFromCache([key])
+        dropFromCache([key], proposal)
         // Undoing the answer takes the question with it.
         appliedToast(result.applied, result.event_ids, done?.(result), () => releaseAnswered(key))
         invalidateCategorizationQueries(queryClient)
-        if (result.applied > 0 && referenceId) {
+        const referenceId = result.applied > 0 ? appliedReference(group, result) : null
+        if (referenceId) {
           setAnswered((prev) => {
             const entry = prev.get(key)
-            return entry ? new Map(prev).set(key, { ...entry, phase: 'asking' }) : prev
+            return entry ? new Map(prev).set(key, { ...entry, referenceId, phase: 'asking' }) : prev
           })
         } else {
           releaseAnswered(key)
@@ -346,9 +360,11 @@ export function ReviewTab() {
         toast.error(extractApiError(err, t('common.error')))
         void invalidateReview()
         releaseAnswered(key)
+      } finally {
+        if (proposal) markPending([proposalPending(proposal)], false)
       }
     },
-    [appliedToast, canWrite, dropFromCache, invalidateReview, queryClient, releaseAnswered, t],
+    [appliedToast, canWrite, dropFromCache, invalidateReview, markPending, queryClient, releaseAnswered, t],
   )
 
   const accept = useCallback(
@@ -379,11 +395,11 @@ export function ReviewTab() {
     [answerStore, queryClient, t],
   )
 
-  /** The store's own new-category proposal, made from its row: one store,
-   *  so it asks about the similar rows like any other answer. */
+  /** A new category for one store (its row's proposal, or a proposal that
+   *  covers only it): one store's choice, so it asks about the similar rows
+   *  like any other answer. */
   const createForStore = useCallback(
-    (group: ReviewGroup) => {
-      const draft = group.new_category
+    (group: ReviewGroup, draft: { group: string; name: string } | null, proposal?: NewCategoryProposal) => {
       if (!draft) return
       void answerStore(
         group,
@@ -397,6 +413,7 @@ export function ReviewTab() {
           invalidateCategoryQueries(queryClient)
           return t('categorization.review.created', { path: `${draft.group} › ${draft.name}` })
         },
+        proposal,
       )
     },
     [answerStore, queryClient, t],
@@ -474,6 +491,15 @@ export function ReviewTab() {
   const createCategory = useCallback(
     async (proposal: NewCategoryProposal) => {
       if (!canWrite) return
+      // A proposal for one store is that store's choice: it asks too.
+      if (proposal.merchant_keys.length === 1) {
+        const [only] = proposal.merchant_keys
+        const group = visibleRef.current.find((g) => g.merchant_key === only)
+        if (group && !answered.has(only)) {
+          createForStore(group, proposal, proposal)
+          return
+        }
+      }
       const keys = [...proposal.merchant_keys, proposalPending(proposal)]
       markPending(keys, true)
       await queryClient.cancelQueries({ queryKey: [...REVIEW_QUERY_KEY] })
@@ -498,7 +524,7 @@ export function ReviewTab() {
         markPending(keys, false)
       }
     },
-    [appliedToast, canWrite, dropFromCache, invalidateReview, markPending, queryClient, t],
+    [answered, appliedToast, canWrite, createForStore, dropFromCache, invalidateReview, markPending, queryClient, t],
   )
 
   // "Accept all" asks twice: the first click arms it for a few seconds.
@@ -562,7 +588,7 @@ export function ReviewTab() {
   /** After an answer the next store (now at the same index) takes the focus,
    *  by key or by click, so the next answer is one key press away. */
   const focusAfter = (idx: number) => {
-    setFocusIdx(idx)
+    setFocus({ key: null, idx })
     refocus.current = true
   }
 
@@ -810,7 +836,7 @@ export function ReviewTab() {
                 <ReviewGroupRow
                   key={group.merchant_key}
                   group={group}
-                  answer={answer ? { phase: answer.phase, referenceId: answer.referenceId } : undefined}
+                  answer={answer ? { phase: answer.phase, referenceId: answer.referenceId ?? '' } : undefined}
                   onAnswerDone={() => releaseAnswered(group.merchant_key)}
                   promptHandle={(handle) => {
                     if (handle) promptHandles.current.set(group.merchant_key, handle)
@@ -848,7 +874,7 @@ export function ReviewTab() {
                   }}
                   onCreateCategory={() => {
                     focusAfter(i)
-                    createForStore(group)
+                    createForStore(group, group.new_category)
                   }}
                 />
               )

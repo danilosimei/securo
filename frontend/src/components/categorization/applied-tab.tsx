@@ -3,7 +3,9 @@
  *  was before and what it is now. Fix a row in place (the memory learns it)
  *  or undo one, a store, a batch or a selection (they go back to Review).
  *  A fix leaves the list, so the question about the store's similar rows
- *  shows in a bar on top of the list, with the store's name. */
+ *  shows in a bar with the store's name, docked at the bottom of the screen
+ *  (above the selection bar): in sight wherever the fix was made, without
+ *  scrolling the page. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -322,27 +324,19 @@ export function AppliedTab() {
   const filtered = sources.size > 0 || confidence !== 'all'
 
   return (
-    <div data-testid="categorization-applied" className={cn(selected.size > 0 && canWrite && 'pb-24')}>
+    <div
+      data-testid="categorization-applied"
+      className={cn(
+        canWrite && (selected.size > 0 || similarFor) && 'pb-24',
+        canWrite && selected.size > 0 && similarFor && 'pb-44',
+      )}
+    >
       <SectionCard>
         <SectionHeader
           title={t('categorization.applied.title', { count: total })}
           description={t('categorization.applied.hint')}
         />
         {filters}
-
-        {canWrite && similarFor && (
-          <SimilarPrompt
-            key={similarFor.referenceId}
-            referenceId={similarFor.referenceId}
-            storeName={similarFor.storeName}
-            currency={currency}
-            showStore
-            autoFocus
-            // A newer fix may have taken the bar meanwhile: only this one closes.
-            onDone={() => setSimilarFor((cur) => (cur?.referenceId === similarFor.referenceId ? null : cur))}
-            className="border-b border-border bg-primary/5 px-4 py-3 sm:px-5"
-          />
-        )}
 
         {days.length === 0 ? (
           <div className="py-10 text-center">
@@ -427,57 +421,73 @@ export function AppliedTab() {
         )}
       </SectionCard>
 
-      {canWrite && selected.size > 0 && (
+      {canWrite && (selected.size > 0 || similarFor) && (
         <div
           className={cn(
-            'fixed bottom-0 left-0 right-0 z-50',
+            // Only the bars take clicks: the gaps around them reach the page.
+            'pointer-events-none fixed bottom-0 left-0 right-0 z-50',
             'transition-[left] duration-300 ease-in-out motion-reduce:transition-none',
             sidebarCollapsed ? 'lg:left-16' : 'lg:left-60',
           )}
         >
-          <div className="mx-auto max-w-7xl px-3 pb-4 md:px-6 md:pb-6">
-            <div className="flex items-center gap-1.5 rounded-2xl border border-border bg-card p-2 shadow-xl">
-              <div className="flex items-center gap-2.5 whitespace-nowrap pl-3 pr-2 sm:pr-4">
-                <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                  {selected.size}
-                </span>
-                <div className="hidden flex-col leading-tight sm:flex">
-                  <span className="text-[11px] font-medium text-muted-foreground">
-                    {t('categorization.applied.selected')}
+          <div className="mx-auto max-w-7xl space-y-2 px-3 pb-4 md:px-6 md:pb-6">
+            {similarFor && (
+              <SimilarPrompt
+                key={similarFor.referenceId}
+                referenceId={similarFor.referenceId}
+                storeName={similarFor.storeName}
+                currency={currency}
+                showStore
+                autoFocus
+                // A newer fix may have taken the bar meanwhile: only this one closes.
+                onDone={() => setSimilarFor((cur) => (cur?.referenceId === similarFor.referenceId ? null : cur))}
+                className="pointer-events-auto rounded-2xl border border-primary/30 bg-card px-4 py-3 shadow-xl"
+              />
+            )}
+            {selected.size > 0 && (
+              <div className="pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-border bg-card p-2 shadow-xl">
+                <div className="flex items-center gap-2.5 whitespace-nowrap pl-3 pr-2 sm:pr-4">
+                  <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {selected.size}
                   </span>
-                  <span
-                    className={cn(
-                      'text-sm font-bold tabular-nums',
-                      selectedNet >= 0 ? 'text-emerald-600' : 'text-rose-500',
-                    )}
+                  <div className="hidden flex-col leading-tight sm:flex">
+                    <span className="text-[11px] font-medium text-muted-foreground">
+                      {t('categorization.applied.selected')}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-sm font-bold tabular-nums',
+                        selectedNet >= 0 ? 'text-emerald-600' : 'text-rose-500',
+                      )}
+                    >
+                      {mask(
+                        `${selectedNet >= 0 ? '+' : '−'}${formatCurrency(Math.abs(selectedNet), currency, locale)}`,
+                      )}
+                    </span>
+                  </div>
+                </div>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    className="h-9 gap-1.5"
+                    disabled={busy}
+                    onClick={() => void undo(selectedEvents.map((e) => e.event_id))}
                   >
-                    {mask(
-                      `${selectedNet >= 0 ? '+' : '−'}${formatCurrency(Math.abs(selectedNet), currency, locale)}`,
-                    )}
-                  </span>
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
+                    {t('categorization.applied.undoSelected')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-9 gap-1.5 text-muted-foreground"
+                    onClick={() => setSelected(new Set())}
+                  >
+                    <X size={14} />
+                    {t('categorization.applied.clear')}
+                  </Button>
                 </div>
               </div>
-              <div className="ml-auto flex items-center gap-1.5">
-                <Button
-                  size="sm"
-                  className="h-9 gap-1.5"
-                  disabled={busy}
-                  onClick={() => void undo(selectedEvents.map((e) => e.event_id))}
-                >
-                  {busy ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
-                  {t('categorization.applied.undoSelected')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-9 gap-1.5 text-muted-foreground"
-                  onClick={() => setSelected(new Set())}
-                >
-                  <X size={14} />
-                  {t('categorization.applied.clear')}
-                </Button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}

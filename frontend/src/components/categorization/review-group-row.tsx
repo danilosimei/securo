@@ -129,6 +129,7 @@ export function ReviewGroupRow({
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
   const listId = useId()
+  const questionId = useId()
 
   const name = storeName(group)
   // The buttons inside are Tab stops only on the current row.
@@ -156,7 +157,8 @@ export function ReviewGroupRow({
       data-review-row=""
       data-index={index}
       tabIndex={current ? 0 : -1}
-      aria-describedby={describedBy}
+      // Answered: the question is what Enter / Escape answer, so it is read out.
+      aria-describedby={answer?.phase === 'asking' ? questionId : describedBy}
       aria-busy={busy || undefined}
       aria-keyshortcuts={
         answer
@@ -237,6 +239,7 @@ export function ReviewGroupRow({
                 shortcuts={current}
                 tabIndex={inner}
                 handle={promptHandle}
+                questionId={questionId}
               />
             )}
           </div>

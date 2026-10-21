@@ -315,3 +315,44 @@ describe('AppliedTab: parecidas da loja', () => {
     expect(document.querySelector('[data-similar-prompt]')).toBeNull()
   })
 })
+
+describe('AppliedTab: barra das parecidas, bordas', () => {
+  it('uma correção nova troca a barra pela da outra loja', async () => {
+    api.categorization.similar.mockImplementation(async (id: string) => ({
+      ...twoUberTrips,
+      merchant_key: id === 't4' ? 'UBER' : 'IFOOD',
+    }))
+    const { user } = await renderTab()
+    const uber = screen.getByRole('button', { name: /Uber/i })
+    if (uber.getAttribute('aria-expanded') !== 'true') await user.click(uber)
+    const trip = screen.getByText('UBER *TRIP').closest('li') as HTMLElement
+    await user.click(within(trip).getByRole('button', { name: 'Rides' }))
+    await user.click(await screen.findByRole('option', { name: /Groceries/ }))
+    expect(await screen.findByText(t('categorization.similar.store', { store: 'Uber' }))).toBeInTheDocument()
+
+    const ifood = screen.getByRole('button', { name: /iFood/i })
+    if (ifood.getAttribute('aria-expanded') !== 'true') await user.click(ifood)
+    const order = screen.getByText('IFOOD *PEDIDO 1').closest('li') as HTMLElement
+    await user.click(within(order).getByRole('button', { name: 'Restaurants' }))
+    await user.click(await screen.findByRole('option', { name: /Groceries/ }))
+
+    expect(await screen.findByText(t('categorization.similar.store', { store: 'iFood' }))).toBeInTheDocument()
+    expect(screen.queryByText(t('categorization.similar.store', { store: 'Uber' }))).not.toBeInTheDocument()
+    expect(document.querySelectorAll('[data-similar-prompt]')).toHaveLength(1)
+    expect(api.categorization.similar).toHaveBeenLastCalledWith('t1', { excludeRule: true })
+  })
+
+  it('a barra fica presa no rodapé da tela, junto da barra de seleção', async () => {
+    api.categorization.similar.mockResolvedValue(twoUberTrips)
+    const { user } = await renderTab()
+    const store = screen.getByRole('button', { name: /Uber/i })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    const trip = screen.getByText('UBER *TRIP').closest('li') as HTMLElement
+    await user.click(within(trip).getByRole('button', { name: 'Rides' }))
+    await user.click(await screen.findByRole('option', { name: /Groceries/ }))
+    const bar = (await screen.findByText(t('categorization.similar.ask', { count: 2 }))).closest(
+      '[data-similar-prompt]',
+    ) as HTMLElement
+    expect(bar.closest('.fixed')).not.toBeNull()
+  })
+})
