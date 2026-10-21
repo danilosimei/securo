@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, screen, waitFor, within } from '@testing-library/react'
 
+import { WorkspaceContext } from '@/contexts/workspace-context'
 import { ReviewTab } from '@/components/categorization/review-tab'
 import { renderWithProviders, t } from '@/test/utils'
 import type { NewCategoryProposal, ReviewGroup, ReviewTransaction } from '@/types'
@@ -12,6 +13,7 @@ const api = vi.hoisted(() => ({
     dismiss: vi.fn(),
     createCategory: vi.fn(),
     undo: vi.fn(),
+    setNote: vi.fn(),
   },
   categories: { list: vi.fn() },
   categoryGroups: { list: vi.fn() },
@@ -147,6 +149,34 @@ async function renderTab() {
 }
 
 describe('ReviewTab', () => {
+  it('apagar a nota na linha chama setNote sem expandir a linha', async () => {
+    serverGroups = [{ ...ifood, merchant_key: 'IFOOD', note: 'só às sextas' }, uber, maria]
+    api.categorization.setNote.mockResolvedValue({ merchant_key: 'IFOOD', note: null })
+    const { user } = renderWithProviders(
+      <WorkspaceContext.Provider value={{ canWrite: true } as unknown as React.ContextType<typeof WorkspaceContext>}>
+        <ReviewTab />
+      </WorkspaceContext.Provider>,
+    )
+    await screen.findByText('iFood')
+    const r = row('iFood')
+    await user.click(within(r).getByRole('button', { name: t('categorization.note.delete') }))
+    await waitFor(() =>
+      expect(api.categorization.setNote).toHaveBeenCalledWith({ merchant_key: 'IFOOD', note: null }),
+    )
+    expect(within(r).getByRole('button', { name: /iFood/, expanded: false })).toBeInTheDocument()
+  })
+
+  it('sem permissão de escrita a linha não mostra o X da nota', async () => {
+    serverGroups = [{ ...ifood, note: 'só às sextas' }, uber, maria]
+    renderWithProviders(
+      <WorkspaceContext.Provider value={{ canWrite: false } as unknown as React.ContextType<typeof WorkspaceContext>}>
+        <ReviewTab />
+      </WorkspaceContext.Provider>,
+    )
+    await screen.findByText('iFood')
+    expect(within(row('iFood')).queryByRole('button', { name: t('categorization.note.delete') })).not.toBeInTheDocument()
+  })
+
   it('mostra a nota da loja na linha', async () => {
     serverGroups = [{ ...ifood, note: 'só às sextas' }, uber, maria]
     await renderTab()

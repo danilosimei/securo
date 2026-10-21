@@ -41,6 +41,26 @@ describe('StoreNote', () => {
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith(t('categorization.note.deleted')))
   })
 
+  it('shows the error toast when deleting fails', async () => {
+    api.categorization.setNote.mockRejectedValue(new Error('boom'))
+    const { user } = renderNote(true)
+    await user.click(screen.getByRole('button', { name: t('categorization.note.delete') }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    expect(toast.success).not.toHaveBeenCalled()
+  })
+
+  it('ignores a second click while deleting', async () => {
+    let resolve: (v: unknown) => void = () => {}
+    api.categorization.setNote.mockReturnValue(new Promise((r) => (resolve = r)))
+    const { user } = renderNote(true)
+    const x = screen.getByRole('button', { name: t('categorization.note.delete') })
+    await user.click(x)
+    await user.click(x)
+    expect(api.categorization.setNote).toHaveBeenCalledTimes(1)
+    resolve({ merchant_key: 'K', note: null })
+    await waitFor(() => expect(toast.success).toHaveBeenCalled())
+  })
+
   it('hides the X from a viewer', () => {
     renderNote(false)
     expect(screen.getByText(/only on Fridays/)).toBeInTheDocument()
