@@ -93,3 +93,28 @@ docker compose exec backend python scripts/seed_perf.py --no-reset
 ## Reproducibility
 
 The script uses a fixed RNG seed (`random.Random(42)`), so the same arguments always produce the same data distribution. The only variable is `--start-date` relative to the current date, which determines the date range.
+
+# rekey_merchant_keys.py
+
+Rewrites the store keys (`merchant_key`) written under the v1 rule to the v2 rule (an acquirer prefix such as `Mlp*`, `Ebn *`, `Dl*` no longer becomes the store: `Mlp*Netshoes` is `NETSHOES`, not `MLP`). Runs **once per deploy that ships the v2 rule, after `alembic upgrade head`**, inside the backend container. Idempotent: running it again changes nothing.
+
+```bash
+# 1. See what would change (writes nothing)
+docker exec <backend> python scripts/rekey_merchant_keys.py --dry-run
+
+# 2. Apply
+docker exec <backend> python scripts/rekey_merchant_keys.py
+
+# Only one workspace
+docker exec <backend> python scripts/rekey_merchant_keys.py --workspace <uuid>
+```
+
+What it does, per workspace (one transaction and one commit each):
+
+- **Suggestions** (pending, accepted and dismissed) keyed with the old key of their transaction take the new key.
+- **Store memory**: keys that turn into one store are **merged** into it (picks summed, latest note and last choice kept, the cached AI decision dropped). Keys that mixed several stores (like `MLP`) are **split**: the old row goes and each new store is re-seeded from the person's own categorizations of its rows (one pick per decision: rows filed together count once).
+- A workspace with a classification or redistribution in progress is **skipped** (`[pulado: busy]`); run the script again once it finishes.
+
+Output: one line per workspace (`<id> sugestões=… fundidas=… divididas=… semeadas=…`), followed by its 20 largest merges/splits (`fundir EBN (3 escolhas) → SPOTIFY`, `dividir MLP (5 escolhas, com nota) → KABUM, NETSHOES`), and a total. A split row's note is not carried over (it described the mixed store): re-add it on the store it belonged to if needed.
+
+Details: `app/services/categorization/rekey.py`.
