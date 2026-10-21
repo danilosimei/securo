@@ -813,7 +813,7 @@ def test_negated_operators_see_the_replacement_character_as_a_letter():
 def test_word_class_keeps_digits_when_the_text_has_the_replacement_character():
     """The lenient pattern relaxes `\\w`, never narrows it: digits and `_`
     still match it, and U+FFFD matches it too."""
-    conditions = [{"field": "description", "op": "regex", "value": r"ID\w\w Remunera(ç|c)ao"}]
+    conditions = [{"field": "description", "op": "regex", "value": r"ID\w\w Remunera(ç|c)(ã|a)o"}]
     tx = make_tx(description="ID12 Remunera\ufffd\ufffdo")
     assert evaluate_conditions("and", conditions, tx) is True
     word = [{"field": "description", "op": "regex", "value": r"Dep\wsito"}]
@@ -824,3 +824,31 @@ def test_word_class_keeps_digits_when_the_text_has_the_replacement_character():
 def test_escapes_inside_a_class_are_not_letters(pattern):
     conditions = [{"field": "description", "op": "regex", "value": pattern}]
     assert evaluate_conditions("and", conditions, make_tx(description="IOF\ufffdX")) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # A U+FFFD was an accented letter: in a regex it stands only for a
+        # letter the pattern writes accented (literal, or in a class).
+        ("Remuneração", True),
+        ("Remunera[çc][ãa]o", True),
+        ("Remuneracao", False),
+        ("Remunera[a-z][a-z]o", False),
+        ("Remunera[a-zç][a-zã]o", True),
+        ("Remunera..o", True),
+        (r"Remunera\w\wo", True),
+        ("Remuneraç[a-z]o", False),
+        ("TAXA DE REMUNERA", True),
+        # Decomposed accents are accented letters too.
+        ("Remunerac\u0327a\u0303o", True),
+    ],
+)
+def test_lenient_regex_relaxes_only_accented_letters(value, expected):
+    conditions = [{"field": "description", "op": "regex", "value": value}]
+    assert evaluate_conditions("and", conditions, make_tx(description=_REMUNERACAO)) is expected
+
+
+def test_lenient_regex_ascii_letters_never_match_the_replacement_character():
+    conditions = [{"field": "description", "op": "regex", "value": "IOF"}]
+    assert evaluate_conditions("and", conditions, make_tx(description="I\ufffdF")) is False

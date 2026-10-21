@@ -92,9 +92,16 @@ def _escape_end(pattern: str, i: int) -> int:
     return min(len(pattern), i + 2)
 
 
+def _accented(char: str) -> bool:
+    """A letter written with an accent (or any non-ASCII letter): the only
+    kind a U+FFFD of the text can have been."""
+    return char.isalpha() and not char.isascii()
+
+
 def _class_end(pattern: str, i: int) -> tuple[int, bool]:
-    """End of the class at `pattern[i]` ("["), and whether it may match a
-    letter: not negated, and holding a literal letter or a word class."""
+    """End of the class at `pattern[i]` ("["), and whether it may match an
+    accented letter: not negated, and holding a literal accented letter or a
+    word class."""
     j = i + 1
     negated = pattern.startswith("^", j)
     if negated:
@@ -110,7 +117,7 @@ def _class_end(pattern: str, i: int) -> tuple[int, bool]:
             letters = letters or pattern[j + 1:j + 2] == "w"
             j = _escape_end(pattern, j)
             continue
-        letters = letters or pattern[j].isalpha()
+        letters = letters or _accented(pattern[j])
         j += 1
     return min(len(pattern), j + 1), letters and not negated
 
@@ -136,9 +143,12 @@ def _group_head_end(pattern: str, i: int) -> int:
 
 
 def _letters_or_replacement(pattern: str) -> str:
-    """`pattern` with each literal letter, word class and class that may
-    match a letter also accepting U+FFFD; other escapes, group names and
-    flags are kept as they are."""
+    """`pattern` (as written, accents and all) without its accents, each
+    literal accented letter, word class and class that may match an accented
+    letter also accepting U+FFFD. An ASCII letter of the pattern stays exact:
+    a U+FFFD was an accented letter, never one the pattern spells plainly.
+    Other escapes, group names and flags are kept as they are."""
+    pattern = unicodedata.normalize("NFC", pattern)
     out: list[str] = []
     i = 0
     while i < len(pattern):
@@ -149,25 +159,30 @@ def _letters_or_replacement(pattern: str) -> str:
             i = end
         elif char == "[":
             end, letters = _class_end(pattern, i)
-            body = pattern[i:end]
+            body = _strip_accents(pattern[i:end])
             out.append(f"(?:{body}|{REPLACEMENT_CHAR})" if letters else body)
             i = end
         elif char == "(" and pattern.startswith("?", i + 1):
             end = _group_head_end(pattern, i)
-            out.append(pattern[i:end])
+            out.append(_strip_accents(pattern[i:end]))
             i = end
-        elif char.isalpha():
-            out.append(f"(?:{char}|{REPLACEMENT_CHAR})")
-            i += 1
         else:
-            out.append(char)
-            i += 1
+            # A letter with combining marks NFC could not compose is
+            # accented all the same.
+            end = i + 1
+            while end < len(pattern) and unicodedata.combining(pattern[end]):
+                end += 1
+            plain = _strip_accents(pattern[i:end])
+            accented = char.isalpha() and (end > i + 1 or _accented(char))
+            out.append(f"(?:{plain}|{REPLACEMENT_CHAR})" if accented else plain)
+            i = end
     return "".join(out)
 
 
 def _regex_search(pattern: str, text: str) -> bool:
     """`compile_rule_regex(pattern)` searched in `text`; when the text holds
-    U+FFFD, each one may also stand for a letter the pattern expects.
+    U+FFFD, each one may also stand for an accented letter the pattern
+    expects (`_letters_or_replacement`).
 
     Raises ValueError for a pattern `compile_rule_regex` refuses.
     """
@@ -185,7 +200,7 @@ def _lenient_regex(pattern: str) -> re.Pattern[str] | None:
     pattern (a rule is matched against many rows); None if it does not
     compile."""
     try:
-        return re.compile(_letters_or_replacement(_strip_accents(pattern)), re.IGNORECASE)
+        return re.compile(_letters_or_replacement(pattern), re.IGNORECASE)
     except re.error:
         return None
 
