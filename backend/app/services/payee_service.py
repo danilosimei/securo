@@ -12,6 +12,7 @@ from app.models.transaction import Transaction
 from app.models.category import Category
 from app.fiscal.registry import TaxIdKind, normalise_and_validate
 from app.schemas.payee import PayeeCreate, PayeeUpdate
+from app.services.categorization.key_backfill import payee_transaction_ids, refresh_keys
 
 
 async def get_payees(
@@ -266,8 +267,19 @@ async def update_payee(
         if existing.scalar_one_or_none():
             raise ValueError("duplicate_payee_name")
 
+    # The store key of the payee's transactions depends on its name and source,
+    # and a payee edit does not go through the transaction model hook.
+    key_inputs_changed = any(
+        key in update_data and update_data[key] != getattr(payee, key, None)
+        for key in ("name", "source")
+    )
+
     for key, value in update_data.items():
         setattr(payee, key, value)
+
+    if key_inputs_changed:
+        await session.flush()
+        await refresh_keys(session, await payee_transaction_ids(session, [payee_id]))
 
     if tax_ids is not None:
         await _apply_tax_ids(session, payee, workspace_id, data.tax_ids or [])
@@ -311,11 +323,13 @@ async def delete_payee(session: AsyncSession, payee_id: uuid.UUID, workspace_id:
         )
 
     # Null out transaction references
+    affected = await payee_transaction_ids(session, [payee_id])
     await session.execute(
         update(Transaction)
         .where(Transaction.payee_id == payee_id)
         .values(payee_id=None)
     )
+    await refresh_keys(session, affected)
 
     # Delete mappings pointing to this payee
     await session.execute(
@@ -342,11 +356,13 @@ async def bulk_delete_payees(session: AsyncSession, workspace_id: uuid.UUID, pay
         raise ValueError(f"payee_has_invoices:{invoiced}")
 
     # Null out transaction references
+    affected = await payee_transaction_ids(session, valid_ids)
     await session.execute(
         update(Transaction)
         .where(Transaction.payee_id.in_(valid_ids))
         .values(payee_id=None)
     )
+    await refresh_keys(session, affected)
 
     # Delete mappings pointing to this payee
     await session.execute(
@@ -383,12 +399,14 @@ async def merge_payees(
             raise ValueError(f"Source payee {source_id} not found")
 
     # Reassign transactions
+    affected = await payee_transaction_ids(session, list(source_ids))
     result = await session.execute(
         update(Transaction)
         .where(Transaction.payee_id.in_(source_ids))
         .values(payee_id=target_id)
     )
     reassigned = cast(CursorResult, result).rowcount
+    await refresh_keys(session, affected)
 
     # Invoices follow the merge for the same reason transactions do: the
     # two rows were one counterparty all along, and leaving the invoices

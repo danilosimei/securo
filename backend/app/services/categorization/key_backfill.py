@@ -72,6 +72,45 @@ async def backfill_workspace(
                 await session.commit()
 
 
+async def payee_transaction_ids(session: Any, payee_ids: list[uuid.UUID]) -> list[uuid.UUID]:
+    """Ids of the transactions that currently point at any of these payees."""
+    if not payee_ids:
+        return []
+    rows = await session.execute(
+        select(Transaction.id).where(Transaction.payee_id.in_(payee_ids))
+    )
+    return list(rows.scalars().all())
+
+
+async def refresh_keys(
+    session: Any, transaction_ids: list[uuid.UUID], *, batch: int = BATCH
+) -> int:
+    """Recompute `merchant_key` for these transactions, inside the caller's
+    session and transaction (no commit). For writes that bypass the model
+    hook: a payee renamed, deleted or merged. Returns the rows changed."""
+    changed = 0
+    for start in range(0, len(transaction_ids), batch):
+        chunk = transaction_ids[start:start + batch]
+        txs = list(
+            (await session.execute(select(Transaction).where(Transaction.id.in_(chunk))))
+            .scalars()
+            .all()
+        )
+        keys = await keys_for(session, txs)
+        for tx in txs:
+            new = keys[tx.id]
+            if tx.merchant_key == new:
+                continue
+            changed += 1
+            # Core update by id: bypasses the model hook on purpose.
+            await session.execute(
+                update(Transaction).where(Transaction.id == tx.id).values(merchant_key=new)
+            )
+            # Keep an already-loaded instance in step with the row.
+            await session.refresh(tx, attribute_names=["merchant_key"])
+    return changed
+
+
 async def backfill_all(
     session_maker: Any, *, dry_run: bool = False, workspace_id: uuid.UUID | None = None,
     batch: int = BATCH,

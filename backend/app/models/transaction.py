@@ -213,8 +213,10 @@ def _refresh_merchant_key(mapper, connection, target):
 
     Recomputed on insert and when `description` or `payee_id` changed. Not
     covered: a Payee renamed (or re-sourced) afterwards, and Core `update()`
-    statements that bypass the unit of work (payee delete/merge); the
-    backfill script (`scripts/backfill_merchant_keys.py`) repairs both.
+    statements that bypass the unit of work. `payee_service` refreshes the
+    keys of the transactions it touches (rename, delete, merge) through
+    `key_backfill.refresh_keys`; the backfill script
+    (`scripts/backfill_merchant_keys.py`) repairs anything else.
     """
     from sqlalchemy import inspect as sa_inspect
 
