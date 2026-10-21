@@ -435,7 +435,11 @@ async def get_income_expenses_report(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> ReportResponse:
-    """Build income/expenses; explicit custom windows include actuals only."""
+    """Build income/expenses; explicit custom windows include actuals only.
+
+    Legacy criteria. The /reports/income-expenses route and the MCP tool now use
+    `app.services.reports.income_expenses`; this stays untouched so upstream
+    merges apply cleanly."""
     filtered = account_ids is not None
     acct_filter = [Transaction.account_id.in_(account_ids)] if filtered else []
     real_today = app_today()

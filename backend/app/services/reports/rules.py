@@ -101,6 +101,7 @@ async def collect_flows(
     primary_currency: str,
     segments: list[Segment],
     store_scope: Optional[tuple[Optional[uuid.UUID]]] = None,
+    account_ids: Optional[list[uuid.UUID]] = None,
 ) -> list[SegmentFlows]:
     """Debits and credits per category for each (disjoint) segment, one pass
     over the rows. Callers choose the segments: a period, its comparison
@@ -108,7 +109,11 @@ async def collect_flows(
 
     `store_scope=(category_id,)` (None inside = no category) narrows to that
     category and keys the flows by store (`merchant_key`) instead. Split
-    offsets are per category, so they are not applied in that mode."""
+    offsets are per category, so they are not applied in that mode.
+
+    `account_ids` narrows to those accounts (a collection). As in the older
+    screens, a narrowed view shows the raw movements of those accounts, so
+    split shares are not redistributed."""
     out = [SegmentFlows() for _ in segments]
     if not segments:
         return out
@@ -129,6 +134,8 @@ async def collect_flows(
     day = report_date.label("day")
     key_col = Transaction.merchant_key if store_scope is not None else Transaction.category_id
     scope_filter = []
+    if account_ids is not None:
+        scope_filter.append(Transaction.account_id.in_(account_ids))
     if store_scope is not None:
         (scope_category,) = store_scope
         scope_filter.append(
@@ -177,7 +184,7 @@ async def collect_flows(
             flow.debit += value
         flow.count += count
 
-    if store_scope is None:
+    if store_scope is None and account_ids is None:
         await _apply_split_offsets(session, workspace_id, user_id, primary_currency, segments, out)
     return out
 

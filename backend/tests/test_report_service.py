@@ -22,6 +22,7 @@ from app.schemas.report import (
     ReportSummary,
 )
 from app.services import report_service
+from app.services.reports import income_expenses as income_expenses_service
 from app.api.reports import (
     _add_years,
     _financial_year_start_month,
@@ -547,7 +548,7 @@ async def test_income_expenses_api_accepts_ytd_period(client, auth_headers, monk
             category_trend=[],
         )
 
-    monkeypatch.setattr(report_service, "get_income_expenses_report", fake_report)
+    monkeypatch.setattr(income_expenses_service, "get_income_expenses_report", fake_report)
 
     resp = await client.get(
         "/api/reports/income-expenses",
@@ -586,7 +587,7 @@ async def test_income_expenses_api_forwards_days_window(client, auth_headers, mo
             category_trend=[],
         )
 
-    monkeypatch.setattr(report_service, "get_income_expenses_report", fake_report)
+    monkeypatch.setattr(income_expenses_service, "get_income_expenses_report", fake_report)
 
     resp = await client.get(
         "/api/reports/income-expenses",
@@ -624,7 +625,7 @@ async def test_income_expenses_api_forwards_custom_range(client, auth_headers, m
             category_trend=[],
         )
 
-    monkeypatch.setattr(report_service, "get_income_expenses_report", fake_report)
+    monkeypatch.setattr(income_expenses_service, "get_income_expenses_report", fake_report)
 
     resp = await client.get(
         "/api/reports/income-expenses",
@@ -703,7 +704,7 @@ async def test_report_api_forwards_workspace_financial_year(
     income_expenses = AsyncMock(return_value=empty_report)
     app.dependency_overrides[current_workspace] = override_workspace
     monkeypatch.setattr(report_service, "get_net_worth_report", net_worth)
-    monkeypatch.setattr(report_service, "get_income_expenses_report", income_expenses)
+    monkeypatch.setattr(income_expenses_service, "get_income_expenses_report", income_expenses)
     try:
         net_response = await client.get(
             "/api/reports/net-worth", params={"period": "ytd"}, headers=auth_headers
@@ -2767,7 +2768,10 @@ async def test_historical_api_custom_range_boundaries(
         composition=[], category_trend=[],
     )
     service = AsyncMock(return_value=report)
-    monkeypatch.setattr(report_service, service_name, service)
+    monkeypatch.setattr(
+        income_expenses_service if endpoint == 'income-expenses' else report_service,
+        service_name, service,
+    )
     params = {}
     for name, offset in [('start_date', start_offset), ('end_date', end_offset)]:
         if offset is not None:
@@ -2805,7 +2809,10 @@ async def test_custom_dates_override_indian_yearly_ytd(
                                  interval='yearly'), composition=[], category_trend=[],
     )
     service = AsyncMock(return_value=report)
-    monkeypatch.setattr(report_service, service_name, service)
+    monkeypatch.setattr(
+        income_expenses_service if endpoint == 'income-expenses' else report_service,
+        service_name, service,
+    )
     app.dependency_overrides[current_workspace] = override_workspace
     try:
         params = {'period': 'ytd', 'interval': 'yearly'}
