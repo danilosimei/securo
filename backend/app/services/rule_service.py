@@ -802,6 +802,7 @@ async def _ensure_categories_for_keys(
             is_system=True,
             group_id=target_group.id if target_group else None,
             treat_as_transfer=data.get("treat_as_transfer", False),
+            report_kind="income" if CATEGORY_TO_GROUP.get(key) == "income" else "normal",
         )
         session.add(cat)
     await session.commit()

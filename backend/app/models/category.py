@@ -40,5 +40,9 @@ class Category(Base):
     # for income/expense calculations.
     is_ignored: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
+    # How reports read this category: "normal" (the sign decides), "income"
+    # (earned money) or "refund" (reduces spending instead of counting as income).
+    report_kind: Mapped[str] = mapped_column(String(10), default="normal", server_default="normal")
+
     user: Mapped["User"] = relationship(back_populates="categories")
     group: Mapped[Optional["CategoryGroup"]] = relationship(back_populates="categories")

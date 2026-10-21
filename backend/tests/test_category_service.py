@@ -405,3 +405,19 @@ async def test_delete_system_category(session: AsyncSession, test_user, test_wor
 async def test_delete_category_not_found(session: AsyncSession, test_user, test_workspace):
     assert await delete_category(session, uuid.uuid4(), test_workspace.id) is False
 
+
+
+@pytest.mark.asyncio
+async def test_default_categories_income_group_is_report_kind_income(
+    session: AsyncSession, test_user, test_workspace
+):
+    for lang, income_name in (("pt-BR", "Salário & Renda"), ("en", "Salary & Income")):
+        categories = await create_default_categories(
+            session, test_user.id, lang=lang, workspace_id=test_workspace.id
+        )
+        kinds = {c.name: c.report_kind for c in categories}
+        assert kinds[income_name] == "income"
+        assert [n for n, k in kinds.items() if k != "normal"] == [income_name]
+        await session.execute(Category.__table__.delete())
+        await session.execute(CategoryGroup.__table__.delete())
+        await session.commit()

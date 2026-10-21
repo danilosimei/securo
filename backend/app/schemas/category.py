@@ -1,7 +1,9 @@
 import uuid
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+ReportKind = Literal["normal", "income", "refund"]
 
 
 class CategoryBase(BaseModel):
@@ -14,6 +16,7 @@ class CategoryCreate(CategoryBase):
     group_id: Optional[uuid.UUID] = None
     treat_as_transfer: bool = False
     is_ignored: bool = False
+    report_kind: ReportKind = "normal"
 
 
 class CategoryUpdate(BaseModel):
@@ -24,6 +27,15 @@ class CategoryUpdate(BaseModel):
     treat_as_transfer: Optional[bool] = None
     is_ignored: Optional[bool] = None
     is_hidden: Optional[bool] = None
+    report_kind: Optional[ReportKind] = None
+
+    @field_validator("report_kind")
+    @classmethod
+    def _report_kind_not_null(cls, value: Optional[str]) -> Optional[str]:
+        # Omitting the field leaves it alone; sending null is not a kind.
+        if value is None:
+            raise ValueError("report_kind cannot be null")
+        return value
 
 
 class CategoryRead(CategoryBase):
@@ -34,6 +46,7 @@ class CategoryRead(CategoryBase):
     is_hidden: bool = False
     treat_as_transfer: bool = False
     is_ignored: bool = False
+    report_kind: ReportKind = "normal"
 
     model_config = ConfigDict(from_attributes=True)
 
