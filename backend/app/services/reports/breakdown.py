@@ -62,14 +62,17 @@ def _level_not_available(level: str) -> HTTPException:
 
 
 async def _group_level(session: AsyncSession, workspace_id: uuid.UUID) -> RowOf:
-    categories = {
-        cid: gid
-        for cid, gid in (
-            await session.execute(
-                select(Category.id, Category.group_id).where(Category.workspace_id == workspace_id)
+    rows = (
+        await session.execute(
+            select(Category.id, Category.group_id, Category.name, Category.report_kind).where(
+                Category.workspace_id == workspace_id
             )
-        ).all()
-    }
+        )
+    ).all()
+    categories = {cid: gid for cid, gid, _, _ in rows}
+    # A refund category gets its own line wherever it is filed: folded into
+    # its group, the reduction would hide inside that group's total.
+    refunds = {cid: name for cid, _, name, kind in rows if kind == "refund"}
     groups = {
         gid: name
         for gid, name in (
@@ -84,6 +87,8 @@ async def _group_level(session: AsyncSession, workspace_id: uuid.UUID) -> RowOf:
     def row_of(category_id: Optional[uuid.UUID]) -> RowRef:
         if category_id is None:
             return RowRef(None, NO_CATEGORY_LABEL, "group")
+        if category_id in refunds:
+            return RowRef(str(category_id), refunds[category_id], "category")
         group_id = categories.get(category_id)
         if group_id is None or group_id not in groups:
             return RowRef(None, NO_GROUP_LABEL, "group")

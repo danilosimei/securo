@@ -37,7 +37,8 @@ async def world(session, test_user, test_account, test_workspace):
 
     mercado = cat("Mercado", group_id=casa.id)
     cinema = cat("Cinema", group_id=lazer.id)
-    estornos = cat("Estornos & Reembolsos", report_kind="refund")
+    estornos = cat("Estornos & Reembolsos", group_id=lazer.id, report_kind="refund")
+    sem_grupo = cat("Avulsa")
     salario = cat("Salário", report_kind="income")
     await session.flush()
 
@@ -55,9 +56,10 @@ async def world(session, test_user, test_account, test_workspace):
     add(estornos, "20.00", date(2026, 9, 9), "credit")
     add(salario, "5000.00", date(2026, 9, 5), "credit")
     add(None, "10.00", date(2026, 9, 6))
+    add(sem_grupo, "5.00", date(2026, 9, 7))
     add(mercado, "150.00", date(2026, 8, 15))  # período anterior
     await session.commit()
-    return {"ws_id": ws_id, "casa": casa, "lazer": lazer}
+    return {"ws_id": ws_id, "casa": casa, "lazer": lazer, "estornos": estornos}
 
 
 @pytest.mark.asyncio
@@ -71,23 +73,28 @@ async def test_rows_by_group_with_refunds_comparison_and_sparkline(client, auth_
         "previous_from": "2026-08-02", "previous_to": "2026-08-31",
     }
     assert body["currency"] == "BRL"
-    assert body["total"] == "320.00"  # 250 + 80 + 10 - 20; the salary is not spending
+    assert body["total"] == "325.00"  # 250 + 80 + 10 + 5 - 20; the salary is not spending
     assert body["previous_total"] == "150.00"
     assert body["unconverted_count"] == 0
 
     rows = body["rows"]
-    assert [r["label"] for r in rows] == ["Casa", "Lazer", "Sem categoria", "Sem grupo"]
-    casa, lazer, no_category, no_group = rows
+    assert [r["label"] for r in rows] == ["Casa", "Lazer", "Sem categoria", "Sem grupo", "Estornos & Reembolsos"]
+    casa, lazer, no_category, no_group, refunds = rows
     assert casa["id"] == str(world["casa"].id) and casa["kind"] == "group"
     assert casa["total"] == "250.00"  # 100 + 200 - 50
     assert casa["count"] == 3
-    assert casa["share"] == pytest.approx(0.781, abs=1e-3)
+    assert casa["share"] == pytest.approx(0.769, abs=1e-3)
     assert casa["previous_total"] == "150.00"
     assert casa["change"] == pytest.approx(0.667, abs=1e-3)
+    # The refund category sits in Lazer but shows on its own line, so the
+    # reduction stays visible instead of hiding inside its group.
+    assert lazer["total"] == "80.00"
     assert lazer["previous_total"] == "0.00" and lazer["change"] is None
     assert no_category["id"] is None and no_category["total"] == "10.00"
-    assert no_group["id"] is None and no_group["total"] == "-20.00"
-    assert no_group["share"] is None  # a negative row has no share
+    assert no_group["id"] is None and no_group["total"] == "5.00"
+    assert refunds["id"] == str(world["estornos"].id) and refunds["kind"] == "category"
+    assert refunds["total"] == "-20.00"
+    assert refunds["share"] is None  # a negative row has no share
 
     assert len(casa["sparkline"]) == 12
     assert casa["sparkline"][-1] == "250.00"  # September
@@ -106,7 +113,7 @@ async def test_preset_period_uses_closed_months(client, auth_headers, world):
     assert body["period"]["from"] == "2026-07-01"
     assert body["period"]["to"] == "2026-09-30"
     assert body["period"]["partial"] is False
-    assert body["total"] == "470.00"  # August (150) joins September (320)
+    assert body["total"] == "475.00"  # August (150) joins September (325)
 
 
 @pytest.mark.asyncio
@@ -118,7 +125,7 @@ async def test_this_month_is_partial(client, auth_headers, world):
     assert body["period"]["partial"] is True
     assert body["period"]["from"] == "2026-10-01" and body["period"]["to"] == "2026-10-21"
     assert body["rows"] == [] and body["total"] == "0.00"
-    assert body["previous_total"] == "320.00"  # 1-21 September, same days of last month
+    assert body["previous_total"] == "325.00"  # 1-21 September, same days of last month
 
 
 @pytest.mark.asyncio
@@ -180,4 +187,4 @@ async def test_another_workspace_does_not_leak(session, client, auth_headers, wo
 
     body = (await client.get(URL, params={"level": "group", **SEP}, headers=auth_headers)).json()
     assert "Secreto" not in [r["label"] for r in body["rows"]]
-    assert body["total"] == "320.00"
+    assert body["total"] == "325.00"
