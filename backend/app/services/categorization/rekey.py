@@ -10,70 +10,66 @@ This module rewrites them once, at deploy, after `alembic upgrade head`
 Per workspace, under the workspace lock, and only when no `classify` or
 `redistribute` run is busy (those write suggestions and memory; a busy
 workspace is skipped and reported with the run that holds it, to be run
-again later). The transactions considered are the pipeline's candidates
-(posted, not a transfer pair, not an opening balance, not ignored), their
-payee read within the workspace, as the pipeline reads it. A key is *dead*
-when some transaction had it under v1 and none has it under v2.
+again later). The *facts* are the pipeline's candidate transactions
+(posted, not a transfer pair, not an opening balance, not ignored), each
+with its v1 and v2 key, the payee read within the workspace as the
+pipeline reads it. A key is *dead* when some candidate had it under v1 and
+none has it under v2.
 
-- **Suggestions** (every status: a dismissed one is what keeps a store
-  "ignored") keyed with the v1 key of their transaction, when v2 differs,
-  take the v2 key. One keyed with a dead key otherwise (a payee set since,
-  say) follows the memory of that key: to the key it merges into, else to
-  its transaction's v2 key. Any other key is left alone: rewriting it would
-  move the pick an undo takes back to a key that never got it.
-- **Organizer proposals** still pending (`organize` runs, `create_category`
-  ops not decided) name each store by key; a dead one takes the v2 key most
-  of the store's transactions now have, so approving it later repoints the
-  memory that exists. A store that mixed several (`MLP`) repoints only that
-  one; its rows all move as before.
-- **Memory**, per row `K` that some transaction had as its v1 key. Its
-  destinations are the v2 keys of those transactions, plus `K` itself when
-  some transaction still has `K` as its v2 key. A row whose only
-  destination is itself stays as it is; so does a row no transaction leads
-  to.
+**Which memory keys are touched.** A memory row `K` that some candidate had
+as its v1 key has as destinations the v2 keys of those candidates, plus
+`K` itself when it is still some candidate's v2 key. When that is only `K`,
+nothing happens. One other destination is a **merge** into it; two or more
+a **split** (`K` mixed stores, like `MLP` for Netshoes and Kabum). The
+touched keys are those `K` and all their destinations; no other memory row
+is ever modified.
 
-  - One destination `N` -> **merge**: `counts` summed into `N` (`K` is
-    renamed when `N` does not exist); the last choice is that of the
-    person's latest decision on the store's rows (else that of the row
-    updated last); the newest note (the other one is reported, its text
-    printed, so nothing the person wrote vanishes unseen);
-    `ai_category_id`/`ai_confidence` dropped (the store changed);
-    `ai_clean_name` of `N`, else of `K`; `K` goes.
-  - Two or more -> **split** (`K` mixed different stores): `K`'s counts are
-    unusable, so each destination is re-seeded from the person's own rows
-    (`category_source == "user"`) that now carry its key. One pick per
-    decision, per category (R16): a row's decision is the standing `user`
-    event that gave it its category; events of one store, category and
-    person less than `DECISION_GAP` apart are one decision (one bulk
-    write), and a row with no such event (older than the events) is a
-    decision of its own. A destination the memory already knew keeps, per
-    category, the larger of what it had and what the rows show: its own
-    rows are among those counted, and a sum would count them twice (and
-    again on every run). The last choice is that of the latest decision. A
-    re-seeded row loses its cached AI decision. `K` goes, unless it is
-    itself a destination: then it is rebuilt like the others, and also
-    loses its clean name and its note (both described the mixed store; the
-    note text is reported). Notes are never copied to the destinations: a
-    note goes into the prompt, and one about the mixed store would mislead
-    the model about every store it held.
+**Touched keys are recomputed from the facts**, not by combining counts
+(adding or taking the larger of old numbers drifts from what an undo takes
+back). For each touched key still in use, over the candidates that now
+carry it:
 
-Undo after the re-key. Events keep no key: undoing a person's change takes
-its pick back from the key computed at undo time (`memory.keys_for`, v2),
-or from the accepted suggestion's key, rewritten above. The pick is taken
-only by the event marked `memory_pick`, and a bulk decision under a mixed
-key marked one event, in one of the stores it covered. So each decision a
-re-seed counts gets one marked event among its rows (when none has one):
-undoing the bulk then takes back, store by store, exactly what the re-seed
-gave, and no store keeps a pick the undo left behind. A merge needs no
-marking: the picks move with the counts.
+- `counts[category]` = the person's standing decisions for it (R16, one
+  pick per decision, not per row). A row's decision is the standing `user`
+  event that gave it its current category; events of one store, category
+  and person less than `DECISION_GAP` apart are one decision (one bulk
+  write stamps each row as it goes); a `user` row with no such event
+  (older than the events) is a decision of its own.
+- `memory_pick`: exactly one event of each counted decision carries it
+  (one already marked if any, else the earliest); every other marked event
+  of those rows loses it (a superseded edit, a clear, a second mark of the
+  same decision). An undo then takes back exactly one pick per decision it
+  reverts, from the key the row has now, and the memory never holds more
+  than the facts: an undo that brings an older decision back does not add
+  its pick, so the count may fall short, never exceed.
+- the last choice is the category of the latest decision.
+- a row whose counts or last choice change, or that received a merge,
+  drops its cached AI decision and clean name (they described another
+  store). A key with no decision and no row stays absent.
 
-Rerunning changes nothing: dead keys are gone from memory, suggestions and
-proposals; a re-seed of the same rows gives the same counts, finds its
-events marked and leaves a row it would not change untouched. The cost of
-that: a key still in use that mixed stores is recognised as such on every
-run, so if its row's counts already equal its re-seed on the first run, its
-cached AI decision and note stay. Nothing here commits, except
-`rekey_all`, once per workspace.
+Notes: a merge keeps the newest note of the rows it joins; a split never
+copies a note to its destinations (a note goes into the prompt, and one
+about the mixed store would mislead the model about every store it held);
+a mixed key still in use loses its note when it is rebuilt. Every note
+dropped is reported with its text, so nothing the person wrote vanishes
+unseen. A dead key's row goes (renamed to its merge target when that has
+no row, so the note and id stay).
+
+**Suggestions** (every status: a dismissed one is what keeps a store
+"ignored"; any transaction, candidate or not) whose key is the v1 key of
+their transaction, a dead key, or whose transaction now has a touched key,
+take the transaction's v2 key, which is the key an undo of an accepted one
+takes the pick from. **Organizer proposals** still pending (`organize`
+runs, `create_category` ops not decided) naming a store by a dead key take
+the v2 key most of the store's transactions now have, so approving one
+later repoints memory that exists (a store that mixed several repoints
+the dominant one; its rows all move as before).
+
+Rerunning changes nothing: dead keys are gone; a recompute of the same
+facts gives the same counts, last choice and marks, and a row it would not
+change is left untouched (so a mixed key still in use whose counts already
+equal the facts on the first run keeps its AI cache and note). Nothing here
+commits, except `rekey_all`, once per workspace.
 """
 from __future__ import annotations
 
@@ -121,7 +117,7 @@ class KeyChange:
     new: tuple[str, ...]
     #: Picks the old row held.
     picks: int
-    #: Note text the change dropped (the older of two merged, a split's).
+    #: Note text the change dropped.
     notes: tuple[str, ...] = ()
 
 
@@ -131,10 +127,12 @@ class RekeyReport:
     suggestions: int = 0
     merged: int = 0
     split: int = 0
+    #: Memory rows recomputed that changed (or were created).
     seeded: int = 0
     skipped: str | None = None
-    #: Events marked `memory_pick` for the decisions a re-seed counted.
+    #: Events that gained / lost `memory_pick`.
     marked: int = 0
+    unmarked: int = 0
     #: Stores of pending organizer proposals re-keyed.
     proposals: int = 0
     #: The run that made the workspace busy (kind, status, id, age).
@@ -150,6 +148,7 @@ class _Row:
     category_id: uuid.UUID | None
     source: str
     day: date
+    candidate: bool
 
 
 @dataclass(frozen=True)
@@ -173,18 +172,23 @@ class _Decision:
         at = self.events[-1].at if self.events else None
         return (at is not None, at or _FLOOR, self.day)
 
+    def carrier(self) -> _Event | None:
+        """The event that carries the decision's pick."""
+        marked = [ev for ev in self.events if ev.memory_pick]
+        return (marked or self.events or [None])[0]
+
 
 @dataclass
-class _Seed:
+class _Facts:
     decisions: list[_Decision] = field(default_factory=list)
 
     def counts(self) -> dict[str, int]:
         return dict(Counter(d.category for d in self.decisions))
 
-    def latest(self) -> _Decision | None:
+    def last(self) -> uuid.UUID | None:
         if not self.decisions:
             return None
-        return max(self.decisions, key=lambda d: d.order)
+        return uuid.UUID(max(self.decisions, key=lambda d: d.order).category)
 
 
 def _utc(value: datetime | None) -> datetime | None:
@@ -242,8 +246,15 @@ def _key(
 
 
 async def _load_rows(session: AsyncSession, workspace_id: uuid.UUID) -> list[_Row]:
-    """The pipeline's candidate transactions with their v1 and v2 stored
-    key, the payee read within the workspace as the pipeline reads it."""
+    """Every transaction with its v1 and v2 stored key (the payee read within
+    the workspace, as the pipeline reads it), flagged when it is one of the
+    pipeline's candidates."""
+    candidate = and_(
+        Transaction.status == "posted",
+        Transaction.transfer_pair_id.is_(None),
+        Transaction.source != "opening_balance",
+        Transaction.is_ignored.is_(False),
+    )
     result = await session.execute(
         select(
             Transaction.id,
@@ -253,21 +264,18 @@ async def _load_rows(session: AsyncSession, workspace_id: uuid.UUID) -> list[_Ro
             Transaction.category_id,
             Transaction.category_source,
             Transaction.date,
+            candidate.label("candidate"),
         )
         .outerjoin(
             Payee, and_(Payee.id == Transaction.payee_id, Payee.workspace_id == workspace_id)
         )
-        .where(
-            Transaction.workspace_id == workspace_id,
-            Transaction.status == "posted",
-            Transaction.transfer_pair_id.is_(None),
-            Transaction.source != "opening_balance",
-            Transaction.is_ignored.is_(False),
-        )
+        .where(Transaction.workspace_id == workspace_id)
     )
     cache: dict[tuple[str | None, str | None, str | None], tuple[str, str]] = {}
     rows: list[_Row] = []
-    for tx_id, description, payee_name, payee_source, category_id, source, day in result.all():
+    for tx_id, description, payee_name, payee_source, category_id, source, day, is_candidate in (
+        result.all()
+    ):
         names = (description, payee_name, payee_source)
         keys = cache.get(names)
         if keys is None:
@@ -276,7 +284,7 @@ async def _load_rows(session: AsyncSession, workspace_id: uuid.UUID) -> list[_Ro
                 _key(description, payee_name, payee_source, NEW_VERSION),
             )
         old, new = keys
-        rows.append(_Row(tx_id, old, new, category_id, source, day))
+        rows.append(_Row(tx_id, old, new, category_id, source, day, bool(is_candidate)))
     return rows
 
 
@@ -285,6 +293,7 @@ async def _rekey_suggestions(
     workspace_id: uuid.UUID,
     by_tx: dict[uuid.UUID, _Row],
     dead: dict[str, str | None],
+    touched: set[str],
 ) -> int:
     suggestions = (
         await session.execute(
@@ -295,14 +304,15 @@ async def _rekey_suggestions(
     ).scalars().all()
     moved = 0
     for sug in suggestions:
+        key = sug.merchant_key
         row = by_tx.get(sug.transaction_id)
-        if row is not None and sug.merchant_key == row.old and row.old != row.new:
+        if row is not None and (key == row.old or key in dead or row.new in touched):
             target: str | None = row.new
-        elif sug.merchant_key in dead:
-            target = dead[sug.merchant_key] or (row.new if row is not None else None)
+        elif row is None and key in dead:
+            target = dead[key]
         else:
             continue
-        if target is not None and target != sug.merchant_key:
+        if target is not None and target != key:
             sug.merchant_key = target
             moved += 1
     return moved
@@ -365,14 +375,11 @@ async def _rekey_proposals(
     return moved
 
 
-async def _seeds(
-    session: AsyncSession, workspace_id: uuid.UUID, rows: list[_Row], keys: set[str]
-) -> dict[str, _Seed]:
-    """Per store key in `keys`, the person's decisions behind its `user` rows."""
-    chosen = [
-        row for row in rows
-        if row.new in keys and row.source == "user" and row.category_id is not None
-    ]
+async def _facts(
+    session: AsyncSession, workspace_id: uuid.UUID, rows: list[_Row]
+) -> dict[str, _Facts]:
+    """Per store key, the person's standing decisions behind its `user` rows."""
+    chosen = [row for row in rows if row.source == "user" and row.category_id is not None]
     wanted = {row.id: row.category_id for row in chosen}
     decided: dict[uuid.UUID, _Event] = {}
     ids = list(wanted)
@@ -400,13 +407,13 @@ async def _seeds(
             if tx_id not in decided or at > decided[tx_id].at:
                 decided[tx_id] = _Event(ev_id, at, user_id, bool(pick))
 
-    seeds: dict[str, _Seed] = defaultdict(_Seed)
+    facts: dict[str, _Facts] = defaultdict(_Facts)
     bursts: dict[tuple[str, str, uuid.UUID | None], list[tuple[_Event, date]]] = defaultdict(list)
     for row in chosen:
         category = str(row.category_id)
         event = decided.get(row.id)
         if event is None:
-            seeds[row.new].decisions.append(_Decision(category, [], row.day))
+            facts[row.new].decisions.append(_Decision(category, [], row.day))
         else:
             bursts[(row.new, category, event.user_id)].append((event, row.day))
     for (key, category, _user), found_events in bursts.items():
@@ -415,59 +422,66 @@ async def _seeds(
         for event, day in found_events:
             if current is None or event.at - current.events[-1].at > DECISION_GAP:
                 current = _Decision(category, [], day)
-                seeds[key].decisions.append(current)
+                facts[key].decisions.append(current)
             current.events.append(event)
             current.day = max(current.day, day)
-    return dict(seeds)
+    return dict(facts)
 
 
-def _merge_into(target: MerchantMemory, source: MerchantMemory, seed: _Seed | None) -> list[str]:
-    """Fold `source` into `target`; returns the note text dropped."""
-    counts = memory._counts(target.counts)
-    for category, picks in memory._counts(source.counts).items():
-        counts[category] = counts.get(category, 0) + picks
-    target.counts = counts  # reassigned: in-place JSON mutation is not tracked
-    latest = seed.latest() if seed is not None else None
-    if latest is not None and latest.events:
-        target.last_user_category_id = uuid.UUID(latest.category)
-    else:
-        newer, older = sorted(
-            (target, source), key=lambda r: _utc(r.updated_at) or _FLOOR, reverse=True
+async def _set_picks(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    tx_ids: list[uuid.UUID],
+    facts: list[_Facts],
+) -> tuple[int, int]:
+    """One `memory_pick` per counted decision, none on any other event of
+    `tx_ids`; returns (marked, unmarked)."""
+    carriers: dict[uuid.UUID, bool] = {}
+    for found in facts:
+        for decision in found.decisions:
+            carrier = decision.carrier()
+            if carrier is not None:
+                carriers[carrier.id] = carrier.memory_pick
+    stale: list[uuid.UUID] = []
+    for start in range(0, len(tx_ids), memory.CHUNK):
+        stale.extend(
+            ev_id
+            for ev_id in (
+                await session.execute(
+                    select(CategorizationEvent.id).where(
+                        CategorizationEvent.workspace_id == workspace_id,
+                        CategorizationEvent.transaction_id.in_(
+                            tx_ids[start:start + memory.CHUNK]
+                        ),
+                        CategorizationEvent.memory_pick.is_(True),
+                    )
+                )
+            ).scalars()
+            if ev_id not in carriers
         )
-        target.last_user_category_id = newer.last_user_category_id or older.last_user_category_id
-    dropped: list[str] = []
+    mark = [ev_id for ev_id, already in carriers.items() if not already]
+    for ids, value in ((mark, True), (stale, False)):
+        for start in range(0, len(ids), memory.CHUNK):
+            await session.execute(
+                sa_update(CategorizationEvent)
+                .where(CategorizationEvent.id.in_(ids[start:start + memory.CHUNK]))
+                .values(memory_pick=value)
+                .execution_options(synchronize_session=False)
+            )
+    return len(mark), len(stale)
+
+
+def _latest_note(rows: list[MerchantMemory]) -> tuple[MerchantMemory | None, list[str]]:
+    """The row with the newest note, and the other note texts."""
     noted = sorted(
-        (r for r in (target, source) if r.note is not None),
+        (r for r in rows if r.note is not None),
         key=lambda r: _utc(r.note_updated_at) or _FLOOR,
         reverse=True,
     )
-    if noted:
-        kept = noted[0]
-        dropped = [r.note for r in noted[1:] if r.note is not None and r.note != kept.note]
-        target.note, target.note_updated_at = kept.note, kept.note_updated_at
-    target.ai_clean_name = target.ai_clean_name or source.ai_clean_name
-    target.ai_category_id = None
-    target.ai_confidence = None
-    return dropped
-
-
-async def _mark_picks(session: AsyncSession, seeds: list[_Seed]) -> int:
-    """One `memory_pick` per counted decision, where none of its events has
-    one: an undo takes back exactly the picks the re-seed gave."""
-    ids = [
-        decision.events[0].id
-        for seed in seeds
-        for decision in seed.decisions
-        if decision.events and not any(ev.memory_pick for ev in decision.events)
-    ]
-    for start in range(0, len(ids), memory.CHUNK):
-        await session.execute(
-            sa_update(CategorizationEvent)
-            .where(CategorizationEvent.id.in_(ids[start:start + memory.CHUNK]))
-            .values(memory_pick=True)
-            .execution_options(synchronize_session=False)
-        )
-    return len(ids)
+    if not noted:
+        return None, []
+    kept = noted[0]
+    return kept, [r.note for r in noted[1:] if r.note is not None and r.note != kept.note]
 
 
 async def _rekey_memory(
@@ -475,58 +489,61 @@ async def _rekey_memory(
     workspace_id: uuid.UUID,
     rows: list[_Row],
     stored: dict[str, MerchantMemory],
-    merges: list[tuple[str, str]],
+    merges: dict[str, list[str]],
     splits: dict[str, set[str]],
     report: RekeyReport,
 ) -> None:
     current = {row.new for row in rows}
-    targets: set[str] = set().union(*splits.values()) if splits else set()
-    seeds = await _seeds(
-        session, workspace_id, rows, targets | {new for _old, new in merges}
-    )
+    touched: set[str] = set(merges) | set(splits)
+    for sources in merges.values():
+        touched.update(sources)
+    for destinations in splits.values():
+        touched.update(destinations)
+    live = touched & current
+    facts_rows = [row for row in rows if row.new in live]
+    facts = await _facts(session, workspace_id, facts_rows)
+    notes: dict[str, list[str]] = defaultdict(list)
+    picks = {key: _picks(stored[key]) for key in touched if key in stored}
 
-    for old, new in merges:
-        source = stored.pop(old)
-        picks = _picks(source)
-        target = stored.get(new)
-        dropped: list[str] = []
-        if target is None:
-            latest = seeds[new].latest() if new in seeds else None
-            if latest is not None and latest.events:
-                source.last_user_category_id = uuid.UUID(latest.category)
-            source.merchant_key = new
-            source.ai_category_id = None
-            source.ai_confidence = None
-            stored[new] = source
-        else:
-            dropped = _merge_into(target, source, seeds.get(new))
-            await session.delete(source)
+    # Dead keys first: a merge source joins its target (renamed into it when
+    # the target has no row), a split source goes.
+    received: set[str] = set()
+    for target, sources in sorted(merges.items()):
+        joining = [stored.pop(key) for key in sources]
+        row = stored.get(target)
+        kept, dropped = _latest_note(([row] if row is not None else []) + joining)
+        if row is None:
+            row = joining.pop(0)
+            row.merchant_key = target
+            stored[target] = row
+        for gone in joining:
+            await session.delete(gone)
         await session.flush()
-        report.merged += 1
-        report.changes.append(KeyChange(MERGE, old, (new,), picks, tuple(dropped)))
+        if kept is not None and kept is not row:
+            row.note, row.note_updated_at = kept.note, kept.note_updated_at
+        received.add(target)
+        for key in sources:
+            # Notes dropped by a merge are reported once, on its first source.
+            report.changes.append(
+                KeyChange(
+                    MERGE, key, (target,), picks.get(key, 0),
+                    tuple(dropped) if key == sources[0] else (),
+                )
+            )
+            report.merged += 1
+    for key in sorted(splits):
+        if key not in current:
+            row = stored.pop(key)
+            if row.note is not None:
+                notes[key].append(row.note)
+            await session.delete(row)
+    await session.flush()
 
-    if not splits:
-        return
-    before = {key: _picks(stored[key]) for key in splits}
-    notes: dict[str, str] = {}
     changed: set[str] = set()
-    for key in sorted(targets):
-        seed = seeds.get(key) or _Seed()
-        seeded = seed.counts()
+    for key in sorted(live):
+        found = facts.get(key) or _Facts()
+        counts, last = found.counts(), found.last()
         row = stored.get(key)
-        mixed = key in splits
-        # A key that mixed stores is rebuilt from its rows alone.
-        base = {} if mixed or row is None else memory._counts(row.counts)
-        counts = dict(base)
-        for category, picks in seeded.items():
-            counts[category] = max(counts.get(category, 0), picks)
-        latest = seed.latest()
-        if latest is not None:
-            last: uuid.UUID | None = uuid.UUID(latest.category)
-        elif mixed or row is None:
-            last = None
-        else:
-            last = row.last_user_category_id
         if row is None:
             if not counts:
                 continue
@@ -535,40 +552,38 @@ async def _rekey_memory(
                 counts=counts, last_user_category_id=last,
             )
             session.add(stored[key])
-        elif counts != memory._counts(row.counts) or last != row.last_user_category_id:
-            row.counts = counts
+        elif (
+            key in received
+            or counts != memory._counts(row.counts)
+            or last != row.last_user_category_id
+        ):
+            row.counts = counts  # reassigned: in-place JSON mutation is not tracked
             row.last_user_category_id = last
             row.ai_category_id = None
             row.ai_confidence = None
-            if mixed:
-                # The clean name and the note described the mixed store.
-                row.ai_clean_name = None
-                if row.note is not None:
-                    notes[key] = row.note
+            row.ai_clean_name = None
+            if key in splits and row.note is not None:
+                # A mixed key still in use: its note described the mix.
+                notes[key].append(row.note)
                 row.note = None
                 row.note_updated_at = None
         else:
             continue
         changed.add(key)
         report.seeded += 1
-    report.marked = await _mark_picks(
-        session, [seeds[key] for key in sorted(targets) if key in seeds]
+    report.marked, report.unmarked = await _set_picks(
+        session, workspace_id, [row.id for row in facts_rows],
+        [facts[key] for key in sorted(live) if key in facts],
     )
 
     for key in sorted(splits):
         destinations = splits[key]
-        if key not in current:
-            row = stored.pop(key)
-            if row.note is not None:
-                notes[key] = row.note
-            await session.delete(row)
-        elif not destinations & changed:
+        if key in current and not destinations & changed:
             continue  # a key still in use, already rebuilt: nothing to do
         report.split += 1
         report.changes.append(
             KeyChange(
-                SPLIT, key, tuple(sorted(destinations)), before[key],
-                (notes[key],) if key in notes else (),
+                SPLIT, key, tuple(sorted(destinations)), picks.get(key, 0), tuple(notes[key])
             )
         )
     await session.flush()
@@ -593,8 +608,8 @@ async def rekey_workspace(
         report.skipped = SKIPPED_BUSY
         report.busy_run = busy
     else:
-        rows = await _load_rows(session, workspace_id)
-        by_tx = {row.id: row for row in rows}
+        every = await _load_rows(session, workspace_id)
+        rows = [row for row in every if row.candidate]
         mapping: dict[str, set[str]] = defaultdict(set)
         current: set[str] = set()
         for row in rows:
@@ -615,7 +630,7 @@ async def rekey_workspace(
                 )
             ).scalars().all()
         }
-        merges: list[tuple[str, str]] = []
+        merges: dict[str, list[str]] = defaultdict(list)
         splits: dict[str, set[str]] = {}
         for key in sorted(stored):
             if key not in mapping:
@@ -624,13 +639,22 @@ async def rekey_workspace(
             if destinations == {key}:
                 continue
             if len(destinations) == 1:
-                merges.append((key, next(iter(destinations))))
+                merges[next(iter(destinations))].append(key)
             else:
                 splits[key] = destinations
+        touched = set(splits) | set(merges)
+        for sources in merges.values():
+            touched.update(sources)
+        for destinations in splits.values():
+            touched.update(destinations)
 
-        report.suggestions = await _rekey_suggestions(session, workspace_id, by_tx, dead)
-        report.proposals = await _rekey_proposals(session, workspace_id, by_tx, dead)
-        await _rekey_memory(session, workspace_id, rows, stored, merges, splits, report)
+        report.suggestions = await _rekey_suggestions(
+            session, workspace_id, {row.id: row for row in every}, dead, touched & current
+        )
+        report.proposals = await _rekey_proposals(
+            session, workspace_id, {row.id: row for row in every}, dead
+        )
+        await _rekey_memory(session, workspace_id, rows, stored, dict(merges), splits, report)
         await session.flush()
     if dry_run:
         await session.rollback()

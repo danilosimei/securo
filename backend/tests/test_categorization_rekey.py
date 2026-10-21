@@ -76,8 +76,9 @@ async def _snapshot(session, ws_id):
 
 
 def _zero(report: rekey.RekeyReport) -> bool:
-    return (report.suggestions, report.merged, report.split, report.seeded,
-            report.skipped, report.changes) == (0, 0, 0, 0, None, [])
+    return (report.suggestions, report.merged, report.split, report.seeded, report.marked,
+            report.unmarked, report.proposals, report.skipped, report.changes) == (
+        0, 0, 0, 0, 0, 0, 0, None, [])
 
 
 async def test_rekey_pending_suggestions(session, test_user, test_account, test_workspace):
@@ -120,15 +121,20 @@ async def test_rekey_leaves_suggestions_keyed_by_something_else(
 async def test_rekey_merges_converging_rows(
     session, test_user, test_account, test_workspace, test_categories
 ):
-    a, b = (str(c.id) for c in test_categories[:2])
+    """Counts come from the facts, not from adding the two rows: the
+    rows' standing decisions, whatever the old numbers said."""
+    cat_a, cat_b, cat_c = test_categories
+    a, b = str(cat_a.id), str(cat_b.id)
     ws = test_workspace.id
-    _tx(session, test_user, test_account, "Ebn *Spotify")
+    ebn = _tx(session, test_user, test_account, "Ebn *Spotify", source="user", category_id=cat_a.id)
+    plain = _tx(session, test_user, test_account, "Spotify", source="user", category_id=cat_b.id)
+    await session.flush()
+    _user_event(session, ebn, cat_a.id, NOON)
+    _user_event(session, plain, cat_b.id, NOON + timedelta(hours=1))
     _memory(session, ws, "EBN", {a: 2}, note="nota antiga", note_at=NOON - timedelta(days=3),
-            updated_at=NOON - timedelta(days=2), last=test_categories[0].id,
-            ai=test_categories[2].id)
-    _memory(session, ws, "SPOTIFY", {a: 1, b: 1}, note="nota nova", note_at=NOON,
-            updated_at=NOON - timedelta(days=1), last=test_categories[1].id,
-            ai=test_categories[2].id)
+            updated_at=NOON - timedelta(days=2), last=cat_a.id, ai=cat_c.id)
+    _memory(session, ws, "SPOTIFY", {a: 1, b: 4}, note="nota nova", note_at=NOON,
+            updated_at=NOON - timedelta(days=1), last=cat_a.id, ai=cat_c.id)
     await session.commit()
 
     report = await rekey.rekey_workspace(session, ws)
@@ -137,11 +143,11 @@ async def test_rekey_merges_converging_rows(
     rows = await _rows(session, ws)
     assert set(rows) == {"SPOTIFY"}
     spotify = rows["SPOTIFY"]
-    assert spotify.counts == {a: 3, b: 1}
+    assert spotify.counts == {a: 1, b: 1}
+    assert spotify.last_user_category_id == cat_b.id
     assert spotify.note == "nota nova"
-    assert spotify.last_user_category_id == test_categories[1].id
-    assert spotify.ai_category_id is None and spotify.ai_confidence is None
-    assert spotify.ai_clean_name == "Spotify limpo"
+    assert (spotify.ai_category_id, spotify.ai_confidence, spotify.ai_clean_name) == (
+        None, None, None)
     assert (report.merged, report.split) == (1, 0)
     assert report.changes == [rekey.KeyChange("merge", "EBN", ("SPOTIFY",), 2, ("nota antiga",))]
 
@@ -149,10 +155,10 @@ async def test_rekey_merges_converging_rows(
 async def test_rekey_merge_into_missing_row_moves_it(
     session, test_user, test_account, test_workspace, test_categories
 ):
-    a = str(test_categories[0].id)
+    cat_a = test_categories[0]
     ws = test_workspace.id
-    _tx(session, test_user, test_account, "Ebn *Spotify")
-    old = _memory(session, ws, "EBN", {a: 2}, note="assinatura", note_at=NOON,
+    _tx(session, test_user, test_account, "Ebn *Spotify", source="user", category_id=cat_a.id)
+    old = _memory(session, ws, "EBN", {str(cat_a.id): 2}, note="assinatura", note_at=NOON,
                   ai=test_categories[2].id)
     await session.commit()
 
@@ -162,10 +168,10 @@ async def test_rekey_merge_into_missing_row_moves_it(
     rows = await _rows(session, ws)
     assert set(rows) == {"SPOTIFY"}
     assert rows["SPOTIFY"].id == old.id
-    assert rows["SPOTIFY"].counts == {a: 2}
+    assert rows["SPOTIFY"].counts == {str(cat_a.id): 1}
     assert rows["SPOTIFY"].note == "assinatura"
     assert rows["SPOTIFY"].ai_category_id is None
-    assert rows["SPOTIFY"].ai_clean_name == "Ebn limpo"
+    assert rows["SPOTIFY"].ai_clean_name is None
 
 
 async def test_rekey_splits_mixed_prefix_and_reseeds_from_user_rows(
@@ -254,18 +260,18 @@ async def test_rekey_reseed_last_choice_is_the_latest_decision(
     assert rows["NETSHOES"].counts == {str(cat_a.id): 1, str(cat_b.id): 1, str(cat_c.id): 1}
 
 
-async def test_rekey_split_sums_into_existing_row(
+async def test_rekey_existing_destination_holds_its_real_decisions(
     session, test_user, test_account, test_workspace, test_categories
 ):
-    """A destination the memory already knew keeps what it had and gains the
-    person's decisions of the rows that come to it."""
+    """A destination the memory already knew is recomputed too: picks no row
+    shows any more (history) go, the rows' decisions stay; its note stays."""
     cat_a, cat_b, cat_c = test_categories
     ws = test_workspace.id
     _tx(session, test_user, test_account, "Netshoes", source="user", category_id=cat_a.id)
     _tx(session, test_user, test_account, "Mlp*Netshoes", source="user", category_id=cat_a.id)
     _tx(session, test_user, test_account, "Mlp*Kabum", source="user", category_id=cat_b.id)
-    _memory(session, ws, "NETSHOES", {str(cat_a.id): 1, str(cat_c.id): 1}, note="tenis",
-            last=cat_c.id)
+    _memory(session, ws, "NETSHOES", {str(cat_a.id): 3, str(cat_c.id): 1}, note="tenis",
+            last=cat_c.id, ai=cat_c.id)
     _memory(session, ws, "MLP", {str(cat_a.id): 3})
     await session.commit()
 
@@ -273,9 +279,34 @@ async def test_rekey_split_sums_into_existing_row(
     await session.commit()
 
     rows = await _rows(session, ws)
-    assert rows["NETSHOES"].counts == {str(cat_a.id): 2, str(cat_c.id): 1}
+    assert rows["NETSHOES"].counts == {str(cat_a.id): 2}
+    assert rows["NETSHOES"].last_user_category_id == cat_a.id
     assert rows["NETSHOES"].note == "tenis"
+    assert rows["NETSHOES"].ai_category_id is None
     assert rows["KABUM"].counts == {str(cat_b.id): 1}
+
+
+async def test_rekey_leaves_untouched_keys_alone(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """Only keys the re-key touches are recomputed: a store whose key did not
+    change keeps its numbers even when no row shows them."""
+    cat_a = test_categories[0]
+    ws = test_workspace.id
+    tx = _tx(session, test_user, test_account, "Padaria Real", source="user", category_id=cat_a.id)
+    await session.flush()
+    ev = _user_event(session, tx, cat_a.id, NOON, pick=True)
+    _memory(session, ws, "PADARIA REAL", {str(cat_a.id): 7}, ai=cat_a.id)
+    await session.commit()
+    before = await _snapshot(session, ws)
+
+    report = await rekey.rekey_workspace(session, ws)
+    await session.commit()
+
+    assert _zero(report)
+    assert await _snapshot(session, ws) == before
+    await session.refresh(ev)
+    assert ev.memory_pick is True
 
 
 async def test_rekey_is_idempotent(
@@ -330,7 +361,7 @@ async def test_rekey_dry_run_changes_nothing(
 
     report = await rekey.rekey_workspace(session, ws, dry_run=True)
 
-    assert (report.suggestions, report.merged, report.split, report.seeded) == (1, 1, 1, 2)
+    assert (report.suggestions, report.merged, report.split, report.seeded) == (1, 1, 1, 3)
     assert await _snapshot(session, ws) == before
 
 
@@ -466,8 +497,8 @@ async def test_rekey_all_postgres(postgres_sessions):
             session.add(row)
             return row
 
-        spotify = tx("Ebn *Spotify")
-        tx("Spotify")
+        spotify = tx("Ebn *Spotify", cats[0])
+        tx("Spotify", cats[0])
         tx("Mlp*Netshoes", cats[0])
         tx("Mlp*Kabum", cats[1])
         await session.flush()
@@ -478,7 +509,7 @@ async def test_rekey_all_postgres(postgres_sessions):
         await session.commit()
 
     reports = await rekey.rekey_all(postgres_sessions, workspace_id=ws)
-    assert [(r.suggestions, r.merged, r.split, r.seeded) for r in reports] == [(1, 1, 1, 2)]
+    assert [(r.suggestions, r.merged, r.split, r.seeded) for r in reports] == [(1, 1, 1, 3)]
 
     async with postgres_sessions() as session:
         rows = {
@@ -490,7 +521,7 @@ async def test_rekey_all_postgres(postgres_sessions):
             ).scalars()
         }
     assert rows == {
-        "SPOTIFY": {str(cats[0].id): 3},
+        "SPOTIFY": {str(cats[0].id): 2},
         "NETSHOES": {str(cats[0].id): 1},
         "KABUM": {str(cats[1].id): 1},
     }
@@ -769,3 +800,131 @@ async def test_rekey_reads_only_candidate_rows_and_workspace_payees(
     rows = await _rows(session, ws)
     assert set(rows) == {"EBN", "NETSHOES"}
     assert rows["NETSHOES"].id == mlp.id
+
+
+async def _accept(session, ws, user_id, key, category_id, *, at):
+    """`review.accept`, its events then stamped `at` (decisions apart in time)."""
+    from sqlalchemy import update
+
+    from app.services.categorization import review
+
+    applied = await review.accept(session, ws, user_id, merchant_key=key, category_id=category_id)
+    await session.execute(
+        update(CategorizationEvent)
+        .where(CategorizationEvent.id.in_(applied.event_ids))
+        .values(created_at=at)
+    )
+    await session.commit()
+    return applied
+
+
+async def test_undo_of_mixed_bulk_takes_only_its_pick_from_an_existing_destination(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """NETSHOES already had picks (one decision on its own row, plus history
+    no row shows). After the re-key it holds its real decisions, and undoing
+    the MLP bulk takes back exactly that bulk's pick, in each store."""
+    from app.services.categorization import review
+
+    cat_a = test_categories[0]
+    ws, user_id, a = test_workspace.id, test_user.id, str(cat_a.id)
+    plain = _tx(session, test_user, test_account, "Netshoes")
+    mlp_netshoes = _tx(session, test_user, test_account, "Mlp*Netshoes")
+    mlp_kabum = _tx(session, test_user, test_account, "Mlp*Kabum")
+    await session.flush()
+    _suggest(session, plain, "NETSHOES")
+    _suggest(session, mlp_netshoes, "MLP")
+    _suggest(session, mlp_kabum, "MLP")
+    await session.commit()
+    await _accept(session, ws, user_id, "NETSHOES", cat_a.id, at=NOON)
+    bulk = await _accept(session, ws, user_id, "MLP", cat_a.id, at=NOON + timedelta(hours=1))
+    netshoes_row = (await _rows(session, ws))["NETSHOES"]
+    netshoes_row.counts = {a: 3}  # history the rows no longer show
+    await session.commit()
+
+    report = await rekey.rekey_workspace(session, ws)
+    await session.commit()
+    rows = await _rows(session, ws)
+    assert rows["NETSHOES"].counts == {a: 2}
+    assert rows["KABUM"].counts == {a: 1}
+    assert (report.marked, report.unmarked) == (1, 0)
+
+    session.expire_all()  # the marks were written by a bulk UPDATE
+    await review.undo(session, ws, event_ids=bulk.event_ids, user_id=user_id)
+    await session.commit()
+
+    rows = await _rows(session, ws)
+    assert rows["NETSHOES"].counts == {a: 1}
+    assert rows["KABUM"].counts == {}
+    assert _zero(await rekey.rekey_workspace(session, ws))
+
+
+async def test_rekey_two_marked_edits_close_together_keep_one_mark(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """Two edits under 2 s apart are one decision: one pick, one mark, so an
+    undo of both takes back one, not two. A superseded edit loses its mark."""
+    cat_a, cat_b, _ = test_categories
+    ws = test_workspace.id
+    one = _tx(session, test_user, test_account, "Mlp*Netshoes", source="user", category_id=cat_a.id)
+    two = _tx(session, test_user, test_account, "Mlp*Netshoes", source="user", category_id=cat_a.id)
+    _tx(session, test_user, test_account, "Mlp*Kabum", source="user", category_id=cat_b.id)
+    await session.flush()
+    superseded = _user_event(session, one, cat_b.id, NOON - timedelta(days=1), pick=True)
+    first = _user_event(session, one, cat_a.id, NOON, pick=True)
+    second = _user_event(session, two, cat_a.id, NOON + timedelta(seconds=1), pick=True)
+    _memory(session, ws, "MLP", {str(cat_a.id): 2})
+    await session.commit()
+
+    report = await rekey.rekey_workspace(session, ws)
+    await session.commit()
+
+    assert (await _rows(session, ws))["NETSHOES"].counts == {str(cat_a.id): 1}
+    for ev in (superseded, first, second):
+        await session.refresh(ev)
+    assert (superseded.memory_pick, first.memory_pick, second.memory_pick) == (False, True, False)
+    assert (report.marked, report.unmarked) == (0, 2)
+
+
+async def test_rekey_dead_key_suggestion_goes_to_its_row_key_once(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """A suggestion keyed with a dead key takes its own row's key, not the
+    key the dead one merges into: a second run then finds it settled."""
+    ws = test_workspace.id
+    _tx(session, test_user, test_account, "Ebn *Spotify")
+    netshoes = _tx(session, test_user, test_account, "Mlp*Netshoes")
+    await session.flush()
+    sug = _suggest(session, netshoes, "EBN")
+    _memory(session, ws, "EBN", {str(test_categories[0].id): 1})
+    await session.commit()
+
+    await rekey.rekey_workspace(session, ws)
+    await session.commit()
+    await session.refresh(sug)
+    assert sug.merchant_key == "NETSHOES"
+
+    assert (await rekey.rekey_workspace(session, ws)).suggestions == 0
+
+
+async def test_rekey_suggestion_on_a_row_no_longer_a_candidate(
+    session, test_user, test_account, test_workspace, test_categories
+):
+    """A row ignored after its suggestion was accepted still has its
+    suggestion re-keyed: an undo of the accept takes the pick from there."""
+    ws = test_workspace.id
+    tx = _tx(session, test_user, test_account, "Mlp*Netshoes", is_ignored=True)
+    _tx(session, test_user, test_account, "Mlp*Netshoes")
+    _tx(session, test_user, test_account, "Mlp*Kabum")  # MLP splits: no single target
+    await session.flush()
+    sug = _suggest(session, tx, "MLP")
+    sug.status = "accepted"
+    _memory(session, ws, "MLP", {str(test_categories[0].id): 1})
+    await session.commit()
+
+    report = await rekey.rekey_workspace(session, ws)
+    await session.commit()
+
+    await session.refresh(sug)
+    assert sug.merchant_key == "NETSHOES"
+    assert report.suggestions == 1

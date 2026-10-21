@@ -49,6 +49,7 @@ def format_report(report: RekeyReport) -> list[str]:
         f"{report.workspace_id} sugestões={report.suggestions} fundidas={report.merged}"
         f" divididas={report.split} semeadas={report.seeded}"
         f" propostas={report.proposals} marcadas={report.marked}"
+        f" desmarcadas={report.unmarked}"
     )
     if report.skipped:
         line += f" [pulado: {report.skipped}"
@@ -94,7 +95,8 @@ async def run(argv: list[str] | None = None) -> int:
         f"total: {len(reports)} workspaces, sugestões={sum(r.suggestions for r in reports)}"
         f" fundidas={sum(r.merged for r in reports)} divididas={sum(r.split for r in reports)}"
         f" semeadas={sum(r.seeded for r in reports)} propostas={sum(r.proposals for r in reports)}"
-        f" marcadas={sum(r.marked for r in reports)} puladas={skipped}"
+        f" marcadas={sum(r.marked for r in reports)}"
+        f" desmarcadas={sum(r.unmarked for r in reports)} puladas={skipped}"
     )
     return 0
 
