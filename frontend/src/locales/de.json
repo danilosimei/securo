@@ -3169,6 +3169,18 @@
       "created": "Category created and applied",
       "tooLong": "Name too long (up to {{max}} characters)",
       "noGroup": "No group found"
+    },
+    "similar": {
+      "ask_one": "Also apply to {{count}} similar transaction from this store?",
+      "ask_other": "Also apply to the {{count}} similar transactions from this store?",
+      "apply_one": "Apply to {{count}}",
+      "apply_other": "Apply to {{count}}",
+      "show": "Show which",
+      "hide": "Hide",
+      "no": "No",
+      "applied_one": "{{count}} similar transaction updated",
+      "applied_other": "{{count}} similar transactions updated",
+      "store": "At {{store}}"
     }
   }
 }

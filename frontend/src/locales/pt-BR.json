@@ -3172,6 +3172,18 @@
       "created": "Categoria criada e aplicada",
       "tooLong": "Nome longo demais (até {{max}} caracteres)",
       "noGroup": "Nenhum grupo encontrado"
+    },
+    "similar": {
+      "ask_one": "Aplicar também à {{count}} parecida desta loja?",
+      "ask_other": "Aplicar também às {{count}} parecidas desta loja?",
+      "apply_one": "Aplicar à {{count}}",
+      "apply_other": "Aplicar às {{count}}",
+      "show": "Ver quais",
+      "hide": "Ocultar",
+      "no": "Não",
+      "applied_one": "{{count}} parecida atualizada",
+      "applied_other": "{{count}} parecidas atualizadas",
+      "store": "Em {{store}}"
     }
   }
 }

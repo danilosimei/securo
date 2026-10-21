@@ -1,7 +1,9 @@
 /** The audit screen: everything the AI, the memory and the rules categorized
  *  on their own, newest day first, one line per transaction showing what it
  *  was before and what it is now. Fix a row in place (the memory learns it)
- *  or undo one, a store, a batch or a selection (they go back to Review). */
+ *  or undo one, a store, a batch or a selection (they go back to Review).
+ *  A fix leaves the list, so the question about the store's similar rows
+ *  shows in a bar on top of the list, with the store's name. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -24,6 +26,7 @@ import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { SectionCard, SectionHeader, Segmented } from '@/components/invoice-ui'
 import { CategoryIcon } from '@/components/category-icon'
 import { CategorySelect } from '@/components/category-select'
+import { SimilarPrompt } from '@/components/categorization/similar-prompt'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -73,6 +76,8 @@ export function AppliedTab() {
   const [opened, setOpened] = useState<Map<string, boolean>>(() => new Map())
   const [fixed, setFixed] = useState<Set<string>>(() => new Set())
   const [busy, setBusy] = useState(false)
+  // The last fix, asking about the store's similar rows (a newer fix replaces it).
+  const [similarFor, setSimilarFor] = useState<{ referenceId: string; storeName: string } | null>(null)
 
   const sourceParam = [...sources].sort().join(',') || undefined
   const applied = useInfiniteQuery({
@@ -189,6 +194,7 @@ export function AppliedTab() {
         return next
       })
       toast.success(t('categorization.applied.corrected'))
+      setSimilarFor({ referenceId: event.transaction.id, storeName: event.store_name })
       invalidateCategorizationQueries(queryClient)
     },
     [queryClient, t],
@@ -323,6 +329,20 @@ export function AppliedTab() {
           description={t('categorization.applied.hint')}
         />
         {filters}
+
+        {canWrite && similarFor && (
+          <SimilarPrompt
+            key={similarFor.referenceId}
+            referenceId={similarFor.referenceId}
+            storeName={similarFor.storeName}
+            currency={currency}
+            showStore
+            autoFocus
+            // A newer fix may have taken the bar meanwhile: only this one closes.
+            onDone={() => setSimilarFor((cur) => (cur?.referenceId === similarFor.referenceId ? null : cur))}
+            className="border-b border-border bg-primary/5 px-4 py-3 sm:px-5"
+          />
+        )}
 
         {days.length === 0 ? (
           <div className="py-10 text-center">

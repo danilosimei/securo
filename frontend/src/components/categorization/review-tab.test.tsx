@@ -4,7 +4,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import { WorkspaceContext } from '@/contexts/workspace-context'
 import { ReviewTab } from '@/components/categorization/review-tab'
 import { renderWithProviders, t } from '@/test/utils'
-import type { NewCategoryProposal, ReviewGroup, ReviewTransaction } from '@/types'
+import type { NewCategoryProposal, ReviewGroup, ReviewTransaction, SimilarResult, SimilarTransaction } from '@/types'
 
 const api = vi.hoisted(() => ({
   categorization: {
@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
     choose: vi.fn(),
     undo: vi.fn(),
     setNote: vi.fn(),
+    similar: vi.fn(),
+    applySimilar: vi.fn(),
   },
   categories: { list: vi.fn() },
   categoryGroups: { list: vi.fn() },
@@ -108,6 +110,24 @@ const maria = group({
   is_person: true,
 })
 
+const noSimilar: SimilarResult = { merchant_key: 'X', count: 0, transaction_ids: [], transactions: [] }
+const similarTx = (id: string): SimilarTransaction => ({
+  id,
+  date: '2026-09-01',
+  description: `IFOOD *OLD ${id}`,
+  amount: '30.00',
+  currency: 'BRL',
+  type: 'debit',
+  category_id: 'c2',
+  category_source: 'memory',
+})
+const twoSimilar: SimilarResult = {
+  merchant_key: 'IFOOD',
+  count: 2,
+  transaction_ids: ['a', 'b'],
+  transactions: [similarTx('a'), similarTx('b')],
+}
+
 let serverGroups: ReviewGroup[] = []
 let proposals: NewCategoryProposal[] = []
 
@@ -137,6 +157,8 @@ beforeEach(() => {
     return { dismissed: 1 }
   })
   api.categorization.undo.mockResolvedValue({ restored: 2, skipped: 0 })
+  api.categorization.similar.mockResolvedValue(noSimilar)
+  api.categorization.applySimilar.mockResolvedValue({ applied: 2, event_ids: ['s1', 's2'], event_run_id: null })
 })
 
 const row = (name: string) => screen.getByText(name).closest('[data-review-row]') as HTMLElement
@@ -617,5 +639,130 @@ describe('ReviewTab', () => {
     await user.click(screen.getByRole('button', { name: t('categorization.review.notNow') }))
     expect(screen.queryByText(text)).not.toBeInTheDocument()
     expect(api.categorization.createCategory).not.toHaveBeenCalled()
+  })
+})
+
+describe('ReviewTab: parecidas da loja', () => {
+  const ask = t('categorization.similar.ask', { count: 2 })
+  const applyTwo = t('categorization.similar.apply', { count: 2 })
+
+  beforeEach(() => {
+    api.categorization.similar.mockImplementation(async (id: string) => (id === 't1' ? twoSimilar : noSimilar))
+  })
+
+  it('depois de aceitar, a linha fica com a pergunta mesmo após o refetch sem a loja; "Não" a remove', async () => {
+    const { user, queryClient } = await renderTab()
+    await user.click(within(row('iFood')).getByRole('button', { name: /Food › Restaurants/ }))
+
+    expect(await within(row('iFood')).findByText(ask)).toBeInTheDocument()
+    expect(api.categorization.similar).toHaveBeenCalledWith('t1', { excludeRule: true })
+    // The answer's own toast (with undo) is out already.
+    expect(toast.success).toHaveBeenCalledWith(
+      t('categorization.review.applied', { count: 12 }),
+      expect.objectContaining({ action: expect.objectContaining({ label: t('common.undo') }) }),
+    )
+    // The suggestion buttons gave way to the question.
+    expect(within(row('iFood')).queryByRole('button', { name: /Food › Restaurants/ })).not.toBeInTheDocument()
+
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ['categorization', 'review'] })
+    })
+    expect(within(row('iFood')).getByText(ask)).toBeInTheDocument()
+
+    await user.click(within(row('iFood')).getByRole('button', { name: t('categorization.similar.no') }))
+    await waitFor(() => expect(screen.queryByText('iFood')).not.toBeInTheDocument())
+    expect(api.categorization.applySimilar).not.toHaveBeenCalled()
+    await waitFor(() => expect(row('Uber')).toHaveFocus())
+  })
+
+  it('pelo teclado: o foco fica na loja respondida e Enter aplica às N', async () => {
+    const { user } = await renderTab()
+    act(() => row('iFood').focus())
+    await user.keyboard('1')
+    await within(row('iFood')).findByText(ask)
+    expect(row('iFood')).toHaveFocus()
+
+    await user.keyboard('{Enter}')
+    expect(api.categorization.applySimilar).toHaveBeenCalledWith('t1', {
+      excludeRule: true,
+      transactionIds: ['a', 'b'],
+    })
+    await waitFor(() => expect(screen.queryByText('iFood')).not.toBeInTheDocument())
+    await waitFor(() => expect(row('Uber')).toHaveFocus())
+    expect(toast.success).toHaveBeenCalledWith(
+      t('categorization.similar.applied', { count: 2 }),
+      expect.objectContaining({ action: expect.objectContaining({ label: t('common.undo') }) }),
+    )
+  })
+
+  it('pelo teclado: Escape é o "Não"', async () => {
+    const { user } = await renderTab()
+    act(() => row('iFood').focus())
+    await user.keyboard('1')
+    await within(row('iFood')).findByText(ask)
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByText('iFood')).not.toBeInTheDocument())
+    expect(api.categorization.applySimilar).not.toHaveBeenCalled()
+    await waitFor(() => expect(row('Uber')).toHaveFocus())
+  })
+
+  it('a pergunta não trava as outras lojas', async () => {
+    const { user } = await renderTab()
+    await user.click(within(row('iFood')).getByRole('button', { name: /Food › Restaurants/ }))
+    await within(row('iFood')).findByText(ask)
+
+    // The answered row's own shortcuts are gone; the other rows still answer.
+    act(() => row('iFood').focus())
+    await user.keyboard('2')
+    expect(api.categorization.accept).toHaveBeenCalledTimes(1)
+    await user.click(within(row('Uber')).getByRole('button', { name: /Transport › Rides/ }))
+    await waitFor(() =>
+      expect(api.categorization.accept).toHaveBeenCalledWith(expect.objectContaining({ merchant_key: 'UBER' })),
+    )
+    await waitFor(() => expect(screen.queryByText('Uber')).not.toBeInTheDocument())
+    expect(within(row('iFood')).getByText(ask)).toBeInTheDocument()
+  })
+
+  it('desfazer a resposta tira a pergunta e a loja volta a pedir revisão', async () => {
+    const { user } = await renderTab()
+    await user.click(within(row('iFood')).getByRole('button', { name: /Food › Restaurants/ }))
+    await within(row('iFood')).findByText(ask)
+
+    serverGroups = [ifood, ...serverGroups]
+    const options = toast.success.mock.calls[0][1] as { action: { onClick: () => void } }
+    await act(async () => options.action.onClick())
+
+    expect(api.categorization.undo).toHaveBeenCalledWith({ event_ids: ['IFOOD-e1', 'IFOOD-e2'] })
+    // The refetch brings the store back as a store to review.
+    await waitFor(() =>
+      expect(within(row('iFood')).getByRole('button', { name: /Food › Restaurants/ })).toBeInTheDocument(),
+    )
+    expect(screen.queryByText(ask)).not.toBeInTheDocument()
+  })
+
+  it('criar a categoria nova da própria linha também pergunta', async () => {
+    serverGroups = [{ ...ifood, new_category: { group: 'Leisure', name: 'Delivery' } }, uber, maria]
+    api.categorization.createCategory.mockImplementation(async () => {
+      serverGroups = serverGroups.filter((g) => g.merchant_key !== 'IFOOD')
+      return { category_id: 'c9', applied: 12, event_ids: ['n1'] }
+    })
+    const { user } = await renderTab()
+    await user.click(
+      within(row('iFood')).getByRole('button', {
+        name: t('categorization.review.newCategory', { path: 'Leisure › Delivery' }),
+      }),
+    )
+    expect(api.categorization.createCategory).toHaveBeenCalledWith({
+      group: 'Leisure',
+      name: 'Delivery',
+      merchant_keys: ['IFOOD'],
+    })
+    expect(await within(row('iFood')).findByText(ask)).toBeInTheDocument()
+    await user.click(within(row('iFood')).getByRole('button', { name: applyTwo }))
+    expect(api.categorization.applySimilar).toHaveBeenCalledWith('t1', {
+      excludeRule: true,
+      transactionIds: ['a', 'b'],
+    })
   })
 })

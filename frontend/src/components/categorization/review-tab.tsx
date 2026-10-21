@@ -2,8 +2,10 @@
  *  decide on their own, one row per store, biggest total first.
  *
  *  Built for speed: every answer is one click (or one key), applies to the
- *  whole store, disappears at once and can be undone from the toast. The
- *  memory learns each answer, so this list is meant to shrink over time. */
+ *  whole store and can be undone from the toast. The memory learns each
+ *  answer, so this list is meant to shrink over time. When the store has
+ *  other rows a person never decided on, the answered row stays in place and
+ *  asks whether to file them too (Enter / Escape); otherwise it leaves. */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -25,7 +27,9 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { Kbd, ReviewGroupRow, type CategoryInfo } from '@/components/categorization/review-group-row'
+import { ReviewGroupRow, type CategoryInfo } from '@/components/categorization/review-group-row'
+import { Kbd } from '@/components/categorization/kbd'
+import type { SimilarPromptHandle } from '@/components/categorization/similar-prompt'
 import { storeName } from '@/lib/categorization-review'
 import type { AppliedResult, ChooseRequest, NewCategoryProposal, ReviewGroup, ReviewQueue } from '@/types'
 
@@ -40,6 +44,15 @@ const UNDO_CHUNK = 5000
 /** How long "Ignore" can be taken back before it reaches the server. */
 const DISMISS_UNDO_MS = 6000
 const HIDDEN_PROPOSALS_KEY = 'categorization.review.hiddenProposals'
+
+/** A store just answered: kept on screen, where it was, while it asks about
+ *  the store's similar rows ("sending" until the answer is in). */
+interface Answered {
+  group: ReviewGroup
+  index: number
+  referenceId: string
+  phase: 'sending' | 'asking'
+}
 
 const proposalId = (p: { group: string; name: string }) =>
   `${p.group.trim().toLowerCase()}|${p.name.trim().toLowerCase()}`
@@ -149,6 +162,10 @@ export function ReviewTab() {
   // hidden, so the list never flashes "all categorized" before the answer.
   const [applying, setApplying] = useState<Set<string>>(() => new Set())
   const [acceptingAll, setAcceptingAll] = useState(false)
+  // Answered stores asking about their similar rows, by merchant key; the
+  // server's queue no longer holds them, so the snapshot is what is shown.
+  const [answered, setAnswered] = useState<Map<string, Answered>>(() => new Map())
+  const promptHandles = useRef(new Map<string, SimilarPromptHandle>())
 
   const [hiddenProposals, setHiddenProposals] = useState(readHiddenProposals)
   const [openKey, setOpenKey] = useState<string | null>(null)
@@ -160,13 +177,20 @@ export function ReviewTab() {
   const legendId = useId()
 
   const data = review.data
-  const visible = useMemo(
-    () =>
-      (data?.groups ?? []).filter(
-        (g) => !pending.has(g.merchant_key) && !ignored.has(g.merchant_key),
-      ),
-    [data, pending, ignored],
-  )
+  const visible = useMemo(() => {
+    const rows = (data?.groups ?? []).filter(
+      (g) => !pending.has(g.merchant_key) && !ignored.has(g.merchant_key) && !answered.has(g.merchant_key),
+    )
+    // Each answered store goes back where it was (or last, if the list shrank).
+    for (const a of [...answered.values()].sort((x, y) => x.index - y.index)) {
+      rows.splice(Math.min(a.index, rows.length), 0, a.group)
+    }
+    return rows
+  }, [data, pending, ignored, answered])
+  const visibleRef = useRef(visible)
+  useEffect(() => {
+    visibleRef.current = visible
+  })
   const proposals = useMemo(
     () =>
       (data?.new_category_proposals ?? []).filter(
@@ -183,10 +207,11 @@ export function ReviewTab() {
       visible.filter(
         (g) =>
           !applying.has(g.merchant_key) &&
+          !answered.has(g.merchant_key) &&
           !!g.suggestion?.category_id &&
           catalog.has(g.suggestion.category_id),
       ),
-    [visible, catalog, applying],
+    [visible, catalog, applying, answered],
   )
   const current = Math.max(0, Math.min(focusIdx, visible.length - 1))
 
@@ -238,11 +263,17 @@ export function ReviewTab() {
   )
 
   const appliedToast = useCallback(
-    (applied: number, eventIds: string[], title?: string) => {
+    (applied: number, eventIds: string[], title?: string, onUndo?: () => void) => {
       const message = t('categorization.review.applied', { count: applied })
       const action =
         eventIds.length > 0
-          ? { label: t('common.undo'), onClick: () => void undo(eventIds) }
+          ? {
+              label: t('common.undo'),
+              onClick: () => {
+                onUndo?.()
+                void undo(eventIds)
+              },
+            }
           : undefined
       if (title) toast.success(title, { description: message, action, duration: 8000 })
       else toast.success(message, { action, duration: 8000 })
@@ -250,9 +281,31 @@ export function ReviewTab() {
     [t, undo],
   )
 
-  /** One answer for one store: hidden at once, sent, then the toast with
-   *  undo; on failure the row comes back. `done` runs on success and may
-   *  return the toast's title. */
+  /** The answered store leaves; if it held the focus, the next store (now
+   *  at the same index) takes it, so the next answer is one key away. */
+  const releaseAnswered = useCallback((key: string) => {
+    const idx = visibleRef.current.findIndex((g) => g.merchant_key === key)
+    const active = document.activeElement as HTMLElement | null
+    const activeRow = active?.closest<HTMLElement>('[data-review-row]')
+    const heldFocus =
+      idx >= 0 && (!active || active === document.body || Number(activeRow?.dataset.index) === idx)
+    if (heldFocus) {
+      setFocusIdx(idx)
+      refocus.current = true
+    }
+    promptHandles.current.delete(key)
+    setAnswered((prev) => {
+      if (!prev.has(key)) return prev
+      const next = new Map(prev)
+      next.delete(key)
+      return next
+    })
+  }, [])
+
+  /** One answer for one store: the row stays where it is while it is sent,
+   *  then the toast with undo and the question about the store's similar
+   *  rows (the row leaves when there are none); on failure the row comes
+   *  back as it was. `done` runs on success and may return the toast's title. */
   const answerStore = useCallback(
     async <R extends { applied: number; event_ids: string[] }>(
       group: ReviewGroup,
@@ -261,23 +314,41 @@ export function ReviewTab() {
     ) => {
       if (!canWrite) return
       const key = group.merchant_key
-      markPending([key], true)
+      const shown = visibleRef.current
+      const at = shown.findIndex((g) => g.merchant_key === key)
+      const referenceId = group.transaction_ids[0]
+      setAnswered((prev) =>
+        new Map(prev).set(key, {
+          group,
+          index: at >= 0 ? at : shown.length,
+          referenceId,
+          phase: 'sending',
+        }),
+      )
       setOpenKey((open) => (open === key ? null : open))
       // A refetch already on its way may still hold this store.
       await queryClient.cancelQueries({ queryKey: [...REVIEW_QUERY_KEY] })
       try {
         const result = await send()
         dropFromCache([key])
-        appliedToast(result.applied, result.event_ids, done?.(result))
+        // Undoing the answer takes the question with it.
+        appliedToast(result.applied, result.event_ids, done?.(result), () => releaseAnswered(key))
         invalidateCategorizationQueries(queryClient)
+        if (result.applied > 0 && referenceId) {
+          setAnswered((prev) => {
+            const entry = prev.get(key)
+            return entry ? new Map(prev).set(key, { ...entry, phase: 'asking' }) : prev
+          })
+        } else {
+          releaseAnswered(key)
+        }
       } catch (err) {
         toast.error(extractApiError(err, t('common.error')))
         void invalidateReview()
-      } finally {
-        markPending([key], false)
+        releaseAnswered(key)
       }
     },
-    [appliedToast, canWrite, dropFromCache, invalidateReview, markPending, queryClient, t],
+    [appliedToast, canWrite, dropFromCache, invalidateReview, queryClient, releaseAnswered, t],
   )
 
   const accept = useCallback(
@@ -305,6 +376,29 @@ export function ReviewTab() {
           return result.created_category ? t('categorization.create.created') : undefined
         },
       ),
+    [answerStore, queryClient, t],
+  )
+
+  /** The store's own new-category proposal, made from its row: one store,
+   *  so it asks about the similar rows like any other answer. */
+  const createForStore = useCallback(
+    (group: ReviewGroup) => {
+      const draft = group.new_category
+      if (!draft) return
+      void answerStore(
+        group,
+        () =>
+          categorizationApi.createCategory({
+            group: draft.group,
+            name: draft.name,
+            merchant_keys: [group.merchant_key],
+          }),
+        () => {
+          invalidateCategoryQueries(queryClient)
+          return t('categorization.review.created', { path: `${draft.group} › ${draft.name}` })
+        },
+      )
+    },
     [answerStore, queryClient, t],
   )
 
@@ -491,6 +585,39 @@ export function ReviewTab() {
     const group = visible[idx]
     if (!group) return
 
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        moveFocus(idx + 1)
+        return
+      case 'ArrowUp':
+        e.preventDefault()
+        moveFocus(idx - 1)
+        return
+      case 'Home':
+        e.preventDefault()
+        moveFocus(0)
+        return
+      case 'End':
+        e.preventDefault()
+        moveFocus(visible.length - 1)
+        return
+    }
+
+    // An answered store asks about its similar rows: Enter applies, Escape
+    // declines; its other shortcuts went away with its buttons.
+    if (answered.has(group.merchant_key)) {
+      const prompt = promptHandles.current.get(group.merchant_key)
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        prompt?.apply()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        prompt?.decline()
+      }
+      return
+    }
+
     const answer = (run: () => void) => {
       e.preventDefault()
       if (applying.has(group.merchant_key)) return
@@ -499,22 +626,6 @@ export function ReviewTab() {
     }
     const suggestion = group.suggestion
     switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        moveFocus(idx + 1)
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        moveFocus(idx - 1)
-        break
-      case 'Home':
-        e.preventDefault()
-        moveFocus(0)
-        break
-      case 'End':
-        e.preventDefault()
-        moveFocus(visible.length - 1)
-        break
       case 'Enter':
         e.preventDefault()
         setOpenKey((open) => (open === group.merchant_key ? null : group.merchant_key))
@@ -593,8 +704,12 @@ export function ReviewTab() {
     )
   }
 
-  const hiddenCount = data.groups.length - visible.length
+  const hiddenCount = data.groups.filter(
+    (g) => pending.has(g.merchant_key) || ignored.has(g.merchant_key) || answered.has(g.merchant_key),
+  ).length
   const remaining = Math.max(0, data.total - hiddenCount)
+  // Answered stores still on screen are not waiting for review any more.
+  const reviewing = visible.length - answered.size
   const paged = data.total > data.groups.length
   const showShortcuts = canWrite && visible.length > 0
   const money = (value: number | string) => mask(formatCurrency(Number(value), currency, locale))
@@ -689,51 +804,55 @@ export function ReviewTab() {
               pointerDown.current = true
             }}
           >
-            {visible.map((group, i) => (
-              <ReviewGroupRow
-                key={group.merchant_key}
-                group={group}
-                index={i}
-                catalog={catalog}
-                categories={categories}
-                categoryGroups={categoryGroups}
-                canWrite={canWrite}
-                open={openKey === group.merchant_key}
-                current={i === current}
-                busy={applying.has(group.merchant_key)}
-                describedBy={showShortcuts ? legendId : undefined}
-                currency={currency}
-                offerNewCategory={!proposedKeys.has(group.merchant_key)}
-                rowRef={(el) => {
-                  rowRefs.current[i] = el
-                }}
-                onFocusRow={() => setFocusIdx(i)}
-                onToggle={() =>
-                  setOpenKey((open) => (open === group.merchant_key ? null : group.merchant_key))
-                }
-                onAccept={(categoryId) => {
-                  focusAfter(i)
-                  void accept(group, categoryId)
-                }}
-                onChoose={(payload) => {
-                  focusAfter(i)
-                  void choose(group, payload)
-                }}
-                onDismiss={() => {
-                  focusAfter(i)
-                  dismiss(group)
-                }}
-                onCreateCategory={() =>
-                  group.new_category &&
-                  void createCategory({
-                    ...group.new_category,
-                    merchant_keys: [group.merchant_key],
-                    count: group.count,
-                    total: group.total,
-                  })
-                }
-              />
-            ))}
+            {visible.map((group, i) => {
+              const answer = answered.get(group.merchant_key)
+              return (
+                <ReviewGroupRow
+                  key={group.merchant_key}
+                  group={group}
+                  answer={answer ? { phase: answer.phase, referenceId: answer.referenceId } : undefined}
+                  onAnswerDone={() => releaseAnswered(group.merchant_key)}
+                  promptHandle={(handle) => {
+                    if (handle) promptHandles.current.set(group.merchant_key, handle)
+                    else promptHandles.current.delete(group.merchant_key)
+                  }}
+                  index={i}
+                  catalog={catalog}
+                  categories={categories}
+                  categoryGroups={categoryGroups}
+                  canWrite={canWrite}
+                  open={openKey === group.merchant_key}
+                  current={i === current}
+                  busy={applying.has(group.merchant_key)}
+                  describedBy={showShortcuts ? legendId : undefined}
+                  currency={currency}
+                  offerNewCategory={!proposedKeys.has(group.merchant_key)}
+                  rowRef={(el) => {
+                    rowRefs.current[i] = el
+                  }}
+                  onFocusRow={() => setFocusIdx(i)}
+                  onToggle={() =>
+                    setOpenKey((open) => (open === group.merchant_key ? null : group.merchant_key))
+                  }
+                  onAccept={(categoryId) => {
+                    focusAfter(i)
+                    void accept(group, categoryId)
+                  }}
+                  onChoose={(payload) => {
+                    focusAfter(i)
+                    void choose(group, payload)
+                  }}
+                  onDismiss={() => {
+                    focusAfter(i)
+                    dismiss(group)
+                  }}
+                  onCreateCategory={() => {
+                    focusAfter(i)
+                    createForStore(group)
+                  }}
+                />
+              )
+            })}
           </ul>
         )}
 
@@ -767,7 +886,7 @@ export function ReviewTab() {
             {paged && (
               <p>
                 {t('categorization.review.showing', {
-                  shown: visible.length,
+                  shown: reviewing,
                   total: remaining,
                 })}
               </p>

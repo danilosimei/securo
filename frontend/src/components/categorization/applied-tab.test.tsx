@@ -7,7 +7,7 @@ import { renderWithProviders, t } from '@/test/utils'
 import type { AppliedEvent } from '@/types'
 
 const api = vi.hoisted(() => ({
-  categorization: { applied: vi.fn(), undo: vi.fn(), choose: vi.fn() },
+  categorization: { applied: vi.fn(), undo: vi.fn(), choose: vi.fn(), similar: vi.fn(), applySimilar: vi.fn() },
   categories: { list: vi.fn() },
   categoryGroups: { list: vi.fn() },
   transactions: { update: vi.fn() },
@@ -81,7 +81,25 @@ beforeEach(() => {
   api.categories.list.mockResolvedValue([restaurants, groceries, rides])
   api.categoryGroups.list.mockResolvedValue(groupsFixture)
   api.transactions.update.mockResolvedValue({})
+  api.categorization.similar.mockResolvedValue({ merchant_key: 'X', count: 0, transaction_ids: [], transactions: [] })
+  api.categorization.applySimilar.mockResolvedValue({ applied: 2, event_ids: ['s1', 's2'], event_run_id: null })
 })
+
+const twoUberTrips = {
+  merchant_key: 'UBER',
+  count: 2,
+  transaction_ids: ['u1', 'u2'],
+  transactions: ['u1', 'u2'].map((id) => ({
+    id,
+    date: '2026-09-01',
+    description: `UBER *OLD ${id}`,
+    amount: '18.00',
+    currency: 'BRL',
+    type: 'debit',
+    category_id: 'c3',
+    category_source: 'memory',
+  })),
+}
 
 async function renderTab() {
   const utils = renderWithProviders(<AppliedTab />)
@@ -248,5 +266,52 @@ describe('AppliedTab', () => {
     total = 0
     renderWithProviders(<AppliedTab />)
     expect(await screen.findByText('Nothing was applied automatically yet')).toBeInTheDocument()
+  })
+})
+
+describe('AppliedTab: parecidas da loja', () => {
+  const ask = t('categorization.similar.ask', { count: 2 })
+
+  async function fixUber(user: Awaited<ReturnType<typeof renderTab>>['user']) {
+    const store = screen.getByRole('button', { name: /Uber/i })
+    if (store.getAttribute('aria-expanded') !== 'true') await user.click(store)
+    const row = screen.getByText('UBER *TRIP').closest('li') as HTMLElement
+    await user.click(within(row).getByRole('button', { name: 'Rides' }))
+    await user.click(await screen.findByRole('option', { name: /Groceries/ }))
+  }
+
+  it('depois de corrigir uma linha, a barra com o nome da loja pergunta pelas parecidas', async () => {
+    api.categorization.similar.mockResolvedValue(twoUberTrips)
+    const { user } = await renderTab()
+    await fixUber(user)
+
+    const bar = (await screen.findByText(ask)).closest('[data-similar-prompt]') as HTMLElement
+    expect(within(bar).getByText(t('categorization.similar.store', { store: 'Uber' }))).toBeInTheDocument()
+    expect(api.categorization.similar).toHaveBeenCalledWith('t4', { excludeRule: true })
+    // The corrected row has left the list; the question stays at the top.
+    await waitFor(() => expect(screen.queryByText('UBER *TRIP')).not.toBeInTheDocument())
+
+    await user.click(within(bar).getByRole('button', { name: t('categorization.similar.apply', { count: 2 }) }))
+    expect(api.categorization.applySimilar).toHaveBeenCalledWith('t4', {
+      excludeRule: true,
+      transactionIds: ['u1', 'u2'],
+    })
+    await waitFor(() => expect(screen.queryByText(ask)).not.toBeInTheDocument())
+  })
+
+  it('"Não" fecha a barra sem aplicar', async () => {
+    api.categorization.similar.mockResolvedValue(twoUberTrips)
+    const { user } = await renderTab()
+    await fixUber(user)
+    await user.click(await screen.findByRole('button', { name: t('categorization.similar.no') }))
+    expect(screen.queryByText(ask)).not.toBeInTheDocument()
+    expect(api.categorization.applySimilar).not.toHaveBeenCalled()
+  })
+
+  it('sem parecidas nenhuma barra aparece', async () => {
+    const { user } = await renderTab()
+    await fixUber(user)
+    await waitFor(() => expect(api.categorization.similar).toHaveBeenCalledWith('t4', { excludeRule: true }))
+    expect(document.querySelector('[data-similar-prompt]')).toBeNull()
   })
 })

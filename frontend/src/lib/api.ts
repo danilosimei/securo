@@ -2358,12 +2358,28 @@ export const categorization = {
     const { data } = await api.put('/categorization/notes', payload)
     return data
   },
-  similar: async (transactionId: string): Promise<SimilarResult> => {
-    const { data } = await api.post('/categorization/similar', { transaction_id: transactionId })
+  /** The store's other rows with a different category. `excludeRule`
+   *  (the Categorization section) also leaves out the rows a rule filed. */
+  similar: async (
+    transactionId: string,
+    opts: { excludeRule?: boolean } = {},
+  ): Promise<SimilarResult> => {
+    const { data } = await api.post('/categorization/similar', {
+      transaction_id: transactionId,
+      exclude_rule: opts.excludeRule ?? false,
+    })
     return data
   },
-  applySimilar: async (transactionId: string): Promise<AppliedResult> => {
-    const { data } = await api.post('/categorization/similar/apply', { transaction_id: transactionId })
+  /** With `transactionIds`, exactly those rows (the ones the person was shown). */
+  applySimilar: async (
+    transactionId: string,
+    opts: { excludeRule?: boolean; transactionIds?: string[] } = {},
+  ): Promise<AppliedResult> => {
+    const { data } = await api.post('/categorization/similar/apply', {
+      transaction_id: transactionId,
+      exclude_rule: opts.excludeRule ?? false,
+      ...(opts.transactionIds ? { transaction_ids: opts.transactionIds } : {}),
+    })
     return data
   },
   ruleDraft: async (txId: string): Promise<RuleDraft> => {

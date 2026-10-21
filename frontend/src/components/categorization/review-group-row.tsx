@@ -5,10 +5,13 @@
  *  `ReviewTab`); the buttons inside stay ordinary buttons so a mouse, a
  *  touch screen and a screen reader all reach the same answers. Only the
  *  current row's buttons are Tab stops: the shortcuts and the arrows serve
- *  that row, so Tab need not walk every button of every store. */
+ *  that row, so Tab need not walk every button of every store.
+ *
+ *  Once answered, the row keeps its place and its focus, and the answers
+ *  give way to the question about the store's similar rows. */
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronRight, FolderPlus, X } from 'lucide-react'
+import { ChevronRight, FolderPlus, Loader2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CategoryIcon } from '@/components/category-icon'
 import { CategorySelect } from '@/components/category-select'
@@ -17,6 +20,8 @@ import { useDateLocale, useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { cn } from '@/lib/utils'
 import { StoreNote } from '@/components/categorization/store-note'
+import { Kbd } from '@/components/categorization/kbd'
+import { SimilarPrompt, type SimilarPromptHandle } from '@/components/categorization/similar-prompt'
 import { storeName } from '@/lib/categorization-review'
 import type { Category, CategoryGroup, ChooseRequest, ReviewGroup, ReviewTransaction } from '@/types'
 
@@ -27,19 +32,6 @@ export interface CategoryInfo {
 
 function categoryPath(info: CategoryInfo) {
   return info.groupName ? `${info.groupName} › ${info.category.name}` : info.category.name
-}
-
-/** A key cap, shared by the row buttons and the shortcuts legend. */
-export function Kbd({ className, ...props }: React.ComponentProps<'kbd'>) {
-  return (
-    <kbd
-      className={cn(
-        'inline-flex h-4 min-w-4 items-center justify-center rounded border border-border bg-muted px-1 font-mono text-[10px] font-medium leading-none text-muted-foreground',
-        className,
-      )}
-      {...props}
-    />
-  )
 }
 
 function SuggestionButton({
@@ -101,6 +93,12 @@ interface ReviewGroupRowProps {
   onChoose: (payload: Omit<ChooseRequest, 'merchant_key'>) => void
   onDismiss: () => void
   onCreateCategory: () => void
+  /** Answered: being sent, or asking about the store's similar rows. */
+  answer?: { phase: 'sending' | 'asking'; referenceId: string }
+  /** The question is over (applied, declined, or nothing to ask). */
+  onAnswerDone?: () => void
+  /** Lets the list route Enter / Escape on the row to the question. */
+  promptHandle?: React.Ref<SimilarPromptHandle>
 }
 
 export function ReviewGroupRow({
@@ -123,6 +121,9 @@ export function ReviewGroupRow({
   onChoose,
   onDismiss,
   onCreateCategory,
+  answer,
+  onAnswerDone,
+  promptHandle,
 }: ReviewGroupRowProps) {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
@@ -157,7 +158,13 @@ export function ReviewGroupRow({
       tabIndex={current ? 0 : -1}
       aria-describedby={describedBy}
       aria-busy={busy || undefined}
-      aria-keyshortcuts={canWrite ? '1 2 x Enter ArrowUp ArrowDown' : 'Enter ArrowUp ArrowDown'}
+      aria-keyshortcuts={
+        answer
+          ? 'Enter Escape ArrowUp ArrowDown'
+          : canWrite
+            ? '1 2 x Enter ArrowUp ArrowDown'
+            : 'Enter ArrowUp ArrowDown'
+      }
       onFocus={(e) => {
         if (e.target === e.currentTarget) onFocusRow()
       }}
@@ -216,7 +223,24 @@ export function ReviewGroupRow({
           {group.note && <StoreNote merchantKey={group.merchant_key} note={group.note} className="mt-0.5 pl-5" />}
         </div>
 
-        {canWrite && (
+        {answer ? (
+          <div className="pl-5 sm:max-w-[26rem] sm:shrink-0 sm:pl-0" onClick={(e) => e.stopPropagation()}>
+            {answer.phase === 'sending' ? (
+              <Applying />
+            ) : (
+              <SimilarPrompt
+                referenceId={answer.referenceId}
+                storeName={name ?? t('categorization.review.whoIsUnknown')}
+                currency={currency}
+                onDone={() => onAnswerDone?.()}
+                loading={<Applying />}
+                shortcuts={current}
+                tabIndex={inner}
+                handle={promptHandle}
+              />
+            )}
+          </div>
+        ) : canWrite && (
           <div
             // Phone: suggestions full width, then "Other…" and "Ignore" side by side.
             className="grid grid-cols-2 gap-1.5 pl-5 sm:flex sm:shrink-0 sm:items-center sm:pl-0"
@@ -290,6 +314,17 @@ export function ReviewGroupRow({
         />
       )}
     </li>
+  )
+}
+
+/** The answer on its way (and the question being looked up). */
+function Applying() {
+  const { t } = useTranslation()
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+      <Loader2 size={13} className="animate-spin" />
+      {t('categorization.review.applying')}
+    </span>
   )
 }
 

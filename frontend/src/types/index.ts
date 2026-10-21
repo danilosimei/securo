@@ -2022,10 +2022,25 @@ export interface Provenance {
   store_note: NoteRead | null
 }
 
+/** One of a store's other rows that a choice could also file. */
+export interface SimilarTransaction {
+  id: string
+  date: string
+  description: string
+  /** Unmasked: mask it with `mask(formatCurrency(...))`. */
+  amount: number | string
+  currency: string
+  type: 'debit' | 'credit'
+  category_id: string | null
+  category_source: CategorySource
+}
+
 export interface SimilarResult {
   merchant_key: string
   count: number
   transaction_ids: string[]
+  /** The same rows, in the same order as `transaction_ids`. */
+  transactions: SimilarTransaction[]
 }
 
 export interface RuleDraft {
