@@ -3,6 +3,7 @@ import { loadReportsRange, saveReportsRange, type ReportsRange } from '@/lib/rem
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import {
   AreaChart,
   Area,
@@ -27,6 +28,8 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { PageHeader } from '@/components/page-header'
 import { CashflowSankey } from '@/components/reports/CashflowSankey'
+import { ExploreTab } from '@/components/reports/explore/explore-tab'
+import { FadePanel } from '@/components/ui/fade-panel'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
@@ -156,6 +159,13 @@ interface ReportTab {
 
 const REPORT_TABS: ReportTab[] = [
   {
+    // Has its own period selector and URL state (see ExploreTab); the range
+    // fields only keep the shared tab shape valid.
+    key: 'explore', labelKey: 'reports.explore.tab', enabled: true,
+    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
+  },
+  {
     key: 'net_worth', labelKey: 'reports.netWorth', enabled: true,
     rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
     supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
@@ -176,6 +186,9 @@ const REPORT_TABS: ReportTab[] = [
     supportsCustomRange: true, fallbackRangeKey: '3m', fallbackInterval: 'monthly',
   },
 ]
+
+/** The tab the page opens on when the URL does not ask for another. */
+const DEFAULT_TAB = REPORT_TABS.find((tab) => tab.key === 'net_worth') ?? REPORT_TABS[0]
 
 /** The range last used on `tab`, if it is still one the tab offers. */
 function storedReportsRange(tab: ReportTab): ReportsRange | null {
@@ -203,11 +216,11 @@ export default function ReportsPage() {
   const customDefaults = defaultCustomRange()
   // The page opens on the first tab with the range last used there (issue
   // #1053), or that tab's defaults if what was stored doesn't apply to it.
-  const [initialRange] = useState<ReportsRange>(() => storedReportsRange(REPORT_TABS[0]) ?? {
-    rangeKey: REPORT_TABS[0].fallbackRangeKey,
+  const [initialRange] = useState<ReportsRange>(() => storedReportsRange(DEFAULT_TAB) ?? {
+    rangeKey: DEFAULT_TAB.fallbackRangeKey,
     from: '',
     to: '',
-    interval: REPORT_TABS[0].fallbackInterval,
+    interval: DEFAULT_TAB.fallbackInterval,
   })
   const [rangeKey, setRangeKey] = useState(initialRange.rangeKey)
   const [interval, setInterval] = useState(initialRange.interval)
@@ -217,10 +230,17 @@ export default function ReportsPage() {
   // selection while the user compares views.
   const [customFrom, setCustomFrom] = useState(initialRange.from)
   const [customTo, setCustomTo] = useState(initialRange.to)
-  const [activeTab, setActiveTab] = useState(REPORT_TABS[0].key)
+  // `?tab=` lets a link open a tab; only Explore keeps the rest of its state in
+  // the URL for now (its own period params).
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(
+    () => REPORT_TABS.find((tab) => tab.key === searchParams.get('tab'))?.key ?? DEFAULT_TAB.key,
+  )
+  const isExplore = activeTab === 'explore'
   // Each tab keeps its own range: Cash Flow clamping to its forward presets
   // must not overwrite what Net Worth was showing.
   useEffect(() => {
+    if (activeTab === 'explore') return
     saveReportsRange(activeTab, { rangeKey, from: customFrom, to: customTo, interval })
   }, [activeTab, rangeKey, customFrom, customTo, interval])
   const [compositionView, setCompositionView] = useState<string>('netWorth')
@@ -278,6 +298,7 @@ export default function ReportsPage() {
   const handleSelectTab = (key: string) => {
     const nextTab = REPORT_TABS.find((tab) => tab.key === key) ?? REPORT_TABS[0]
     setActiveTab(key)
+    setSearchParams({ tab: key }, { replace: true })
     setCompositionView(key === 'net_worth' ? 'netWorth' : 'net')
     setSparklinePage(0)
     setSelectedDate(null)
@@ -312,7 +333,7 @@ export default function ReportsPage() {
           ? reports.incomeExpenses(months, interval, acctIds, period, days, apiStart, apiEnd)
           : reports.netWorth(months, interval, acctIds, walletIds, period, apiStart, apiEnd),
     // Only request a custom report with both committed endpoints.
-    enabled: currentTab.enabled && !(noAccounts && activeTab !== 'net_worth') && (!isCustomRange || hasCustomRange),
+    enabled: currentTab.enabled && !isExplore && !(noAccounts && activeTab !== 'net_worth') && (!isCustomRange || hasCustomRange),
   })
 
   const summary = data?.summary
@@ -593,7 +614,7 @@ export default function ReportsPage() {
         section={t('reports.section')}
         title={t(currentTab.labelKey)}
         action={
-          <div className="flex items-center gap-2">
+          <div className={`flex items-center gap-2 ${isExplore ? 'hidden' : ''}`}>
             {isCashFlow && (
               <div
                 className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
@@ -712,7 +733,13 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      {isError && (
+      {isExplore && (
+        <FadePanel panelKey="explore">
+          <ExploreTab />
+        </FadePanel>
+      )}
+
+      {!isExplore && isError && (
         <div className="flex items-center justify-between gap-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-lg px-4 py-2.5 mb-5">
           <div className="flex items-center gap-2.5 min-w-0">
             <AlertCircle size={16} className="shrink-0 text-rose-600 dark:text-rose-400" />
@@ -730,7 +757,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {!isError && (
+      {!isExplore && !isError && (
       <>
       {/* Hero Card */}
       <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
