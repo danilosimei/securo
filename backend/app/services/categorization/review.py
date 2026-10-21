@@ -1118,8 +1118,9 @@ async def similar(
 ) -> tuple[Transaction, str, list[SimilarRow]]:
     """Rows of the same store, not protected, filed elsewhere than the reference.
 
-    `exclude_rule` also leaves out the rows a rule filed (the Categorization
-    section); the other screens' correction toast keeps them. A row with no
+    `exclude_rule` (the Categorization section) also leaves out the rows a
+    rule filed and keeps to the categorizable base; the other screens'
+    correction toast keeps rule, pending and ignored rows. A row with no
     merchant identity (`UNKNOWN`) has no "same store": none.
     """
     ref = await get_transaction(session, workspace_id, tx_id)
@@ -1127,6 +1128,18 @@ async def similar(
     if key == UNKNOWN_KEY:
         return ref, key, []
     excluded = PROTECTED_SOURCES | {"rule"} if exclude_rule else PROTECTED_SOURCES
+    # The section counts its own base (posted, not ignored, no transfer leg,
+    # no opening balance), so its N agrees with Revisar, Aplicadas and the
+    # scoreboard; the other screens' toast also offers pending/ignored rows.
+    base = (
+        categorizable(workspace_id)
+        if exclude_rule
+        else [
+            Transaction.workspace_id == workspace_id,
+            Transaction.transfer_pair_id.is_(None),
+            Transaction.source != "opening_balance",
+        ]
+    )
     rows = await session.execute(
         select(
             Transaction.id,
@@ -1144,12 +1157,10 @@ async def similar(
             Payee, and_(Payee.id == Transaction.payee_id, Payee.workspace_id == workspace_id)
         )
         .where(
-            Transaction.workspace_id == workspace_id,
+            *base,
             Transaction.id != ref.id,
             Transaction.category_source.not_in(excluded),
             Transaction.category_id.is_distinct_from(ref.category_id),
-            Transaction.transfer_pair_id.is_(None),
-            Transaction.source != "opening_balance",
         )
         .order_by(Transaction.date, Transaction.id)
     )

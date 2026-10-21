@@ -204,3 +204,39 @@ async def test_apply_similar_marks_one_pick(
     assert undo.json() == {"restored": 3, "skipped": 0}
     await session.refresh(memory)
     assert memory.counts == {}
+
+
+@pytest.mark.asyncio
+async def test_similar_for_categorization_counts_only_the_categorizable_base(
+    client, auth_headers, session, test_user, test_account, test_categories
+):
+    """The section's N agrees with its own numbers: pending and ignored rows
+    are outside the base Revisar, Aplicadas and the scoreboard count. The
+    other screens' toast keeps them."""
+    food, other = test_categories[0].id, test_categories[1].id
+    ref = _tx(session, test_user, test_account, "IFOOD 1", source="user", category_id=food)
+    open_ = _tx(session, test_user, test_account, "IFOOD 2", source="ai", category_id=other)
+    pending = _tx(session, test_user, test_account, "IFOOD 3", source="none")
+    pending.status = "pending"
+    ignored = _tx(session, test_user, test_account, "IFOOD 4", source="ai", category_id=other)
+    ignored.is_ignored = True
+    await session.commit()
+
+    body = await _similar(client, auth_headers, ref, exclude_rule=True)
+    assert body["transaction_ids"] == [str(open_.id)]
+
+    resp = await client.post(
+        f"{API}/similar/apply",
+        headers=auth_headers,
+        json={
+            "transaction_id": str(ref.id),
+            "exclude_rule": True,
+            "transaction_ids": [str(open_.id), str(pending.id), str(ignored.id)],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["skipped"] == [str(pending.id), str(ignored.id)]
+    assert (await session.get(Transaction, ignored.id, populate_existing=True)).category_id == other
+
+    body = await _similar(client, auth_headers, ref)
+    assert sorted(body["transaction_ids"]) == sorted(str(t.id) for t in (pending, ignored))
