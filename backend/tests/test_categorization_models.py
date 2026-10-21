@@ -520,6 +520,55 @@ async def test_migration_098_window_edge_and_accept_without_event_postgres(postg
         assert events_of_no_event_row == 0
 
 
+async def test_migration_098_skips_category_merges_and_transfer_cascade_copies_postgres(
+    postgres_sessions,
+):
+    """Marked like the live memory counts: a category merge (`record_moves`)
+    moves rows, it teaches nothing; the copy a transfer cascade writes on the
+    paired leg follows the person's change on the other leg (`derived`), and
+    only that change is the pick. Both legs edited apart are two choices."""
+    from datetime import datetime, timedelta, timezone
+
+    migration = _migration_098()
+    async with postgres_sessions() as session:
+        ws, category, seed = await _seed_pg(session)
+        user_id, account_id = seed.user_id, seed.account_id
+
+        def tx(description, pair=None):
+            row = Transaction(
+                id=uuid.uuid4(), user_id=user_id, workspace_id=ws, account_id=account_id,
+                description=description, amount=Decimal("10"), date=date.today(),
+                type="debit", source="sync", currency="BRL", transfer_pair_id=pair,
+            )
+            session.add(row)
+            return row
+
+        def event(row, at, *, reason=None):
+            ev = CategorizationEvent(
+                id=uuid.uuid4(), workspace_id=ws, transaction_id=row.id, source="user",
+                previous_category_id=None, new_category_id=category.id,
+                user_id=user_id, created_at=at, reason=reason,
+            )
+            session.add(ev)
+            return ev
+
+        at = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+        pair, apart = uuid.uuid4(), uuid.uuid4()
+        merged, out_leg, in_leg = tx("MERGED"), tx("OUT", pair), tx("IN", pair)
+        first_leg, second_leg = tx("OUT2", apart), tx("IN2", apart)
+        await session.flush()
+        event(merged, at, reason="category_merge")
+        change = event(out_leg, at)
+        event(in_leg, at + timedelta(milliseconds=5))  # the cascade's copy
+        first = event(first_leg, at)
+        second = event(second_leg, at + timedelta(minutes=5))
+        await session.commit()
+
+        marked = await _run_098_marks(session, migration)
+
+        assert marked == {change.id, first.id, second.id}
+
+
 async def test_migration_098_downgrade_round_trip_postgres():
     """`alembic upgrade 098` / `downgrade 097` / `upgrade 098` on a scratch
     database: the CHECK and the column come and go, and the second upgrade

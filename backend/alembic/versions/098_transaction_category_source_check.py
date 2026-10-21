@@ -6,7 +6,8 @@ origin the pipeline does not know, and then neither protect nor revisit
 the row. The CHECK takes the same list as the model
 (`app.models.categorization.CATEGORY_SOURCES`).
 
-Production holds only `none`, `provider` and `ai` at this point, so the
+Production holds only values of that list at this point (`none`,
+`provider`, `ai`, and `user`, `memory`, `rule` written by 097), so the
 plain (validated) constraint is added: one scan of a small table under a
 brief lock, no `NOT VALID` step needed.
 
@@ -23,12 +24,20 @@ leave a pick for a decision the person undid):
   `resolved_at`) is marked, the latest written just before it;
 - every other standing person choice (a form edit, a bulk edit, apply to
   similar) is marked, and so is an accept's event written 2 minutes or more
-  before its `resolved_at` (outside the window, it falls to this rule). The
-  data cannot tell which row of an old bulk edit taught the store, so all
-  of them are marked: undoing an old bulk row by row may take back more
-  picks than the bulk taught, since the memory counts per store and the
-  extra ones come from the store's other decisions (floored at 0, and
-  bounded by the few such events production holds);
+  before its `resolved_at` (outside the window, it falls to this rule). 097
+  taught a bulk edit one pick per row, so marking each of its rows matches
+  the memory. Apply to similar taught one pick for its N rows, but its
+  events cannot be told from a bulk edit's (same origin, person, category,
+  one write): all N are marked, and undoing them row by row may take back
+  more picks than it taught; the extra ones come from the store's other
+  decisions (floored at 0, the under-count direction, and bounded by the
+  few such events production holds);
+- what never taught a pick stays unmarked, as the live memory counts: a
+  category merge (`reason = 'category_merge'`, `record_moves` re-files the
+  rows of a deleted category as they were), and the copy a transfer cascade
+  wrote on the paired leg (a `user` event of the same person and category
+  on the other leg of the pair, at most 2 seconds after the change on it;
+  097 wrote it `derived`). Both legs changed apart are two choices;
 - clears stay unmarked: marking one that took nothing would give back a
   pick on undo.
 
@@ -54,6 +63,17 @@ _NAME = "ck_transaction_category_source"
 _CHOICE = (
     "e.source = 'user' AND e.user_id IS NOT NULL"
     " AND e.new_category_id IS NOT NULL AND e.undone_at IS NULL"
+    " AND COALESCE(e.reason, '') <> 'category_merge'"
+    " AND NOT EXISTS ("
+    "SELECT 1 FROM transactions leg"
+    " JOIN transactions twin ON twin.transfer_pair_id = leg.transfer_pair_id"
+    " AND twin.id <> leg.id"
+    " JOIN categorization_events c ON c.transaction_id = twin.id"
+    " WHERE leg.id = e.transaction_id AND leg.transfer_pair_id IS NOT NULL"
+    " AND c.workspace_id = e.workspace_id AND c.source = 'user'"
+    " AND c.user_id = e.user_id AND c.new_category_id = e.new_category_id"
+    " AND c.created_at >= e.created_at - interval '2 seconds'"
+    " AND (c.created_at, c.id) < (e.created_at, e.id))"
 )
 #: The accepted suggestion an event was written for: same row, just before
 #: the call stamped `resolved_at`.
