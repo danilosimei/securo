@@ -3,6 +3,7 @@ import re
 import unicodedata
 import uuid
 from collections.abc import Collection
+from functools import lru_cache
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING
@@ -35,13 +36,12 @@ def _normalize(text: str) -> str:
 
 
 #: What a lost accented letter became in some production descriptions
-#: ("Remunera��o"): one per letter. In a transaction's text it
+#: ("Remunera\ufffd\ufffdo"): one per letter. In a transaction's text it
 #: stands for any one letter of the rule value.
-REPLACEMENT_CHAR = "�"
-#: A letter, or the character standing for one.
-_LETTER_OR_REPLACEMENT = r"(?:[^\W\d_]|�)"
-#: Escapes of letter classes and anchors, whose letter is not a literal.
-_CLASS_ESCAPES = frozenset("dDsSwWbBAZ")
+REPLACEMENT_CHAR = "\ufffd"
+#: `\w`, or the character standing for a letter (`\w` keeps its digits
+#: and underscore).
+_WORD_OR_REPLACEMENT = r"(?:\w|\ufffd)"
 #: Escapes followed by a fixed number of hex digits.
 _HEX_ESCAPES = {"x": 2, "u": 4, "U": 8}
 
@@ -104,12 +104,11 @@ def _class_end(pattern: str, i: int) -> tuple[int, bool]:
     letters = False
     while j < len(pattern) and pattern[j] != "]":
         if pattern[j] == "\\":
-            end = _escape_end(pattern, j)
-            code = pattern[j + 1:j + 2]
-            letters = letters or code == "w" or (
-                end - j == 2 and code.isalpha() and code not in _CLASS_ESCAPES
-            )
-            j = end
+            # Only `\w` stands for letters; the other valid letter escapes
+            # are classes of non-letters (`\d`, `\s`), controls (`\n`,
+            # `\t`) or hex codes.
+            letters = letters or pattern[j + 1:j + 2] == "w"
+            j = _escape_end(pattern, j)
             continue
         letters = letters or pattern[j].isalpha()
         j += 1
@@ -146,7 +145,7 @@ def _letters_or_replacement(pattern: str) -> str:
         char = pattern[i]
         if char == "\\":
             end = _escape_end(pattern, i)
-            out.append(_LETTER_OR_REPLACEMENT if pattern[i + 1:end] == "w" else pattern[i:end])
+            out.append(_WORD_OR_REPLACEMENT if pattern[i + 1:end] == "w" else pattern[i:end])
             i = end
         elif char == "[":
             end, letters = _class_end(pattern, i)
@@ -176,11 +175,19 @@ def _regex_search(pattern: str, text: str) -> bool:
         return True
     if REPLACEMENT_CHAR not in text:
         return False
+    lenient = _lenient_regex(pattern)
+    return lenient is not None and lenient.search(text) is not None
+
+
+@lru_cache(maxsize=512)
+def _lenient_regex(pattern: str) -> re.Pattern[str] | None:
+    """`pattern` rewritten by `_letters_or_replacement`, compiled once per
+    pattern (a rule is matched against many rows); None if it does not
+    compile."""
     try:
-        lenient = re.compile(_letters_or_replacement(_strip_accents(pattern)), re.IGNORECASE)
+        return re.compile(_letters_or_replacement(_strip_accents(pattern)), re.IGNORECASE)
     except re.error:
-        return False
-    return lenient.search(text) is not None
+        return None
 
 
 def _to_decimal(val) -> Decimal:

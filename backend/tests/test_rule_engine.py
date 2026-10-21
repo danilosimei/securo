@@ -808,3 +808,19 @@ def test_negated_operators_see_the_replacement_character_as_a_letter():
     assert evaluate_conditions(
         "and", [{"field": "description", "op": "not_contains", "value": "Rendimento"}], tx
     ) is True
+
+
+def test_word_class_keeps_digits_when_the_text_has_the_replacement_character():
+    """The lenient pattern relaxes `\\w`, never narrows it: digits and `_`
+    still match it, and U+FFFD matches it too."""
+    conditions = [{"field": "description", "op": "regex", "value": r"ID\w\w Remunera(ç|c)ao"}]
+    tx = make_tx(description="ID12 Remunera\ufffd\ufffdo")
+    assert evaluate_conditions("and", conditions, tx) is True
+    word = [{"field": "description", "op": "regex", "value": r"Dep\wsito"}]
+    assert evaluate_conditions("and", word, make_tx(description=_DEPOSITO)) is True
+
+
+@pytest.mark.parametrize("pattern", [r"IOF[\n]X", r"IOF[\t]X", r"IOF[\x41]X"])
+def test_escapes_inside_a_class_are_not_letters(pattern):
+    conditions = [{"field": "description", "op": "regex", "value": pattern}]
+    assert evaluate_conditions("and", conditions, make_tx(description="IOF\ufffdX")) is False
