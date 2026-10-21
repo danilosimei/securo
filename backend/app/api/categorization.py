@@ -44,7 +44,7 @@ from app.schemas.categorization import (
     UndoResultRead,
 )
 from app.models.categorization import CategorizationRun
-from app.services.categorization import choose, memory, organizer, review
+from app.services.categorization import choose, creation, memory, organizer, review
 from app.services.categorization.events import UNSET
 from app.services.categorization import settings as categorization_settings
 from app.tasks import categorization_tasks
@@ -174,7 +174,7 @@ async def choose_category(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": str(exc)},
         )
-    except ValueError as exc:
+    except (choose.InvalidChoice, creation.InvalidName) as exc:
         await session.rollback()
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

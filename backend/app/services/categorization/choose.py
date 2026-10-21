@@ -22,17 +22,19 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
-from sqlalchemy import and_, select
-from sqlalchemy import update as sa_update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.categorization import CategorizationSuggestion
 from app.models.transaction import Transaction
 from app.services.categorization import creation, events, memory, review
-from app.services.categorization.events import PROTECTED_SOURCES, UNSET, Unset
+from app.services.categorization.events import UNSET, Unset
 from app.services.categorization.pipeline import CHUNK
+
+
+class InvalidChoice(ValueError):
+    """The request names no category, or both an existing and a new one."""
 
 
 @dataclass
@@ -43,52 +45,12 @@ class ChooseOutcome:
     applied: review.Applied
 
 
-async def _load_rows(
-    session: AsyncSession, workspace_id: uuid.UUID, ids: list[uuid.UUID]
-) -> list[Transaction]:
-    found: list[Transaction] = []
-    for start in range(0, len(ids), CHUNK):
-        result = await session.execute(
-            select(Transaction).where(
-                Transaction.workspace_id == workspace_id,
-                Transaction.id.in_(ids[start:start + CHUNK]),
-            )
-        )
-        found.extend(result.scalars().all())
-    return found
-
-
-async def _accept_pending_of_rows(
-    session: AsyncSession, workspace_id: uuid.UUID, tx_ids: list[uuid.UUID]
-) -> None:
-    """Settle the pending suggestions over `tx_ids` as accepted."""
-    now = datetime.now(timezone.utc)
-    for start in range(0, len(tx_ids), CHUNK):
-        await session.execute(
-            sa_update(CategorizationSuggestion)
-            .where(
-                CategorizationSuggestion.workspace_id == workspace_id,
-                CategorizationSuggestion.status == "pending",
-                CategorizationSuggestion.transaction_id.in_(tx_ids[start:start + CHUNK]),
-            )
-            .values(status="accepted", resolved_at=now)
-            .execution_options(synchronize_session="fetch")
-        )
-
-
 async def _has_open_pending(session: AsyncSession, workspace_id: uuid.UUID, key: str) -> bool:
     """Whether the store still has a pending row nobody categorized by hand
     since (what Revisar shows for it)."""
     found = await session.scalar(
         select(CategorizationSuggestion.id)
-        .join(
-            Transaction,
-            and_(
-                Transaction.id == CategorizationSuggestion.transaction_id,
-                Transaction.workspace_id == workspace_id,
-                Transaction.category_source.not_in(PROTECTED_SOURCES),
-            ),
-        )
+        .join(Transaction, review.open_row(workspace_id))
         .where(
             CategorizationSuggestion.workspace_id == workspace_id,
             CategorizationSuggestion.status == "pending",
@@ -97,6 +59,25 @@ async def _has_open_pending(session: AsyncSession, workspace_id: uuid.UUID, key:
         .limit(1)
     )
     return found is not None
+
+
+async def _pending_of_rows(
+    session: AsyncSession, workspace_id: uuid.UUID, tx_ids: list[uuid.UUID]
+) -> list[CategorizationSuggestion]:
+    """Pending suggestions over `tx_ids`, newest first."""
+    found: list[CategorizationSuggestion] = []
+    for start in range(0, len(tx_ids), CHUNK):
+        result = await session.execute(
+            select(CategorizationSuggestion)
+            .where(
+                CategorizationSuggestion.workspace_id == workspace_id,
+                CategorizationSuggestion.status == "pending",
+                CategorizationSuggestion.transaction_id.in_(tx_ids[start:start + CHUNK]),
+            )
+            .order_by(CategorizationSuggestion.created_at.desc(), CategorizationSuggestion.id)
+        )
+        found.extend(result.scalars().all())
+    return found
 
 
 async def choose(
@@ -113,39 +94,43 @@ async def choose(
     """Apply `category_id`, or the `(group, name)` found or created, to the
     store's rows; `note` (when given; None clears it) is saved on the store.
 
-    Exactly one of `category_id` and `new_category`: ValueError otherwise.
-    Rows are checked before anything is created, so a request with nothing
-    to apply to (`review.NotFound`) leaves the tree as it was.
+    Exactly one of `category_id` and `new_category` (`InvalidChoice`
+    otherwise). Rows are checked before anything is created, so a request
+    with nothing to apply to (`review.NotFound`) leaves the tree as it was.
     """
     if (category_id is None) == (new_category is None):
-        raise ValueError("Informe exatamente uma: categoria existente ou nova")
+        raise InvalidChoice("Informe exatamente uma: categoria existente ou nova")
 
     txs = None
     if transaction_ids is not None:
-        txs = await _load_rows(session, workspace_id, list(dict.fromkeys(transaction_ids)))
+        txs = await review.load_transactions(
+            session, workspace_id, list(dict.fromkeys(transaction_ids))
+        )
         if not txs:
             raise review.NotFound("Transactions not found")
     elif not await _has_open_pending(session, workspace_id, merchant_key):
         raise review.NotFound("Nothing pending for this store")
 
     created_group = created_category = False
-    if category_id is not None:
-        await review.ensure_assignable(session, workspace_id, category_id)
-        target = category_id
-    else:
-        assert new_category is not None
+    if new_category is not None:
         group, name = new_category
         created = await creation.find_or_create_category(
             session, workspace_id, user_id, group=group, name=name
         )
         target = created.category_id
         created_group, created_category = created.created_group, created.created_category
+    else:
+        assert category_id is not None
+        target = category_id
 
     if txs is None:
+        # `accept` checks the category is assignable.
         applied = await review.accept(
             session, workspace_id, user_id, merchant_key=merchant_key, category_id=target
         )
     else:
+        if new_category is None:
+            await review.ensure_assignable(session, workspace_id, target)
         applied = await _apply_to_rows(session, workspace_id, user_id, txs, target)
 
     if not isinstance(note, Unset):
@@ -167,12 +152,20 @@ async def _apply_to_rows(
 ) -> review.Applied:
     """File `txs` under `category_id` as the person; one pick per store.
 
-    A store teaches the memory only when one of its rows actually changed:
-    that row's event carries the pick (`memory_pick`), so undoing the
-    change, whole or row by row, takes back exactly that one.
+    A row pending review belongs to the store of its (latest) suggestion,
+    as when it is accepted from Revisar, since that is the key an undo
+    reopens and takes the pick back from; any other row to the store its
+    description and payee name now. A store teaches the memory only when
+    one of its rows actually changed: that row's event carries the pick
+    (`memory_pick`), so undoing the change, whole or row by row, takes back
+    exactly that one.
     """
-    result = await review.apply_as_user(session, workspace_id, user_id, txs, category_id)
+    pending = await _pending_of_rows(session, workspace_id, [tx.id for tx in txs])
     keys = await memory.keys_for(session, txs)
+    for sug in reversed(pending):  # newest last: it wins
+        keys[sug.transaction_id] = sug.merchant_key
+
+    result = await review.apply_as_user(session, workspace_id, user_id, txs, category_id)
     carriers: dict[str, uuid.UUID] = {}
     for tx in txs:
         event_id = result.by_tx.get(tx.id)
@@ -181,5 +174,5 @@ async def _apply_to_rows(
     for key in carriers:
         await memory.learn_choice(session, workspace_id, key, category_id)
     await events.mark_picks(session, list(carriers.values()))
-    await _accept_pending_of_rows(session, workspace_id, [tx.id for tx in txs])
+    await review.resolve_suggestions(session, pending, "accepted")
     return result

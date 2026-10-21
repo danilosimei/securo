@@ -3,9 +3,9 @@ import uuid
 from datetime import date as _Date
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
 class CategorizationSettingsUpdate(BaseModel):
@@ -216,9 +216,13 @@ class CreateCategoryResult(BaseModel):
     event_ids: list[uuid.UUID]
 
 
+#: A name with something besides spaces in it, stripped.
+CategoryName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
 class NewCategoryDraft(BaseModel):
-    group: str = Field(min_length=1, max_length=100)
-    name: str = Field(min_length=1, max_length=100)
+    group: CategoryName
+    name: CategoryName
 
 
 class ChooseRequest(BaseModel):
@@ -232,7 +236,7 @@ class ChooseRequest(BaseModel):
     merchant_key: str = Field(min_length=1, max_length=255)
     category_id: Optional[uuid.UUID] = None
     new_category: Optional[NewCategoryDraft] = None
-    transaction_ids: Optional[list[uuid.UUID]] = Field(default=None, max_length=500)
+    transaction_ids: Optional[list[uuid.UUID]] = Field(default=None, min_length=1, max_length=500)
     note: Optional[str] = Field(default=None, max_length=400)
 
 

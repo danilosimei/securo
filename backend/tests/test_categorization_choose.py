@@ -239,6 +239,134 @@ async def test_choose_with_transaction_ids_applies_to_those_rows_and_counts_one_
 
 
 @pytest.mark.asyncio
+async def test_choose_with_ids_learns_under_the_suggestions_key_and_undo_returns_it(
+    client, auth_headers, session, test_user, test_account, test_categories
+):
+    """A row pending under another key than the one computed now (its payee
+    changed, or the key rule did) teaches and is undone under that key."""
+    food, transport = test_categories[0].id, test_categories[1].id
+    computed = merchant_key("PADARIA PAO QUENTE")
+    row = _tx(session, test_user, test_account, "PADARIA PAO QUENTE", source="ai", category_id=transport)
+    await session.flush()
+    _suggest(session, row, "PADARIA ANTIGA", category_id=transport)
+    await session.commit()
+    assert computed != "PADARIA ANTIGA"
+
+    body = await _choose(client, auth_headers, {
+        "merchant_key": "PADARIA ANTIGA", "category_id": str(food), "transaction_ids": [str(row.id)],
+    })
+
+    assert await _counts(session, "PADARIA ANTIGA") == {str(food): 1}
+    assert await _counts(session, computed) is None
+    assert await _undo(client, auth_headers, body["event_ids"]) == {"restored": 1, "skipped": 0}
+    assert await _counts(session, "PADARIA ANTIGA") == {}
+    assert await _counts(session, computed) is None
+
+
+@pytest.mark.asyncio
+async def test_choose_with_ids_counts_one_pick_per_store_legacy_rows_included(
+    client, auth_headers, session, test_user, test_account, test_categories
+):
+    food, transport = test_categories[0].id, test_categories[1].id
+    padaria, mercado = merchant_key("PADARIA PAO QUENTE"), merchant_key("MERCADO BOM PRECO")
+    rows = [
+        _tx(session, test_user, test_account, "PADARIA PAO QUENTE", source="ai", category_id=transport),
+        _tx(session, test_user, test_account, "PADARIA PAO QUENTE", source="legacy", category_id=transport),
+        _tx(session, test_user, test_account, "MERCADO BOM PRECO", source="none"),
+    ]
+    await session.commit()
+
+    body = await _choose(client, auth_headers, {
+        "merchant_key": padaria, "category_id": str(food),
+        "transaction_ids": [str(tx.id) for tx in rows],
+    })
+
+    assert body["applied"] == 3
+    for tx in rows:
+        fresh = await _fresh(session, Transaction, tx.id)
+        assert (fresh.category_id, fresh.category_source) == (food, "user")
+    assert await _counts(session, padaria) == {str(food): 1}
+    assert await _counts(session, mercado) == {str(food): 1}
+    picks = await session.scalar(
+        select(func.count(CategorizationEvent.id)).where(
+            CategorizationEvent.id.in_([uuid.UUID(e) for e in body["event_ids"]]),
+            CategorizationEvent.memory_pick.is_(True),
+        )
+    )
+    assert picks == 2
+
+
+async def _ai_cache(session, ws_id, key, category_id):
+    await remember_ai_decision(session, ws_id, key, category_id, 91, None)
+    await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_choose_reusing_names_keeps_other_stores_ai_cache_and_creating_drops_it(
+    client, auth_headers, session, test_user, test_account, test_workspace, test_categories
+):
+    group = await category_group_service.create_group(
+        session, test_workspace.id, test_user.id, CategoryGroupCreate(name="Saúde")
+    )
+    await category_service.create_category(
+        session, test_workspace.id, test_user.id,
+        CategoryCreate(name="Farmácia", group_id=group.id),
+    )
+    await _ai_cache(session, test_workspace.id, "ELSEWHERE", test_categories[0].id)
+    await _pending_store(session, test_user, test_account, "DROGARIA Y", "DROGARIA", n=1)
+
+    body = await _choose(client, auth_headers, {
+        "merchant_key": "DROGARIA", "new_category": {"group": "saude", "name": "farmacia"},
+    })
+    assert body["created_category"] is False
+    assert (await _memory(session, "ELSEWHERE")).ai_confidence == 91
+
+    await _pending_store(session, test_user, test_account, "DROGARIA Z", "DROGARIA Z", n=1)
+    body = await _choose(client, auth_headers, {
+        "merchant_key": "DROGARIA Z", "new_category": {"group": "saude", "name": "Manipulação"},
+    })
+    assert body["created_category"] is True
+    assert (await _memory(session, "ELSEWHERE")).ai_confidence is None
+
+
+@pytest.mark.asyncio
+async def test_choose_note_drops_the_ai_cache_of_the_noted_store(
+    client, auth_headers, session, test_user, test_account, test_workspace, test_categories
+):
+    """The note's store is not one of the rows: only the note can have
+    dropped its cached decision (a pick would drop it too)."""
+    food, transport = test_categories[0].id, test_categories[1].id
+    await _ai_cache(session, test_workspace.id, "AURINO", transport)
+    row = _tx(session, test_user, test_account, "PADARIA PAO QUENTE")
+    await session.commit()
+
+    await _choose(client, auth_headers, {
+        "merchant_key": "AURINO", "category_id": str(food),
+        "transaction_ids": [str(row.id)], "note": "jardineiro",
+    })
+
+    memo = await _memory(session, "AURINO")
+    assert (memo.note, memo.ai_category_id, memo.ai_confidence) == ("jardineiro", None, None)
+    assert memo.counts == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("extra", [
+    {"category_id": "CAT", "transaction_ids": []},
+    {"new_category": {"group": "   ", "name": "Carro"}},
+    {"new_category": {"group": "Transporte", "name": "  "}},
+])
+async def test_choose_rejects_empty_ids_and_blank_names(client, auth_headers, test_categories, extra):
+    body = {"merchant_key": "PADARIA", **extra}
+    if "category_id" in body:
+        body["category_id"] = str(test_categories[0].id)
+    resp = await client.post(f"{API}/choose", headers=auth_headers, json=body)
+    assert resp.status_code == 422, resp.text
+    # Refused by the schema, before the service.
+    assert isinstance(resp.json()["detail"], list)
+
+
+@pytest.mark.asyncio
 async def test_choose_saves_note_and_forgets_ai_cache(
     client, auth_headers, session, test_user, test_account, test_categories
 ):
@@ -314,6 +442,17 @@ async def test_choose_unknown_category_is_404(client, auth_headers, session, tes
     ("Xyz", "Abc", None, "circle-help", None),
     ("Uber", "Abc", "#6B7280", "bus", None),
     ("Xyz", "Saúde", None, "stethoscope", None),
+    # A stem counts at the start of a word, not inside one.
+    ("Carpete", "Abc", None, "circle-help", None),
+    ("Representação", "Abc", None, "circle-help", None),
+    ("Pet Shop", "Abc", None, "dog", None),
+    ("Restaurantes", "Abc", None, "utensils-crossed", None),
+    ("Águas", "Abc", None, "droplets", None),
+    # Words that start like a stem but mean something else.
+    ("Aguardando", "Abc", None, "circle-help", None),
+    ("Petróleo", "Abc", None, "circle-help", None),
+    ("Autônomo", "Abc", None, "circle-help", None),
+    ("Casamento", "Abc", None, "circle-help", None),
 ])
 def test_suggest_style(name, group, color, icon, expected_color):
     got_icon, got_color = suggest_style(name, group, color)
@@ -327,5 +466,24 @@ def test_suggest_style(name, group, color, icon, expected_color):
 
 def test_suggest_group_style():
     assert suggest_group_style("Transporte")[0] == "bus"
-    assert suggest_group_style("Abc")[0] == "folder"
+    assert suggest_group_style("Abc")[0] == "circle-help"
     assert suggest_group_style("Abc")[1] == suggest_style("Xyz", "Abc", None)[1]
+
+
+def test_every_icon_creation_can_emit_exists_in_the_frontend():
+    """An icon the frontend does not know falls back to a generic one: every
+    icon `creation` can store must be a key of `category-icons.ts`."""
+    import re
+    from pathlib import Path
+
+    from app.services.categorization import creation
+
+    icons = Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "category-icons.ts"
+    if not icons.is_file():
+        pytest.skip("frontend icons not available outside a full checkout")
+    source = icons.read_text(encoding="utf-8")
+    known = set(re.findall(r"name:\s*'([^']+)'", source))
+    emitted = {icon for _stems, icon in creation.STYLE_KEYWORDS}
+    emitted |= {creation.DEFAULT_CATEGORY_ICON, creation.DEFAULT_GROUP_ICON}
+    assert "circle-help" in known
+    assert emitted - known == set()

@@ -93,7 +93,7 @@ _fold = creation.fold
 _norm_name = creation.norm_name
 
 
-def _open_row(workspace_id: uuid.UUID):
+def open_row(workspace_id: uuid.UUID):
     """Join a suggestion to its row, if nobody categorized that row by hand
     since: a suggestion over a protected row is stale, not a question."""
     return and_(
@@ -120,7 +120,7 @@ def _latest_pending(workspace_id: uuid.UUID) -> Any:
             )
             .label("rank"),
         )
-        .join(Transaction, _open_row(workspace_id))
+        .join(Transaction, open_row(workspace_id))
         .where(
             CategorizationSuggestion.workspace_id == workspace_id,
             CategorizationSuggestion.status == "pending",
@@ -223,7 +223,7 @@ async def _pending_groups(session: AsyncSession, workspace_id: uuid.UUID) -> lis
             Transaction.currency,
             Transaction.original_description,
         )
-        .join(Transaction, _open_row(workspace_id))
+        .join(Transaction, open_row(workspace_id))
         .where(
             CategorizationSuggestion.workspace_id == workspace_id,
             CategorizationSuggestion.status == "pending",
@@ -335,9 +335,10 @@ class Applied:
     by_tx: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
 
 
-async def _load_transactions(
+async def load_transactions(
     session: AsyncSession, workspace_id: uuid.UUID, ids: list[uuid.UUID]
 ) -> list[Transaction]:
+    """The workspace's rows among `ids` (others are left out), per chunk."""
     found: list[Transaction] = []
     for chunk in _chunks(ids):
         result = await session.execute(
@@ -404,9 +405,10 @@ async def _pending_suggestions(
     return list(result.scalars().all())
 
 
-async def _resolve(
+async def resolve_suggestions(
     session: AsyncSession, suggestions: list[CategorizationSuggestion], status: str
 ) -> None:
+    """Settle `suggestions` as `status` (accepted, dismissed), stamped now."""
     ids = [s.id for s in suggestions]
     now = _now()
     for chunk in _chunks(ids):
@@ -447,19 +449,22 @@ async def _accept_keys(
     tx_ids = list(dict.fromkeys(s.transaction_id for s in suggestions))
     txs = [
         tx
-        for tx in await _load_transactions(session, workspace_id, tx_ids)
+        for tx in await load_transactions(session, workspace_id, tx_ids)
         if tx.category_source not in PROTECTED_SOURCES
     ]
     result = await apply_as_user(session, workspace_id, user_id, txs, category_id)
-    # One pick per store, carried by one of the store's events.
-    carriers: dict[str, uuid.UUID | None] = {}
+    # One pick per store, carried by one of the store's events. A store none
+    # of whose rows was filed (all categorized by hand since) teaches
+    # nothing: no event would carry the pick, so no undo could take it back.
+    carriers: dict[str, uuid.UUID] = {}
     for sug in suggestions:
-        if carriers.get(sug.merchant_key) is None:
-            carriers[sug.merchant_key] = result.by_tx.get(sug.transaction_id)
+        event_id = result.by_tx.get(sug.transaction_id)
+        if event_id is not None:
+            carriers.setdefault(sug.merchant_key, event_id)
     for key in carriers:
         await memory.learn_choice(session, workspace_id, key, category_id)
-    await events.mark_picks(session, [e for e in carriers.values() if e is not None])
-    await _resolve(session, suggestions, "accepted")
+    await events.mark_picks(session, list(carriers.values()))
+    await resolve_suggestions(session, suggestions, "accepted")
     return result
 
 
@@ -482,7 +487,7 @@ async def accept(
 async def dismiss(session: AsyncSession, workspace_id: uuid.UUID, merchant_key: str) -> int:
     """Drop a store's pending suggestions; its rows keep their category."""
     suggestions = await _pending_suggestions(session, workspace_id, [merchant_key])
-    await _resolve(session, suggestions, "dismissed")
+    await resolve_suggestions(session, suggestions, "dismissed")
     return len(suggestions)
 
 
@@ -728,7 +733,7 @@ async def _give_back(
     took = [ev for ev in uncleared if ev.memory_pick and ev.previous_category_id is not None]
     if not took:
         return
-    txs = await _load_transactions(
+    txs = await load_transactions(
         session, workspace_id, list(dict.fromkeys(ev.transaction_id for ev in took))
     )
     store_keys = await memory.keys_for(session, txs)
@@ -746,7 +751,7 @@ async def _back_to_review(
     for ev in sorted(undone, key=lambda e: _utc(e.created_at), reverse=True):
         latest.setdefault(ev.transaction_id, ev)
     tx_ids = list(latest)
-    txs = {tx.id: tx for tx in await _load_transactions(session, workspace_id, tx_ids)}
+    txs = {tx.id: tx for tx in await load_transactions(session, workspace_id, tx_ids)}
     pending: set[uuid.UUID] = set()
     for chunk in _chunks(tx_ids):
         pending.update(
@@ -810,7 +815,7 @@ async def _take_back(
                 still_pending.add(sug.transaction_id)
             else:
                 accepted.setdefault(sug.transaction_id, sug)
-    txs = {tx.id: tx for tx in await _load_transactions(session, workspace_id, tx_ids)}
+    txs = {tx.id: tx for tx in await load_transactions(session, workspace_id, tx_ids)}
     store_keys = await memory.keys_for(session, list(txs.values()))
 
     taught: list[tuple[str, uuid.UUID]] = []
@@ -939,7 +944,7 @@ async def apply_similar(
         raise ValueError("A transação de referência não tem categoria")
     txs = [
         tx
-        for tx in await _load_transactions(session, workspace_id, ids)
+        for tx in await load_transactions(session, workspace_id, ids)
         if tx.category_source not in PROTECTED_SOURCES
     ]
     result = await apply_as_user(session, workspace_id, user_id, txs, ref.category_id)

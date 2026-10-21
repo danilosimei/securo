@@ -12,6 +12,7 @@ Nothing here commits: the caller owns the transaction.
 from __future__ import annotations
 
 import hashlib
+import re
 import unicodedata
 import uuid
 from dataclasses import dataclass
@@ -26,8 +27,9 @@ from app.schemas.category_group import CategoryGroupCreate
 from app.services import category_group_service, category_service
 from app.services.categorization import memory
 
-#: Name stems (folded) and the icon they suggest, first match wins. Every
-#: icon exists in `frontend/src/lib/category-icons.ts`.
+#: Name stems (folded) and the icon they suggest, first match wins. A stem
+#: counts at the start of a word ("PET SHOP", not "CARPETE"). Every icon
+#: exists in `frontend/src/lib/category-icons.ts`.
 STYLE_KEYWORDS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("CARRO", "AUTO", "VEICUL"), "car"),
     (("COMBUST", "GASOL", "POSTO"), "fuel"),
@@ -54,14 +56,18 @@ STYLE_KEYWORDS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("JOGO", "LAZER"), "gamepad-2"),
     (("MANUTEN", "REFORM"), "wrench"),
 )
+#: Word starts that look like a stem but mean something else.
+FALSE_STEMS: tuple[str, ...] = ("AGUARD", "PETRO", "AUTONOM", "CASAMENT")
 #: Colors a new group (and its categories) can get, picked by its name.
 PALETTE: tuple[str, ...] = (
     "#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4", "#a855f7", "#ec4899", "#14b8a6",
 )
 #: The color a group or category gets when nobody chose one.
 DEFAULT_COLOR = "#6B7280"
+#: Icons for a name that suggests none: the frontend's "Outros" icon (it
+#: has no folder icon, and an unknown name falls back to a generic one).
 DEFAULT_CATEGORY_ICON = "circle-help"
-DEFAULT_GROUP_ICON = "folder"
+DEFAULT_GROUP_ICON = "circle-help"
 
 
 def fold(text: str) -> str:
@@ -75,11 +81,22 @@ def norm_name(text: str) -> str:
     return " ".join(fold(text).split())
 
 
+class InvalidName(ValueError):
+    """A group or category name that is blank."""
+
+
+_WORD_RE = re.compile(r"[A-Z0-9]+")
+
+
+def _words(name: str) -> list[str]:
+    return [w for w in _WORD_RE.findall(fold(name)) if not w.startswith(FALSE_STEMS)]
+
+
 def _icon_for(*names: str) -> str | None:
     for name in names:
-        folded = fold(name)
+        words = _words(name)
         for stems, icon in STYLE_KEYWORDS:
-            if any(stem in folded for stem in stems):
+            if any(word.startswith(stems) for word in words):
                 return icon
     return None
 
@@ -90,7 +107,8 @@ def _palette_color(group_name: str) -> str:
 
 
 def suggest_group_style(group_name: str) -> tuple[str, str]:
-    """(icon, color) for a new group: from its name, else a folder."""
+    """(icon, color) for a new group: the icon from its name, else the
+    "Outros" one; the color picked by its name."""
     return _icon_for(group_name) or DEFAULT_GROUP_ICON, _palette_color(group_name)
 
 
@@ -154,7 +172,7 @@ async def find_or_create_category(
     (made without it) are dropped for the whole workspace.
     """
     if not group.strip() or not name.strip():
-        raise ValueError("Grupo e nome da categoria são obrigatórios")
+        raise InvalidName("Grupo e nome da categoria são obrigatórios")
     category_group, created_group = await _find_or_create_group(
         session, workspace_id, user_id, group
     )

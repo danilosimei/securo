@@ -698,6 +698,11 @@ async def test_accept_never_overrides_a_hand_choice_even_when_selected(client, a
     fresh = await _fresh(session, Transaction, manual.id)
     assert (fresh.category_id, fresh.category_source) == (transport, "user")
     assert (await _fresh(session, CategorizationSuggestion, sm.id)).status == "accepted"
+    # Nothing was filed, so there is no event to carry a pick: none is taught.
+    memory = (await session.execute(
+        select(MerchantMemory).where(MerchantMemory.merchant_key == "PADARIA")
+    )).scalar_one_or_none()
+    assert memory is None or memory.counts == {}
 
 
 @pytest.mark.asyncio
