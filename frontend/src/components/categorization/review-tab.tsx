@@ -477,6 +477,7 @@ export function ReviewTab() {
     [answerStore, ask, catalog, currency, focusRow, t],
   )
   const askBlockedReason = ask.blocked ? t(`categorization.ask.blocked.${ask.blocked}`) : null
+  const canAsk = ask.available && !ask.blocked
 
   /** Send a queued "Ignore"; a no-op once undone or already sent. */
   const commitDismiss = useCallback(
@@ -731,6 +732,14 @@ export function ReviewTab() {
       case 'X':
         if (canWrite) answer(() => dismiss(group))
         break
+      case 'i':
+      case 'I':
+        // The conversation about the store; the focus comes back to the row.
+        if (canAsk) {
+          e.preventDefault()
+          askAbout(group)
+        }
+        break
     }
   }
 
@@ -797,6 +806,9 @@ export function ReviewTab() {
   const reviewing = visible.length - answered.size
   const paged = data.total > data.groups.length
   const showShortcuts = canWrite && visible.length > 0
+  // On an answered row, Enter and Escape answer the question about the
+  // store's similar rows: the legend says so instead of the usual keys.
+  const answeringCurrent = answered.get(visible[current]?.merchant_key ?? '')?.phase === 'asking'
   const money = (value: number | string) => mask(formatCurrency(Number(value), currency, locale))
 
   return (
@@ -960,13 +972,31 @@ export function ReviewTab() {
               >
                 <span>{t('categorization.review.keysHint')}</span>
                 <span aria-hidden="true">·</span>
-                <Kbd>1</Kbd>/<Kbd>2</Kbd> {t('categorization.review.keys.accept')}
-                <span aria-hidden="true">·</span>
-                <Kbd>↑</Kbd><Kbd>↓</Kbd> {t('categorization.review.keys.navigate')}
-                <span aria-hidden="true">·</span>
-                <Kbd>Enter</Kbd> {t('categorization.review.keys.expand')}
-                <span aria-hidden="true">·</span>
-                <Kbd>x</Kbd> {t('categorization.review.keys.ignore')}
+                {answeringCurrent ? (
+                  <>
+                    <Kbd>Enter</Kbd> {t('categorization.review.keys.applySimilar')}
+                    <span aria-hidden="true">·</span>
+                    <Kbd>Esc</Kbd> {t('categorization.review.keys.declineSimilar')}
+                    <span aria-hidden="true">·</span>
+                    <Kbd>↑</Kbd><Kbd>↓</Kbd> {t('categorization.review.keys.navigate')}
+                  </>
+                ) : (
+                  <>
+                    <Kbd>1</Kbd>/<Kbd>2</Kbd> {t('categorization.review.keys.accept')}
+                    <span aria-hidden="true">·</span>
+                    <Kbd>↑</Kbd><Kbd>↓</Kbd> {t('categorization.review.keys.navigate')}
+                    <span aria-hidden="true">·</span>
+                    <Kbd>Enter</Kbd> {t('categorization.review.keys.expand')}
+                    <span aria-hidden="true">·</span>
+                    <Kbd>x</Kbd> {t('categorization.review.keys.ignore')}
+                    {canAsk && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <Kbd>i</Kbd> {t('categorization.review.keys.ask')}
+                      </>
+                    )}
+                  </>
+                )}
               </p>
             ) : (
               <span />

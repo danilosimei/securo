@@ -77,6 +77,16 @@ export function AskDialog({
   const [accepting, setAccepting] = useState(false)
   // An answer said sending again cannot work (cap, AI off, no connection).
   const [halted, setHalted] = useState(false)
+  // Reopening the same conversation tries again: what stopped it may be
+  // over (the page's own `blocked` still says when it is not).
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setHalted(false)
+      setError(null)
+    }
+  }
   const { turns, thinking, gen } = conversation
   // The generation now: an answer for an older one changes nothing here.
   const genRef = useRef(gen)

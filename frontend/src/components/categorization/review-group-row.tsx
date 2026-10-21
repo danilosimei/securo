@@ -170,6 +170,7 @@ export function ReviewGroupRow({
       className="order-last col-span-2 h-8 w-full gap-1.5 text-muted-foreground sm:order-none sm:w-8 sm:px-0"
       tabIndex={inner}
       aria-label={askLabel}
+      aria-keyshortcuts={askBlockedReason ? undefined : 'i'}
       title={askBlockedReason ?? askLabel}
       disabled={!!askBlockedReason}
       onClick={onAsk}
@@ -191,9 +192,7 @@ export function ReviewGroupRow({
       aria-keyshortcuts={
         answer
           ? 'Enter Escape ArrowUp ArrowDown'
-          : canWrite
-            ? '1 2 x Enter ArrowUp ArrowDown'
-            : 'Enter ArrowUp ArrowDown'
+          : `${canWrite ? '1 2 x ' : ''}${onAsk && !askBlockedReason ? 'i ' : ''}Enter ArrowUp ArrowDown`
       }
       onFocus={(e) => {
         if (e.target === e.currentTarget) onFocusRow()

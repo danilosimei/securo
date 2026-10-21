@@ -280,6 +280,23 @@ describe('AskDialog', () => {
     expect(box()).toBeDisabled()
   })
 
+  it('reabrir a mesma conversa depois de um erro que travou o campo deixa tentar de novo', async () => {
+    api.categorization.ask.mockRejectedValueOnce(apiError(409, { code: 'no_connection', message: 'x' }))
+    const { user } = await renderDialog()
+    await user.type(box(), 'é o jardineiro{Enter}')
+    expect(await screen.findByRole('alert')).toHaveTextContent(t('categorization.ask.errors.no_connection'))
+    expect(box()).toBeDisabled()
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'open Aurino Silva' }))
+    await screen.findByRole('dialog')
+    expect(box()).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    // The message that did not go is still in the field.
+    expect(box()).toHaveValue('é o jardineiro')
+  })
+
   it('a página bloqueada (teto no summary) desabilita o campo com o motivo', async () => {
     api.categorization.summary.mockResolvedValue(summary({ month_cost_usd: '2', monthly_cap_usd: '2' }))
     await renderDialog()

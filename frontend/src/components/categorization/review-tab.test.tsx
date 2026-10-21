@@ -678,6 +678,18 @@ describe('ReviewTab: parecidas da loja', () => {
     await waitFor(() => expect(row('Uber')).toHaveFocus())
   })
 
+  it('na linha respondida a legenda troca para Enter aplicar às parecidas · Esc não', async () => {
+    const { user } = await renderTab()
+    const legend = screen.getByTestId('review-shortcuts')
+    expect(legend).toHaveTextContent(t('categorization.review.keys.accept'))
+    act(() => row('iFood').focus())
+    await user.keyboard('1')
+    await within(row('iFood')).findByText(ask)
+    expect(legend).toHaveTextContent(t('categorization.review.keys.applySimilar'))
+    expect(legend).toHaveTextContent(t('categorization.review.keys.declineSimilar'))
+    expect(legend).not.toHaveTextContent(t('categorization.review.keys.accept'))
+  })
+
   it('pelo teclado: o foco fica na loja respondida e Enter aplica às N', async () => {
     const { user } = await renderTab()
     act(() => row('iFood').focus())
@@ -1023,6 +1035,29 @@ describe('ReviewTab: perguntar à IA', () => {
         name: t('categorization.ask.title', { name: t('categorization.review.pix') }),
       }),
     ).toBeInTheDocument()
+  })
+
+  it('atalho i abre a conversa da linha focada, e a legenda mostra o atalho', async () => {
+    const { user } = await renderAsk()
+    await waitFor(() => expect(askButton('Uber')).toBeEnabled())
+    expect(screen.getByTestId('review-shortcuts')).toHaveTextContent(t('categorization.review.keys.ask'))
+    act(() => row('iFood').focus())
+    await user.keyboard('{ArrowDown}')
+    expect(row('Uber')).toHaveAttribute('aria-keyshortcuts', expect.stringContaining('i'))
+    await user.keyboard('i')
+    expect(
+      await screen.findByRole('dialog', { name: t('categorization.ask.title', { name: 'Uber' }) }),
+    ).toBeInTheDocument()
+  })
+
+  it('atalho i não abre nada quando a conversa está bloqueada', async () => {
+    api.categorization.summary.mockResolvedValue(summary({ ai_enabled: false }))
+    const { user } = await renderAsk()
+    await waitFor(() => expect(askButton('iFood')).toBeDisabled())
+    expect(screen.getByTestId('review-shortcuts')).not.toHaveTextContent(t('categorization.review.keys.ask'))
+    act(() => row('iFood').focus())
+    await user.keyboard('i')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('"Perguntar à IA" no rodapé do "Outra..." abre o diálogo da loja', async () => {
