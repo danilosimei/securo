@@ -670,7 +670,7 @@ export interface TransactionCalendarItem {
   is_transfer: boolean
   is_ignored: boolean
   exclude_from_pnl: boolean
-  /** Who decided the category (actual rows only). */
+  /** Who decided the category; null for a recurring projection (no row). */
   category_source?: CategorySource | null
   /** A categorization suggestion for this row waits for review. */
   categorization_pending?: boolean
