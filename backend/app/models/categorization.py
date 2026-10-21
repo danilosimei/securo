@@ -182,6 +182,10 @@ class CategorizationEvent(Base):
     user_id: Mapped[Optional[uuid.UUID]] = _set_null_fk("users.id")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     undone_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: The merchant memory counted one pick for this event: a person's
+    #: choice taught it, a person's clear took it back. Undoing the event
+    #: reverses exactly that pick; an unmarked event moves none.
+    memory_pick: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class CategorizationSuggestion(Base):

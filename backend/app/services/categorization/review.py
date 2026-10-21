@@ -6,7 +6,8 @@ both for the UI and carries out the person's answers -- accept, dismiss,
 create the proposed category, apply to similar rows -- always as source
 `user`, through the set-based recorder. A decision about a store teaches
 the memory once, not once per row: the bulk is `derived` and the memory is
-fed explicitly.
+fed explicitly, and one of its events is marked `memory_pick`, so an undo
+(whole or row by row) takes back exactly that one pick.
 
 Nothing here commits: the API owns the transaction.
 """
@@ -203,7 +204,8 @@ class _Group:
     total: Decimal = Decimal("0")
     tx_ids: list[uuid.UUID] = field(default_factory=list)
     descriptions: list[str] = field(default_factory=list)
-    #: The first `REVIEW_PREVIEW` rows, as the bank sent them.
+    #: The first `REVIEW_PREVIEW` rows: the description as it is now, plus
+    #: the bank's original when it was rewritten since.
     preview: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -337,6 +339,8 @@ async def review_queue(
 class Applied:
     applied: int
     event_ids: list[uuid.UUID]
+    #: Transaction id -> the event written for it.
+    by_tx: dict[uuid.UUID, uuid.UUID] = field(default_factory=dict)
 
 
 async def _load_transactions(
@@ -373,12 +377,13 @@ async def _apply_as_user(
         user_id=user_id,
         derived=True,
     )
-    event_ids: list[uuid.UUID] = []
+    by_tx: dict[uuid.UUID, uuid.UUID] = {}
     for chunk in _chunks([tx.id for tx in txs]):
-        event_ids.extend(
-            (
+        by_tx.update(
+            (tx_id, event_id)
+            for event_id, tx_id in (
                 await session.execute(
-                    select(CategorizationEvent.id).where(
+                    select(CategorizationEvent.id, CategorizationEvent.transaction_id).where(
                         CategorizationEvent.workspace_id == workspace_id,
                         CategorizationEvent.transaction_id.in_(chunk),
                         CategorizationEvent.source == "user",
@@ -387,9 +392,9 @@ async def _apply_as_user(
                         CategorizationEvent.created_at >= started,
                     )
                 )
-            ).scalars().all()
+            ).all()
         )
-    return Applied(applied=applied, event_ids=event_ids)
+    return Applied(applied=applied, event_ids=list(by_tx.values()), by_tx=by_tx)
 
 
 async def _pending_suggestions(
@@ -454,8 +459,14 @@ async def _accept_keys(
         if tx.category_source not in PROTECTED_SOURCES
     ]
     result = await _apply_as_user(session, workspace_id, user_id, txs, category_id)
-    for key in dict.fromkeys(s.merchant_key for s in suggestions):
+    # One pick per store, carried by one of the store's events.
+    carriers: dict[str, uuid.UUID | None] = {}
+    for sug in suggestions:
+        if carriers.get(sug.merchant_key) is None:
+            carriers[sug.merchant_key] = result.by_tx.get(sug.transaction_id)
+    for key in carriers:
         await memory.learn_choice(session, workspace_id, key, category_id)
+    await events.mark_picks(session, [e for e in carriers.values() if e is not None])
     await _resolve(session, suggestions, "accepted")
     return result
 
@@ -690,12 +701,15 @@ async def undo(
 ) -> events.UndoResult:
     """`events.undo`, plus what the undone decisions had settled.
 
-    Undoing a person's change (accept, create-category, apply-to-similar)
-    takes back what it taught the memory, once per store and category, and
-    reopens the suggestion it accepted, so the store is back in review.
-    Undoing a person's clear gives the store back the pick the clear took
-    (R27-U), once per store and category; the AI's cached decision the
-    clear dropped stays dropped.
+    Undoing a person's change (accept, create-category, apply-to-similar,
+    an edit) takes back the pick it taught the memory and reopens the
+    suggestion it accepted, so the store is back in review. Undoing a
+    person's clear gives the store back the pick the clear took (R27-U); the
+    AI's cached decision the clear dropped stays dropped. Either way only an
+    event marked `memory_pick` moves a pick, exactly one: a change taught
+    once per store carries the mark on one of its events, so undoing it whole
+    or row by row reverses that pick once, and a clear that found no pick to
+    take (or only followed another row's) gives none back.
 
     Undoing a pipeline decision (`ai`, `memory`) drops the model's cached
     decision for the store and leaves the row a pending suggestion with the
@@ -756,18 +770,19 @@ async def undo(
 async def _give_back(
     session: AsyncSession, workspace_id: uuid.UUID, uncleared: list[CategorizationEvent]
 ) -> None:
-    """The picks undone clears had taken back, once per store and category."""
+    """The pick each undone clear had taken back (`memory_pick`), one each:
+    a clear that took none, or only followed another row's, gives none."""
+    took = [ev for ev in uncleared if ev.memory_pick and ev.previous_category_id is not None]
+    if not took:
+        return
     txs = await _load_transactions(
-        session, workspace_id, list(dict.fromkeys(ev.transaction_id for ev in uncleared))
+        session, workspace_id, list(dict.fromkeys(ev.transaction_id for ev in took))
     )
     store_keys = await memory.keys_for(session, txs)
-    picks: dict[tuple[str, uuid.UUID], None] = {}
-    for ev in uncleared:
+    for ev in took:
         key = store_keys.get(ev.transaction_id)
         if key is not None and ev.previous_category_id is not None:
-            picks[(key, ev.previous_category_id)] = None
-    for key, category_id in picks:
-        await memory.learn_choice(session, workspace_id, key, category_id)
+            await memory.learn_choice(session, workspace_id, key, ev.previous_category_id)
 
 
 async def _back_to_review(
@@ -845,7 +860,7 @@ async def _take_back(
     txs = {tx.id: tx for tx in await _load_transactions(session, workspace_id, tx_ids)}
     store_keys = await memory.keys_for(session, list(txs.values()))
 
-    taught: dict[tuple[str, uuid.UUID], None] = {}
+    taught: list[tuple[str, uuid.UUID]] = []
     for ev in restored:
         tx = txs.get(ev.transaction_id)
         sug = accepted.get(ev.transaction_id)
@@ -868,8 +883,9 @@ async def _take_back(
             key = store_keys[tx.id]
         else:
             continue
-        if ev.new_category_id is not None:
-            taught[(key, ev.new_category_id)] = None
+        # Only the event that carried the pick takes it back, once.
+        if ev.memory_pick and ev.new_category_id is not None:
+            taught.append((key, ev.new_category_id))
     for key, category_id in taught:
         await memory.unlearn_choice(session, workspace_id, key, category_id)
     await session.flush()
@@ -973,6 +989,7 @@ async def apply_similar(
     result = await _apply_as_user(session, workspace_id, user_id, txs, ref.category_id)
     if result.applied:
         await memory.learn_choice(session, workspace_id, stored_key(key), ref.category_id)
+        await events.mark_picks(session, result.event_ids[:1])
     return result
 
 

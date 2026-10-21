@@ -418,6 +418,19 @@ async def test_person_clear_takes_back_one_pick_and_the_ai_cache(
 
 
 @pytest.mark.asyncio
+async def test_unlearn_choice_says_whether_it_took_a_pick(session, test_workspace, test_categories):
+    from app.services.categorization import memory
+
+    food, transport = test_categories[0].id, test_categories[1].id
+    assert await memory.unlearn_choice(session, test_workspace.id, "NUNCA VISTA", food) is False
+    await memory.learn_choice(session, test_workspace.id, "PADARIA", food)
+    assert await memory.unlearn_choice(session, test_workspace.id, "PADARIA", transport) is False
+    assert await memory.unlearn_choice(session, test_workspace.id, "PADARIA", food) is True
+    # At zero: the floor, nothing left to take.
+    assert await memory.unlearn_choice(session, test_workspace.id, "PADARIA", food) is False
+
+
+@pytest.mark.asyncio
 async def test_clearing_a_store_never_taught_leaves_the_memory_alone(
     session, test_user, test_workspace, test_transactions
 ):

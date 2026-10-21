@@ -60,14 +60,20 @@ class Unset:
 
 UNSET = Unset()
 
-UserChoiceHook = Callable[[AsyncSession, uuid.UUID, Transaction, uuid.UUID | None], Awaitable[None]]
+UserChoiceHook = Callable[
+    [AsyncSession, uuid.UUID, Transaction, uuid.UUID | None], Awaitable[bool | None]
+]
 #: Async callbacks run as `(session, workspace_id, tx, new_category_id)` when a
-#: person picks a category. The memory learner registers itself here.
+#: person picks a category. The memory learner registers itself here. A hook
+#: returns True when it counted a pick, so the event is marked `memory_pick`.
 user_choice_hooks: list[UserChoiceHook] = []
 
-UserClearHook = Callable[[AsyncSession, uuid.UUID, Transaction, uuid.UUID], Awaitable[None]]
+UserClearHook = Callable[
+    [AsyncSession, uuid.UUID, Transaction, uuid.UUID], Awaitable[bool | None]
+]
 #: Async callbacks run as `(session, workspace_id, tx, previous_category_id)`
 #: when a person clears a category (R27-U). The memory registers itself here.
+#: A hook returns True when it took a pick back (the event is marked).
 user_clear_hooks: list[UserClearHook] = []
 
 
@@ -173,18 +179,22 @@ def _aware(value: datetime) -> datetime:
 
 async def run_user_hooks(
     session: AsyncSession, tx: Transaction, new_category_id: uuid.UUID | None
-) -> None:
+) -> bool:
     """Run the user-choice hooks for `tx`; a failing hook is logged, never raised.
 
     `record_change` and `write_staged` call it for a person's own,
     non-derived choice. A caller whose choice reached only derived rows (a
     series edit that moved the siblings alone) calls it once itself.
+    Returns whether a hook counted a pick: the event that carries the
+    choice is then marked (`memory_pick`), so its undo takes that pick back.
     """
+    counted = False
     for hook in list(user_choice_hooks):
         try:
-            await hook(session, tx.workspace_id, tx, new_category_id)
+            counted = bool(await hook(session, tx.workspace_id, tx, new_category_id)) or counted
         except Exception:
             logger.exception("on_user_choice hook failed for transaction %s", tx.id)
+    return counted
 
 
 def _person_clear(
@@ -200,17 +210,60 @@ def _person_clear(
 
 async def run_clear_hooks(
     session: AsyncSession, tx: Transaction, previous_category_id: uuid.UUID
-) -> None:
+) -> bool:
     """Run the user-clear hooks for `tx`; a failing hook is logged, never raised.
 
     Run by `record_change` and `write_staged` for a person's own,
     non-derived clear, and by callers that take a choice back once per store.
+    Returns whether a hook took a pick back (the clear's event is marked).
     """
+    took = False
     for hook in list(user_clear_hooks):
         try:
-            await hook(session, tx.workspace_id, tx, previous_category_id)
+            took = bool(await hook(session, tx.workspace_id, tx, previous_category_id)) or took
         except Exception:
             logger.exception("on_user_clear hook failed for transaction %s", tx.id)
+    return took
+
+
+async def mark_picks(session: AsyncSession, event_ids: list[uuid.UUID]) -> None:
+    """Mark events the memory counted one pick for (`memory_pick`)."""
+    for start in range(0, len(event_ids), UNDO_CHUNK):
+        await session.execute(
+            sa_update(CategorizationEvent)
+            .where(CategorizationEvent.id.in_(event_ids[start:start + UNDO_CHUNK]))
+            .values(memory_pick=True)
+            .execution_options(synchronize_session="fetch")
+        )
+
+
+async def mark_latest_picks(session: AsyncSession, tx_ids: list[uuid.UUID]) -> None:
+    """Mark the latest standing event of each row (the one the caller just
+    wrote for it) as the one the memory counted a pick for: for callers that
+    run the hooks themselves, once per store, after a set-based write."""
+    marked: list[uuid.UUID] = []
+    for start in range(0, len(tx_ids), UNDO_CHUNK):
+        ranked = (
+            select(
+                CategorizationEvent.id,
+                func.row_number()
+                .over(
+                    partition_by=CategorizationEvent.transaction_id,
+                    order_by=(CategorizationEvent.created_at.desc(), CategorizationEvent.id.desc()),
+                )
+                .label("rank"),
+            )
+            .where(
+                CategorizationEvent.transaction_id.in_(tx_ids[start:start + UNDO_CHUNK]),
+                CategorizationEvent.undone_at.is_(None),
+                CategorizationEvent.source != "undo",
+            )
+            .subquery()
+        )
+        marked.extend(
+            (await session.execute(select(ranked.c.id).where(ranked.c.rank == 1))).scalars().all()
+        )
+    await mark_picks(session, marked)
 
 
 async def record_change(
@@ -281,12 +334,15 @@ async def record_change(
         logger.exception("could not record categorization event for %s", tx.id)
         event = None
 
+    moved_pick = False
     if source == "user" and not derived:
-        await run_user_hooks(session, tx, new_category_id)
+        moved_pick = await run_user_hooks(session, tx, new_category_id)
     elif previous_category_id is not None and _person_clear(
         source, user_id, new_category_id, derived
     ):
-        await run_clear_hooks(session, tx, previous_category_id)
+        moved_pick = await run_clear_hooks(session, tx, previous_category_id)
+    if moved_pick and event is not None:
+        event.memory_pick = True
     return event
 
 
@@ -348,9 +404,10 @@ async def write_staged(session: AsyncSession, staged: list[StagedChange]) -> int
     if not staged:
         return 0
     await session.flush()
+    event_ids = [uuid.uuid4() for _ in staged]
     payload = [
         {
-            "id": uuid.uuid4(),
+            "id": event_id,
             "workspace_id": change.tx.workspace_id,
             "transaction_id": change.tx.id,
             "run_id": change.run_id,
@@ -370,20 +427,26 @@ async def write_staged(session: AsyncSession, staged: list[StagedChange]) -> int
             "user_id": change.user_id,
             "created_at": change.created_at,
         }
-        for change in staged
+        for change, event_id in zip(staged, event_ids)
     ]
     try:
         async with session.begin_nested():
             await session.execute(sa_insert(CategorizationEvent), payload)
     except Exception:
         logger.exception("could not record %d categorization events", len(payload))
-    for change in staged:
+    moved: list[uuid.UUID] = []
+    for change, event_id in zip(staged, event_ids):
+        moved_pick = False
         if change.source == "user" and not change.derived:
-            await run_user_hooks(session, change.tx, change.new_category_id)
+            moved_pick = await run_user_hooks(session, change.tx, change.new_category_id)
         elif change.previous_category_id is not None and _person_clear(
             change.source, change.user_id, change.new_category_id, change.derived
         ):
-            await run_clear_hooks(session, change.tx, change.previous_category_id)
+            moved_pick = await run_clear_hooks(session, change.tx, change.previous_category_id)
+        if moved_pick:
+            moved.append(event_id)
+    # A failed insert above leaves nothing to mark: the UPDATE matches no row.
+    await mark_picks(session, moved)
     return len(staged)
 
 

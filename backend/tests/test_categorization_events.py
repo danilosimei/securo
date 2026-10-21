@@ -272,3 +272,60 @@ async def test_run_user_hooks_is_public(session, test_transactions, test_categor
     monkeypatch.setattr(events, "user_choice_hooks", [hook])
     await events.run_user_hooks(session, test_transactions[0], test_categories[0].id)
     assert seen == [test_categories[0].id]
+
+
+@pytest.mark.asyncio
+async def test_events_whose_hooks_moved_a_pick_are_marked(
+    session, test_user, test_transactions, test_categories, monkeypatch
+):
+    """`memory_pick` goes on the event a hook moved a pick for, on both
+    write paths; a hook that moved nothing (or failed) leaves it unmarked."""
+    food = test_categories[0].id
+    moved: set[uuid.UUID] = {test_transactions[0].id, test_transactions[2].id}
+
+    async def choice(_s, _ws, tx, _new):
+        return tx.id in moved
+
+    async def broken(_s, _ws, _tx, _new):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(events, "user_choice_hooks", [choice, broken])
+    taught = await record_change(
+        session, test_transactions[0], source="user", new_category_id=food, user_id=test_user.id,
+    )
+    untaught = await record_change(
+        session, test_transactions[1], source="user", new_category_id=food, user_id=test_user.id,
+    )
+    staged = [
+        events.stage_change(tx, source="user", new_category_id=food, user_id=test_user.id)
+        for tx in (test_transactions[2], test_transactions[3])
+    ]
+    await events.write_staged(session, [c for c in staged if c is not None])
+    await session.flush()
+
+    assert taught is not None and taught.memory_pick is True
+    assert untaught is not None and untaught.memory_pick is False
+    rows = dict((await session.execute(
+        select(CategorizationEvent.transaction_id, CategorizationEvent.memory_pick).where(
+            CategorizationEvent.transaction_id.in_([test_transactions[2].id, test_transactions[3].id])
+        )
+    )).all())
+    assert rows == {test_transactions[2].id: True, test_transactions[3].id: False}
+
+
+@pytest.mark.asyncio
+async def test_mark_latest_picks_marks_each_rows_latest_standing_event(
+    session, test_user, test_transactions, test_categories
+):
+    food, transport = test_categories[0].id, test_categories[1].id
+    tx = test_transactions[0]
+    first = await record_change(session, tx, source="ai", new_category_id=food)
+    latest = await record_change(session, tx, source="ai", new_category_id=transport)
+    await session.flush()
+
+    await events.mark_latest_picks(session, [tx.id])
+
+    assert first is not None and latest is not None
+    await session.refresh(first)
+    await session.refresh(latest)
+    assert (first.memory_pick, latest.memory_pick) == (False, True)

@@ -232,3 +232,37 @@ async def test_migration_098_checks_the_model_sources():
     spec.loader.exec_module(migration)
     assert (migration.revision, migration.down_revision) == ("098", "097")
     assert migration._SOURCES == CATEGORY_SOURCES
+
+
+async def test_migration_098_adds_the_memory_pick_mark_like_the_model(monkeypatch):
+    """The column the undo reads: not null, false by default, as the model."""
+    import importlib.util
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    path = (
+        Path(__file__).resolve().parent.parent
+        / "alembic" / "versions" / "098_transaction_category_source_check.py"
+    )
+    spec = importlib.util.spec_from_file_location("migration_098_pick", path)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    calls: list[tuple] = []
+    monkeypatch.setattr(migration, "op", SimpleNamespace(
+        create_check_constraint=lambda *a, **k: calls.append(("check", a)),
+        add_column=lambda table, column: calls.append(("add", table, column)),
+        drop_column=lambda table, name: calls.append(("drop", table, name)),
+        drop_constraint=lambda *a, **k: calls.append(("uncheck", a)),
+    ))
+
+    migration.upgrade()
+    [(_, table, column)] = [c for c in calls if c[0] == "add"]
+    assert (table, column.name, column.nullable) == ("categorization_events", "memory_pick", False)
+    assert column.server_default is not None
+    model = CategorizationEvent.__table__.c.memory_pick
+    assert (model.nullable, model.server_default is not None) == (False, True)
+
+    calls.clear()
+    migration.downgrade()
+    assert calls[0] == ("drop", "categorization_events", "memory_pick")

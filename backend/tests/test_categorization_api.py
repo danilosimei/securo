@@ -43,7 +43,7 @@ def _tx(
         effective_date=day,
         type=extra.pop("type", "debit"),
         source="sync",
-        status="posted",
+        status=extra.pop("status", "posted"),
         category_id=category_id,
         category_source=source,
         payee_id=payee_id,
@@ -341,10 +341,35 @@ async def test_undo_after_similar_apply_unlearns(client, auth_headers, session, 
     assert (await _fresh(session, Transaction, other.id)).category_source == "none"
 
 
+async def _counts(session, key):
+    row = (await session.execute(
+        select(MerchantMemory).where(MerchantMemory.merchant_key == key)
+    )).scalar_one_or_none()
+    if row is None:
+        return None
+    await session.refresh(row)
+    return row.counts
+
+
+async def _event_ids(session, tx_ids, source):
+    return (await session.execute(
+        select(CategorizationEvent.id)
+        .where(CategorizationEvent.transaction_id.in_(tx_ids), CategorizationEvent.source == source)
+        .order_by(CategorizationEvent.created_at)
+    )).scalars().all()
+
+
+async def _undo(client, auth_headers, ids):
+    resp = await client.post(f"{API}/undo", headers=auth_headers, json={"event_ids": [str(i) for i in ids]})
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
 @pytest.mark.asyncio
 async def test_undoing_a_persons_clear_gives_the_store_its_pick_back(client, auth_headers, session, test_user, test_account, test_categories):
-    """B4-X: a person's clear takes one pick back from the store (R27-U);
-    undoing it gives that pick back, once per store and category."""
+    """B4-X: undoing a person's clear gives back exactly the pick the clear
+    took (R27-U). A bulk clear took one per store, so undoing its rows one
+    by one gives back one, not one per row."""
     from app.services.categorization.memory import learn_choice
     from app.services.categorization.merchant_key import merchant_key
 
@@ -361,27 +386,196 @@ async def test_undoing_a_persons_clear_gives_the_store_its_pick_back(client, aut
         json={"transaction_ids": [str(a.id), str(b.id)], "category_id": None},
     )
     assert resp.status_code == 200, resp.text
-    memory = (await session.execute(
-        select(MerchantMemory).where(MerchantMemory.merchant_key == key)
-    )).scalar_one()
-    await session.refresh(memory)
-    assert memory.counts == {str(food): 1}
-    clears = (await session.execute(
-        select(CategorizationEvent.id).where(
-            CategorizationEvent.transaction_id.in_([a.id, b.id]),
-            CategorizationEvent.source == "none",
-        )
-    )).scalars().all()
+    assert await _counts(session, key) == {str(food): 1}
+    clears = await _event_ids(session, [a.id, b.id], "none")
     assert len(clears) == 2
 
-    undo = await client.post(f"{API}/undo", headers=auth_headers, json={"event_ids": [str(e) for e in clears]})
+    for clear in clears:
+        assert await _undo(client, auth_headers, [clear]) == {"restored": 1, "skipped": 0}
 
-    assert undo.json() == {"restored": 2, "skipped": 0}
     fresh = await _fresh(session, Transaction, a.id)
     assert (fresh.category_id, fresh.category_source) == (food, "user")
-    await session.refresh(memory)
-    assert memory.counts == {str(food): 2}
+    assert await _counts(session, key) == {str(food): 2}
+    memory = (await session.execute(select(MerchantMemory).where(MerchantMemory.merchant_key == key))).scalar_one()
     assert memory.last_user_category_id == food
+
+
+@pytest.mark.asyncio
+async def test_undoing_two_single_clears_at_once_gives_both_picks_back(client, auth_headers, session, test_user, test_account, test_categories):
+    """Two clears took two picks: one undo naming both gives both back."""
+    from app.services.categorization.memory import learn_choice
+    from app.services.categorization.merchant_key import merchant_key
+
+    food = test_categories[0].id
+    key = merchant_key("PADARIA PAO QUENTE")
+    for _ in range(2):
+        await learn_choice(session, test_account.workspace_id, key, food)
+    a = _tx(session, test_user, test_account, "PADARIA PAO QUENTE", source="user", category_id=food)
+    b = _tx(session, test_user, test_account, "PADARIA PAO QUENTE", source="user", category_id=food)
+    await session.commit()
+    for tx in (a, b):
+        resp = await client.patch(f"/api/transactions/{tx.id}", headers=auth_headers, json={"category_id": None})
+        assert resp.status_code == 200, resp.text
+    assert await _counts(session, key) == {}
+
+    assert await _undo(client, auth_headers, await _event_ids(session, [a.id, b.id], "none")) == {
+        "restored": 2, "skipped": 0,
+    }
+
+    assert await _counts(session, key) == {str(food): 2}
+
+
+@pytest.mark.asyncio
+async def test_undoing_a_clear_that_took_no_pick_teaches_nothing(client, auth_headers, session, test_user, test_account, test_categories):
+    """Clearing a guess the store never had a pick for took nothing (the
+    floor at zero), so its undo gives nothing: no phantom pick."""
+    from app.services.categorization.merchant_key import merchant_key
+
+    food = test_categories[0].id
+    tx = _tx(session, test_user, test_account, "PADARIA PAO QUENTE", source="ai", category_id=food)
+    await session.commit()
+    resp = await client.patch(f"/api/transactions/{tx.id}", headers=auth_headers, json={"category_id": None})
+    assert resp.status_code == 200, resp.text
+
+    assert await _undo(client, auth_headers, await _event_ids(session, [tx.id], "none")) == {
+        "restored": 1, "skipped": 0,
+    }
+
+    assert (await _fresh(session, Transaction, tx.id)).category_source == "ai"
+    assert await _counts(session, merchant_key("PADARIA PAO QUENTE")) is None
+
+
+@pytest.mark.asyncio
+async def test_undoing_a_derived_sibling_clear_teaches_nothing(client, auth_headers, session, test_user, test_workspace, test_account, test_categories):
+    """A series clear takes one pick, through the row the person edited;
+    a sibling's clear only followed it, so undoing it alone gives nothing,
+    and undoing the edited row's clear gives the one pick back."""
+    from app.schemas.transaction import InstallmentSeriesCreate, TransactionCreate, TransactionUpdate
+    from app.services import transaction_service
+    from app.services.categorization.memory import learn_choice
+
+    food = test_categories[0].id
+    created = await transaction_service.create_installment_series(
+        session, test_workspace.id, test_user.id,
+        InstallmentSeriesCreate(
+            base=TransactionCreate(
+                account_id=test_account.id, description="SOFA", amount=Decimal("100"),
+                date=date(2026, 1, 10), type="debit", category_id=food,
+            ),
+            installments=3,
+        ),
+    )
+    [key] = (await session.execute(select(MerchantMemory.merchant_key))).scalars().all()
+    await learn_choice(session, test_workspace.id, key, food)
+    await session.commit()
+    assert await _counts(session, key) == {str(food): 2}
+
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=None, apply_to="all"),
+    )
+    assert await _counts(session, key) == {str(food): 1}
+    [sibling_clear] = await _event_ids(session, [created[1].id], "none")
+    [anchor_clear] = await _event_ids(session, [created[0].id], "none")
+
+    assert await _undo(client, auth_headers, [sibling_clear]) == {"restored": 1, "skipped": 0}
+    assert await _counts(session, key) == {str(food): 1}
+
+    assert await _undo(client, auth_headers, [anchor_clear]) == {"restored": 1, "skipped": 0}
+    assert await _counts(session, key) == {str(food): 2}
+
+
+@pytest.mark.asyncio
+async def test_undoing_a_series_clear_of_the_siblings_only_gives_its_pick_back(client, auth_headers, session, test_user, test_workspace, test_account, test_categories):
+    """The anchor is already empty and only the siblings lose the category
+    (the clear is taken back before the edit): the pick still comes back
+    through the sibling it was taken for, once."""
+    from app.schemas.transaction import InstallmentSeriesCreate, TransactionCreate, TransactionUpdate
+    from app.services import transaction_service
+    from app.services.categorization.memory import learn_choice
+
+    food = test_categories[0].id
+    created = await transaction_service.create_installment_series(
+        session, test_workspace.id, test_user.id,
+        InstallmentSeriesCreate(
+            base=TransactionCreate(
+                account_id=test_account.id, description="SOFA", amount=Decimal("100"),
+                date=date(2026, 1, 10), type="debit", category_id=food,
+            ),
+            installments=3,
+        ),
+    )
+    [key] = (await session.execute(select(MerchantMemory.merchant_key))).scalars().all()
+    for _ in range(2):
+        await learn_choice(session, test_workspace.id, key, food)
+    await session.commit()
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id, TransactionUpdate(category_id=None),
+    )
+    assert await _counts(session, key) == {str(food): 2}
+
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=None, apply_to="all"),
+    )
+    assert await _counts(session, key) == {str(food): 1}
+
+    sibling_clears = await _event_ids(session, [created[1].id, created[2].id], "none")
+    assert len(sibling_clears) == 2
+    for event_id in sibling_clears:
+        assert await _undo(client, auth_headers, [event_id]) == {"restored": 1, "skipped": 0}
+    assert await _counts(session, key) == {str(food): 2}
+
+
+@pytest.mark.asyncio
+async def test_undoing_an_accept_row_by_row_takes_back_only_its_pick(client, auth_headers, session, test_user, test_account, test_categories):
+    """m4: accepting a store teaches one pick; undoing its rows one by one
+    takes back that one pick, not one per row (a pick taught before stays)."""
+    from app.services.categorization.memory import learn_choice
+
+    food = test_categories[0].id
+    await learn_choice(session, test_account.workspace_id, "PADARIA", food)
+    txs = [_tx(session, test_user, test_account, "PADARIA") for _ in range(2)]
+    await session.flush()
+    for tx in txs:
+        _suggest(session, tx, "PADARIA", category_id=food)
+    await session.commit()
+
+    body = (await client.post(
+        f"{API}/review/accept", headers=auth_headers,
+        json={"merchant_key": "PADARIA", "category_id": str(food)},
+    )).json()
+    assert await _counts(session, "PADARIA") == {str(food): 2}
+
+    for event_id in body["event_ids"]:
+        assert await _undo(client, auth_headers, [event_id]) == {"restored": 1, "skipped": 0}
+
+    assert await _counts(session, "PADARIA") == {str(food): 1}
+
+
+@pytest.mark.asyncio
+async def test_undoing_a_bulk_pick_row_by_row_takes_back_only_its_pick(client, auth_headers, session, test_user, test_account, test_categories):
+    """m4 on the bulk edit: it taught one pick per store, so undoing its
+    rows one by one takes back one."""
+    from app.services.categorization.memory import learn_choice
+    from app.services.categorization.merchant_key import merchant_key
+
+    food = test_categories[0].id
+    key = merchant_key("PADARIA PAO QUENTE")
+    await learn_choice(session, test_account.workspace_id, key, food)
+    txs = [_tx(session, test_user, test_account, "PADARIA PAO QUENTE") for _ in range(2)]
+    await session.commit()
+    resp = await client.patch(
+        "/api/transactions/bulk-categorize", headers=auth_headers,
+        json={"transaction_ids": [str(tx.id) for tx in txs], "category_id": str(food)},
+    )
+    assert resp.status_code == 200, resp.text
+    assert await _counts(session, key) == {str(food): 2}
+
+    for event_id in await _event_ids(session, [tx.id for tx in txs], "user"):
+        assert await _undo(client, auth_headers, [event_id]) == {"restored": 1, "skipped": 0}
+
+    assert await _counts(session, key) == {str(food): 1}
 
 
 @pytest.mark.asyncio
@@ -960,6 +1154,9 @@ async def test_calendar_items_carry_origin_and_pending_review(client, auth_heade
     filed = _tx(session, test_user, test_account, "IFOOD", source="ai", category_id=food, day=date(2026, 9, 10))
     waiting = _tx(session, test_user, test_account, "PADARIA", day=date(2026, 9, 11))
     mine = _tx(session, test_user, test_account, "POSTO", source="user", category_id=food, day=date(2026, 9, 12))
+    # A bank row still pending is a projected item, but a real transaction.
+    held = _tx(session, test_user, test_account, "MERCADO", source="ai", category_id=food,
+               day=date(2026, 9, 13), status="pending")
     await session.flush()
     _suggest(session, waiting, "PADARIA", category_id=food)
     await session.commit()
@@ -970,9 +1167,13 @@ async def test_calendar_items_carry_origin_and_pending_review(client, auth_heade
     items = {i["id"]: i for day in resp.json()["days"] for i in day["items"] if i["id"]}
     seal = {
         tx_id: (items[str(tx_id)]["category_source"], items[str(tx_id)]["categorization_pending"])
-        for tx_id in (filed.id, waiting.id, mine.id)
+        for tx_id in (filed.id, waiting.id, mine.id, held.id)
     }
-    assert seal == {filed.id: ("ai", False), waiting.id: ("none", True), mine.id: ("user", False)}
+    assert seal == {
+        filed.id: ("ai", False), waiting.id: ("none", True), mine.id: ("user", False),
+        held.id: ("ai", False),
+    }
+    assert items[str(held.id)]["kind"] == "projected"
 
 
 @pytest.mark.asyncio

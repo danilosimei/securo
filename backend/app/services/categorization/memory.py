@@ -152,11 +152,12 @@ async def learn_choice(
 
 async def unlearn_choice(
     session: AsyncSession, workspace_id: uuid.UUID, key: str, category_id: uuid.UUID
-) -> None:
+) -> bool:
     """Take back one pick for a store (an undone decision); never below zero.
 
     An entry that reaches zero is removed. The AI's cached decision, already
-    dropped when the pick was learned, is not brought back.
+    dropped when the pick was learned, is not brought back. Returns whether
+    a pick was actually taken (False for a store or category with none).
     """
     row = (
         await session.execute(
@@ -166,7 +167,7 @@ async def unlearn_choice(
         )
     ).scalar_one_or_none()
     if row is None:
-        return
+        return False
     counts = _counts(row.counts)
     entry = str(category_id)
     current = counts.get(entry, 0)
@@ -178,6 +179,7 @@ async def unlearn_choice(
     if row.last_user_category_id == category_id and entry not in counts:
         row.last_user_category_id = None
     await session.flush()
+    return current >= 1
 
 
 async def lookup(
@@ -352,15 +354,17 @@ async def on_user_choice(
     workspace_id: uuid.UUID,
     tx: Transaction,
     new_category_id: uuid.UUID | None,
-) -> None:
-    """User-choice hook: feed the memory with the person's pick."""
+) -> bool:
+    """User-choice hook: feed the memory with the person's pick. Returns
+    whether it counted one (the caller marks the event, see `memory_pick`)."""
     if new_category_id is None:
-        return
+        return False
     # A savepoint, so a failing learner rolls back only its own work and
     # leaves the caller's transaction usable.
     async with session.begin_nested():
         key = stored_key(await key_for_transaction(session, tx))
         await learn_choice(session, workspace_id, key, new_category_id)
+    return True
 
 
 async def on_user_clear(
@@ -368,13 +372,15 @@ async def on_user_clear(
     workspace_id: uuid.UUID,
     tx: Transaction,
     previous_category_id: uuid.UUID,
-) -> None:
+) -> bool:
     """User-clear hook (R27-U): the person took the store's category away,
-    so the memory loses one pick for it and the store's cached AI decision."""
+    so the memory loses one pick for it and the store's cached AI decision.
+    Returns whether a pick was taken (none when the store had none)."""
     async with session.begin_nested():
         key = stored_key(await key_for_transaction(session, tx))
-        await unlearn_choice(session, workspace_id, key, previous_category_id)
+        took = await unlearn_choice(session, workspace_id, key, previous_category_id)
         await forget_ai_decisions(session, workspace_id, [key])
+    return took
 
 
 async def one_per_store(

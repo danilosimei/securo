@@ -30,6 +30,7 @@ from app.services.categorization.events import (
     StagedChange,
     record_change,
     record_changes_bulk,
+    mark_latest_picks,
     run_clear_hooks,
     run_user_hooks,
     stage_change,
@@ -1673,9 +1674,11 @@ async def update_transaction(
     categories_before = {row.id: row.category_id for row in rows}
     # The anchor is already empty and only its siblings lose the category:
     # the siblings are derived, so the clear is taken back here, once per
-    # store and category, from the rows as they are before the edit.
+    # store and category, from the rows as they are before the edit. Their
+    # events do not exist yet: the ones a pick was taken for are marked below.
+    took_picks: list[uuid.UUID] = []
     if not anchor_changes and "category_id" in update_data and update_data["category_id"] is None:
-        await _person_hooks_once_per_store(
+        took_picks = await _person_hooks_once_per_store(
             session, [(row, row.category_id) for row in rows if row.category_id is not None], None,
         )
 
@@ -1704,13 +1707,14 @@ async def update_transaction(
         )
 
     # The anchor already had the category and only its siblings moved: the
-    # siblings are derived, so the choice is taught once, from the anchor.
-    if (
-        not anchor_changes
-        and update_data.get("category_id") is not None
-        and any(row.category_id != categories_before[row.id] for row in rows)
-    ):
-        await run_user_hooks(session, transaction, transaction.category_id)
+    # siblings are derived, so the choice is taught once, from the anchor,
+    # and marked on the first sibling that moved (the anchor wrote no event).
+    moved = [row for row in rows if row.category_id != categories_before[row.id]]
+    if not anchor_changes and update_data.get("category_id") is not None and moved:
+        if await run_user_hooks(session, transaction, transaction.category_id):
+            took_picks = [moved[0].id]
+    if took_picks:
+        await mark_latest_picks(session, took_picks)
 
     # A changed parcel amount makes the stored series total stale, whatever
     # the scope was: "this" reprices one parcel, "future"/"all" reprice
@@ -1728,14 +1732,18 @@ async def _person_hooks_once_per_store(
     session: AsyncSession,
     changes: list[tuple[Transaction, Optional[uuid.UUID]]],
     new_category_id: Optional[uuid.UUID],
-) -> None:
+) -> list[uuid.UUID]:
     """Run a person's hooks for rows they changed together (`(tx, previous
     category)` each) once per store, not once per row: the user-choice hooks
     for a pick, the user-clear hooks (once per store and category the rows
     held) for a clear. The rows' own writes are `derived`, so their hooks
-    do not run as well."""
+    do not run as well.
+
+    Returns the rows a hook moved a pick for: the caller marks their events
+    (`events.mark_latest_picks`), so undoing one of them reverses that pick.
+    """
     if not changes:
-        return
+        return []
     try:
         firsts = await categorization_memory.one_per_store(
             session, changes, by_previous=new_category_id is None
@@ -1743,12 +1751,16 @@ async def _person_hooks_once_per_store(
     except Exception:
         # Same posture as the hooks: the memory is a hint, the edit stands.
         logger.exception("could not group %d edited rows by store", len(changes))
-        return
+        return []
+    moved: list[uuid.UUID] = []
     for tx, previous in firsts:
         if new_category_id is not None:
-            await run_user_hooks(session, tx, new_category_id)
+            if await run_user_hooks(session, tx, new_category_id):
+                moved.append(tx.id)
         elif previous is not None:
-            await run_clear_hooks(session, tx, previous)
+            if await run_clear_hooks(session, tx, previous):
+                moved.append(tx.id)
+    return moved
 
 
 async def bulk_update_category(
@@ -1788,7 +1800,8 @@ async def bulk_update_category(
         session, workspace_id, [(tx, category_id, "user") for tx in rows],
         user_id=user_id, derived=True,
     )
-    await _person_hooks_once_per_store(session, changed, category_id)
+    moved = await _person_hooks_once_per_store(session, changed, category_id)
+    await mark_latest_picks(session, moved)
     await session.commit()
     return len(rows)
 
