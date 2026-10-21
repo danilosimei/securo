@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class CollectionBase(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    icon: str = "folder"
+    icon: str = "circle-help"
     color: str = "#6366F1"
     position: int = 0
 

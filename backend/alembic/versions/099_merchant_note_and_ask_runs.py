@@ -10,6 +10,12 @@ created again with the model's list (`app.models.categorization.RUN_KINDS`).
 The downgrade deletes the `ask` runs first, as the old check could not hold
 them.
 
+Category groups made without an icon got "folder", which the frontend's icon
+set (`frontend/src/lib/category-icons.ts`) does not have, so they showed a
+generic one. They move to "circle-help" (the "Outros" icon), and so does the
+column's server default. A data fix: the downgrade puts the default back but
+cannot tell which groups had "folder", so it leaves the icons.
+
 Revision ID: 099
 Revises: 098
 """
@@ -23,6 +29,11 @@ depends_on = None
 
 _NAME = "ck_categorization_run_kind"
 _KINDS = ("classify", "organize", "redistribute", "ask")
+_GROUP_ICON = "circle-help"
+_OLD_GROUP_ICON = "folder"
+_FIX_GROUP_ICONS = (
+    f"UPDATE category_groups SET icon = '{_GROUP_ICON}' WHERE icon = '{_OLD_GROUP_ICON}'"
+)
 
 
 def _in(kinds: tuple[str, ...]) -> str:
@@ -36,9 +47,12 @@ def upgrade() -> None:
     )
     op.drop_constraint(_NAME, "categorization_runs", type_="check")
     op.create_check_constraint(_NAME, "categorization_runs", _in(_KINDS))
+    op.alter_column("category_groups", "icon", server_default=_GROUP_ICON)
+    op.execute(_FIX_GROUP_ICONS)
 
 
 def downgrade() -> None:
+    op.alter_column("category_groups", "icon", server_default=_OLD_GROUP_ICON)
     op.execute("DELETE FROM categorization_runs WHERE kind = 'ask'")
     op.drop_constraint(_NAME, "categorization_runs", type_="check")
     op.create_check_constraint(_NAME, "categorization_runs", _in(_KINDS[:-1]))

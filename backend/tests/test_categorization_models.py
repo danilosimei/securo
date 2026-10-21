@@ -422,9 +422,15 @@ async def test_migration_099_round_trip_postgres():
                 "INSERT INTO categorization_runs (id, workspace_id, kind, trigger, status)"
                 " SELECT gen_random_uuid(), id, 'ask', 'manual', 'done' FROM workspaces"
             ))
+        icon_default = (
+            "SELECT column_default FROM information_schema.columns"
+            " WHERE table_name='category_groups' AND column_name='icon'"
+        )
+        assert "circle-help" in await scalar(scratch, icon_default)
         await asyncio.to_thread(alembic, "downgrade", "098")
         assert await scalar(scratch, cols) == 0
         assert await scalar(scratch, "SELECT count(*) FROM categorization_runs") == 0
+        assert "folder" in await scalar(scratch, icon_default)
         await asyncio.to_thread(alembic, "upgrade", "head")
         assert await scalar(scratch, cols) == 2
     finally:
@@ -579,3 +585,93 @@ async def test_migration_098_downgrade_round_trip_postgres():
         async with admin.connect() as conn:
             await conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
         await admin.dispose()
+
+
+def _migration_099():
+    import importlib.util
+    from pathlib import Path
+
+    path = (
+        Path(__file__).resolve().parent.parent
+        / "alembic" / "versions" / "099_merchant_note_and_ask_runs.py"
+    )
+    spec = importlib.util.spec_from_file_location(f"migration_099_{uuid.uuid4().hex}", path)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    return migration
+
+
+async def test_group_and_collection_icons_default_to_an_icon_the_frontend_has(
+    session, test_user, test_workspace
+):
+    """"folder" is not in `frontend/src/lib/category-icons.ts`; the
+    "Outros" icon is."""
+    from pathlib import Path
+
+    from app.models.category_group import CategoryGroup
+    from app.models.collection import Collection
+    from app.schemas.category_group import CategoryGroupCreate
+    from app.schemas.collection import CollectionCreate
+
+    icons = (
+        Path(__file__).resolve().parents[2] / "frontend" / "src" / "lib" / "category-icons.ts"
+    )
+    if icons.exists():
+        assert "name: 'circle-help'" in icons.read_text(encoding="utf-8")
+        assert "name: 'folder'" not in icons.read_text(encoding="utf-8")
+    group = CategoryGroup(user_id=test_user.id, workspace_id=test_workspace.id, name="G")
+    session.add(group)
+    await session.commit()
+    assert group.icon == "circle-help"
+    assert CategoryGroupCreate(name="G").icon == "circle-help"
+    assert Collection.__table__.c.icon.default.arg == "circle-help"
+    assert CollectionCreate(name="C").icon == "circle-help"
+
+
+async def test_migration_099_moves_folder_group_icons_to_circle_help(monkeypatch):
+    from types import SimpleNamespace
+
+    migration = _migration_099()
+    calls: list[tuple] = []
+    monkeypatch.setattr(migration, "op", SimpleNamespace(
+        add_column=lambda *a, **k: calls.append(("add", a)),
+        drop_column=lambda *a, **k: calls.append(("drop", a)),
+        create_check_constraint=lambda *a, **k: calls.append(("check", a)),
+        drop_constraint=lambda *a, **k: calls.append(("uncheck", a)),
+        alter_column=lambda *a, **k: calls.append(("alter", a, k)),
+        execute=lambda sql: calls.append(("sql", sql)),
+    ))
+
+    migration.upgrade()
+
+    assert ("sql", migration._FIX_GROUP_ICONS) in calls
+    assert ("alter", ("category_groups", "icon"), {"server_default": "circle-help"}) in calls
+    calls.clear()
+    migration.downgrade()
+    assert ("alter", ("category_groups", "icon"), {"server_default": "folder"}) in calls
+    assert ("sql", migration._FIX_GROUP_ICONS) not in calls
+
+
+async def test_migration_099_icon_fix_touches_only_folder_groups_postgres(postgres_sessions):
+    from app.models.category_group import CategoryGroup
+
+    migration = _migration_099()
+    async with postgres_sessions() as session:
+        ws, category, seed = await _seed_pg(session)
+        folder, chosen = (
+            CategoryGroup(user_id=seed.user_id, workspace_id=ws, name=name, icon=icon)
+            for name, icon in (("Antigo", "folder"), ("Casa", "house"))
+        )
+        session.add_all([folder, chosen])
+        await session.commit()
+
+        schema = session.get_bind().get_execution_options()["schema_translate_map"][None]
+        await session.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+        await session.execute(text(migration._FIX_GROUP_ICONS))
+        await session.commit()
+
+        icons = dict((await session.execute(
+            select(CategoryGroup.name, CategoryGroup.icon).where(CategoryGroup.workspace_id == ws)
+        )).all())
+        assert icons == {"Antigo": "circle-help", "Casa": "house"}
