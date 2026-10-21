@@ -333,6 +333,7 @@
   "POST /api/workspaces/{workspace_id}/archive": 401,
   "POST /api/workspaces/{workspace_id}/members": 401,
   "PUT /api/agents/{agent_id}/tools": 401,
+  "PUT /api/categorization/notes": 401,
   "PUT /api/categorization/settings": 401,
   "PUT /api/reconciliation/rules/{node}/order": 401
  },
@@ -407,6 +408,7 @@
   "POST /api/transactions/{transaction_id}/create-counterpart": 422,
   "POST /api/workspaces": 422,
   "POST /api/workspaces/{workspace_id}/members": 422,
+  "PUT /api/categorization/notes": 422,
   "PUT /api/reconciliation/rules/{node}/order": 422
  },
  "ok": {
@@ -741,6 +743,7 @@
   "POST /api/workspaces/{workspace_id}/archive": 400,
   "POST /api/workspaces/{workspace_id}/members": 400,
   "PUT /api/agents/{agent_id}/tools": 200,
+  "PUT /api/categorization/notes": 200,
   "PUT /api/categorization/settings": 200,
   "PUT /api/reconciliation/rules/{node}/order": 400
  },
@@ -1100,6 +1103,7 @@
   "POST /api/workspaces/{workspace_id}/archive": 403,
   "POST /api/workspaces/{workspace_id}/members": 403,
   "PUT /api/agents/{agent_id}/tools": 403,
+  "PUT /api/categorization/notes": 403,
   "PUT /api/categorization/settings": 403,
   "PUT /api/reconciliation/rules/{node}/order": 403
  }

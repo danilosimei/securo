@@ -3,6 +3,7 @@
 SQLite runs without foreign keys, so everything about ON DELETE is proven on
 PostgreSQL; the rest (defaults, uniqueness) runs on the default SQLite session.
 """
+import asyncio
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -352,3 +353,82 @@ async def test_migration_098_marks_one_pick_per_accept_and_every_other_choice_po
         )).scalars().all())
         assert marked == {k1_latest.id, k2.id, k1_again.id, edit.id}
         assert k1_older.id not in marked
+
+
+async def test_merchant_memory_note_defaults_to_null(session, test_user, test_account):
+    row = MerchantMemory(workspace_id=test_account.workspace_id, merchant_key="mercado")
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    assert row.note is None
+    assert row.note_updated_at is None
+
+
+async def test_run_kind_accepts_ask(session, test_account):
+    ws = test_account.workspace_id
+    run = {"workspace_id": ws, "trigger": "manual", "status": "done"}
+    session.add(CategorizationRun(**run, kind="ask"))
+    await session.commit()
+    session.add(CategorizationRun(**run, kind="chat"))
+    with pytest.raises(IntegrityError, match="CHECK"):
+        await session.commit()
+    await session.rollback()
+
+
+async def test_migration_099_round_trip_postgres():
+    """`alembic upgrade head` / `downgrade 098` / `upgrade head` on a scratch
+    database: the columns come and go, the kind check follows, and the
+    downgrade drops the `ask` runs the old check could not hold."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    base = os.environ.get("POSTGRES_TEST_URL")
+    if not base:
+        if os.environ.get("CI"):
+            pytest.fail("CI must supply POSTGRES_TEST_URL for PostgreSQL tests")
+        pytest.skip("isolated PostgreSQL not configured")
+    name = f"mig099_{uuid.uuid4().hex[:12]}"
+    url = base.rsplit("/", 1)[0] + "/" + name
+    admin = create_async_engine(base, isolation_level="AUTOCOMMIT")
+    backend = Path(__file__).resolve().parent.parent
+
+    def alembic(*args):
+        subprocess.run(
+            [sys.executable, "-m", "alembic", *args], cwd=backend, check=True,
+            env={**os.environ, "DATABASE_URL": url}, capture_output=True, text=True,
+        )
+
+    async def scalar(engine, sql):
+        async with engine.connect() as conn:
+            return (await conn.execute(text(sql))).scalar_one()
+
+    async with admin.connect() as conn:
+        await conn.execute(text(f'CREATE DATABASE "{name}"'))
+    scratch = create_async_engine(url)
+    try:
+        await asyncio.to_thread(alembic, "upgrade", "head")
+        cols = (
+            "SELECT count(*) FROM information_schema.columns WHERE table_name='merchant_memory'"
+            " AND column_name IN ('note', 'note_updated_at')"
+        )
+        assert await scalar(scratch, cols) == 2
+        async with scratch.begin() as conn:
+            await conn.execute(text("INSERT INTO workspaces (id, name) VALUES (gen_random_uuid(), 'w')"))
+            await conn.execute(text(
+                "INSERT INTO categorization_runs (id, workspace_id, kind, trigger, status)"
+                " SELECT gen_random_uuid(), id, 'ask', 'manual', 'done' FROM workspaces"
+            ))
+        await asyncio.to_thread(alembic, "downgrade", "098")
+        assert await scalar(scratch, cols) == 0
+        assert await scalar(scratch, "SELECT count(*) FROM categorization_runs") == 0
+        await asyncio.to_thread(alembic, "upgrade", "head")
+        assert await scalar(scratch, cols) == 2
+    finally:
+        await scratch.dispose()
+        async with admin.connect() as conn:
+            await conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        await admin.dispose()

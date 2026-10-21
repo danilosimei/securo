@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import String, cast, or_, select
@@ -24,7 +25,7 @@ from app.models.categorization import MerchantMemory
 from app.models.payee import Payee
 from app.models.transaction import Transaction
 from app.services.categorization import events
-from app.services.categorization.merchant_key import merchant_key
+from app.services.categorization.merchant_key import merchant_key, sanitize_text
 
 #: Choices needed before the memory is trusted.
 MIN_CHOICES = 2
@@ -32,6 +33,8 @@ MIN_CHOICES = 2
 DOMINANCE = 0.8
 #: `merchant_key` column width (memory and suggestions).
 KEY_WIDTH = 255
+#: Longest store note kept (the column is `String(200)`).
+NOTE_LENGTH = 200
 #: Ids per `IN (...)` (asyncpg caps a statement at 32767 parameters).
 CHUNK = 1000
 
@@ -44,6 +47,7 @@ class MemoryHit:
     ai_category_id: uuid.UUID | None = None
     ai_confidence: int | None = None
     ai_clean_name: str | None = None
+    note: str | None = None
 
 
 def stored_key(key: str) -> str:
@@ -218,8 +222,30 @@ async def lookup(
             ai_category_id=row.ai_category_id,
             ai_confidence=row.ai_confidence,
             ai_clean_name=row.ai_clean_name,
+            note=row.note,
         )
     return hits
+
+
+async def set_note(
+    session: AsyncSession, workspace_id: uuid.UUID, key: str, note: str | None
+) -> MerchantMemory:
+    """Set (or clear, with empty text) what the person says about a store.
+
+    The text is stripped of documents and account numbers and cut at
+    `NOTE_LENGTH`. A changed note makes the store's cached AI decision stale,
+    so it is dropped; an unchanged one touches nothing. It is not a choice:
+    `counts` stay as they are and no pick is counted.
+    """
+    row = await _get_or_create(session, workspace_id, stored_key(key))
+    clean = sanitize_text(note or "")[:NOTE_LENGTH].strip() or None
+    if clean != row.note:
+        row.note = clean
+        row.note_updated_at = datetime.now(timezone.utc)
+        row.ai_category_id = None
+        row.ai_confidence = None
+        await session.flush()
+    return row
 
 
 async def remember_ai_decision(

@@ -137,6 +137,17 @@ class ReviewTransaction(BaseModel):
     type: str
 
 
+class NoteRequest(BaseModel):
+    merchant_key: str = Field(min_length=1, max_length=255)
+    #: Cleaned and cut to `memory.NOTE_LENGTH` on save; empty clears it.
+    note: Optional[str] = Field(default=None, max_length=400)
+
+
+class NoteRead(BaseModel):
+    merchant_key: str
+    note: Optional[str] = None
+
+
 class ReviewGroup(BaseModel):
     merchant_key: str
     clean_name: Optional[str] = None
@@ -147,6 +158,8 @@ class ReviewGroup(BaseModel):
     suggestion: Optional[ReviewSuggestion] = None
     new_category: Optional[NewCategory] = None
     is_person: bool
+    #: What the person said about the store, when they did.
+    note: Optional[str] = None
     transaction_ids: list[uuid.UUID]
     #: The first rows of `transaction_ids` (at most `review.REVIEW_PREVIEW`).
     transactions: list[ReviewTransaction] = Field(default_factory=list)
@@ -263,6 +276,8 @@ class Provenance(BaseModel):
     current_source: str
     original_description: Optional[str] = None
     events: list[ProvenanceEvent]
+    #: The note on the row's store; none when it has no note.
+    store_note: Optional[NoteRead] = None
 
 
 class SimilarRequest(BaseModel):

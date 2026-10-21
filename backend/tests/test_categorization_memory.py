@@ -542,3 +542,87 @@ async def test_clear_takes_the_pick_back_from_the_store_the_row_was_in(
         select(MerchantMemory).execution_options(populate_existing=True)
     )).scalars().all()}
     assert rows == {key: {str(food): 2}}
+
+
+# --- store note ---------------------------------------------------------------
+
+
+async def _memory_row(session, ws, key):
+    return (
+        await session.execute(
+            select(MerchantMemory).where(
+                MerchantMemory.workspace_id == ws, MerchantMemory.merchant_key == key
+            )
+        )
+    ).scalar_one_or_none()
+
+
+@pytest.mark.asyncio
+async def test_set_note_creates_row_without_picks(session, test_workspace):
+    from app.services.categorization.memory import set_note
+
+    row = await set_note(session, test_workspace.id, "AURINO", "jardineiro")
+    assert row.note == "jardineiro"
+    assert row.note_updated_at is not None
+    assert row.counts == {}
+    assert is_consistent(row.counts) == (None, False)
+
+
+@pytest.mark.asyncio
+async def test_set_note_scrubs_documents_and_truncates(session, test_workspace):
+    from app.services.categorization.memory import NOTE_LENGTH, set_note
+
+    row = await set_note(
+        session, test_workspace.id, "AURINO",
+        "Aurino jardineiro CPF 123.456.789-09 conta 12345-6 " + "x" * 300,
+    )
+    assert row.note is not None
+    assert "123.456.789-09" not in row.note
+    assert "12345-6" not in row.note
+    assert len(row.note) <= NOTE_LENGTH == 200
+
+
+@pytest.mark.asyncio
+async def test_set_note_forgets_ai_decision(session, test_workspace, test_categories):
+    from app.services.categorization.memory import set_note
+
+    await remember_ai_decision(session, test_workspace.id, "AURINO", test_categories[0].id, 90, "Aurino")
+    row = await set_note(session, test_workspace.id, "AURINO", "jardineiro")
+    assert row.ai_category_id is None
+    assert row.ai_confidence is None
+    assert row.ai_clean_name == "Aurino"
+
+
+@pytest.mark.asyncio
+async def test_set_note_unchanged_keeps_ai_decision(session, test_workspace, test_categories):
+    from app.services.categorization.memory import set_note
+
+    await set_note(session, test_workspace.id, "AURINO", "jardineiro")
+    stamp = (await _memory_row(session, test_workspace.id, "AURINO")).note_updated_at
+    await remember_ai_decision(session, test_workspace.id, "AURINO", test_categories[0].id, 90, None)
+    row = await set_note(session, test_workspace.id, "AURINO", "jardineiro")
+    assert row.ai_category_id == test_categories[0].id
+    assert row.ai_confidence == 90
+    assert row.note_updated_at == stamp
+
+
+@pytest.mark.asyncio
+async def test_clearing_note_keeps_counts(session, test_workspace, test_categories):
+    from app.services.categorization.memory import set_note
+
+    cat = test_categories[0].id
+    await learn_choice(session, test_workspace.id, "AURINO", cat)
+    await set_note(session, test_workspace.id, "AURINO", "jardineiro")
+    row = await set_note(session, test_workspace.id, "AURINO", "   ")
+    assert row.note is None
+    assert row.counts == {str(cat): 1}
+
+
+@pytest.mark.asyncio
+async def test_lookup_returns_note(session, test_workspace):
+    from app.services.categorization.memory import set_note
+
+    await set_note(session, test_workspace.id, "AURINO", "jardineiro")
+    hits = await lookup(session, test_workspace.id, ["AURINO", "OUTRA"])
+    assert hits["AURINO"].note == "jardineiro"
+    assert hits["OUTRA"].note is None

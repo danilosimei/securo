@@ -48,6 +48,10 @@ CATEGORY_SOURCES = (
 EVENT_SOURCES = CATEGORY_SOURCES + ("undo",)
 
 
+#: What a run is for: `ask` is one message of the conversation about a row.
+RUN_KINDS = ("classify", "organize", "redistribute", "ask")
+
+
 def in_clause(column: str, values: tuple[str, ...]) -> str:
     """A CHECK clause; also used by `Transaction.category_source` (098)."""
     return f"{column} IN ({', '.join(repr(v) for v in values)})"
@@ -109,7 +113,7 @@ class CategorizationRun(Base):
     __tablename__ = "categorization_runs"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('classify', 'organize', 'redistribute')",
+            in_clause("kind", RUN_KINDS),
             name="ck_categorization_run_kind",
         ),
         CheckConstraint(
@@ -246,6 +250,11 @@ class MerchantMemory(Base):
     ai_category_id: Mapped[Optional[uuid.UUID]] = _set_null_fk("categories.id")
     ai_confidence: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     ai_clean_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: What the person told us about the store (at most `memory.NOTE_LENGTH`).
+    note: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    note_updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

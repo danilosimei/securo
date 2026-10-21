@@ -311,6 +311,7 @@ async def review_queue(
 ) -> dict[str, Any]:
     groups = await _pending_groups(session, workspace_id)
     page = groups[offset:offset + limit]
+    hits = await memory.lookup(session, workspace_id, [g.key for g in page])
     return {
         "groups": [
             {
@@ -322,6 +323,7 @@ async def review_queue(
                 "suggestion": g.suggestion,
                 "new_category": g.new_category,
                 "is_person": g.key.startswith(PERSON_PREFIX),
+                "note": hits[g.key].note,
                 "transaction_ids": g.tx_ids,
                 "transactions": g.preview,
             }
@@ -917,10 +919,13 @@ async def provenance(
             .limit(PROVENANCE_EVENTS)
         )
     ).scalars().all()
+    key = memory.stored_key(await memory.key_for_transaction(session, tx))
+    note = (await memory.lookup(session, workspace_id, [key]))[key].note
     return {
         "current_source": tx.category_source,
         "original_description": tx.original_description,
         "events": list(events),
+        "store_note": {"merchant_key": key, "note": note} if note else None,
     }
 
 

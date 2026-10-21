@@ -26,6 +26,8 @@ from app.schemas.categorization import (
     CreateCategoryResult,
     DismissRequest,
     DismissResult,
+    NoteRead,
+    NoteRequest,
     OrganizerApplyResult,
     OrganizerOp,
     OrganizerRead,
@@ -40,7 +42,7 @@ from app.schemas.categorization import (
     UndoResultRead,
 )
 from app.models.categorization import CategorizationRun
-from app.services.categorization import organizer, review
+from app.services.categorization import memory, organizer, review
 from app.services.categorization import settings as categorization_settings
 from app.tasks import categorization_tasks
 
@@ -138,6 +140,17 @@ async def create_category_from_review(
     return CreateCategoryResult(
         category_id=category_id, applied=result.applied, event_ids=result.event_ids
     )
+
+
+@router.put("/notes", response_model=NoteRead)
+async def put_note(
+    data: NoteRequest,
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    row = await memory.set_note(session, ctx.workspace.id, data.merchant_key, data.note)
+    await session.commit()
+    return NoteRead(merchant_key=row.merchant_key, note=row.note)
 
 
 @router.get("/applied", response_model=AppliedPage)

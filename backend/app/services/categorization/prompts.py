@@ -34,6 +34,8 @@ from app.services.categorization.merchant_key import (
     UNKNOWN_KEY,
     sample_description,
     scrub_documents,
+    TRAILING_JUNK,
+    strip_account_numbers,
 )
 from app.services.categorization.pipeline import MerchantGroup
 
@@ -59,21 +61,6 @@ _ACCOUNT_KINDS = {"credit_card": "cc", "checking": "ca", "savings": "ca"}
 TRANSFER_MARK = " (movimentação)"
 #: Previous choices per store sent as `h`.
 HISTORY_LIMIT = 3
-
-# Prompt samples only (merchant keys are untouched): branch/account numbers
-# after their label, card-number shapes, "final 1234", and any run of 5+
-# digits with . - / * separators (masked documents like ***.456.789-**).
-# Bank codes (3 digits, e.g. "TED 341") stay: public, and a useful signal.
-_ACCOUNT_TOKEN_RE = re.compile(
-    r"\b(?:AG|AGENCIA|AGÊNCIA|CC|C/C|CONTA|CT)\b\.?:?\s*[.\-/]*\d[\d.\-/]*", re.IGNORECASE
-)
-_CARD_RE = re.compile(
-    r"(?<![\w*])(?:\d{4}|\*{4}|[Xx]{4})(?:[ .\-]?(?:\d{4}|\*{4}|[Xx]{4})){2,3}(?![\w*])"
-)
-_CARD_FINAL_RE = re.compile(r"\bFINAL\s*\d{4}\b", re.IGNORECASE)
-_NUMBER_RUN_RE = re.compile(r"[\d*][\d.\-/*]*")
-NUMBER_RUN_MIN_DIGITS = 5
-_TRAILING_JUNK = " |-/:"
 
 INSTRUCTIONS = """Você categoriza as transações bancárias e de cartão de crédito de uma pessoa no Brasil. As transações chegam agrupadas por loja: decida uma vez por item e a decisão vale para todas as transações daquele item.
 
@@ -130,21 +117,6 @@ def _one_line(text: str) -> str:
     return _SPACES_RE.sub(" ", text).strip()
 
 
-def _drop_long_number(match: re.Match[str]) -> str:
-    token = match.group(0)
-    digits = sum(ch.isdigit() for ch in token)
-    return " " if digits >= NUMBER_RUN_MIN_DIGITS else token
-
-
-def strip_account_numbers(text: str) -> str:
-    """Remove branch/account/card numbers and long digit runs (prompt text only)."""
-    text = _ACCOUNT_TOKEN_RE.sub(" ", text)
-    text = _CARD_RE.sub(" ", text)
-    text = _CARD_FINAL_RE.sub(" ", text)
-    text = _NUMBER_RUN_RE.sub(_drop_long_number, text)
-    return _one_line(text).rstrip(_TRAILING_JUNK)
-
-
 def prompt_sample(text: str | None) -> str:
     """A description as the prompt may carry it: no documents, no account or
     card numbers, at most `SAMPLE_MAX_LENGTH` characters."""
@@ -152,7 +124,7 @@ def prompt_sample(text: str | None) -> str:
         return ""
     # Documents first: the account/card patterns could take a piece of one
     # and leave the rest unrecognizable.
-    return sample_description(strip_account_numbers(scrub_documents(text))).rstrip(_TRAILING_JUNK)
+    return sample_description(strip_account_numbers(scrub_documents(text))).rstrip(TRAILING_JUNK)
 
 
 @dataclass(frozen=True)

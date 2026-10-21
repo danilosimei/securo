@@ -137,6 +137,43 @@ def _squeeze(text: str) -> str:
     return _SPACES_RE.sub(" ", text).strip()
 
 
+# Prompt samples only (merchant keys are untouched): branch/account numbers
+# after their label, card-number shapes, "final 1234", and any run of 5+
+# digits with . - / * separators (masked documents like ***.456.789-**).
+# Bank codes (3 digits, e.g. "TED 341") stay: public, and a useful signal.
+_ACCOUNT_TOKEN_RE = re.compile(
+    r"\b(?:AG|AGENCIA|AGÊNCIA|CC|C/C|CONTA|CT)\b\.?:?\s*[.\-/]*\d[\d.\-/]*", re.IGNORECASE
+)
+_CARD_RE = re.compile(
+    r"(?<![\w*])(?:\d{4}|\*{4}|[Xx]{4})(?:[ .\-]?(?:\d{4}|\*{4}|[Xx]{4})){2,3}(?![\w*])"
+)
+_CARD_FINAL_RE = re.compile(r"\bFINAL\s*\d{4}\b", re.IGNORECASE)
+_NUMBER_RUN_RE = re.compile(r"[\d*][\d.\-/*]*")
+NUMBER_RUN_MIN_DIGITS = 5
+TRAILING_JUNK = " |-/:"
+
+
+def _drop_long_number(match: re.Match[str]) -> str:
+    token = match.group(0)
+    digits = sum(ch.isdigit() for ch in token)
+    return " " if digits >= NUMBER_RUN_MIN_DIGITS else token
+
+
+def strip_account_numbers(text: str) -> str:
+    """Remove branch/account/card numbers and long digit runs (prompt text only)."""
+    text = _ACCOUNT_TOKEN_RE.sub(" ", text)
+    text = _CARD_RE.sub(" ", text)
+    text = _CARD_FINAL_RE.sub(" ", text)
+    text = _NUMBER_RUN_RE.sub(_drop_long_number, text)
+    return _squeeze(text).rstrip(TRAILING_JUNK)
+
+
+def sanitize_text(text: str) -> str:
+    """Free text as a prompt or a note may carry it: no documents, no account
+    or card numbers. Not truncated."""
+    return strip_account_numbers(scrub_documents(text))
+
+
 def scrub_documents(text: str) -> str:
     """Remove CPF/CNPJ (11 ou 14 digitos), com ou sem pontuacao ou espacos."""
 
