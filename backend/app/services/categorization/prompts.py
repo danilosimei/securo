@@ -27,13 +27,14 @@ from typing import Any
 from app.models.categorization import MerchantMemory
 from app.models.category import Category
 from app.models.category_group import CategoryGroup
-from app.services.categorization.memory import DOMINANCE
+from app.services.categorization.memory import DOMINANCE, NOTE_LENGTH
 from app.services.categorization.merchant_key import (
     PAYEE_PREFIX,
     PERSON_PREFIX,
     TRAILING_JUNK,
     UNKNOWN_KEY,
     sample_description,
+    sanitize_text,
     scrub_documents,
     strip_account_numbers,
 )
@@ -74,6 +75,7 @@ Uma lista JSON de itens com:
 - m: 1 se repete todo mês com valor parecido (assinatura, conta fixa); 0 se não.
 - a: "cc" cartão de crédito; "ca" conta corrente ou poupança; "o" outro tipo de conta.
 - h (só às vezes): escolhas anteriores desta pessoa nessa mesma loja, como [id, vezes], da mais frequente para a menos. É um sinal forte: prefira a mais frequente, a não ser que s ou v apontem claramente para outra, e use a segunda como alt.
+- o (só às vezes): nota que a pessoa escreveu sobre esta loja; é o sinal mais forte, acima de h.
 
 ## Saída
 Um objeto por item recebido, sem omitir nenhum, com os campos nesta ordem:
@@ -267,18 +269,27 @@ def build_examples(
     return "\n".join(lines)
 
 
-def build_system_blocks(index: CategoryIndex, examples: str) -> list[dict[str, Any]]:
-    """[instructions, tree + examples], each closing a cache breakpoint: the
-    instructions stay cached when the tree or the examples change."""
-    context = (
+def category_context(index: CategoryIndex, examples: str) -> str:
+    """The workspace's tree with short ids and the person's examples: the
+    cached block shared by the batch and the chat about one store."""
+    return (
         "Categorias desta pessoa (id Grupo › Categoria):\n"
         f"{index.render() or '(nenhuma)'}\n\n"
         "Exemplos desta pessoa (loja -> id), dos mais usados para os menos usados:\n"
         f"{examples or '(nenhum ainda)'}"
     )
+
+
+def build_system_blocks(index: CategoryIndex, examples: str) -> list[dict[str, Any]]:
+    """[instructions, tree + examples], each closing a cache breakpoint: the
+    instructions stay cached when the tree or the examples change."""
     return [
         {"type": "text", "text": INSTRUCTIONS, "cache_control": {"type": "ephemeral"}},
-        {"type": "text", "text": context, "cache_control": {"type": "ephemeral"}},
+        {
+            "type": "text",
+            "text": category_context(index, examples),
+            "cache_control": {"type": "ephemeral"},
+        },
     ]
 
 
@@ -319,13 +330,16 @@ def build_history(
 def build_user_message(
     groups: Sequence[MerchantGroup],
     history: dict[str, list[tuple[str, int]]] | None = None,
+    notes: dict[str, str] | None = None,
 ) -> tuple[str, dict[str, str]]:
     """The batch as compact JSON, plus item id -> merchant key.
 
     Items are ordered by merchant key so the same batch renders the same
     bytes. Keys stay out of the message; samples lose documents and account
     or card numbers. `history` (merchant key -> previous picks as short id
-    and count) becomes the item's `h` when present.
+    and count) becomes the item's `h` when present; `notes` (merchant key ->
+    what the person wrote about the store) its `o`, cleaned like the person's
+    text and cut at `NOTE_LENGTH`.
     """
     items: list[dict[str, Any]] = []
     ids: dict[str, str] = {}
@@ -349,6 +363,9 @@ def build_user_message(
         previous = _history_entries((history or {}).get(grp.key, []))
         if previous:
             item["h"] = previous
+        note = sanitize_text((notes or {}).get(grp.key) or "")[:NOTE_LENGTH].strip()
+        if note:
+            item["o"] = note
         items.append(item)
     return json.dumps(items, ensure_ascii=False, separators=(",", ":")), ids
 

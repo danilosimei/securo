@@ -16,6 +16,7 @@ from app.services.categorization.prompts import (
     build_result_schema,
     build_system_blocks,
     build_user_message,
+    category_context,
     classify_params,
     prompt_sample,
 )
@@ -396,3 +397,54 @@ def test_prompt_samples_drop_spaced_documents():
         cleaned = prompt_sample(raw)
         assert cleaned == raw.split()[0] + " JOAO", raw
     assert strip_account_numbers(scrub_documents("PIX 123 456 789 09 JOAO")) == "PIX JOAO"
+
+
+# --- store notes ------------------------------------------------------------------
+
+
+def test_batch_item_carries_store_note():
+    groups = [merchant("IFOOD", ["IFOOD *REST"]), merchant("UBER", ["UBER"])]
+    text, ids = build_user_message(
+        groups, {"IFOOD": [("c3", 1), ("c2", 1)]}, notes={"IFOOD": "Aurino: jardineiro"}
+    )
+    items = {ids[i["k"]]: i for i in json.loads(text)}
+    assert items["IFOOD"]["o"] == "Aurino: jardineiro"
+    assert list(items["IFOOD"])[-2:] == ["h", "o"]
+    assert "o" not in items["UBER"]
+    # No notes: the same bytes as before.
+    assert build_user_message(groups, notes={})[0] == build_user_message(groups)[0]
+
+
+def test_batch_note_is_sanitized():
+    text, _ = build_user_message(
+        [merchant("IFOOD", ["IFOOD"])],
+        notes={"IFOOD": "cpf 123.456.789-09 cartão 4111 1111 1111 1111 " + "x" * 300},
+    )
+    [item] = json.loads(text)
+    assert "123.456.789-09" not in item["o"] and "4111" not in item["o"]
+    assert item["o"].startswith("cpf cartão x")
+    assert len(item["o"]) == 200
+
+
+def test_instructions_explain_the_note_field():
+    text = build_system_blocks(build_category_index([], []), "")[0]["text"]
+    lines = text.splitlines()
+    note_line = (
+        "- o (só às vezes): nota que a pessoa escreveu sobre esta loja; "
+        "é o sinal mais forte, acima de h."
+    )
+    assert note_line in lines
+    assert lines.index(note_line) == next(
+        n for n, line in enumerate(lines) if line.startswith("- h (só às vezes)")
+    ) + 1
+
+
+def test_category_context_is_the_cached_tree_block():
+    cats, groups = tree()
+    index = build_category_index(cats, groups)
+    assert build_system_blocks(index, "X -> c1")[1]["text"] == category_context(index, "X -> c1")
+    assert category_context(build_category_index([], []), "") == (
+        "Categorias desta pessoa (id Grupo › Categoria):\n(nenhuma)\n\n"
+        "Exemplos desta pessoa (loja -> id), dos mais usados para os menos usados:\n"
+        "(nenhum ainda)"
+    )

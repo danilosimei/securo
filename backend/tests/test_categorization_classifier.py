@@ -34,7 +34,7 @@ from app.services.categorization.classifier import (
     apply_results,
 )
 from app.services.categorization.costs import cost_usd
-from app.services.categorization.memory import learn_choice
+from app.services.categorization.memory import learn_choice, set_note
 from app.services.categorization.pipeline import (
     NO_AI_REASON,
     collect_candidates,
@@ -741,6 +741,28 @@ async def test_history_is_sent_for_inconsistent_stores(
     uber = next(item for sample, item in by_sample.items() if "UBER" in sample)
     assert sorted(ifood["h"]) == sorted([[ids["Alimentação"], 1], [ids["Lazer"], 1]])
     assert "h" not in uber
+
+
+@pytest.mark.asyncio
+async def test_classify_sends_memory_notes(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    _tx(session, test_user, test_account, "UBER *TRIP")
+    await set_note(session, test_workspace.id, "IFOOD", "Aurino: jardineiro cpf 123.456.789-09")
+    await session.commit()
+    client = wire(fake_client(answer(lambda item, ids: None)))
+
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    params = client.messages.create.await_args.kwargs
+    content = params["messages"][0]["content"]
+    assert "Aurino: jardineiro cpf" in content and "123.456.789-09" not in content
+    by_sample = {item["s"][0]: item for item in sent_items(params)}
+    ifood = next(item for sample, item in by_sample.items() if "IFOOD" in sample)
+    uber = next(item for sample, item in by_sample.items() if "UBER" in sample)
+    assert ifood["o"] == "Aurino: jardineiro cpf"
+    assert "o" not in uber
 
 
 @pytest.mark.asyncio

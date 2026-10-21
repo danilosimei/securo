@@ -624,7 +624,8 @@ def batch_estimate(detail: dict[str, Any] | None) -> Decimal:
         return Decimal(0)
 
 
-def _account(run: CategorizationRun, usage: Any, *, batch: bool) -> None:
+def account_usage(run: CategorizationRun, usage: Any, *, batch: bool) -> None:
+    """Add one paid call's tokens and cost to `run`."""
     def tokens(name: str) -> int:
         return int(getattr(usage, name, None) or 0)
 
@@ -667,7 +668,7 @@ async def _apply_message(
     )
 
 
-async def _category_index(
+async def category_index(
     session: AsyncSession,
     workspace_id: uuid.UUID,
     allowed_category_ids: set[uuid.UUID] | None = None,
@@ -701,13 +702,23 @@ def _plan(
     system: list[dict[str, Any]],
     schema: dict[str, Any],
     history: dict[str, list[tuple[str, int]]],
+    notes: dict[str, str],
 ) -> _Plan:
-    text, mapping = build_user_message(chunk, history)
+    text, mapping = build_user_message(chunk, history, notes)
     by_key = {group.key: group for group in chunk}
     return _Plan(
         groups_by_item={item_id: by_key[key] for item_id, key in mapping.items()},
         params=classify_params(system, text, len(chunk), schema),
     )
+
+
+def _notes(
+    groups: dict[str, MerchantGroup], memory_rows: list[MerchantMemory]
+) -> dict[str, str]:
+    """Group key -> what the person wrote about that store, matched in the
+    stored key form the memory uses."""
+    by_stored = {row.merchant_key: row.note for row in memory_rows if row.note}
+    return {key: note for key in groups if (note := by_stored.get(stored_key(key)))}
 
 
 def _groups_of(plans: Sequence[_Plan]) -> dict[str, MerchantGroup]:
@@ -774,7 +785,7 @@ async def classify(
         run.stats = stats
         return
     settings = await get_settings(session, workspace_id)
-    index = await _category_index(session, workspace_id, allowed_category_ids)
+    index = await category_index(session, workspace_id, allowed_category_ids)
     memory_rows = list(
         (
             await session.execute(
@@ -783,11 +794,12 @@ async def classify(
         ).scalars().all()
     )
     history = await _history(session, workspace_id, groups, memory_rows, index)
+    notes = _notes(groups, memory_rows)
     system = build_system_blocks(index, build_examples(memory_rows, index))
     schema = build_result_schema(index)
     ordered = [groups[key] for key in sorted(groups)]
     plans = [
-        _plan(ordered[start:start + CHUNK_SIZE], system, schema, history)
+        _plan(ordered[start:start + CHUNK_SIZE], system, schema, history, notes)
         for start in range(0, len(ordered), CHUNK_SIZE)
     ]
     cap = Decimal(settings.monthly_cap_usd)
@@ -814,7 +826,7 @@ async def classify(
                 break
             run.model = CLASSIFIER_MODEL
             message = await create_message(client, plan.params)
-            _account(run, getattr(message, "usage", None), batch=False)
+            account_usage(run, getattr(message, "usage", None), batch=False)
             # The one commit of this module: the call is paid, so its cost
             # must reach `month_spend` even if applying the answer fails and
             # the task rolls back. Nothing else is pending at this point
@@ -1025,7 +1037,7 @@ async def _collect(
                 allowed_category_ids=allowed,
             )
         else:
-            _account(run, getattr(message, "usage", None), batch=True)
+            account_usage(run, getattr(message, "usage", None), batch=True)
             result = await _apply_message(
                 session, run.workspace_id, run, groups, message,
                 index=index, threshold=threshold, position=position,
