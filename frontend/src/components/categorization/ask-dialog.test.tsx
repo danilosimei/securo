@@ -203,6 +203,28 @@ describe('AskDialog', () => {
     })
   })
 
+  it('aceitar o cartão de uma resposta antiga leva a nota mais nova', async () => {
+    api.categorization.ask
+      .mockResolvedValueOnce(reply({ note: 'Aurino: jardineiro' }))
+      .mockResolvedValueOnce(reply({ reply: 'Anotado.', suggestion: null, note: 'Aurino: jardineiro, às sextas' }))
+      .mockResolvedValueOnce(reply({ reply: 'Certo.', suggestion: null, note: null }))
+    const { user } = await renderDialog()
+    await user.type(box(), 'é o jardineiro{Enter}')
+    await screen.findByTestId('ask-suggestion')
+    await user.type(box(), 'vem às sextas{Enter}')
+    await screen.findByText('Anotado.')
+    await user.type(box(), 'obrigado{Enter}')
+    await screen.findByText('Certo.')
+
+    const [card] = screen.getAllByTestId('ask-suggestion')
+    await user.click(within(card).getByRole('button', { name: t('categorization.ask.accept') }))
+    expect(api.categorization.choose).toHaveBeenCalledWith({
+      merchant_key: 'K',
+      new_category: { group: 'Casa', name: 'Jardinagem' },
+      note: 'Aurino: jardineiro, às sextas',
+    })
+  })
+
   it('erro ao aceitar avisa no diálogo e não fecha', async () => {
     api.categorization.choose.mockRejectedValue(apiError(404, { code: 'not_found', message: 'Nenhuma transação pendente' }))
     const { user } = await renderDialog()

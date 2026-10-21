@@ -42,7 +42,7 @@ import {
 } from '@/components/ui/dialog'
 import { AskSuggestionCard, type AskPick } from '@/components/categorization/ask-suggestion-card'
 import type { AskTarget } from '@/components/categorization/ask-provider'
-import type { AskResponse, ChooseRequest, ChooseResult } from '@/types'
+import type { ChooseRequest, ChooseResult } from '@/types'
 
 interface AskDialogProps {
   target: AskTarget
@@ -154,16 +154,19 @@ export function AskDialog({
     }
   }
 
-  const accept = async (pick: AskPick, answer: AskResponse) => {
+  const accept = async (pick: AskPick) => {
     if (accepting || thinking) return
     setAccepting(true)
     setError(null)
-    // The answer's note is the store's whole note; none means "keep it".
+    // Each answer's note is the store's whole note as of that answer, so the
+    // latest one wins, whichever card is accepted (an older card's note would
+    // undo what later answers added); none at all means "keep it".
+    const note = latestNote(turns)
     const payload: ChooseRequest = {
       merchant_key: target.merchantKey,
       ...(target.transactionIds ? { transaction_ids: target.transactionIds } : {}),
       ...pick,
-      ...(answer.note != null ? { note: answer.note } : {}),
+      ...(note != null ? { note } : {}),
     }
     try {
       const result = await categorizationApi.choose(payload)
@@ -257,7 +260,7 @@ export function AskDialog({
                   // proposal (and accepting would end the conversation).
                   busy={accepting || thinking}
                   suggestedGroupId={target.suggestedGroupId}
-                  onPick={(pick) => void accept(pick, turn.answer!)}
+                  onPick={(pick) => void accept(pick)}
                 />
               )}
             </Turn>
@@ -316,6 +319,15 @@ export function AskDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+/** The note of the newest answer that has one (null: none has). */
+function latestNote(turns: ChatTurn[]): string | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const note = turns[i].answer?.note
+    if (note != null) return note
+  }
+  return null
 }
 
 function Turn({ turn, children }: { turn: ChatTurn; children?: React.ReactNode }) {
