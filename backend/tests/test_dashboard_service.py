@@ -18,11 +18,11 @@ from app.services.dashboard_service import (
     _account_balance_at,
     _total_balance_by_currency,
     get_balance_history,
-    get_monthly_trend,
     get_summary,
     get_spending_by_category,
     get_projected_transactions,
 )
+from app.services.reports import dashboard_rules
 from app.services.transaction_service import get_transactions
 
 
@@ -453,11 +453,11 @@ async def test_spending_and_trend_keep_closed_account_history(
     today = date.today()
     await _add_txn(session, test_user.id, closed_account.id, 60, "debit", today, category_id=cat.id)
 
-    spending = await get_spending_by_category(session, test_workspace.id, test_user.id)
+    spending = await dashboard_rules.get_spending_by_category(session, test_workspace.id, test_user.id)
     fees = next((s for s in spending if s.category_id == str(cat.id)), None)
     assert fees is not None and fees.total == pytest.approx(60.0)
 
-    trend = await get_monthly_trend(session, test_workspace.id, test_user.id, months=1)
+    trend = await dashboard_rules.get_monthly_trend(session, test_workspace.id, test_user.id, months=1)
     assert sum(point.expenses for point in trend) == pytest.approx(60.0)
 
 
