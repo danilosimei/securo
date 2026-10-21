@@ -590,9 +590,10 @@ async def test_saved_note_and_prompt_note_are_cleaned_by_one_function(
 ):
     """The note saved and the note sent to the model are the same text: one
     cleaning, shared by the memory and the prompts."""
-    from app.services.categorization import memory, merchant_key, prompts
+    from app.services.categorization import ask_prompts, memory, merchant_key, prompts
 
     assert prompts.clean_note is merchant_key.clean_note
+    assert ask_prompts.clean_note is merchant_key.clean_note
     assert memory.NOTE_LENGTH == merchant_key.NOTE_LENGTH == 200
     monkeypatch.setattr(memory, "clean_note", lambda text: "limpa")
 

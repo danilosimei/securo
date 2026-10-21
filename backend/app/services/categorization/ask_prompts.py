@@ -32,12 +32,11 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from app.services.categorization.merchant_key import sanitize_text
+from app.services.categorization.merchant_key import clean_note, sanitize_text
 from app.services.categorization.prompts import (
     CLASSIFIER_MODEL,
     CategoryIndex,
     category_context,
-    clean_note,
     nullable,
     prompt_amount,
     prompt_sample,

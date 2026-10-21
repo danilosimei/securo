@@ -1217,13 +1217,8 @@ async def apply_similar(
         await events.mark_picks(session, result.event_ids[:1])
     changed = set(result.transaction_ids)
     skipped = [i for i in dict.fromkeys(transaction_ids or []) if i not in changed]
-    return SimilarApplied(
-        applied=result.applied,
-        event_ids=result.event_ids,
-        by_tx=result.by_tx,
-        transaction_ids=result.transaction_ids,
-        skipped=skipped,
-    )
+    # Every field of `Applied`, whatever it grows to hold.
+    return SimilarApplied(**vars(result), skipped=skipped)
 
 
 async def rule_draft(
