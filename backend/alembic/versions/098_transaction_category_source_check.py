@@ -22,11 +22,21 @@ leave a pick for a decision the person undid):
   share one `resolved_at`: one `user` event per (workspace, key,
   `resolved_at`) is marked, the latest written just before it;
 - every other standing person choice (a form edit, a bulk edit, apply to
-  similar) is marked. The data cannot tell which row of an old bulk edit
-  taught the store, and marking too many only means a row-by-row undo of
-  an old bulk takes back less, never a pick that was not there;
+  similar) is marked, and so is an accept's event written 2 minutes or more
+  before its `resolved_at` (outside the window, it falls to this rule). The
+  data cannot tell which row of an old bulk edit taught the store, so all
+  of them are marked: undoing an old bulk row by row may take back more
+  picks than the bulk taught, since the memory counts per store and the
+  extra ones come from the store's other decisions (floored at 0, and
+  bounded by the few such events production holds);
 - clears stay unmarked: marking one that took nothing would give back a
   pick on undo.
+
+The marks are derived from the data, not kept: a downgrade drops them with
+the column, and upgrading again derives them anew from the events and
+suggestions as they stand then. Marks the live code set after 098 are not
+restored as they were (a clear's mark is lost; every row of a post-098 bulk
+edit is marked), which errs the same way as above.
 
 Revision ID: 098
 Revises: 097

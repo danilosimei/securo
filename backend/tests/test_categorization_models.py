@@ -9,7 +9,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.models.account import Account
@@ -427,6 +427,153 @@ async def test_migration_099_round_trip_postgres():
         assert await scalar(scratch, "SELECT count(*) FROM categorization_runs") == 0
         await asyncio.to_thread(alembic, "upgrade", "head")
         assert await scalar(scratch, cols) == 2
+    finally:
+        await scratch.dispose()
+        async with admin.connect() as conn:
+            await conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        await admin.dispose()
+
+
+async def _run_098_marks(session, migration):
+    schema = session.get_bind().get_execution_options()["schema_translate_map"][None]
+    await session.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+    await session.execute(text(migration._MARK_ACCEPTS))
+    await session.execute(text(migration._MARK_OTHER_PICKS))
+    await session.commit()
+    return set((await session.execute(
+        select(CategorizationEvent.id).where(CategorizationEvent.memory_pick.is_(True))
+    )).scalars().all())
+
+
+async def test_migration_098_window_edge_and_accept_without_event_postgres(postgres_sessions):
+    """An accept's event 2 minutes or more before `resolved_at` is outside
+    the window: it falls to the "other choices" rule and is marked (the safe
+    direction). An event exactly at `resolved_at` is the accept's carrier.
+    An accepted (protected) row with no event marks nothing."""
+    from datetime import datetime, timedelta, timezone
+
+    migration = _migration_098()
+    async with postgres_sessions() as session:
+        ws, category, seed = await _seed_pg(session)
+        user_id, account_id = seed.user_id, seed.account_id
+
+        def tx(description, source="none"):
+            row = Transaction(
+                id=uuid.uuid4(), user_id=user_id, workspace_id=ws, account_id=account_id,
+                description=description, amount=Decimal("10"), date=date.today(),
+                type="debit", source="sync", currency="BRL",
+                category_id=category.id if source != "none" else None, category_source=source,
+            )
+            session.add(row)
+            return row
+
+        def event(row, at):
+            ev = CategorizationEvent(
+                id=uuid.uuid4(), workspace_id=ws, transaction_id=row.id, source="user",
+                previous_category_id=None, new_category_id=category.id,
+                user_id=user_id, created_at=at,
+            )
+            session.add(ev)
+            return ev
+
+        def accepted(row, key, resolved):
+            session.add(CategorizationSuggestion(
+                id=uuid.uuid4(), workspace_id=ws, transaction_id=row.id, merchant_key=key,
+                status="accepted", resolved_at=resolved,
+            ))
+
+        resolved = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+        at_edge, past_edge, at_resolved, no_event = (
+            tx(n, source="user") for n in ("EDGE", "PAST", "AT", "NOEV")
+        )
+        await session.flush()
+        accepted(at_edge, "K_EDGE", resolved)
+        accepted(past_edge, "K_PAST", resolved)
+        accepted(at_resolved, "K_AT", resolved)
+        accepted(no_event, "K_NOEV", resolved)
+        edge = event(at_edge, resolved - timedelta(minutes=2))
+        past = event(past_edge, resolved - timedelta(minutes=3))
+        carrier = event(at_resolved, resolved)
+        await session.commit()
+
+        marked = await _run_098_marks(session, migration)
+
+        assert marked == {edge.id, past.id, carrier.id}
+        events_of_no_event_row = (await session.execute(
+            select(func.count(CategorizationEvent.id))
+            .where(CategorizationEvent.transaction_id == no_event.id)
+        )).scalar_one()
+        assert events_of_no_event_row == 0
+
+
+async def test_migration_098_downgrade_round_trip_postgres():
+    """`alembic upgrade 098` / `downgrade 097` / `upgrade 098` on a scratch
+    database: the CHECK and the column come and go, and the second upgrade
+    derives the marks again from the data as it stands."""
+    import os
+    import subprocess
+    import sys
+    from datetime import datetime, timedelta, timezone
+    from pathlib import Path
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    base = os.environ.get("POSTGRES_TEST_URL")
+    if not base:
+        if os.environ.get("CI"):
+            pytest.fail("CI must supply POSTGRES_TEST_URL for PostgreSQL tests")
+        pytest.skip("isolated PostgreSQL not configured")
+    name = f"mig098_{uuid.uuid4().hex[:12]}"
+    url = base.rsplit("/", 1)[0] + "/" + name
+    admin = create_async_engine(base, isolation_level="AUTOCOMMIT")
+    backend = Path(__file__).resolve().parent.parent
+
+    def alembic(*args):
+        subprocess.run(
+            [sys.executable, "-m", "alembic", *args], cwd=backend, check=True,
+            env={**os.environ, "DATABASE_URL": url}, capture_output=True, text=True,
+        )
+
+    async def scalar(engine, sql):
+        async with engine.connect() as conn:
+            return (await conn.execute(text(sql))).scalar_one()
+
+    column = (
+        "SELECT count(*) FROM information_schema.columns"
+        " WHERE table_name='categorization_events' AND column_name='memory_pick'"
+    )
+    check = "SELECT count(*) FROM pg_constraint WHERE conname='ck_transaction_category_source'"
+    marks = "SELECT count(*) FROM categorization_events WHERE memory_pick"
+
+    async with admin.connect() as conn:
+        await conn.execute(text(f'CREATE DATABASE "{name}"'))
+    scratch = create_async_engine(url)
+    try:
+        await asyncio.to_thread(alembic, "upgrade", "098")
+        assert (await scalar(scratch, column), await scalar(scratch, check)) == (1, 1)
+        async with async_sessionmaker(scratch, expire_on_commit=False)() as session:
+            ws, category, seed = await _seed_pg(session)
+            resolved = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+            session.add(CategorizationSuggestion(
+                id=uuid.uuid4(), workspace_id=ws, transaction_id=seed.id, merchant_key="K",
+                status="accepted", resolved_at=resolved,
+            ))
+            for seconds in (2, 1):
+                session.add(CategorizationEvent(
+                    id=uuid.uuid4(), workspace_id=ws, transaction_id=seed.id, source="user",
+                    previous_category_id=None, new_category_id=category.id,
+                    user_id=seed.user_id, created_at=resolved - timedelta(seconds=seconds),
+                ))
+            await session.commit()
+        assert await scalar(scratch, marks) == 0
+
+        await asyncio.to_thread(alembic, "downgrade", "097")
+        assert (await scalar(scratch, column), await scalar(scratch, check)) == (0, 0)
+
+        await asyncio.to_thread(alembic, "upgrade", "098")
+        assert (await scalar(scratch, column), await scalar(scratch, check)) == (1, 1)
+        # One accept of one store key: one pick, on its latest event.
+        assert await scalar(scratch, marks) == 1
     finally:
         await scratch.dispose()
         async with admin.connect() as conn:
