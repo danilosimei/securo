@@ -284,3 +284,122 @@ describe('CategorySelect creation in a group', () => {
     expect(onSelect).not.toHaveBeenCalled()
   })
 })
+
+describe('CategorySelect creation in a group: limits and hidden groups', () => {
+  const groupsFixture = [
+    { id: 'g-transporte', name: 'Transporte', is_hidden: false, categories: [] },
+    { id: 'g-casa', name: 'Casa', is_hidden: false, categories: [] },
+    { id: 'g-velho', name: 'Velho', is_hidden: true, categories: [] },
+  ] as unknown as CategoryGroup[]
+
+  function renderGrouped() {
+    const onCreateInGroup = vi.fn()
+    const Workspace = withRole(true)
+    const utils = renderWithProviders(
+      <Workspace>
+        <CategorySelect
+          value=""
+          onChange={vi.fn()}
+          categories={[]}
+          groups={groupsFixture}
+          placeholder="Other…"
+          onCreateInGroup={onCreateInGroup}
+          suggestedGroupId="g-transporte"
+        />
+      </Workspace>,
+    )
+    return { ...utils, onCreateInGroup }
+  }
+
+  const tooLong = () => t('categorization.create.tooLong', { max: 100 })
+  const pickGroup = (name: string) => t('categorization.create.pickGroup', { name })
+
+  async function openGroupStep(user: ReturnType<typeof renderWithProviders>['user'], name: string) {
+    await openAndType(user, name)
+    await user.click(screen.getByText(pickGroup(name)))
+    return screen.getByPlaceholderText(t('categorization.create.chooseGroup'))
+  }
+
+  it('a name over 100 characters offers no creation and says why, disabled', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+    const over = 'a'.repeat(101)
+
+    await user.click(screen.getByRole('button'))
+    // Pasted rather than typed: 101 key presses add nothing to the test.
+    screen.getByPlaceholderText(t('transactions.searchCategory')).focus()
+    await user.paste(over)
+
+    const reason = screen.getByRole('option', { name: tooLong() })
+    expect(reason).toHaveAttribute('aria-disabled', 'true')
+    expect(reason).toHaveAttribute('title', tooLong())
+    expect(screen.queryByText(pickGroup(over))).not.toBeInTheDocument()
+    await user.click(reason)
+    await user.keyboard('{Enter}')
+    expect(onCreateInGroup).not.toHaveBeenCalled()
+  })
+
+  it('exactly 100 characters is still offered', async () => {
+    const { user } = renderGrouped()
+    const max = 'a'.repeat(100)
+
+    await user.click(screen.getByRole('button'))
+    screen.getByPlaceholderText(t('transactions.searchCategory')).focus()
+    await user.paste(max)
+
+    expect(screen.getByText(pickGroup(max))).toBeInTheDocument()
+    expect(screen.queryByText(tooLong())).not.toBeInTheDocument()
+  })
+
+  it('the group step lists visible groups only, the suggested one first, each with its title', async () => {
+    const { user } = renderGrouped()
+
+    await openGroupStep(user, 'Carro')
+
+    const names = screen.getAllByRole('option').map((o) => o.textContent)
+    expect(names).toEqual(['Transporte', 'Casa'])
+    expect(screen.getByRole('option', { name: 'Casa' })).toHaveAttribute('title', 'Casa')
+  })
+
+  it('typing the suggested group in the group step still finds it', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    const search = await openGroupStep(user, 'Carro')
+    await user.type(search, 'transp{Enter}')
+
+    expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'Transporte', name: 'Carro', groupExists: true })
+  })
+
+  it('typing a hidden group name in the group step creates a new visible group', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    const search = await openGroupStep(user, 'Carro')
+    await user.type(search, 'Velho')
+    const label = t('categorization.create.inNewGroup', { name: 'Carro', group: 'Velho' })
+    expect(screen.getByRole('option', { name: label })).toHaveAttribute('title', label)
+    expect(screen.queryByRole('option', { name: 'Velho' })).not.toBeInTheDocument()
+    await user.keyboard('{Enter}')
+
+    expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'Velho', name: 'Carro', groupExists: false })
+  })
+
+  it('a group name over 100 characters in the group step is refused with the reason', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    const search = await openGroupStep(user, 'Carro')
+    search.focus()
+    await user.paste('g'.repeat(101))
+
+    expect(screen.getByRole('option', { name: tooLong() })).toHaveAttribute('aria-disabled', 'true')
+    await user.keyboard('{Enter}')
+    expect(onCreateInGroup).not.toHaveBeenCalled()
+  })
+
+  it('"Hidden / Name" creates a new group rather than the hidden one', async () => {
+    const { user, onCreateInGroup } = renderGrouped()
+
+    await openAndType(user, 'velho / Carro')
+    await user.click(screen.getByText(t('categorization.create.inNewGroup', { name: 'Carro', group: 'velho' })))
+
+    expect(onCreateInGroup).toHaveBeenCalledWith({ group: 'velho', name: 'Carro', groupExists: false })
+  })
+})

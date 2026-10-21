@@ -250,8 +250,15 @@ export function ReviewTab() {
     [t, undo],
   )
 
-  const accept = useCallback(
-    async (group: ReviewGroup, categoryId: string) => {
+  /** One answer for one store: hidden at once, sent, then the toast with
+   *  undo; on failure the row comes back. `done` runs on success and may
+   *  return the toast's title. */
+  const answerStore = useCallback(
+    async <R extends { applied: number; event_ids: string[] }>(
+      group: ReviewGroup,
+      send: () => Promise<R>,
+      done?: (result: R) => string | undefined,
+    ) => {
       if (!canWrite) return
       const key = group.merchant_key
       markPending([key], true)
@@ -259,13 +266,9 @@ export function ReviewTab() {
       // A refetch already on its way may still hold this store.
       await queryClient.cancelQueries({ queryKey: [...REVIEW_QUERY_KEY] })
       try {
-        const result = await categorizationApi.accept({
-          merchant_key: key,
-          category_id: categoryId,
-          transaction_ids: group.transaction_ids,
-        })
+        const result = await send()
         dropFromCache([key])
-        appliedToast(result.applied, result.event_ids)
+        appliedToast(result.applied, result.event_ids, done?.(result))
         invalidateCategorizationQueries(queryClient)
       } catch (err) {
         toast.error(extractApiError(err, t('common.error')))
@@ -277,34 +280,32 @@ export function ReviewTab() {
     [appliedToast, canWrite, dropFromCache, invalidateReview, markPending, queryClient, t],
   )
 
+  const accept = useCallback(
+    (group: ReviewGroup, categoryId: string) =>
+      answerStore(group, () =>
+        categorizationApi.accept({
+          merchant_key: group.merchant_key,
+          category_id: categoryId,
+          transaction_ids: group.transaction_ids,
+        }),
+      ),
+    [answerStore],
+  )
+
   /** "Other…" beyond an existing category (a new one, made on the spot):
-   *  same flow as `accept`, over the store's pending rows as they are now
-   *  (no `transaction_ids`), so a row categorized meanwhile is left alone. */
+   *  over the store's pending rows as they are now (no `transaction_ids`),
+   *  so a row categorized meanwhile is left alone. */
   const choose = useCallback(
-    async (group: ReviewGroup, payload: Omit<ChooseRequest, 'merchant_key'>) => {
-      if (!canWrite) return
-      const key = group.merchant_key
-      markPending([key], true)
-      setOpenKey((open) => (open === key ? null : open))
-      await queryClient.cancelQueries({ queryKey: [...REVIEW_QUERY_KEY] })
-      try {
-        const result = await categorizationApi.choose({ merchant_key: key, ...payload })
-        dropFromCache([key])
-        appliedToast(
-          result.applied,
-          result.event_ids,
-          result.created_category ? t('categorization.create.created') : undefined,
-        )
-        if (result.created_category || result.created_group) invalidateCategoryQueries(queryClient)
-        invalidateCategorizationQueries(queryClient)
-      } catch (err) {
-        toast.error(extractApiError(err, t('common.error')))
-        void invalidateReview()
-      } finally {
-        markPending([key], false)
-      }
-    },
-    [appliedToast, canWrite, dropFromCache, invalidateReview, markPending, queryClient, t],
+    (group: ReviewGroup, payload: Omit<ChooseRequest, 'merchant_key'>) =>
+      answerStore(
+        group,
+        () => categorizationApi.choose({ merchant_key: group.merchant_key, ...payload }),
+        (result) => {
+          if (result.created_category || result.created_group) invalidateCategoryQueries(queryClient)
+          return result.created_category ? t('categorization.create.created') : undefined
+        },
+      ),
+    [answerStore, queryClient, t],
   )
 
   /** Send a queued "Ignore"; a no-op once undone or already sent. */

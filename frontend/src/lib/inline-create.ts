@@ -32,7 +32,35 @@ export type GroupedCreateOption =
   | { kind: 'pickGroup'; name: string }
   | { kind: 'newGroup'; draft: GroupedCreateDraft }
 
-const same = (a: string, b: string) => normalizeText(a.trim()) === normalizeText(b.trim())
+/** The server's ceiling for a group or category name, in characters. */
+export const CREATE_NAME_MAX = 100
+
+/** A name as the server stores it: trimmed, inner spaces squeezed. */
+export function cleanCreateName(name: string): string {
+  return name.trim().replace(/\s+/g, ' ')
+}
+
+const key = (name: string) => normalizeText(cleanCreateName(name))
+const same = (a: string, b: string) => key(a) === key(b)
+// Code points, as the server counts them (an emoji is one, not two).
+const tooLong = (name: string) => [...name].length > CREATE_NAME_MAX
+
+/** The search cut into `[group, name]` at its first slash, or null without one. */
+function splitAtSlash(text: string): [string, string] | null {
+  const slash = text.indexOf('/')
+  if (slash < 0) return null
+  return [cleanCreateName(text.slice(0, slash)), cleanCreateName(text.slice(slash + 1))]
+}
+
+/**
+ * Whether the search names a group or a category longer than the server
+ * takes: nothing is offered for it, and the picker says why instead.
+ */
+export function createNameTooLong(search: string): boolean {
+  const text = cleanCreateName(search)
+  const parts = splitAtSlash(text)
+  return parts ? parts.some(tooLong) : tooLong(text)
+}
 
 /**
  * What a picker offers to create from its search text, Notion style.
@@ -42,8 +70,10 @@ const same = (a: string, b: string) => normalizeText(a.trim()) === normalizeText
  * the group already has the name. A plain name offers, in order: the
  * suggested group, picking another group, and a new group of the same name
  * (it is born with that one category). Nothing is offered for a name some
- * category already carries: picking it is the answer. Names compare without
- * case or accents, as the server does.
+ * category already carries (picking it is the answer), nor for a name over
+ * `CREATE_NAME_MAX`. Names compare as the server does: no case, no accents,
+ * spaces squeezed. Hidden groups count as absent, as on the server: a
+ * category made in one would be hidden too, so it creates a visible one.
  */
 export function groupedCreateOptions(
   search: string,
@@ -51,15 +81,15 @@ export function groupedCreateOptions(
   groups: CategoryGroup[],
   suggestedGroupId: string | null,
 ): GroupedCreateOption[] {
-  const text = search.trim()
-  if (!text) return []
+  const text = cleanCreateName(search)
+  if (!text || createNameTooLong(text)) return []
+  const visible = groups.filter((g) => !g.is_hidden)
 
-  const slash = text.indexOf('/')
-  if (slash >= 0) {
-    const groupName = text.slice(0, slash).trim()
-    const name = text.slice(slash + 1).trim()
+  const parts = splitAtSlash(text)
+  if (parts) {
+    const [groupName, name] = parts
     if (!groupName || !name) return []
-    const existing = groups.find((g) => same(g.name, groupName))
+    const existing = visible.find((g) => same(g.name, groupName))
     if (existing && categories.some((c) => c.group_id === existing.id && same(c.name, name))) return []
     return [
       {
@@ -71,12 +101,12 @@ export function groupedCreateOptions(
 
   if (categories.some((c) => same(c.name, text))) return []
   const options: GroupedCreateOption[] = []
-  const suggested = suggestedGroupId ? groups.find((g) => g.id === suggestedGroupId) : undefined
+  const suggested = suggestedGroupId ? visible.find((g) => g.id === suggestedGroupId) : undefined
   if (suggested) {
     options.push({ kind: 'inGroup', draft: { group: suggested.name, name: text, groupExists: true } })
   }
-  if (groups.some((g) => g.id !== suggested?.id)) options.push({ kind: 'pickGroup', name: text })
-  if (!groups.some((g) => same(g.name, text))) {
+  if (visible.some((g) => g.id !== suggested?.id)) options.push({ kind: 'pickGroup', name: text })
+  if (!visible.some((g) => same(g.name, text))) {
     options.push({ kind: 'newGroup', draft: { group: text, name: text, groupExists: false } })
   }
   return options

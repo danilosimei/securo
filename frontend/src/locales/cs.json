@@ -3327,7 +3327,9 @@
       "newGroup": "Create \"{{name}}\" as a new group",
       "inNewGroup": "Create \"{{name}}\" in new group {{group}}",
       "chooseGroup": "Choose the group",
-      "created": "Category created and applied"
+      "created": "Category created and applied",
+      "tooLong": "Name too long (up to {{max}} characters)",
+      "noGroup": "No group found"
     }
   }
 }

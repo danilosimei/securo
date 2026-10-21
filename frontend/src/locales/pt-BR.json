@@ -3169,7 +3169,9 @@
       "newGroup": "Criar \"{{name}}\" como grupo novo",
       "inNewGroup": "Criar \"{{name}}\" no grupo novo {{group}}",
       "chooseGroup": "Escolha o grupo",
-      "created": "Categoria criada e aplicada"
+      "created": "Categoria criada e aplicada",
+      "tooLong": "Nome longo demais (até {{max}} caracteres)",
+      "noGroup": "Nenhum grupo encontrado"
     }
   }
 }

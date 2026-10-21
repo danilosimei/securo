@@ -408,10 +408,12 @@ describe('ReviewTab', () => {
     await user.click(screen.getByText(t('categorization.create.inGroup', { name: 'Carro', group: 'Transport' })))
 
     // No transaction_ids: the store's pending rows, whatever they are by now.
-    expect(api.categorization.choose).toHaveBeenCalledWith({
-      merchant_key: 'UBER',
-      new_category: { group: 'Transport', name: 'Carro' },
-    })
+    await waitFor(() =>
+      expect(api.categorization.choose).toHaveBeenCalledWith({
+        merchant_key: 'UBER',
+        new_category: { group: 'Transport', name: 'Carro' },
+      }),
+    )
     expect(api.categorization.accept).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.queryByText('Uber')).not.toBeInTheDocument())
     await waitFor(() =>
@@ -440,10 +442,12 @@ describe('ReviewTab', () => {
     await user.type(await screen.findByPlaceholderText(t('transactions.searchCategory')), 'Carro')
     await user.click(screen.getByText(t('categorization.create.newGroup', { name: 'Carro' })))
 
-    expect(api.categorization.choose).toHaveBeenCalledWith({
-      merchant_key: 'UBER',
-      new_category: { group: 'Carro', name: 'Carro' },
-    })
+    await waitFor(() =>
+      expect(api.categorization.choose).toHaveBeenCalledWith({
+        merchant_key: 'UBER',
+        new_category: { group: 'Carro', name: 'Carro' },
+      }),
+    )
     await waitFor(() => expect(toast.error).toHaveBeenCalled())
     expect(screen.getByText('Uber')).toBeInTheDocument()
   })

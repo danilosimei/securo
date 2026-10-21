@@ -7,6 +7,7 @@ import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CircleAlertIcon,
   FolderInputIcon,
   FolderPlusIcon,
   PlusIcon,
@@ -19,6 +20,9 @@ import { categories as categoriesApi } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { invalidateCategoryQueries } from '@/lib/invalidate-queries'
 import {
+  CREATE_NAME_MAX,
+  cleanCreateName,
+  createNameTooLong,
   groupedCreateOptions,
   inlineCreateItemValue,
   inlineCreateName,
@@ -177,13 +181,26 @@ export function CategorySelect({
   const createOptions = createsInGroup
     ? groupedCreateOptions(search, categories ?? [], groups ?? [], suggestedGroupId)
     : []
-  // The second step offers every group but the one already on the first.
-  const otherGroups = (groups ?? []).filter((g) => g.id !== suggestedGroupId)
-  const groupSearchName = groupSearch.trim()
+  // Over the server's ceiling: say so rather than offer a create that fails.
+  const searchTooLong = createsInGroup && search.trim() !== '' && createNameTooLong(search)
+  const tooLongLabel = t('categorization.create.tooLong', { max: CREATE_NAME_MAX })
+
+  // The second step lists the visible groups, the suggested one first (so
+  // typing its name still finds it); a hidden group would hide the category.
+  const pickableGroups = useMemo(() => {
+    const visible = (groups ?? []).filter((g) => !g.is_hidden)
+    return [
+      ...visible.filter((g) => g.id === suggestedGroupId),
+      ...visible.filter((g) => g.id !== suggestedGroupId),
+    ]
+  }, [groups, suggestedGroupId])
+  const groupSearchName = cleanCreateName(groupSearch)
+  const groupSearchTooLong = groupSearchName !== '' && [...groupSearchName].length > CREATE_NAME_MAX
   const newGroupFromSearch =
     pickingFor !== null
     && groupSearchName !== ''
-    && !(groups ?? []).some((g) => normalizeText(g.name.trim()) === normalizeText(groupSearchName))
+    && !groupSearchTooLong
+    && !pickableGroups.some((g) => normalizeText(cleanCreateName(g.name)) === normalizeText(groupSearchName))
 
   const resolvedPlaceholder = placeholder ?? t('transactions.selectCategory', 'Select category')
 
@@ -297,12 +314,14 @@ export function CategorySelect({
           />
           {pickingFor !== null ? (
             <CommandList>
+              <CommandEmpty>{t('categorization.create.noGroup')}</CommandEmpty>
               <CommandGroup>
-                {otherGroups.map((group) => (
+                {pickableGroups.map((group) => (
                   <CommandItem
                     key={group.id}
                     value={group.name}
                     onSelect={() => createInGroup({ group: group.name, name: pickingFor, groupExists: true })}
+                    title={group.name}
                     className="cursor-pointer"
                   >
                     <span className="truncate">{group.name}</span>
@@ -314,12 +333,19 @@ export function CategorySelect({
                     onSelect={() =>
                       createInGroup({ group: groupSearchName, name: pickingFor, groupExists: false })
                     }
+                    title={t('categorization.create.inNewGroup', { name: pickingFor, group: groupSearchName })}
                     className="cursor-pointer"
                   >
                     <FolderPlusIcon className="size-4 shrink-0 text-muted-foreground" />
                     <span className="truncate">
                       {t('categorization.create.inNewGroup', { name: pickingFor, group: groupSearchName })}
                     </span>
+                  </CommandItem>
+                )}
+                {groupSearchTooLong && (
+                  <CommandItem value={inlineCreateItemValue(groupSearch)} disabled title={tooLongLabel}>
+                    <CircleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{tooLongLabel}</span>
                   </CommandItem>
                 )}
               </CommandGroup>
@@ -411,6 +437,14 @@ export function CategorySelect({
                       </CommandItem>
                     )
                   })}
+                </CommandGroup>
+              )}
+              {searchTooLong && (
+                <CommandGroup>
+                  <CommandItem value={inlineCreateItemValue(search)} disabled title={tooLongLabel}>
+                    <CircleAlertIcon className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{tooLongLabel}</span>
+                  </CommandItem>
                 </CommandGroup>
               )}
               {footerAction && (
