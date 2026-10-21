@@ -96,7 +96,7 @@ describe('how the category got here', () => {
   it('does not look up the origin of a transaction being created', async () => {
     stubLists()
     const provenance = vi.spyOn(categorization, 'provenance').mockResolvedValue({
-      current_source: 'ai', original_description: null, events: [],
+      current_source: 'ai', original_description: null, events: [], store_note: null,
     })
     renderWithProviders(<TransactionDialog {...props} transaction={null} />)
     expect(await screen.findByText(t('transactions.addManual'))).toBeInTheDocument()
@@ -108,6 +108,7 @@ describe('how the category got here', () => {
     const provenance = vi.spyOn(categorization, 'provenance').mockResolvedValue({
       current_source: 'ai',
       original_description: 'IFOOD *PEDIDO 123',
+      store_note: null,
       events: [],
     })
     const tx = {
@@ -125,6 +126,7 @@ describe('how the category got here', () => {
     vi.spyOn(categorization, 'provenance').mockResolvedValue({
       current_source: 'ai',
       original_description: 'IFOOD *PEDIDO 123',
+      store_note: null,
       events: [{
         id: 'e1', run_id: 'r1', source: 'ai', previous_source: 'none', previous_category_id: 'c2',
         new_category_id: 'c1', confidence: 94, reason: null, model: null, user_id: null,

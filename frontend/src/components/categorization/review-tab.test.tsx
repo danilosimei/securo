@@ -62,6 +62,7 @@ function group(overrides: Partial<ReviewGroup> & { merchant_key: string }): Revi
     suggestion: null,
     new_category: null,
     is_person: false,
+    note: null,
     transaction_ids: [`${overrides.merchant_key}-tx`],
     transactions: [],
     ...overrides,
@@ -146,6 +147,13 @@ async function renderTab() {
 }
 
 describe('ReviewTab', () => {
+  it('mostra a nota da loja na linha', async () => {
+    serverGroups = [{ ...ifood, note: 'só às sextas' }, uber, maria]
+    await renderTab()
+    expect(within(row('iFood')).getByText(/só às sextas/)).toBeInTheDocument()
+    expect(within(row('Uber')).queryByText(/Note:/)).not.toBeInTheDocument()
+  })
+
   it('aceitar palpite remove a linha e mostra toast com Desfazer', async () => {
     const { user } = await renderTab()
 

@@ -14,6 +14,7 @@ import type {
   OrganizerApplyResult,
   OrganizerOp,
   OrganizerView,
+  NoteRead,
   Provenance,
   ReviewQueue,
   RuleDraft,
@@ -2344,6 +2345,10 @@ export const categorization = {
   },
   provenance: async (txId: string): Promise<Provenance> => {
     const { data } = await api.get(`/categorization/transactions/${txId}/provenance`)
+    return data
+  },
+  setNote: async (payload: NoteRead): Promise<NoteRead> => {
+    const { data } = await api.put('/categorization/notes', payload)
     return data
   },
   similar: async (transactionId: string): Promise<SimilarResult> => {

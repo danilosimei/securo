@@ -3013,6 +3013,12 @@
       "filterNone": "No category",
       "reviewAria": "Category to review"
     },
+    "note": {
+      "label": "Note: {{note}}",
+      "delete": "Delete note",
+      "deleted": "Note deleted",
+      "deleteError": "Could not delete the note"
+    },
     "provenance": {
       "label": "How this category got here",
       "by_ai": "Categorized by AI",

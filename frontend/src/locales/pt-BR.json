@@ -2998,6 +2998,12 @@
       "filterNone": "Sem categoria",
       "reviewAria": "Categoria a revisar"
     },
+    "note": {
+      "label": "Nota: {{note}}",
+      "delete": "Apagar nota",
+      "deleted": "Nota apagada",
+      "deleteError": "Não foi possível apagar a nota"
+    },
     "provenance": {
       "label": "Como esta categoria chegou aqui",
       "by_ai": "Categorizado pela IA",

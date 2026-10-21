@@ -49,6 +49,7 @@ function provenance(overrides: Partial<Provenance> = {}): Provenance {
     current_source: 'ai',
     original_description: 'IFOOD *PEDIDO 123',
     events: [event()],
+    store_note: null,
     ...overrides,
   }
 }
@@ -91,6 +92,14 @@ describe('ProvenanceBlock', () => {
     expect(screen.getByText(/IFOOD \*PEDIDO 123/)).toBeInTheDocument()
     expect(screen.getByText(/Groceries/)).toBeInTheDocument()
     expect(api.categorization.provenance).toHaveBeenCalledWith('t1')
+  })
+
+  it('shows the store note', async () => {
+    api.categorization.provenance.mockResolvedValue(
+      provenance({ store_note: { merchant_key: 'K', note: 'only on Fridays' } }),
+    )
+    renderBlock()
+    expect(await screen.findByText(/only on Fridays/)).toBeInTheDocument()
   })
 
   it('says "No category" when nothing was there before', async () => {

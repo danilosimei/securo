@@ -16,6 +16,7 @@ import { formatCurrency } from '@/lib/format'
 import { useDateLocale, useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { cn } from '@/lib/utils'
+import { StoreNote } from '@/components/categorization/store-note'
 import { storeName } from '@/lib/categorization-review'
 import type { Category, CategoryGroup, ReviewGroup, ReviewTransaction } from '@/types'
 
@@ -209,6 +210,7 @@ export function ReviewGroupRow({
               {note}
             </p>
           )}
+          {group.note && <StoreNote merchantKey={group.merchant_key} note={group.note} className="mt-0.5 pl-5" />}
         </div>
 
         {canWrite && (

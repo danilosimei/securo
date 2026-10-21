@@ -1873,6 +1873,8 @@ export interface ReviewGroup {
   suggestion: ReviewSuggestion | null
   new_category: ReviewNewCategory | null
   is_person: boolean
+  /** The note the person left on this store, if any. */
+  note: string | null
   transaction_ids: string[]
   /** The first rows of `transaction_ids`; the rest are only counted. */
   transactions: ReviewTransaction[]
@@ -1981,10 +1983,16 @@ export interface ProvenanceEvent {
   undone_at: string | null
 }
 
+export interface NoteRead {
+  merchant_key: string
+  note: string | null
+}
+
 export interface Provenance {
   current_source: CategorySource
   original_description: string | null
   events: ProvenanceEvent[]
+  store_note: NoteRead | null
 }
 
 export interface SimilarResult {

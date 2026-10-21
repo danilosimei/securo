@@ -15,6 +15,7 @@ import { formatRelativeFromNow } from '@/lib/relative-time'
 import { cn } from '@/lib/utils'
 import { WorkspaceContext } from '@/contexts/workspace-context'
 import { useDateLocale } from '@/hooks/use-display-locale'
+import { StoreNote } from '@/components/categorization/store-note'
 import { Button } from '@/components/ui/button'
 import type { Category, CategorySource, ProvenanceEvent } from '@/types'
 
@@ -128,6 +129,9 @@ export function ProvenanceBlock({ transactionId, categories, onUndone }: Provena
                 <span className="font-medium">{t('categorization.provenance.original')}:</span>{' '}
                 {original.join(' · ')}
               </p>
+            )}
+            {data.store_note?.note && (
+              <StoreNote merchantKey={data.store_note.merchant_key} note={data.store_note.note} className="text-xs" />
             )}
           </div>
           {canWrite && latest && (
