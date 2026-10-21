@@ -109,12 +109,15 @@ docker exec <backend> python scripts/rekey_merchant_keys.py
 docker exec <backend> python scripts/rekey_merchant_keys.py --workspace <uuid>
 ```
 
-What it does, per workspace (one transaction and one commit each):
+What it does, per workspace (one transaction and one commit each), over the transactions the pipeline considers (posted, not a transfer pair, not an opening balance, not ignored):
 
-- **Suggestions** (pending, accepted and dismissed) keyed with the old key of their transaction take the new key.
-- **Store memory**: keys that turn into one store are **merged** into it (picks summed, latest note and last choice kept, the cached AI decision dropped). Keys that mixed several stores (like `MLP`) are **split**: the old row goes and each new store is re-seeded from the person's own categorizations of its rows (one pick per decision: rows filed together count once).
-- A workspace with a classification or redistribution in progress is **skipped** (`[pulado: busy]`); run the script again once it finishes.
+- **Suggestions** (pending, accepted and dismissed) keyed with the old key of their transaction take the new key; one keyed with a key that no longer exists follows that key's memory.
+- **Pending organizer proposals** (`organize` runs not yet decided) that name a store by a key that no longer exists take the key most of the store's rows now have.
+- **Store memory**: keys that turn into one store are **merged** into it (picks summed, the newest note and the person's latest choice kept, the cached AI decision dropped). Keys that mixed several stores (like `MLP`) are **split**: the old row goes and each new store is re-seeded from the person's own categorizations of its rows (one pick per decision: rows filed together in one go count once), and each counted decision gets one event marked as carrying the pick, so undoing it later takes back exactly that pick. Notes are not copied to the new stores (a note about the mixed store would mislead the AI); the text is printed.
+- A workspace with a classification or redistribution in progress is **skipped** (`[pulado: busy (<kind> <status> <run id>, criada há …)]`); run the script again once it finishes, or once the beat expires an abandoned run.
 
-Output: one line per workspace (`<id> sugestões=… fundidas=… divididas=… semeadas=…`), followed by its 20 largest merges/splits (`fundir EBN (3 escolhas) → SPOTIFY`, `dividir MLP (5 escolhas, com nota) → KABUM, NETSHOES`), and a total. A split row's note is not carried over (it described the mixed store): re-add it on the store it belonged to if needed.
+Output: one line per workspace (`<id> sugestões=… fundidas=… divididas=… semeadas=… propostas=… marcadas=…`), followed by its 20 largest merges/splits (`fundir EBN (3 escolhas) → SPOTIFY`, `dividir MLP (5 escolhas) → KABUM, NETSHOES`), **every** dropped note with its text (`nota descartada de MLP: '…'`, keep the output to re-add it on the right store if needed), and a total.
+
+Run it with little activity in the app: a categorization saved by the person while the script runs on the same workspace can lose its pick.
 
 Details: `app/services/categorization/rekey.py`.

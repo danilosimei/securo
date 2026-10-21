@@ -48,19 +48,24 @@ def format_report(report: RekeyReport) -> list[str]:
     line = (
         f"{report.workspace_id} sugestões={report.suggestions} fundidas={report.merged}"
         f" divididas={report.split} semeadas={report.seeded}"
+        f" propostas={report.proposals} marcadas={report.marked}"
     )
     if report.skipped:
-        line += f" [pulado: {report.skipped}]"
+        line += f" [pulado: {report.skipped}"
+        line += f" ({report.busy_run})]" if report.busy_run else "]"
     lines = [line]
     ranked = sorted(report.changes, key=lambda c: (-c.picks, c.old))
     for change in ranked[:TOP]:
         verb = "fundir " if change.kind == MERGE else "dividir"
-        extra = ", com nota" if change.had_note else ""
         lines.append(
-            f"  {verb} {change.old} ({change.picks} escolhas{extra}) → {', '.join(change.new)}"
+            f"  {verb} {change.old} ({change.picks} escolhas) → {', '.join(change.new)}"
         )
     if len(ranked) > TOP:
         lines.append(f"  … e mais {len(ranked) - TOP}")
+    # Every dropped note, not only the top ones: the text exists nowhere else.
+    for change in sorted(report.changes, key=lambda c: c.old):
+        for note in change.notes:
+            lines.append(f"  nota descartada de {change.old}: {note!r}")
     return lines
 
 
@@ -88,7 +93,8 @@ async def run(argv: list[str] | None = None) -> int:
     print(
         f"total: {len(reports)} workspaces, sugestões={sum(r.suggestions for r in reports)}"
         f" fundidas={sum(r.merged for r in reports)} divididas={sum(r.split for r in reports)}"
-        f" semeadas={sum(r.seeded for r in reports)} puladas={skipped}"
+        f" semeadas={sum(r.seeded for r in reports)} propostas={sum(r.proposals for r in reports)}"
+        f" marcadas={sum(r.marked for r in reports)} puladas={skipped}"
     )
     return 0
 
