@@ -186,12 +186,15 @@ def _drop_long_number(match: re.Match[str]) -> str:
     return " " if digits >= NUMBER_RUN_MIN_DIGITS else token
 
 
-def strip_account_numbers(text: str) -> str:
-    """Remove branch/account/card numbers and long digit runs (prompt text only)."""
+def _strip_labeled_numbers(text: str) -> str:
     text = _ACCOUNT_TOKEN_RE.sub(" ", text)
     text = _CARD_RE.sub(" ", text)
-    text = _CARD_FINAL_RE.sub(" ", text)
-    text = _NUMBER_RUN_RE.sub(_drop_long_number, text)
+    return _CARD_FINAL_RE.sub(" ", text)
+
+
+def strip_account_numbers(text: str) -> str:
+    """Remove branch/account/card numbers and long digit runs (prompt text only)."""
+    text = _NUMBER_RUN_RE.sub(_drop_long_number, _strip_labeled_numbers(text))
     return _squeeze(text).rstrip(TRAILING_JUNK)
 
 
@@ -199,6 +202,45 @@ def sanitize_text(text: str) -> str:
     """Free text as a prompt or a note may carry it: no documents, no account
     or card numbers. Not truncated."""
     return strip_account_numbers(scrub_documents(text))
+
+
+# A number written as money, in the chat only: a currency before it, a
+# currency word after it, or cents (",dd" / ".dd"). Up to 10 digits
+# (R$ 99.999.999,99), so a CPF (11) or CNPJ (14) never passes for one,
+# whatever its punctuation. Anything else with 5+ digits may be an account,
+# a phone or a document typed without its label, and still goes.
+_CHAT_NUMBER_RE = re.compile(r"[\d*][\d.,\-/*]*")
+_MONEY_SHAPE_RE = re.compile(
+    r"(?:\d{1,3}(?:\.\d{3})+|\d+)(?P<cents>,\d{2}|(?<!\.\d{3})\.\d{2})?"
+)
+_MONEY_BEFORE_RE = re.compile(r"(?:R\$|US\$|U\$|\$|€|£|\b(?:BRL|USD|EUR))\s?$", re.IGNORECASE)
+_MONEY_AFTER_RE = re.compile(r"\s?(?:reais|real|d[oó]lar(?:es)?|euros?)\b", re.IGNORECASE)
+MONEY_MAX_DIGITS = 10
+
+
+def _keep_money(match: re.Match[str]) -> str:
+    token = match.group(0)
+    body = token.rstrip(".,")
+    shape = _MONEY_SHAPE_RE.fullmatch(body)
+    if shape is not None and sum(ch.isdigit() for ch in body) <= MONEY_MAX_DIGITS:
+        text, start, end = match.string, match.start(), match.start() + len(body)
+        if (
+            shape.group("cents")
+            or _MONEY_BEFORE_RE.search(text, 0, start)
+            or _MONEY_AFTER_RE.match(text, end)
+        ):
+            return token
+    # Not money: each piece between commas as the long-number rule sees it.
+    return ",".join(_NUMBER_RUN_RE.sub(_drop_long_number, piece) for piece in token.split(","))
+
+
+def sanitize_chat(text: str) -> str:
+    """A chat message as it goes to the model: `sanitize_text`, except that
+    amounts written as money stay (they are what the person is asking
+    about). Documents, card and labeled account numbers go first, so none
+    of them is ever read as money. Not truncated."""
+    text = _CHAT_NUMBER_RE.sub(_keep_money, _strip_labeled_numbers(scrub_documents(text)))
+    return _squeeze(text).rstrip(TRAILING_JUNK)
 
 
 #: Longest store note kept (the `merchant_memory.note` column is `String(200)`).

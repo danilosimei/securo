@@ -14,9 +14,12 @@ classifier's pieces and is ordered for prompt caching:
 
 each closing a cache breakpoint (one below the model's minimum cacheable
 length is ignored without error), followed by the short conversation the
-client keeps (it is never stored on the server). Everything the person
-typed passes through `sanitize_text` before it is sent; it drops any run of
-5+ digits, so amounts and dates written in full go too (privacy first).
+client keeps (it is never stored on the server). Every turn passes through
+`sanitize_chat` before it is sent: no CPF/CNPJ, card or account numbers,
+and no other run of 5+ digits (dates written in full go too), except an
+amount written as money ("R$ 15000", "15.000,00", "25000 reais"), which
+is what the person asks about. A bare "15000" still goes: it may as well
+be an account or a phone typed without its label (privacy first).
 
 The answer is `{reply, suggestion, note}` under a per-workspace schema whose
 category field only accepts that workspace's short ids.
@@ -32,7 +35,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from app.services.categorization.merchant_key import clean_note, sanitize_text
+from app.services.categorization.merchant_key import clean_note, sanitize_chat, sanitize_text
 from app.services.categorization.prompts import (
     CLASSIFIER_MODEL,
     CategoryIndex,
@@ -232,7 +235,7 @@ def conversation_messages(turns: Sequence[tuple[str, str]]) -> list[dict[str, An
     return [
         {
             "role": role,
-            "content": sanitize_text(content or "")[:MESSAGE_LENGTH].strip() or REMOVED_MESSAGE,
+            "content": sanitize_chat(content or "")[:MESSAGE_LENGTH].strip() or REMOVED_MESSAGE,
         }
         for role, content in window
     ]

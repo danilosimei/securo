@@ -179,6 +179,52 @@ def test_person_text_is_sanitized():
     assert messages[0]["role"] == "user" and "cpf" in messages[0]["content"]
 
 
+def test_money_amounts_reach_the_model_but_identifiers_do_not():
+    """Amounts written as money (a currency, a currency word, cents) are the
+    point of the question and stay. Anything else with 5+ digits may be an
+    account, a phone or a document typed without its label: it still goes,
+    as do CPF/CNPJ (even after "R$"), card and labeled account numbers."""
+    kept = {
+        "paguei R$ 15000 no carro": "R$ 15000",
+        "paguei R$15.000,00 no carro.": "R$15.000,00",
+        "foram 15.000,00 de entrada": "15.000,00",
+        "uns 1500,90 por mês": "1500,90",
+        "custa US$ 12500.50": "US$ 12500.50",
+        "deu 25000 reais": "25000 reais",
+        "uns 30000 dólares": "30000 dólares",
+        "parcela de 2.500": "2.500",
+    }
+    for text, amount in kept.items():
+        [message] = conversation_messages([("user", text)])
+        assert amount in message["content"], (text, message["content"])
+    gone = {
+        "paguei 15000 no carro": "15000",
+        "conta corrente número 123456": "123456",
+        "liga 987654321": "987654321",
+        "R$ 123.456.789-09": "456",
+        "R$ 123.456.789,09": "456",
+        "R$ 12.345.678/0001-95": "345",
+        "cartão R$ 4111 1111 1111 1111": "4111",
+        "conta 12345,67": "12345",
+        "ag 1234 cc 98765": "98765",
+        "em 10/10/2026": "2026",
+        "R$ 12345678901": "12345678901",
+    }
+    for text, secret in gone.items():
+        [message] = conversation_messages([("user", text)])
+        assert secret not in message["content"], (text, message["content"])
+    # Short numbers and comma lists stay as they were.
+    [message] = conversation_messages([("user", "itens 10,20,30 e 4 parcelas")])
+    assert message["content"] == "itens 10,20,30 e 4 parcelas"
+
+
+def test_store_note_still_drops_every_long_number():
+    """The note is saved and goes with every batch: it keeps the stricter rule."""
+    from app.services.categorization.merchant_key import clean_note
+
+    assert clean_note("aluguel R$ 15000") == "aluguel R$"
+
+
 def test_message_left_empty_by_cleaning_becomes_a_placeholder():
     messages = conversation_messages([
         ("user", "123.456.789-09"),
