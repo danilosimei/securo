@@ -1,4 +1,4 @@
-import type { ComponentType, Dispatch, SetStateAction } from 'react'
+import { useState, type ComponentType, type Dispatch, type SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowUpDown,
@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DateRangeFields } from '@/components/date-range-fields'
 import { CategoryFilterContent } from '@/components/category-filter-content'
 import {
   DropdownMenuCheckboxItem,
@@ -90,7 +91,6 @@ interface MobileTransactionsFilterMenuProps {
   onDateRangeChange: (from: string, to: string) => void
   onAmountRangeChange: (min: string, max: string) => void
   onApplyAmountRange: () => void
-  onOpenCustomRange: () => void
   onClearAll: () => void
 }
 
@@ -348,42 +348,84 @@ function MobileSelectionView({
   ))
 }
 
-function MobileDateView({
+export function MobileDateView({
   from,
   to,
   presets,
   onChange,
-  onOpenCustomRange,
 }: {
   from: string
   to: string
   presets: MobileDatePreset[]
   onChange: (from: string, to: string) => void
-  onOpenCustomRange: () => void
 }) {
   const { t } = useTranslation()
-  const options = [
-    { value: '|', label: t('transactions.all') },
-    ...presets.map((preset) => ({
-      value: `${preset.from}|${preset.to}`,
-      label: preset.label,
-    })),
-  ]
+  const isPreset = presets.some((preset) => preset.from === from && preset.to === to)
+  const isCustom = (!!from || !!to) && !isPreset
+  const [betweenOpen, setBetweenOpen] = useState(isCustom)
+  const [draftFrom, setDraftFrom] = useState(from)
+  const [draftTo, setDraftTo] = useState(to)
+  const [valid, setValid] = useState(true)
+  const canApply = valid && (!!draftFrom || !!draftTo)
+  const apply = () => {
+    if (canApply) onChange(draftFrom, draftTo)
+  }
+  const all = { value: '|', label: t('transactions.all') }
+  const presetOptions = presets.map((preset) => ({
+    value: `${preset.from}|${preset.to}`,
+    label: preset.label,
+  }))
+  const select = (value: string) => onChange(...splitDateRange(value))
   return (
     <>
       <MobileSelectionView
-        options={options}
+        options={[all]}
         selectedValue={`${from}|${to}`}
-        onChange={(value) => onChange(...splitDateRange(value))}
+        onChange={select}
       />
-      <DropdownMenuSeparator />
       <DropdownMenuItem
-        onSelect={onOpenCustomRange}
-        className="justify-between py-2 text-[13px]"
+        onSelect={(event) => {
+          event.preventDefault()
+          setBetweenOpen((open) => !open)
+        }}
+        aria-expanded={betweenOpen}
+        className={cn('justify-between py-2 text-[13px]', isCustom && 'bg-primary/5')}
       >
-        {t('transactions.filtersBar.customRange')}
-        <ChevronRight size={13} className="text-muted-foreground/60" />
+        <span className="min-w-0 flex-1 truncate">{t('transactions.filtersBar.customRange')}</span>
+        {isCustom ? (
+          <Check size={13} className="text-primary" />
+        ) : (
+          <ChevronRight
+            size={13}
+            className={cn('text-muted-foreground/60 transition-transform', betweenOpen && 'rotate-90')}
+          />
+        )}
       </DropdownMenuItem>
+      {betweenOpen && (
+        <div className="p-2">
+          <DateRangeFields
+            from={draftFrom}
+            to={draftTo}
+            onChange={(nextFrom, nextTo) => {
+              setDraftFrom(nextFrom)
+              setDraftTo(nextTo)
+            }}
+            onValidityChange={setValid}
+            onSubmit={apply}
+          />
+          <div className="mt-2 flex justify-end">
+            <Button type="button" size="sm" disabled={!canApply} onClick={apply}>
+              {t('transactions.filtersBar.apply')}
+            </Button>
+          </div>
+        </div>
+      )}
+      <DropdownMenuSeparator />
+      <MobileSelectionView
+        options={presetOptions}
+        selectedValue={`${from}|${to}`}
+        onChange={select}
+      />
     </>
   )
 }
@@ -557,7 +599,7 @@ function MobileFilterDetail({
     return <MobileSelectionView options={options} selectedValue={menu.hideIgnored ? 'hide' : 'show'} onChange={(value) => menu.onHideIgnoredChange(value === 'hide')} />
   }
   if (menu.view === 'date') {
-    return <MobileDateView from={menu.from} to={menu.to} presets={menu.datePresets} onChange={menu.onDateRangeChange} onOpenCustomRange={menu.onOpenCustomRange} />
+    return <MobileDateView from={menu.from} to={menu.to} presets={menu.datePresets} onChange={menu.onDateRangeChange} />
   }
   if (menu.view === 'amount') {
     return <MobileAmountView minAmount={menu.minAmount} maxAmount={menu.maxAmount} setMinAmount={menu.setMinAmount} setMaxAmount={menu.setMaxAmount} onReset={() => resetAmount(menu)} onApply={menu.onApplyAmountRange} />

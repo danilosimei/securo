@@ -44,7 +44,8 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CATEGORY_SOURCE_OPTIONS } from '@/lib/category-source-options'
 import { localDateString } from '@/lib/date-utils'
-import { formatDateRange } from '@/lib/date-range-format'
+import { formatDateShort } from '@/lib/date-input'
+import { DateRangeFields } from '@/components/date-range-fields'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import { CategoryFilterContent } from '@/components/category-filter-content'
 import {
@@ -148,6 +149,7 @@ export function TransactionsFilterBar({
   const [dateCustomOpen, setDateCustomOpen] = useState(false)
   const [draftFrom, setDraftFrom] = useState<string>(filterFrom)
   const [draftTo, setDraftTo] = useState<string>(filterTo)
+  const [draftValid, setDraftValid] = useState(true)
   const [amountSubOpen, setAmountSubOpen] = useState(false)
   const [draftMinAmount, setDraftMinAmount] = useState<string>(filterMinAmount)
   const [draftMaxAmount, setDraftMaxAmount] = useState<string>(filterMaxAmount)
@@ -250,8 +252,13 @@ export function TransactionsFilterBar({
 
   const dateLabel = useMemo(() => {
     if (!filterFrom && !filterTo) return null
-    return formatDateRange(filterFrom, filterTo, dateLocale, { compact: true })
-  }, [filterFrom, filterTo, dateLocale])
+    const from = formatDateShort(filterFrom, dateLocale)
+    const to = formatDateShort(filterTo, dateLocale)
+    if (from && to) return `${from} – ${to}`
+    return from
+      ? t('transactions.filtersBar.since', { date: from })
+      : t('transactions.filtersBar.until', { date: to })
+  }, [filterFrom, filterTo, dateLocale, t])
 
   const amountLabel = useMemo(() => {
     if (!filterMinAmount && !filterMaxAmount) return null
@@ -345,6 +352,13 @@ export function TransactionsFilterBar({
     // Wait for the dropdown to finish closing before showing the popover
     // so focus and portal state settle correctly.
     setTimeout(() => setDateCustomOpen(true), 80)
+  }
+
+  const applyDraftRange = () => {
+    // One side may stay open ("from" / "until"); the typed fields already block To < From.
+    if (!draftValid || (!draftFrom && !draftTo)) return
+    onDateRangeChange(draftFrom, draftTo)
+    setDateCustomOpen(false)
   }
 
   const accountSummary =
@@ -472,7 +486,6 @@ export function TransactionsFilterBar({
                 onDateRangeChange={onDateRangeChange}
                 onAmountRangeChange={onAmountRangeChange}
                 onApplyAmountRange={applyAmountRange}
-                onOpenCustomRange={openCustomRange}
                 onClearAll={onClearAll}
               />
 
@@ -906,6 +919,16 @@ export function TransactionsFilterBar({
                           <Check size={13} className="text-primary" />
                         )}
                       </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={openCustomRange}
+                        className="justify-between rounded-sm px-2 py-1.5 text-[13px]"
+                      >
+                        <span>{t('transactions.filtersBar.customRange')}</span>
+                        <ChevronRight
+                          size={13}
+                          className="text-muted-foreground/60"
+                        />
+                      </DropdownMenuItem>
                       <div className="my-1 h-px bg-border/60" />
                       {datePresets.map((preset) => {
                         const active =
@@ -929,17 +952,6 @@ export function TransactionsFilterBar({
                           </DropdownMenuItem>
                         )
                       })}
-                      <div className="my-1 h-px bg-border/60" />
-                      <DropdownMenuItem
-                        onSelect={openCustomRange}
-                        className="justify-between rounded-sm px-2 py-1.5 text-[13px]"
-                      >
-                        <span>{t('transactions.filtersBar.customRange')}</span>
-                        <ChevronRight
-                          size={13}
-                          className="text-muted-foreground/60"
-                        />
-                      </DropdownMenuItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuPortal>
                 </DropdownMenuSub>
@@ -1186,17 +1198,28 @@ export function TransactionsFilterBar({
               {t('transactions.filtersBar.customRange')}
             </p>
             <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-              {draftFrom || draftTo
-                ? formatDateRange(draftFrom, draftTo, dateLocale)
-                : t('transactions.filtersBar.pickRange')}
+              {t('transactions.filtersBar.pickRange')}
             </p>
           </div>
-          <div className="flex flex-col gap-4 p-3 sm:flex-row sm:gap-0">
+          <div className="border-b border-border/70 px-4 py-3">
+            <DateRangeFields
+              from={draftFrom}
+              to={draftTo}
+              onChange={(from, to) => {
+                setDraftFrom(from)
+                setDraftTo(to)
+              }}
+              onValidityChange={setDraftValid}
+              onSubmit={applyDraftRange}
+            />
+          </div>
+          <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto p-3 sm:max-h-none sm:flex-row sm:gap-0 sm:overflow-visible">
             <div className="sm:border-r sm:border-border/60 sm:pr-2">
               <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
                 {t('transactions.filtersBar.fromLabel')}
               </p>
               <Calendar
+                key={draftFrom}
                 selected={draftFrom ? new Date(draftFrom + 'T00:00:00') : undefined}
                 defaultMonth={
                   draftFrom ? new Date(draftFrom + 'T00:00:00') : new Date()
@@ -1210,6 +1233,7 @@ export function TransactionsFilterBar({
                 {t('transactions.filtersBar.toLabel')}
               </p>
               <Calendar
+                key={draftTo}
                 selected={draftTo ? new Date(draftTo + 'T00:00:00') : undefined}
                 defaultMonth={
                   draftTo
@@ -1246,18 +1270,8 @@ export function TransactionsFilterBar({
               <Button
                 type="button"
                 size="sm"
-                disabled={!draftFrom && !draftTo}
-                onClick={() => {
-                  // Normalize: if user only picked one of the two, mirror it.
-                  const from = draftFrom || draftTo
-                  const to = draftTo || draftFrom
-                  if (from && to && from > to) {
-                    onDateRangeChange(to, from)
-                  } else {
-                    onDateRangeChange(from, to)
-                  }
-                  setDateCustomOpen(false)
-                }}
+                disabled={!draftValid || (!draftFrom && !draftTo)}
+                onClick={applyDraftRange}
               >
                 {t('transactions.filtersBar.apply')}
               </Button>
