@@ -126,7 +126,10 @@ export function SimilarPrompt({
     if (!asking || !autoFocus) return
     const active = document.activeElement
     // No scroll: a bar the page does not jump to.
-    if (!active || active === document.body) applyRef.current?.focus({ preventScroll: true })
+    // Lost focus, or parked by the host to wait for this bar.
+    if (!active || active === document.body || active.hasAttribute('data-focus-parking')) {
+      applyRef.current?.focus({ preventScroll: true })
+    }
   }, [asking, autoFocus])
 
   const undo = (eventIds: string[]) => undoWithToast(eventIds, { t, queryClient })

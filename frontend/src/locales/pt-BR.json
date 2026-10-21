@@ -3234,7 +3234,9 @@
         "timeout": "A IA demorou demais para responder. Tente de novo.",
         "model_error": "A IA não conseguiu responder agora. Tente de novo.",
         "rateLimited": "Mensagens demais em um minuto. Espere um pouco e tente de novo.",
-        "generic": "Não foi possível enviar a mensagem. Tente de novo."
+        "generic": "Não foi possível enviar a mensagem. Tente de novo.",
+        "not_found": "Nenhuma transação desta loja para conversar. Atualize a página.",
+        "invalid_conversation": "Não foi possível ler esta conversa. Feche e comece de novo."
       }
     }
   }

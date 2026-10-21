@@ -190,6 +190,7 @@ export function ReviewTab() {
   // a row leaving above it must not move the roving tabindex off it.
   const [focus, setFocus] = useState<{ key: string | null; idx: number }>({ key: null, idx: 0 })
   const rowRefs = useRef<(HTMLLIElement | null)[]>([])
+  const rootRef = useRef<HTMLDivElement>(null)
   // Set by an answer: once the row leaves, the next one takes the focus.
   const refocus = useRef(false)
   const pointerDown = useRef(false)
@@ -243,7 +244,10 @@ export function ReviewTab() {
   useLayoutEffect(() => {
     if (!refocus.current) return
     refocus.current = false
-    rowRefs.current[current]?.focus()
+    // The last store gone: the tab keeps the focus, not the page's body.
+    const el = rowRefs.current[current]
+    if (el) el.focus()
+    else rootRef.current?.focus({ preventScroll: true })
   })
 
   const invalidateReview = useCallback(
@@ -423,11 +427,19 @@ export function ReviewTab() {
     [answerStore, queryClient, t],
   )
 
-  /** The store's row takes the focus back (the conversation is closing). */
-  const focusRow = useCallback((key: string) => {
-    const idx = visibleRef.current.findIndex((g) => g.merchant_key === key)
-    if (idx < 0) return
-    setFocus({ key, idx })
+  /** The conversation is closing: the store's row takes the focus back. If
+   *  it left meanwhile (rows skipped, nothing similar: it may go during the
+   *  dialog's exit, while the focus is still in there), the row now at its
+   *  place does, or the last one; with no rows left, the list's card. */
+  const focusRow = useCallback((key: string, at: number) => {
+    const shown = visibleRef.current
+    if (shown.length === 0) {
+      rootRef.current?.focus({ preventScroll: true })
+      return
+    }
+    const found = shown.findIndex((g) => g.merchant_key === key)
+    const idx = found >= 0 ? found : Math.max(0, Math.min(at, shown.length - 1))
+    setFocus({ key: shown[idx].merchant_key, idx })
     rowRefs.current[idx]?.focus()
   }, [])
 
@@ -436,6 +448,7 @@ export function ReviewTab() {
   const askAbout = useCallback(
     (group: ReviewGroup) => {
       const key = group.merchant_key
+      const at = Math.max(0, visibleRef.current.findIndex((g) => g.merchant_key === key))
       const guessId = group.suggestion?.category_id
       const lastDate = group.transactions.reduce<string | null>(
         (latest, tx) => (!latest || tx.date > latest ? tx.date : latest),
@@ -443,7 +456,8 @@ export function ReviewTab() {
       )
       ask.open({
         merchantKey: key,
-        storeName: storeName(group) ?? t('categorization.review.whoIsUnknown'),
+        // An unnamed Pix (a hashed key) is just "Pix" in the title.
+        storeName: storeName(group) ?? t('categorization.review.pix'),
         count: group.count,
         total: Number(group.total),
         currency,
@@ -454,15 +468,13 @@ export function ReviewTab() {
           void answerStore(
             group,
             async () => result,
-            (r) => {
-              if (r.created_category || r.created_group) invalidateCategoryQueries(queryClient)
-              return t(r.created_category ? 'categorization.create.created' : 'categorization.ask.accepted')
-            },
+            // The dialog already refreshed the categories it created.
+            (r) => t(r.created_category ? 'categorization.create.created' : 'categorization.ask.accepted'),
           ),
-        restoreFocus: () => focusRow(key),
+        restoreFocus: () => focusRow(key, at),
       })
     },
-    [answerStore, ask, catalog, currency, focusRow, queryClient, t],
+    [answerStore, ask, catalog, currency, focusRow, t],
   )
   const askBlockedReason = ask.blocked ? t(`categorization.ask.blocked.${ask.blocked}`) : null
 
@@ -788,7 +800,8 @@ export function ReviewTab() {
   const money = (value: number | string) => mask(formatCurrency(Number(value), currency, locale))
 
   return (
-    <div data-testid="categorization-review">
+    // Focusable only by script: where the focus lands when no row is left.
+    <div data-testid="categorization-review" ref={rootRef} tabIndex={-1} className="outline-none">
       <SectionCard>
         <SectionHeader
           title={t('categorization.review.title', { count: remaining })}

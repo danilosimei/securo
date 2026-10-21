@@ -3232,7 +3232,9 @@
         "timeout": "The AI took too long to answer. Try again.",
         "model_error": "The AI could not answer right now. Try again.",
         "rateLimited": "Too many messages in a minute. Wait a moment and try again.",
-        "generic": "The message could not be sent. Try again."
+        "generic": "The message could not be sent. Try again.",
+        "not_found": "No transactions of this store are left to talk about. Reload the page.",
+        "invalid_conversation": "This conversation could not be read. Close it and start again."
       }
     }
   }

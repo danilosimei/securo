@@ -241,7 +241,7 @@ describe('AskDialog', () => {
       await waitFor(() => expect(screen.getAllByText('ok')).toHaveLength(i))
     }
     await waitFor(() => expect(box()).toBeDisabled())
-    expect(screen.getByText(t('categorization.ask.limitReached', { max: 30 }))).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(t('categorization.ask.limitReached', { max: 30 }))
     expect(screen.getByText(t('categorization.ask.counter', { used: 30, max: 30 }))).toBeInTheDocument()
   }, 20_000)
 
@@ -252,6 +252,72 @@ describe('AskDialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(t('categorization.ask.errors.timeout'))
     expect(box()).toHaveValue('é o jardineiro')
     expect(screen.getByText(t('categorization.ask.counter', { used: 0, max: 30 }))).toBeInTheDocument()
+  })
+
+  it('com uma mensagem no ar, Aceitar e Outra categoria esperam a resposta', async () => {
+    const { user } = await renderDialog()
+    await user.type(box(), 'é o jardineiro{Enter}')
+    const card = await screen.findByTestId('ask-suggestion')
+    let resolve: (v: AskResponse) => void = () => {}
+    api.categorization.ask.mockImplementationOnce(
+      () => new Promise((r) => {
+        resolve = r
+      }),
+    )
+    await user.type(box(), 'toda semana{Enter}')
+    expect(within(card).getByRole('button', { name: t('categorization.ask.accept') })).toBeDisabled()
+    expect(within(card).getByRole('button', { name: t('categorization.ask.other') })).toBeDisabled()
+    resolve(reply({ reply: 'Semanal, anotado.' }))
+    await screen.findByText('Semanal, anotado.')
+    expect(within(card).getByRole('button', { name: t('categorization.ask.accept') })).toBeEnabled()
+  })
+
+  it('teto estourado no meio da conversa desabilita o campo', async () => {
+    api.categorization.ask.mockRejectedValue(apiError(409, { code: 'capped', message: 'x' }))
+    const { user } = await renderDialog()
+    await user.type(box(), 'é o jardineiro{Enter}')
+    expect(await screen.findByRole('alert')).toHaveTextContent(t('categorization.ask.errors.capped'))
+    expect(box()).toBeDisabled()
+  })
+
+  it('a página bloqueada (teto no summary) desabilita o campo com o motivo', async () => {
+    api.categorization.summary.mockResolvedValue(summary({ month_cost_usd: '2', monthly_cap_usd: '2' }))
+    await renderDialog()
+    await waitFor(() => expect(box()).toBeDisabled())
+    expect(screen.getByRole('status')).toHaveTextContent(t('categorization.ask.blocked.capped'))
+  })
+
+  it('404 da conversa mostra a dica de atualizar a página', async () => {
+    api.categorization.ask.mockRejectedValue(apiError(404, { code: 'not_found', message: 'x' }))
+    const { user } = await renderDialog()
+    await user.type(box(), 'oi{Enter}')
+    expect(await screen.findByRole('alert')).toHaveTextContent(t('categorization.ask.errors.not_found'))
+  })
+
+  it('cada conjunto de linhas tem a sua conversa (Aplicadas: uma por linha)', async () => {
+    const t4 = target({ storeName: 'Linha 4', transactionIds: ['t4'] })
+    const t5 = target({ storeName: 'Linha 5', transactionIds: ['t5'] })
+    const { user } = renderWithProviders(
+      <AskProvider>
+        <Opener of={t4} />
+        <Opener of={t5} />
+      </AskProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'open Linha 4' }))
+    await screen.findByRole('dialog')
+    await user.type(box(), 'é o jardineiro{Enter}')
+    await screen.findByText('Entendi: é o jardineiro.')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'open Linha 5' }))
+    await screen.findByRole('dialog')
+    expect(screen.queryByText('Entendi: é o jardineiro.')).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+    await user.click(screen.getByRole('button', { name: 'open Linha 4' }))
+    expect(await screen.findByText('Entendi: é o jardineiro.')).toBeInTheDocument()
   })
 
   it('a resposta nova entra numa região viva', async () => {

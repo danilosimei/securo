@@ -237,9 +237,14 @@ export function AppliedTab() {
     [canWrite, markFixed, queryClient, t],
   )
 
-  /** "Ask AI" about one row: the answer files that row only. */
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  /** "Ask AI" about one row: the answer files that row only. When the
+   *  dialog closes, the focus goes back to the row's button; a fixed row has
+   *  left, so the similar bar's "Apply" takes it, or (bar still looking, or
+   *  nothing similar) the tab itself, where the bar can still claim it. */
   const askAbout = useCallback(
-    (event: AppliedEvent, restoreFocus: () => void) => {
+    (event: AppliedEvent, focusRow: () => boolean) => {
       const after = event.new_category_id ? catalog.get(event.new_category_id) : undefined
       ask.open({
         merchantKey: event.merchant_key,
@@ -251,14 +256,17 @@ export function AppliedTab() {
         samples: [event.transaction.description],
         transactionIds: [event.transaction.id],
         suggestedGroupId: after?.category.group_id ?? null,
-        onAccepted: (result) => {
-          if (result.created_category || result.created_group) invalidateCategoryQueries(queryClient)
-          markFixed(event)
+        // The dialog already refreshed the categories it created.
+        onAccepted: () => markFixed(event),
+        restoreFocus: () => {
+          if (focusRow()) return
+          const apply = rootRef.current?.querySelector<HTMLButtonElement>('[data-similar-prompt] button')
+          if (apply) apply.focus({ preventScroll: true })
+          else rootRef.current?.focus({ preventScroll: true })
         },
-        restoreFocus,
       })
     },
-    [ask, catalog, markFixed, queryClient],
+    [ask, catalog, markFixed],
   )
   const askBlockedReason = ask.blocked ? t(`categorization.ask.blocked.${ask.blocked}`) : null
 
@@ -354,7 +362,12 @@ export function AppliedTab() {
   return (
     <div
       data-testid="categorization-applied"
+      ref={rootRef}
+      // Focusable only by script: where the focus waits for the similar bar.
+      tabIndex={-1}
+      data-focus-parking=""
       className={cn(
+        'outline-none',
         canWrite && (selected.size > 0 || similarFor) && 'pb-24',
         canWrite && selected.size > 0 && similarFor && 'pb-44',
       )}
@@ -586,7 +599,7 @@ interface StoreGroupProps {
   money: (value: number | string, currency?: string) => string
   onCorrect: (event: AppliedEvent, categoryId: string) => void
   onCreate: (event: AppliedEvent, draft: GroupedCreateDraft) => void
-  onAsk?: (event: AppliedEvent, restoreFocus: () => void) => void
+  onAsk?: (event: AppliedEvent, focusRow: () => boolean) => void
   askBlockedReason: string | null
 }
 
@@ -673,7 +686,7 @@ interface AppliedRowProps {
   money: (value: number | string, currency?: string) => string
   onCorrect: (event: AppliedEvent, categoryId: string) => void
   onCreate: (event: AppliedEvent, draft: GroupedCreateDraft) => void
-  onAsk?: (event: AppliedEvent, restoreFocus: () => void) => void
+  onAsk?: (event: AppliedEvent, focusRow: () => boolean) => void
   askBlockedReason: string | null
 }
 
@@ -684,10 +697,12 @@ function AppliedRow({
   const { t } = useTranslation()
   const askRef = useRef<HTMLButtonElement>(null)
   const askLabel = t('categorization.ask.button')
-  // A fixed row leaves the list: the focus then stays for the similar bar.
+  // False once the row left the list (it was fixed).
   const openAsk = () =>
     onAsk?.(event, () => {
-      if (askRef.current?.isConnected) askRef.current.focus()
+      if (!askRef.current?.isConnected) return false
+      askRef.current.focus()
+      return true
     })
   const before = event.previous_category_id ? catalog.get(event.previous_category_id) : undefined
   const after = event.new_category_id ? catalog.get(event.new_category_id) : undefined

@@ -960,6 +960,71 @@ describe('ReviewTab: perguntar à IA', () => {
     await waitFor(() => expect(row('iFood')).toHaveFocus())
   })
 
+  async function acceptInChat(user: ReturnType<typeof renderWithProviders>['user'], name: string) {
+    await waitFor(() => expect(askButton(name)).toBeEnabled())
+    await user.click(askButton(name))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByRole('textbox'), 'é mercado{Enter}')
+    const card = await within(dialog).findByTestId('ask-suggestion')
+    await user.click(within(card).getByRole('button', { name: t('categorization.ask.accept') }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  }
+
+  it('linhas puladas (sem pergunta): a loja sai e o foco vai à próxima linha, não ao body', async () => {
+    api.categorization.choose.mockImplementation(async () => {
+      serverGroups = serverGroups.filter((g) => g.merchant_key !== 'IFOOD')
+      return { category_id: 'c2', created_group: false, created_category: false, applied: 1, event_ids: ['ch1'] }
+    })
+    const { user } = await renderAsk()
+    await acceptInChat(user, 'iFood')
+    await waitFor(() => expect(screen.queryByText('iFood')).not.toBeInTheDocument())
+    await waitFor(() => expect(row('Uber')).toHaveFocus())
+    expect(api.categorization.similar).not.toHaveBeenCalled()
+  })
+
+  it('nada parecido: a loja sai e o foco vai à próxima linha', async () => {
+    api.categorization.similar.mockResolvedValue(noSimilar)
+    const { user } = await renderAsk()
+    await acceptInChat(user, 'iFood')
+    await waitFor(() => expect(screen.queryByText('iFood')).not.toBeInTheDocument())
+    await waitFor(() => expect(row('Uber')).toHaveFocus())
+    expect(document.activeElement).not.toBe(document.body)
+  })
+
+  it('a última linha que sai passa o foco à anterior', async () => {
+    api.categorization.choose.mockImplementation(async () => {
+      serverGroups = serverGroups.filter((g) => g.merchant_key !== 'PIX:MARIA SILVA')
+      return { category_id: 'c2', created_group: false, created_category: false, applied: 0, event_ids: [] }
+    })
+    const { user } = await renderAsk()
+    await acceptInChat(user, 'Maria Silva')
+    await waitFor(() => expect(screen.queryByText('Maria Silva')).not.toBeInTheDocument())
+    await waitFor(() => expect(row('Uber')).toHaveFocus())
+  })
+
+  it('sem nenhuma linha restante, o foco fica na aba (não no body)', async () => {
+    serverGroups = [ifood]
+    api.categorization.similar.mockResolvedValue(noSimilar)
+    const { user } = await renderAsk()
+    await acceptInChat(user, 'iFood')
+    expect(await screen.findByText(t('categorization.review.empty'))).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId('categorization-review')).toHaveFocus())
+  })
+
+  it('Pix sem nome: o título diz só "Pix"', async () => {
+    serverGroups = [{ ...maria, merchant_key: 'PIX:#abc123', clean_name: null }, ifood]
+    const { user } = await renderAsk()
+    const first = document.querySelector('[data-review-row]') as HTMLElement
+    const button = within(first).getByRole('button', { name: t('categorization.ask.button') })
+    await waitFor(() => expect(button).toBeEnabled())
+    await user.click(button)
+    expect(
+      await screen.findByRole('dialog', {
+        name: t('categorization.ask.title', { name: t('categorization.review.pix') }),
+      }),
+    ).toBeInTheDocument()
+  })
+
   it('"Perguntar à IA" no rodapé do "Outra..." abre o diálogo da loja', async () => {
     const { user } = await renderAsk()
     await waitFor(() => expect(askButton('Uber')).toBeEnabled())

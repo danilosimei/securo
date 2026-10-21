@@ -2,13 +2,24 @@
  *  Applied) opens it about its store with `useAsk().open(target)`, and
  *  `blocked` says why it cannot (the entry points show it disabled).
  *
- *  The conversations live here, by store, for as long as the page: reopening
- *  a store resumes its conversation, a reload starts over, and an accepted
- *  one is gone (its store was answered). */
+ *  The conversations live here, for as long as the page, one per store and
+ *  set of rows (`conversationKey`: Review asks about the store's pending
+ *  rows, each Applied row about itself): reopening resumes it, a reload
+ *  starts over, and an accepted one is gone (with any answer still on its
+ *  way, by generation). */
 import { createContext, useCallback, useContext, useMemo, useState } from 'react'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useCategorizationSummary } from '@/hooks/use-categorization-summary'
-import { askBlocked, type AskBlocked, type ChatTurn } from '@/lib/categorization-ask'
+import {
+  askBlocked,
+  clearConversation,
+  conversationKey,
+  conversationOf,
+  updateConversation,
+  type AskBlocked,
+  type Conversation,
+  type Conversations,
+} from '@/lib/categorization-ask'
 import { AskDialog } from '@/components/categorization/ask-dialog'
 import type { ChooseResult } from '@/types'
 
@@ -56,8 +67,7 @@ export function AskProvider({ children }: { children: React.ReactNode }) {
 
   const [target, setTarget] = useState<AskTarget | null>(null)
   const [isOpen, setIsOpen] = useState(false)
-  const [chats, setChats] = useState<Map<string, ChatTurn[]>>(() => new Map())
-  const [thinking, setThinking] = useState<Set<string>>(() => new Set())
+  const [chats, setChats] = useState<Conversations>(() => new Map())
 
   const open = useCallback((next: AskTarget) => {
     setTarget(next)
@@ -65,34 +75,21 @@ export function AskProvider({ children }: { children: React.ReactNode }) {
   }, [])
   const value = useMemo(() => ({ open, blocked, available: true }), [open, blocked])
 
-  const key = target?.merchantKey ?? ''
-  const onTurns = useCallback(
-    (update: (turns: ChatTurn[]) => ChatTurn[]) =>
-      setChats((prev) => new Map(prev).set(key, update(prev.get(key) ?? []))),
-    [key],
-  )
-  const onThinking = useCallback(
-    (on: boolean) =>
-      setThinking((prev) => {
-        const next = new Set(prev)
-        if (on) next.add(key)
-        else next.delete(key)
-        return next
-      }),
+  const key = target ? conversationKey(target) : ''
+  const onChange = useCallback(
+    (gen: number, change: (current: Conversation) => Partial<Omit<Conversation, 'gen'>>) =>
+      setChats((prev) => updateConversation(prev, key, gen, change)),
     [key],
   )
   const onAccepted = useCallback(
     (result: ChooseResult) => {
       if (!target) return
-      setChats((prev) => {
-        const next = new Map(prev)
-        next.delete(target.merchantKey)
-        return next
-      })
+      // A new generation: an answer still on its way is dropped.
+      setChats((prev) => clearConversation(prev, key))
       setIsOpen(false)
       target.onAccepted(result)
     },
-    [target],
+    [key, target],
   )
 
   return (
@@ -100,14 +97,13 @@ export function AskProvider({ children }: { children: React.ReactNode }) {
       {children}
       {target && (
         <AskDialog
-          key={target.merchantKey}
+          key={key}
           target={target}
           open={isOpen}
           onOpenChange={setIsOpen}
-          turns={chats.get(key) ?? []}
-          thinking={thinking.has(key)}
-          onTurns={onTurns}
-          onThinking={onThinking}
+          conversation={conversationOf(chats, key)}
+          blocked={blocked}
+          onChange={onChange}
           onAccepted={onAccepted}
         />
       )}

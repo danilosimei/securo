@@ -18,11 +18,14 @@ import {
 import { extractApiError } from '@/lib/api-errors'
 import { invalidateCategoryQueries } from '@/lib/invalidate-queries'
 import {
+  ASK_HALTING_ERRORS,
   ASK_MAX_PERSON_MESSAGES,
   askErrorKey,
   personCount,
   toWire,
+  type AskBlocked,
   type ChatTurn,
+  type Conversation,
 } from '@/lib/categorization-ask'
 import { CATEGORIZATION_SUMMARY_KEY } from '@/hooks/use-categorization-summary'
 import { useDateLocale, useDisplayLocale } from '@/hooks/use-display-locale'
@@ -45,11 +48,11 @@ interface AskDialogProps {
   target: AskTarget
   open: boolean
   onOpenChange: (open: boolean) => void
-  turns: ChatTurn[]
-  /** A message of this store is waiting for its answer. */
-  thinking: boolean
-  onTurns: (update: (turns: ChatTurn[]) => ChatTurn[]) => void
-  onThinking: (on: boolean) => void
+  conversation: Conversation
+  /** Why nothing more can be sent (the page's reason; null: nothing). */
+  blocked: AskBlocked | null
+  /** Changes the conversation of generation `gen` (a stale one: no-op). */
+  onChange: (gen: number, change: (current: Conversation) => Partial<Omit<Conversation, 'gen'>>) => void
   /** The choice went through: the provider closes and tells the row. */
   onAccepted: (result: ChooseResult) => void
 }
@@ -58,10 +61,9 @@ export function AskDialog({
   target,
   open,
   onOpenChange,
-  turns,
-  thinking,
-  onTurns,
-  onThinking,
+  conversation,
+  blocked,
+  onChange,
   onAccepted,
 }: AskDialogProps) {
   const { t } = useTranslation()
@@ -73,6 +75,14 @@ export function AskDialog({
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [accepting, setAccepting] = useState(false)
+  // An answer said sending again cannot work (cap, AI off, no connection).
+  const [halted, setHalted] = useState(false)
+  const { turns, thinking, gen } = conversation
+  // The generation now: an answer for an older one changes nothing here.
+  const genRef = useRef(gen)
+  useLayoutEffect(() => {
+    genRef.current = gen
+  })
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const logRef = useRef<HTMLDivElement>(null)
 
@@ -84,7 +94,14 @@ export function AskDialog({
 
   const used = personCount(turns)
   const limitReached = used >= ASK_MAX_PERSON_MESSAGES
-  const canSend = !thinking && !accepting && !limitReached && draft.trim().length > 0
+  const stopped = limitReached || halted || (!!blocked && blocked !== 'readOnly')
+  const canSend = !thinking && !accepting && !stopped && draft.trim().length > 0
+  // What the field is waiting for, read out as it changes.
+  const status = limitReached
+    ? t('categorization.ask.limitReached', { max: ASK_MAX_PERSON_MESSAGES })
+    : blocked && !halted
+      ? t(`categorization.ask.blocked.${blocked}`)
+      : null
 
   // The newest turn in sight.
   useLayoutEffect(() => {
@@ -96,36 +113,39 @@ export function AskDialog({
     const text = draft.trim()
     if (!canSend || !text) return
     const mine: ChatTurn = { role: 'user', text, wire: text }
-    const conversation = [...turns, mine]
-    onTurns(() => conversation)
+    const sent = [...turns, mine]
+    const at = gen
+    onChange(at, () => ({ turns: sent, thinking: true }))
     setDraft('')
     setError(null)
-    onThinking(true)
     try {
       const answer = await categorizationApi.ask({
         merchant_key: target.merchantKey,
         ...(target.transactionIds ? { transaction_ids: target.transactionIds } : {}),
-        messages: toWire(conversation),
+        messages: toWire(sent),
       })
-      onTurns((prev) => [
-        ...prev,
-        { role: 'assistant', text: answer.reply, wire: answer.assistant_turn, answer },
-      ])
+      onChange(at, (c) => ({
+        turns: [...c.turns, { role: 'assistant', text: answer.reply, wire: answer.assistant_turn, answer }],
+        thinking: false,
+      }))
     } catch (err) {
       // The message did not go: it leaves the conversation and goes back to
       // the field, so sending again is one key away.
-      onTurns((prev) => prev.filter((turn) => turn !== mine))
-      setDraft((current) => current || text)
-      setError(t(askErrorKey(err)))
+      onChange(at, (c) => ({ turns: c.turns.filter((turn) => turn !== mine), thinking: false }))
+      if (genRef.current === at) {
+        const key = askErrorKey(err)
+        setDraft((current) => current || text)
+        setError(t(key))
+        if (ASK_HALTING_ERRORS.has(key)) setHalted(true)
+      }
     } finally {
-      onThinking(false)
       // Each message counts in the month's spend: the cap may be reached.
       void queryClient.invalidateQueries({ queryKey: [...CATEGORIZATION_SUMMARY_KEY] })
     }
   }
 
   const accept = async (pick: AskPick, answer: AskResponse) => {
-    if (accepting) return
+    if (accepting || thinking) return
     setAccepting(true)
     setError(null)
     // The answer's note is the store's whole note; none means "keep it".
@@ -137,6 +157,7 @@ export function AskDialog({
     }
     try {
       const result = await categorizationApi.choose(payload)
+      // The one refresh of the categories for this answer (the rows do not repeat it).
       if (result.created_category || result.created_group) invalidateCategoryQueries(queryClient)
       onAccepted(result)
     } catch (err) {
@@ -222,7 +243,9 @@ export function AskDialog({
                   suggestion={turn.answer.suggestion}
                   categories={categories}
                   groups={groups}
-                  busy={accepting}
+                  // While a message is on its way, its answer may change the
+                  // proposal (and accepting would end the conversation).
+                  busy={accepting || thinking}
                   suggestedGroupId={target.suggestedGroupId}
                   onPick={(pick) => void accept(pick, turn.answer!)}
                 />
@@ -245,18 +268,16 @@ export function AskDialog({
               {error}
             </p>
           )}
-          {limitReached && (
-            <p className="mb-2 text-xs text-muted-foreground">
-              {t('categorization.ask.limitReached', { max: ASK_MAX_PERSON_MESSAGES })}
-            </p>
-          )}
+          <p role="status" aria-live="polite" className={cn('text-xs text-muted-foreground', status && 'mb-2')}>
+            {status}
+          </p>
           <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={onKeyDown}
-              disabled={limitReached}
+              disabled={stopped}
               rows={2}
               maxLength={4000}
               aria-label={t('categorization.ask.message')}

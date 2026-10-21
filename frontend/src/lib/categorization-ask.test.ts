@@ -5,7 +5,12 @@ import {
   ASK_MAX_PERSON_MESSAGES,
   askBlocked,
   askErrorKey,
+  clearConversation,
+  conversationKey,
+  conversationOf,
   personCount,
+  updateConversation,
+  type Conversations,
   toWire,
   type ChatTurn,
 } from '@/lib/categorization-ask'
@@ -115,11 +120,58 @@ describe('askErrorKey', () => {
     expect(askErrorKey(apiError(504, 'Gateway Timeout'))).toBe('categorization.ask.errors.timeout')
   })
 
-  it('o resto é genérico', () => {
+  it('404 not_found e 422 invalid_conversation têm mensagem própria', () => {
     expect(askErrorKey(apiError(404, { code: 'not_found', message: 'x' }))).toBe(
+      'categorization.ask.errors.not_found',
+    )
+    expect(askErrorKey(apiError(422, { code: 'invalid_conversation', message: 'x' }))).toBe(
+      'categorization.ask.errors.invalid_conversation',
+    )
+  })
+
+  it('o resto é genérico', () => {
+    expect(askErrorKey(apiError(500, { code: 'boom', message: 'x' }))).toBe(
       'categorization.ask.errors.generic',
     )
     expect(askErrorKey(new Error('network'))).toBe('categorization.ask.errors.generic')
     expect(askErrorKey(undefined)).toBe('categorization.ask.errors.generic')
+  })
+})
+
+describe('conversas por loja', () => {
+  const user = (text: string): ChatTurn => ({ role: 'user', text, wire: text })
+  const assistant: ChatTurn = { role: 'assistant', text: answer.reply, wire: answer.assistant_turn, answer }
+
+  it('a chave separa a Revisar (sem ids) de cada linha das Aplicadas', () => {
+    expect(conversationKey({ merchantKey: 'K' })).toBe('K')
+    expect(conversationKey({ merchantKey: 'K', transactionIds: ['t5', 't4'] })).toBe('K|t4,t5')
+    expect(conversationKey({ merchantKey: 'K', transactionIds: ['t4'] })).not.toBe(
+      conversationKey({ merchantKey: 'K', transactionIds: ['t5'] }),
+    )
+  })
+
+  it('uma resposta atrasada depois de aceitar é descartada e a conversa nova começa pela pessoa', () => {
+    let state: Conversations = new Map()
+    const gen = conversationOf(state, 'K').gen
+    state = updateConversation(state, 'K', gen, (c) => ({ turns: [...c.turns, user('oi')], thinking: true }))
+    expect(conversationOf(state, 'K')).toMatchObject({ turns: [user('oi')], thinking: true })
+
+    // Accepted while the answer was on its way.
+    state = clearConversation(state, 'K')
+    expect(conversationOf(state, 'K')).toEqual({ gen: gen + 1, turns: [], thinking: false })
+
+    const late = updateConversation(state, 'K', gen, (c) => ({ turns: [...c.turns, assistant], thinking: false }))
+    expect(late).toBe(state)
+    expect(conversationOf(late, 'K').turns).toEqual([])
+
+    const next = updateConversation(late, 'K', gen + 1, (c) => ({ turns: [...c.turns, user('de novo')] }))
+    expect(toWire(conversationOf(next, 'K').turns)[0].role).toBe('user')
+  })
+
+  it('as outras lojas não mudam', () => {
+    let state: Conversations = new Map()
+    state = updateConversation(state, 'A', 0, () => ({ turns: [user('a')] }))
+    state = clearConversation(state, 'B')
+    expect(conversationOf(state, 'A').turns).toEqual([user('a')])
   })
 })

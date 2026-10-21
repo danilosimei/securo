@@ -426,6 +426,40 @@ describe('AppliedTab: perguntar à IA', () => {
     expect(toast.success).toHaveBeenCalledWith(t('categorization.applied.corrected'))
   })
 
+  async function acceptUberInChat(user: ReturnType<typeof renderWithProviders>['user']) {
+    const r = await uberRow(user)
+    const button = within(r).getByRole('button', { name: t('categorization.ask.button') })
+    await waitFor(() => expect(button).toBeEnabled())
+    await user.click(button)
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByRole('textbox'), 'corrida{Enter}')
+    const card = await within(dialog).findByTestId('ask-suggestion')
+    await user.click(within(card).getByRole('button', { name: t('categorization.ask.accept') }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  }
+
+  it('a linha corrigida sai e, sem parecidas, o foco fica na aba (não no body)', async () => {
+    const { user } = await renderAsk()
+    await acceptUberInChat(user)
+    await waitFor(() => expect(screen.queryByText('UBER *TRIP')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByTestId('categorization-applied')).toHaveFocus())
+  })
+
+  it('parecidas que chegam depois do diálogo fechar ainda pegam o foco', async () => {
+    let resolve: (v: typeof twoUberTrips) => void = () => {}
+    api.categorization.similar.mockImplementation(
+      () => new Promise((r) => {
+        resolve = r
+      }),
+    )
+    const { user } = await renderAsk()
+    await acceptUberInChat(user)
+    await waitFor(() => expect(screen.getByTestId('categorization-applied')).toHaveFocus())
+    resolve(twoUberTrips)
+    const apply = await screen.findByRole('button', { name: t('categorization.similar.apply', { count: 2 }) })
+    await waitFor(() => expect(apply).toHaveFocus())
+  })
+
   it('sem conexão o botão da linha fica desabilitado com o motivo', async () => {
     api.categorization.summary.mockResolvedValue(summary({ ai_available: false }))
     const { user } = await renderAsk()
