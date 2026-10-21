@@ -1506,6 +1506,57 @@ export const collections = {
   },
 }
 
+// Reports breakdown (Explore tab)
+export type BreakdownLevel = 'group' | 'category' | 'merchant'
+export type ReportPeriod =
+  | 'this_month'
+  | 'last_month'
+  | 'last_3m'
+  | 'last_6m'
+  | 'last_12m'
+  | 'ytd'
+  | 'custom'
+
+export interface BreakdownParams {
+  level: BreakdownLevel
+  period: ReportPeriod
+  /** Required by the backend when `period` is `custom` (YYYY-MM-DD). */
+  from?: string
+  to?: string
+  group_id?: string
+  category_id?: string
+}
+
+export interface BreakdownRow {
+  /** Null on the "no group" / "no category" row. */
+  id: string | null
+  label: string
+  kind: BreakdownLevel
+  /** Decimal string; negative for refund categories. */
+  total: string
+  share: number
+  previous_total: string
+  change: number | null
+  count: number
+  /** 12 decimal strings, oldest month first. */
+  sparkline: string[]
+}
+
+export interface BreakdownResponse {
+  period: {
+    from: string
+    to: string
+    partial: boolean
+    previous_from: string
+    previous_to: string
+  }
+  currency: string
+  total: string
+  previous_total: string | null
+  rows: BreakdownRow[]
+  unconverted_count: number
+}
+
 // Reports
 export const reports = {
   netWorth: async (
@@ -1556,6 +1607,10 @@ export const reports = {
   cashFlow: async (months = 6, interval = 'daily', baseline = false, accountIds?: string[]): Promise<ReportResponse> => {
     const extra = acctIdsParam(accountIds)
     const { data } = await api.get('/reports/cash-flow', { params: { months, interval, baseline, ...(extra.params ?? {}) }, ...(extra.paramsSerializer ? { paramsSerializer: extra.paramsSerializer } : {}) })
+    return data
+  },
+  breakdown: async (params: BreakdownParams): Promise<BreakdownResponse> => {
+    const { data } = await api.get('/reports/breakdown', { params })
     return data
   },
 }
