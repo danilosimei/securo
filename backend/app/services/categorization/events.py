@@ -237,10 +237,14 @@ async def mark_picks(session: AsyncSession, event_ids: list[uuid.UUID]) -> None:
         )
 
 
-async def mark_latest_picks(session: AsyncSession, tx_ids: list[uuid.UUID]) -> None:
-    """Mark the latest standing event of each row (the one the caller just
-    wrote for it) as the one the memory counted a pick for: for callers that
-    run the hooks themselves, once per store, after a set-based write."""
+async def mark_latest_picks(
+    session: AsyncSession, tx_ids: list[uuid.UUID], *, since: datetime
+) -> None:
+    """Mark the latest standing event of each row, written at or after
+    `since` (the one the caller just wrote for it), as the one the memory
+    counted a pick for: for callers that run the hooks themselves, once per
+    store, after a set-based write. A row whose event insert failed has none
+    since then, so nothing of it is marked."""
     marked: list[uuid.UUID] = []
     for start in range(0, len(tx_ids), UNDO_CHUNK):
         ranked = (
@@ -257,6 +261,7 @@ async def mark_latest_picks(session: AsyncSession, tx_ids: list[uuid.UUID]) -> N
                 CategorizationEvent.transaction_id.in_(tx_ids[start:start + UNDO_CHUNK]),
                 CategorizationEvent.undone_at.is_(None),
                 CategorizationEvent.source != "undo",
+                CategorizationEvent.created_at >= since,
             )
             .subquery()
         )

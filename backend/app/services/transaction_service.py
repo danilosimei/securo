@@ -1,7 +1,7 @@
 import logging
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -1677,6 +1677,7 @@ async def update_transaction(
     # store and category, from the rows as they are before the edit. Their
     # events do not exist yet: the ones a pick was taken for are marked below.
     took_picks: list[uuid.UUID] = []
+    started = datetime.now(timezone.utc)
     if not anchor_changes and "category_id" in update_data and update_data["category_id"] is None:
         took_picks = await _person_hooks_once_per_store(
             session, [(row, row.category_id) for row in rows if row.category_id is not None], None,
@@ -1714,7 +1715,7 @@ async def update_transaction(
         if await run_user_hooks(session, transaction, transaction.category_id):
             took_picks = [moved[0].id]
     if took_picks:
-        await mark_latest_picks(session, took_picks)
+        await mark_latest_picks(session, took_picks, since=started)
 
     # A changed parcel amount makes the stored series total stale, whatever
     # the scope was: "this" reprices one parcel, "future"/"all" reprice
@@ -1796,12 +1797,13 @@ async def bulk_update_category(
         if tx.category_id != category_id
         or (category_id is not None and tx.category_source != "user")
     ]
+    started = datetime.now(timezone.utc)
     await record_changes_bulk(
         session, workspace_id, [(tx, category_id, "user") for tx in rows],
         user_id=user_id, derived=True,
     )
     moved = await _person_hooks_once_per_store(session, changed, category_id)
-    await mark_latest_picks(session, moved)
+    await mark_latest_picks(session, moved, since=started)
     await session.commit()
     return len(rows)
 

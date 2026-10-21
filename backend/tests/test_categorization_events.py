@@ -317,15 +317,21 @@ async def test_events_whose_hooks_moved_a_pick_are_marked(
 async def test_mark_latest_picks_marks_each_rows_latest_standing_event(
     session, test_user, test_transactions, test_categories
 ):
+    from datetime import datetime, timezone
+
     food, transport = test_categories[0].id, test_categories[1].id
-    tx = test_transactions[0]
+    tx, untouched = test_transactions[0], test_transactions[1]
+    older = await record_change(session, untouched, source="ai", new_category_id=food)
+    started = datetime.now(timezone.utc)
     first = await record_change(session, tx, source="ai", new_category_id=food)
     latest = await record_change(session, tx, source="ai", new_category_id=transport)
     await session.flush()
 
-    await events.mark_latest_picks(session, [tx.id])
+    # `untouched` wrote nothing since `started` (as when its insert failed):
+    # its older event is not the one the caller meant.
+    await events.mark_latest_picks(session, [tx.id, untouched.id], since=started)
 
-    assert first is not None and latest is not None
-    await session.refresh(first)
-    await session.refresh(latest)
-    assert (first.memory_pick, latest.memory_pick) == (False, True)
+    assert older is not None and first is not None and latest is not None
+    for ev in (older, first, latest):
+        await session.refresh(ev)
+    assert (older.memory_pick, first.memory_pick, latest.memory_pick) == (False, False, True)

@@ -528,6 +528,52 @@ async def test_undoing_a_series_clear_of_the_siblings_only_gives_its_pick_back(c
 
 
 @pytest.mark.asyncio
+async def test_undoing_a_series_pick_that_moved_only_the_siblings_takes_back_its_pick(client, auth_headers, session, test_user, test_workspace, test_account, test_categories):
+    """X-1: the anchor already had the category and only its siblings moved.
+    The memory learned once, from the anchor; undoing the siblings one by one
+    takes that one pick back, no more."""
+    from app.schemas.transaction import InstallmentSeriesCreate, TransactionCreate, TransactionUpdate
+    from app.services import transaction_service
+
+    food, transport = test_categories[0].id, test_categories[1].id
+    created = await transaction_service.create_installment_series(
+        session, test_workspace.id, test_user.id,
+        InstallmentSeriesCreate(
+            base=TransactionCreate(
+                account_id=test_account.id, description="SOFA", amount=Decimal("100"),
+                date=date(2026, 1, 10), type="debit", category_id=food,
+            ),
+            installments=3,
+        ),
+    )
+    [key] = (await session.execute(select(MerchantMemory.merchant_key))).scalars().all()
+    for row in created[1:]:
+        # Moved off the series without an event (as a merge would).
+        (await _fresh(session, Transaction, row.id)).category_id = transport
+    await session.commit()
+    assert await _counts(session, key) == {str(food): 1}
+
+    await transaction_service.update_transaction(
+        session, created[0].id, test_workspace.id, test_user.id,
+        TransactionUpdate(category_id=food, apply_to="all"),
+    )
+    assert await _counts(session, key) == {str(food): 2}
+
+    sibling_picks = (await session.execute(
+        select(CategorizationEvent.id).where(
+            CategorizationEvent.transaction_id.in_([row.id for row in created[1:]]),
+            CategorizationEvent.previous_category_id == transport,
+            CategorizationEvent.new_category_id == food,
+        )
+    )).scalars().all()
+    assert len(sibling_picks) == 2
+    for event_id in sibling_picks:
+        assert await _undo(client, auth_headers, [event_id]) == {"restored": 1, "skipped": 0}
+
+    assert await _counts(session, key) == {str(food): 1}
+
+
+@pytest.mark.asyncio
 async def test_undoing_an_accept_row_by_row_takes_back_only_its_pick(client, auth_headers, session, test_user, test_account, test_categories):
     """m4: accepting a store teaches one pick; undoing its rows one by one
     takes back that one pick, not one per row (a pick taught before stays)."""
