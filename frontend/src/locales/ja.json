@@ -858,10 +858,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "未分類の取引",
     "drillDownDay": "取引 — {{date}}",
-    "drillDownTotal": "{{count}}件 · {{total}}",
-    "drillDownSettledTotal": "決済済み · カード請求合計",
-    "drillDownPendingTotal": "未決済",
-    "drillDownShownTotal": "表示合計",
     "drillDownEmpty": "取引が見つかりません",
     "drillDownClose": "閉じる",
     "accrualNote": "クレジットカードの取引は請求の支払期日ごとにまとめられます(発生基準)。",
@@ -879,7 +875,9 @@
     "fxRateUsed": "為替レート: {{rate}}",
     "refreshRates": "為替レートを更新",
     "ratesRefreshed": "為替レートを更新しました",
-    "ratesError": "為替レートの更新に失敗しました"
+    "ratesError": "為替レートの更新に失敗しました",
+    "drillDownCount": "{{count}}件の取引",
+    "drillDownPlanned": "予定"
   },
   "transactions": {
     "title": "取引",
@@ -2036,7 +2034,8 @@
       "txEmpty": "この店舗の取引はありません。",
       "prevPage": "前のページ",
       "nextPage": "次のページ",
-      "pageOf": "{{page}} / {{pages}} ページ"
+      "pageOf": "{{page}} / {{pages}} ページ",
+      "periodGroup": "期間"
     }
   },
   "payees": {

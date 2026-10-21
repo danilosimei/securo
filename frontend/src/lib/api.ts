@@ -1566,7 +1566,7 @@ export const reports = {
     interval = 'monthly',
     accountIds?: string[],
     assetGroupIds?: string[],
-    period?: 'ytd',
+    period?: string,
     startDate?: string,
     endDate?: string,
   ): Promise<ReportResponse> => {
@@ -1590,7 +1590,7 @@ export const reports = {
     months = 12,
     interval = 'monthly',
     accountIds?: string[],
-    period?: 'ytd',
+    period?: string,
     days?: number,
     startDate?: string,
     endDate?: string,

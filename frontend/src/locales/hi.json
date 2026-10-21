@@ -858,10 +858,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "अवर्गीकृत लेन-देन",
     "drillDownDay": "लेन-देन — {{date}}",
-    "drillDownTotal": "{{count}} लेन-देन · {{total}}",
-    "drillDownSettledTotal": "निपटा · कार्ड कुल",
-    "drillDownPendingTotal": "निपटान लंबित",
-    "drillDownShownTotal": "दिखाया गया कुल",
     "drillDownEmpty": "कोई लेन-देन नहीं मिला",
     "drillDownClose": "बंद करें",
     "accrualNote": "क्रेडिट-कार्ड लेन-देन बिल की देय तिथि के अनुसार समूहित होते हैं (प्रोद्भवन मोड)।",
@@ -879,7 +875,9 @@
     "fxRateUsed": "FX दर: {{rate}}",
     "refreshRates": "FX दरें रीफ़्रेश करें",
     "ratesRefreshed": "FX दरें अपडेट हुईं",
-    "ratesError": "FX दरें अपडेट करने में विफल"
+    "ratesError": "FX दरें अपडेट करने में विफल",
+    "drillDownCount": "{{count}} लेन-देन",
+    "drillDownPlanned": "नियोजित"
   },
   "transactions": {
     "title": "लेन-देन",
@@ -2036,7 +2034,8 @@
       "txEmpty": "इस दुकान पर कोई लेन-देन नहीं।",
       "prevPage": "पिछला पृष्ठ",
       "nextPage": "अगला पृष्ठ",
-      "pageOf": "पृष्ठ {{page}} / {{pages}}"
+      "pageOf": "पृष्ठ {{page}} / {{pages}}",
+      "periodGroup": "अवधि"
     }
   },
   "payees": {

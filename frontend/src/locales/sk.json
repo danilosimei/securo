@@ -866,14 +866,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Transakcie bez kategórie",
     "drillDownDay": "Transakcie — {{date}}",
-    "drillDownTotal": "{{count}} transakcií · {{total}}",
-    "drillDownTotal_one": "{{count}} transakcia · {{total}}",
-    "drillDownTotal_few": "{{count}} transakcie · {{total}}",
-    "drillDownTotal_many": "{{count}} transakcie · {{total}}",
-    "drillDownTotal_other": "{{count}} transakcií · {{total}}",
-    "drillDownSettledTotal": "Zúčtované · súhrnná suma",
-    "drillDownPendingTotal": "Čaká na zúčtovanie",
-    "drillDownShownTotal": "Zobrazená suma",
     "drillDownEmpty": "Nenašli sa žiadne transakcie",
     "drillDownClose": "Zavrieť",
     "accrualNote": "Transakcie kreditnou kartou sú zoskupené podľa dátumu splatnosti výpisu (akruálny režim).",
@@ -895,7 +887,9 @@
     "fxRateUsed": "Kurz: {{rate}}",
     "refreshRates": "Obnoviť kurzy",
     "ratesRefreshed": "Kurzy aktualizované",
-    "ratesError": "Kurzy sa nepodarilo aktualizovať"
+    "ratesError": "Kurzy sa nepodarilo aktualizovať",
+    "drillDownCount": "{{count}} transakcií",
+    "drillDownPlanned": "Plánované"
   },
   "transactions": {
     "title": "Transakcie",
@@ -2152,7 +2146,8 @@
       "txEmpty": "V tomto obchode nie sú žiadne transakcie.",
       "prevPage": "Predchádzajúca strana",
       "nextPage": "Nasledujúca strana",
-      "pageOf": "Strana {{page}} z {{pages}}"
+      "pageOf": "Strana {{page}} z {{pages}}",
+      "periodGroup": "Obdobie"
     }
   },
   "payees": {

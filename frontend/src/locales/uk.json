@@ -866,10 +866,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Транзакції без категорії",
     "drillDownDay": "Транзакції — {{date}}",
-    "drillDownTotal": "{{count}} транзакцій · {{total}}",
-    "drillDownSettledTotal": "Проведено · сума у зведенні",
-    "drillDownPendingTotal": "Очікує розрахунку",
-    "drillDownShownTotal": "Показана сума",
     "drillDownEmpty": "Транзакції не знайдено",
     "drillDownClose": "Закрити",
     "accrualNote": "Кредитні картки: транзакції групуються за датою платежу (метод нарахування).",
@@ -887,7 +883,9 @@
     "fxRateUsed": "Курс: {{rate}}",
     "refreshRates": "Оновити курси валют",
     "ratesRefreshed": "Курси валют оновлено",
-    "ratesError": "Не вдалося оновити курси валют"
+    "ratesError": "Не вдалося оновити курси валют",
+    "drillDownCount": "{{count}} транзакцій",
+    "drillDownPlanned": "Заплановані"
   },
   "transactions": {
     "title": "Транзакції",
@@ -2053,7 +2051,8 @@
       "txEmpty": "Немає транзакцій по цьому магазину.",
       "prevPage": "Попередня сторінка",
       "nextPage": "Наступна сторінка",
-      "pageOf": "Сторінка {{page}} з {{pages}}"
+      "pageOf": "Сторінка {{page}} з {{pages}}",
+      "periodGroup": "Період"
     }
   },
   "payees": {

@@ -858,10 +858,6 @@
     "drillDownCategory": "{{category}} – {{month}}",
     "drillDownUncategorized": "Kategorizálatlan tranzakciók",
     "drillDownDay": "Tranzakciók – {{date}}",
-    "drillDownTotal": "{{count}} tranzakció · {{total}}",
-    "drillDownSettledTotal": "Kiegyenlítve · kártya összesen",
-    "drillDownPendingTotal": "Kiegyenlítésre vár",
-    "drillDownShownTotal": "Megjelenített összeg",
     "drillDownEmpty": "Nincs találat",
     "drillDownClose": "Bezárás",
     "accrualNote": "A hitelkártyás tranzakciók a kártyaszámla esedékessége szerint vannak csoportosítva (teljesítési szemlélet).",
@@ -879,7 +875,9 @@
     "fxRateUsed": "Árfolyam: {{rate}}",
     "refreshRates": "Árfolyamok frissítése",
     "ratesRefreshed": "Árfolyamok frissítve",
-    "ratesError": "Nem sikerült frissíteni az árfolyamokat"
+    "ratesError": "Nem sikerült frissíteni az árfolyamokat",
+    "drillDownCount": "{{count}} tranzakció",
+    "drillDownPlanned": "Tervezett"
   },
   "transactions": {
     "title": "Tranzakciók",
@@ -2036,7 +2034,8 @@
       "txEmpty": "Ebben a boltban nincs tranzakció.",
       "prevPage": "Előző oldal",
       "nextPage": "Következő oldal",
-      "pageOf": "{{page}}. oldal / {{pages}}"
+      "pageOf": "{{page}}. oldal / {{pages}}",
+      "periodGroup": "Időszak"
     }
   },
   "payees": {

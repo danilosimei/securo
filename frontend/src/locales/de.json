@@ -858,10 +858,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Nicht kategorisierte Transaktionen",
     "drillDownDay": "Transaktionen — {{date}}",
-    "drillDownTotal": "{{count}} Transaktionen · {{total}}",
-    "drillDownSettledTotal": "Gebucht · Zusammenfassungssumme",
-    "drillDownPendingTotal": "Ausstehende Abrechnung",
-    "drillDownShownTotal": "Angezeigte Summe",
     "drillDownEmpty": "Keine Transaktionen gefunden",
     "drillDownClose": "Schließen",
     "accrualNote": "Kreditkartentransaktionen werden nach dem Fälligkeitsdatum der Abrechnung gruppiert (Soll-Modus).",
@@ -879,7 +875,9 @@
     "fxRateUsed": "Wechselkurs: {{rate}}",
     "refreshRates": "Wechselkurse aktualisieren",
     "ratesRefreshed": "Wechselkurse aktualisiert",
-    "ratesError": "Fehler beim Aktualisieren der Wechselkurse"
+    "ratesError": "Fehler beim Aktualisieren der Wechselkurse",
+    "drillDownCount": "{{count}} Transaktionen",
+    "drillDownPlanned": "Geplant"
   },
   "transactions": {
     "title": "Transaktionen",
@@ -2037,7 +2035,8 @@
       "txEmpty": "Keine Transaktionen bei diesem Geschäft.",
       "prevPage": "Vorherige Seite",
       "nextPage": "Nächste Seite",
-      "pageOf": "Seite {{page}} von {{pages}}"
+      "pageOf": "Seite {{page}} von {{pages}}",
+      "periodGroup": "Zeitraum"
     }
   },
   "payees": {

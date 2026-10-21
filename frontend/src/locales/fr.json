@@ -860,10 +860,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Transactions non catégorisées",
     "drillDownDay": "Transactions — {{date}}",
-    "drillDownTotal": "{{count}} transactions · {{total}}",
-    "drillDownSettledTotal": "Réglé · total récapitulatif",
-    "drillDownPendingTotal": "En attente de règlement",
-    "drillDownShownTotal": "Total affiché",
     "drillDownEmpty": "Aucune transaction trouvée",
     "drillDownClose": "Fermer",
     "accrualNote": "Les transactions par carte de crédit sont regroupées par date d'échéance de la facture (mode comptabilité d'engagement).",
@@ -881,7 +877,9 @@
     "fxRateUsed": "Taux de change : {{rate}}",
     "refreshRates": "Actualiser les taux de change",
     "ratesRefreshed": "Taux de change mis à jour",
-    "ratesError": "Échec de la mise à jour des taux de change"
+    "ratesError": "Échec de la mise à jour des taux de change",
+    "drillDownCount": "{{count}} transactions",
+    "drillDownPlanned": "Prévues"
   },
   "transactions": {
     "title": "Transactions",
@@ -2040,7 +2038,8 @@
       "txEmpty": "Aucune transaction pour ce commerce.",
       "prevPage": "Page précédente",
       "nextPage": "Page suivante",
-      "pageOf": "Page {{page}} sur {{pages}}"
+      "pageOf": "Page {{page}} sur {{pages}}",
+      "periodGroup": "Période"
     }
   },
   "payees": {

@@ -860,10 +860,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Transazioni senza categoria",
     "drillDownDay": "Transazioni — {{date}}",
-    "drillDownTotal": "{{count}} transazioni · {{total}}",
-    "drillDownSettledTotal": "Regolato · totale riepilogativo",
-    "drillDownPendingTotal": "In attesa di regolamento",
-    "drillDownShownTotal": "Totale mostrato",
     "drillDownEmpty": "Nessuna transazione trovata",
     "drillDownClose": "Chiudi",
     "accrualNote": "Le transazioni con carta di credito sono raggruppate per scadenza dell'estratto conto (modalità per competenza).",
@@ -881,7 +877,9 @@
     "fxRateUsed": "Tasso di cambio: {{rate}}",
     "refreshRates": "Aggiorna i tassi di cambio",
     "ratesRefreshed": "Tassi di cambio aggiornati",
-    "ratesError": "Impossibile aggiornare i tassi di cambio"
+    "ratesError": "Impossibile aggiornare i tassi di cambio",
+    "drillDownCount": "{{count}} transazioni",
+    "drillDownPlanned": "Previste"
   },
   "transactions": {
     "title": "Transazioni",
@@ -2040,7 +2038,8 @@
       "txEmpty": "Nessuna transazione per questo negozio.",
       "prevPage": "Pagina precedente",
       "nextPage": "Pagina successiva",
-      "pageOf": "Pagina {{page}} di {{pages}}"
+      "pageOf": "Pagina {{page}} di {{pages}}",
+      "periodGroup": "Periodo"
     }
   },
   "payees": {

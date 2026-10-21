@@ -860,10 +860,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Transacciones sin categorizar",
     "drillDownDay": "Transacciones — {{date}}",
-    "drillDownTotal": "{{count}} transacciones · {{total}}",
-    "drillDownSettledTotal": "Liquidado · total resumido",
-    "drillDownPendingTotal": "Pendiente de liquidación",
-    "drillDownShownTotal": "Total mostrado",
     "drillDownEmpty": "No se encontraron transacciones",
     "drillDownClose": "Cerrar",
     "accrualNote": "Las transacciones con tarjeta de crédito se agrupan por la fecha de vencimiento de la factura (modo acumulado).",
@@ -881,7 +877,9 @@
     "fxRateUsed": "Tipo de cambio: {{rate}}",
     "refreshRates": "Actualizar tipos FX",
     "ratesRefreshed": "Tipos FX actualizados",
-    "ratesError": "No se pudo actualizar los tipos FX"
+    "ratesError": "No se pudo actualizar los tipos FX",
+    "drillDownCount": "{{count}} transacciones",
+    "drillDownPlanned": "Previstas"
   },
   "transactions": {
     "title": "Transacciones",
@@ -2040,7 +2038,8 @@
       "txEmpty": "Sin transacciones en esta tienda.",
       "prevPage": "Página anterior",
       "nextPage": "Página siguiente",
-      "pageOf": "Página {{page}} de {{pages}}"
+      "pageOf": "Página {{page}} de {{pages}}",
+      "periodGroup": "Período"
     }
   },
   "payees": {

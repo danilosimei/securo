@@ -858,10 +858,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Uncategorized transactions",
     "drillDownDay": "Transactions — {{date}}",
-    "drillDownTotal": "{{count}} transactions · {{total}}",
-    "drillDownSettledTotal": "Settled · card total",
-    "drillDownPendingTotal": "Pending settlement",
-    "drillDownShownTotal": "Total shown",
     "drillDownEmpty": "No transactions found",
     "drillDownClose": "Close",
     "accrualNote": "Credit-card transactions are grouped by bill due date (accrual mode).",
@@ -879,7 +875,9 @@
     "fxRateUsed": "FX rate: {{rate}}",
     "refreshRates": "Refresh FX rates",
     "ratesRefreshed": "FX rates updated",
-    "ratesError": "Failed to update FX rates"
+    "ratesError": "Failed to update FX rates",
+    "drillDownCount": "{{count}} transactions",
+    "drillDownPlanned": "Planned"
   },
   "transactions": {
     "title": "Transactions",
@@ -2036,7 +2034,8 @@
       "txEmpty": "No transactions at this store.",
       "prevPage": "Previous page",
       "nextPage": "Next page",
-      "pageOf": "Page {{page}} of {{pages}}"
+      "pageOf": "Page {{page}} of {{pages}}",
+      "periodGroup": "Period"
     }
   },
   "payees": {

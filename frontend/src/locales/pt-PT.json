@@ -860,10 +860,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Transações sem categoria",
     "drillDownDay": "Transações — {{date}}",
-    "drillDownTotal": "{{count}} transações · {{total}}",
-    "drillDownSettledTotal": "Liquidado · valor resumido",
-    "drillDownPendingTotal": "Pendente de liquidação",
-    "drillDownShownTotal": "Total apresentado",
     "drillDownEmpty": "Nenhuma transação encontrada",
     "drillDownClose": "Fechar",
     "accrualNote": "Transações de cartão de crédito são agrupadas pela data de vencimento da fatura (modo competência).",
@@ -881,7 +877,9 @@
     "fxRateUsed": "Taxa de câmbio: {{rate}}",
     "refreshRates": "Atualizar taxas de câmbio",
     "ratesRefreshed": "Taxas de câmbio atualizadas",
-    "ratesError": "Erro ao atualizar taxas de câmbio"
+    "ratesError": "Erro ao atualizar taxas de câmbio",
+    "drillDownCount": "{{count}} transações",
+    "drillDownPlanned": "Previstas"
   },
   "transactions": {
     "title": "Transações",
@@ -1990,8 +1988,8 @@
     "includeEstimate": "Incluir estimativa",
     "includeEstimateHelp": "Estima entradas e saídas futuras pela média do teu histórico (até 12 meses, ou todo o histórico disponível), em vez das transações recorrentes registadas",
     "baseline": "Estimativa",
-    "surplus": "Excedente",
-    "deficit": "Défice",
+    "surplus": "Sobrou",
+    "deficit": "Faltou",
     "cashFlowNode": "Fluxo de Caixa",
     "flowChartAria": "Diagrama de fluxo de caixa: receitas fluindo para as despesas",
     "category": "Categoria",
@@ -2040,7 +2038,8 @@
       "txEmpty": "Nenhuma transação nesta loja.",
       "prevPage": "Página anterior",
       "nextPage": "Página seguinte",
-      "pageOf": "Página {{page}} de {{pages}}"
+      "pageOf": "Página {{page}} de {{pages}}",
+      "periodGroup": "Período"
     }
   },
   "payees": {

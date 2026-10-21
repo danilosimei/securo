@@ -10,28 +10,22 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 import { AlertCircle, ChevronRight } from 'lucide-react'
 import { reports, type BreakdownParams, type BreakdownRow, type ReportPeriod } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
-import { localDateString } from '@/lib/date-utils'
 import { cn } from '@/lib/utils'
+import { DEFAULT_REPORT_PERIOD, isReportPeriod, monthLabel } from '@/lib/report-period'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { Button } from '@/components/ui/button'
-import { DateRangePicker } from '@/components/ui/date-range-picker'
+import { ReportPeriodSelector } from '@/components/reports/period-selector'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FadePanel } from '@/components/ui/fade-panel'
 import { Sparkline } from '@/components/reports/explore/sparkline'
 import { MerchantTransactions } from '@/components/reports/explore/merchant-transactions'
 import { nextStep } from '@/components/reports/explore/drilldown'
 
-const PERIODS: ReportPeriod[] = ['this_month', 'last_month', 'last_3m', 'last_6m', 'last_12m', 'ytd', 'custom']
-const DEFAULT_PERIOD: ReportPeriod = 'last_12m'
-const CUSTOM_RANGE_MAX_YEARS = 10
+const DEFAULT_PERIOD: ReportPeriod = DEFAULT_REPORT_PERIOD
 
 function isPeriod(value: string | null): value is ReportPeriod {
-  return PERIODS.includes(value as ReportPeriod)
-}
-
-function monthLabel(iso: string, locale: string) {
-  return new Date(iso + 'T00:00:00').toLocaleDateString(locale, { month: 'short', year: '2-digit' })
+  return isReportPeriod(value)
 }
 
 function formatChange(change: number, locale: string) {
@@ -134,16 +128,6 @@ export function ExploreTab() {
   const data = query.data
   const stale = query.isPlaceholderData
 
-  const today = localDateString()
-  const customDefaults = { from: `${today.slice(0, 4)}-01-01`, to: today }
-
-  const rangeText = data
-    ? t(data.period.partial ? 'reports.explore.rangePartial' : 'reports.explore.rangeClosed', {
-        from: monthLabel(data.period.from, locale),
-        to: monthLabel(data.period.to, locale),
-      })
-    : null
-
   const open = (row: BreakdownRow) => {
     const step = nextStep(level, row)
     if (!step) return
@@ -184,45 +168,14 @@ export function ExploreTab() {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5">
-        <div
-          role="group"
-          aria-label={t('reports.explore.tab')}
-          className="inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5 text-xs font-medium"
-        >
-          {PERIODS.filter((p) => p !== 'custom').map((p) => (
-            <button
-              key={p}
-              type="button"
-              aria-pressed={period === p}
-              onClick={() => update(p)}
-              className={cn(
-                'rounded-md px-3 py-1.5 whitespace-nowrap transition-colors',
-                period === p
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {t(`reports.explore.period.${p}`)}
-            </button>
-          ))}
-          <DateRangePicker
-            variant="segment"
-            className="rounded-md"
-            active={period === 'custom'}
-            from={from}
-            to={to}
-            defaultFrom={customDefaults.from}
-            defaultTo={customDefaults.to}
-            disallowFuture
-            maxRangeYears={CUSTOM_RANGE_MAX_YEARS}
-            onChange={(f, e) => (f && e ? update('custom', { from: f, to: e }) : update(DEFAULT_PERIOD))}
-            label={t('reports.explore.period.custom')}
-            placeholder={t('reports.explore.period.custom')}
-          />
-        </div>
-        {rangeText && <p className="text-xs text-muted-foreground">{rangeText}</p>}
-      </div>
+      <ReportPeriodSelector
+        period={period}
+        from={from}
+        to={to}
+        onChange={update}
+        locale={locale}
+        range={data ? { from: data.period.from, to: data.period.to, partial: data.period.partial } : null}
+      />
 
       {level !== 'group' && (
         <nav aria-label={t('reports.explore.breadcrumb')}>

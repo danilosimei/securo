@@ -25,6 +25,8 @@ import { reports } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { ReportPeriodSelector } from '@/components/reports/period-selector'
+import { DEFAULT_REPORT_PERIOD, reportPeriodRange, type ReportPeriodKey } from '@/lib/report-period'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { PageHeader } from '@/components/page-header'
 import { CashflowSankey } from '@/components/reports/CashflowSankey'
@@ -71,7 +73,7 @@ function formatCompact(value: number, currency = 'USD', locale = 'en-US') {
 
 // `days` (when set) asks for an exact rolling window ending today rather than
 // the month-aligned window `months` produces.
-type RangeOption = { key: string; months: number; period?: 'ytd'; days?: number }
+type RangeOption = { key: string; months: number; period?: string; days?: number }
 
 const HISTORICAL_RANGE_OPTIONS: readonly RangeOption[] = [
   { key: '6m', months: 6 },
@@ -86,14 +88,16 @@ const FORWARD_RANGE_OPTIONS: readonly RangeOption[] = [
   { key: '12m', months: 12 },
 ]
 
-// The Money Map answers "where did my money go lately", so it leans on recent
-// windows (down to 30 days) and drops the 2Y trend view the other tabs keep.
-const MONEY_MAP_RANGE_OPTIONS: readonly RangeOption[] = [
-  { key: '30d', months: 1, days: 30 },
-  { key: '3m', months: 3 },
-  { key: '6m', months: 6 },
+// Income & Expenses and the Money Map use the closed periods shared with
+// Explore (the key is the `period` the API takes); the month count only feeds
+// the generic query plumbing. "Custom" is handled apart, like in other tabs.
+const CLOSED_RANGE_OPTIONS: readonly RangeOption[] = [
+  { key: 'this_month', months: 1, period: 'this_month' },
+  { key: 'last_month', months: 1, period: 'last_month' },
+  { key: 'last_3m', months: 3, period: 'last_3m' },
+  { key: 'last_6m', months: 6, period: 'last_6m' },
+  { key: 'last_12m', months: 12, period: 'last_12m' },
   { key: 'ytd', months: 12, period: 'ytd' },
-  { key: '1y', months: 12 },
 ]
 
 const HISTORICAL_INTERVAL_OPTIONS = [
@@ -150,6 +154,8 @@ interface ReportTab {
   enabled: boolean
   rangeOptions: readonly RangeOption[]
   intervalOptions: readonly { key: string; value: string }[]
+  /** Closed periods shared with Explore, instead of the rolling presets. */
+  closedPeriods?: boolean
   /** Cash flow is a forward-only forecast, so it's the only tab that can't offer a past-only calendar range. */
   supportsCustomRange: boolean
   /** Preset selected when switching to this tab drops the current preset, or when Reset+Apply clears a custom range on it. */
@@ -172,8 +178,9 @@ const REPORT_TABS: ReportTab[] = [
   },
   {
     key: 'income_expenses', labelKey: 'reports.incomeExpenses', enabled: true,
-    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
-    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
+    rangeOptions: CLOSED_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+    closedPeriods: true,
+    supportsCustomRange: true, fallbackRangeKey: DEFAULT_REPORT_PERIOD, fallbackInterval: 'monthly',
   },
   {
     key: 'cash_flow', labelKey: 'reports.cashFlow', enabled: true,
@@ -182,8 +189,9 @@ const REPORT_TABS: ReportTab[] = [
   },
   {
     key: 'money_map', labelKey: 'reports.moneyMap', enabled: true,
-    rangeOptions: MONEY_MAP_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
-    supportsCustomRange: true, fallbackRangeKey: '3m', fallbackInterval: 'monthly',
+    rangeOptions: CLOSED_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+    closedPeriods: true,
+    supportsCustomRange: true, fallbackRangeKey: 'last_3m', fallbackInterval: 'monthly',
   },
 ]
 
@@ -290,8 +298,13 @@ export default function ReportsPage() {
       )
     : selectedRange.months
   const months = isCustomRange ? customMonths : selectedRange.months
-  const period = isCustomRange ? undefined : selectedRange.period
+  // Closed-period tabs name the custom window to the API; the others just
+  // send its dates.
+  const period = isCustomRange ? (currentTab.closedPeriods ? 'custom' : undefined) : selectedRange.period
   const days = isCustomRange ? undefined : selectedRange.days
+  const closedRange = currentTab.closedPeriods
+    ? reportPeriodRange(rangeKey as ReportPeriodKey, new Date(), { from: customFrom, to: customTo })
+    : null
   const apiStart = hasCustomRange ? customFrom : undefined
   const apiEnd = hasCustomRange ? customTo : undefined
 
@@ -651,6 +664,24 @@ export default function ReportsPage() {
                 </span>
               </div>
             )}
+            {currentTab.closedPeriods ? (
+              <ReportPeriodSelector
+                period={rangeKey as ReportPeriodKey}
+                from={customFrom}
+                to={customTo}
+                locale={locale}
+                range={closedRange}
+                resetPeriod={currentTab.fallbackRangeKey as ReportPeriodKey}
+                onChange={(next, custom) => {
+                  if (custom) {
+                    setCustomFrom(custom.from)
+                    setCustomTo(custom.to)
+                  }
+                  setRangeKey(next)
+                  setSelectedDate(null)
+                }}
+              />
+            ) : (
             <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
               {rangeOptions.map((opt) => (
                 <button
@@ -686,6 +717,7 @@ export default function ReportsPage() {
                 />
               )}
             </div>
+            )}
             <div className={`flex items-center rounded-lg border border-border bg-card overflow-hidden ${isMoneyMap ? 'hidden' : ''}`}>
               {intervalOptions.map((opt) => (
                 <button
@@ -862,10 +894,6 @@ export default function ReportsPage() {
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F43F5E' }} />
                 <span className="text-[11px] text-muted-foreground">{t('reports.expenses')}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#0EA5E9' }} />
-                <span className="text-[11px] text-muted-foreground">{t('reports.investments')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F59E0B' }} />

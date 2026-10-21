@@ -858,10 +858,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Συναλλαγές χωρίς κατηγορία",
     "drillDownDay": "Συναλλαγές — {{date}}",
-    "drillDownTotal": "{{count}} συναλλαγές · {{total}}",
-    "drillDownSettledTotal": "Διακανονισμένα · συνολικό ποσό",
-    "drillDownPendingTotal": "Εκκρεμεί διακανονισμός",
-    "drillDownShownTotal": "Εμφανιζόμενο σύνολο",
     "drillDownEmpty": "Δεν βρέθηκαν συναλλαγές",
     "drillDownClose": "Κλείσιμο",
     "accrualNote": "Οι συναλλαγές πιστωτικών καρτών ομαδοποιούνται κατά την ημερομηνία λήξης του λογαριασμού (λειτουργία δεδουλευμένων).",
@@ -879,7 +875,9 @@
     "fxRateUsed": "Συναλλαγματική ισοτιμία: {{rate}}",
     "refreshRates": "Ανανέωση ισοτιμιών FX",
     "ratesRefreshed": "Οι ισοτιμίες FX ενημερώθηκαν",
-    "ratesError": "Αποτυχία ενημέρωσης ισοτιμιών FX"
+    "ratesError": "Αποτυχία ενημέρωσης ισοτιμιών FX",
+    "drillDownCount": "{{count}} συναλλαγές",
+    "drillDownPlanned": "Προγραμματισμένες"
   },
   "accounts": {
     "title": "Λογαριασμοί",
@@ -2092,7 +2090,8 @@
       "txEmpty": "Καμία συναλλαγή σε αυτό το κατάστημα.",
       "prevPage": "Προηγούμενη σελίδα",
       "nextPage": "Επόμενη σελίδα",
-      "pageOf": "Σελίδα {{page}} από {{pages}}"
+      "pageOf": "Σελίδα {{page}} από {{pages}}",
+      "periodGroup": "Περίοδος"
     }
   },
   "fiscal": {

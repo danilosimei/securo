@@ -866,13 +866,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Transakcje nieskategoryzowane",
     "drillDownDay": "Transakcje — {{date}}",
-    "drillDownTotal_one": "{{count}} transakcja · {{total}}",
-    "drillDownTotal_few": "{{count}} transakcje · {{total}}",
-    "drillDownTotal_many": "{{count}} transakcji · {{total}}",
-    "drillDownTotal_other": "{{count}} transakcji · {{total}}",
-    "drillDownSettledTotal": "Zaksięgowane · suma podsumowania",
-    "drillDownPendingTotal": "Oczekujące rozliczenie",
-    "drillDownShownTotal": "Wyświetlana suma",
     "drillDownEmpty": "Nie znaleziono transakcji",
     "drillDownClose": "Zamknij",
     "accrualNote": "Transakcje kartą kredytową są grupowane wg terminu płatności rachunku (tryb memoriałowy).",
@@ -893,7 +886,9 @@
     "fxRateUsed": "Kurs FX: {{rate}}",
     "refreshRates": "Odśwież kursy FX",
     "ratesRefreshed": "Zaktualizowano kursy FX",
-    "ratesError": "Nie udało się zaktualizować kursów FX"
+    "ratesError": "Nie udało się zaktualizować kursów FX",
+    "drillDownCount": "{{count}} transakcji",
+    "drillDownPlanned": "Planowane"
   },
   "transactions": {
     "title": "Transakcje",
@@ -2125,7 +2120,8 @@
       "txEmpty": "Brak transakcji w tym sklepie.",
       "prevPage": "Poprzednia strona",
       "nextPage": "Następna strona",
-      "pageOf": "Strona {{page}} z {{pages}}"
+      "pageOf": "Strona {{page}} z {{pages}}",
+      "periodGroup": "Okres"
     }
   },
   "payees": {

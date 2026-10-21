@@ -866,10 +866,6 @@
     "drillDownCategory": "{{category}} — {{month}}",
     "drillDownUncategorized": "Транзакции без категории",
     "drillDownDay": "Транзакции — {{date}}",
-    "drillDownTotal": "{{count}} транзакций · {{total}}",
-    "drillDownSettledTotal": "Проведено · сумма в сводке",
-    "drillDownPendingTotal": "Ожидает расчёта",
-    "drillDownShownTotal": "Показанная сумма",
     "drillDownEmpty": "Транзакции не найдены",
     "drillDownClose": "Закрыть",
     "accrualNote": "Кредитные карты: транзакции группируются по дате платежа (метод начисления).",
@@ -887,7 +883,9 @@
     "fxRateUsed": "Курс: {{rate}}",
     "refreshRates": "Обновить курсы валют",
     "ratesRefreshed": "Курсы валют обновлены",
-    "ratesError": "Не удалось обновить курсы валют"
+    "ratesError": "Не удалось обновить курсы валют",
+    "drillDownCount": "{{count}} транзакций",
+    "drillDownPlanned": "Запланированные"
   },
   "transactions": {
     "title": "Транзакции",
@@ -2053,7 +2051,8 @@
       "txEmpty": "Нет транзакций по этому магазину.",
       "prevPage": "Предыдущая страница",
       "nextPage": "Следующая страница",
-      "pageOf": "Страница {{page}} из {{pages}}"
+      "pageOf": "Страница {{page}} из {{pages}}",
+      "periodGroup": "Период"
     }
   },
   "payees": {
