@@ -200,6 +200,12 @@ class AppliedResult(BaseModel):
     event_run_id: Optional[uuid.UUID] = None
 
 
+class SimilarAppliedResult(AppliedResult):
+    #: The shown rows (`transaction_ids` of the request) left as they were:
+    #: they changed since they were shown, in the order given.
+    skipped: list[uuid.UUID] = Field(default_factory=list)
+
+
 class DismissRequest(BaseModel):
     merchant_key: str = Field(min_length=1, max_length=255)
 

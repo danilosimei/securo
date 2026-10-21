@@ -46,6 +46,7 @@ from app.schemas.categorization import (
     RunRead,
     RunRequest,
     Scoreboard,
+    SimilarAppliedResult,
     SimilarRequest,
     SimilarResult,
     SimilarTransaction,
@@ -445,7 +446,7 @@ async def find_similar(
     )
 
 
-@router.post("/similar/apply", response_model=AppliedResult)
+@router.post("/similar/apply", response_model=SimilarAppliedResult)
 async def apply_similar(
     data: SimilarRequest,
     ctx: WorkspaceContext = Depends(current_writable_workspace),
@@ -465,10 +466,11 @@ async def apply_similar(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
     await session.commit()
-    return AppliedResult(
+    return SimilarAppliedResult(
         applied=result.applied,
         event_ids=result.event_ids,
         transaction_ids=result.transaction_ids,
+        skipped=result.skipped,
     )
 
 

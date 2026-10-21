@@ -1171,6 +1171,14 @@ async def similar(
     return ref, key, found
 
 
+@dataclass
+class SimilarApplied(Applied):
+    #: The given `transaction_ids` left as they were (no longer similar:
+    #: moved since they were shown, protected, another store or workspace),
+    #: in the order given.
+    skipped: list[uuid.UUID] = field(default_factory=list)
+
+
 async def apply_similar(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -1179,14 +1187,15 @@ async def apply_similar(
     *,
     exclude_rule: bool = False,
     transaction_ids: list[uuid.UUID] | None = None,
-) -> Applied:
+) -> SimilarApplied:
     """File the similar rows under the reference's category, as the person.
 
     One decision about the store: the memory learns it once (the reference's
     category may have come from the model, a rule or the bank, never from
     the person's hook), and the rows themselves are derived. With
     `transaction_ids`, only the intersection with the similar set is applied
-    (the rows the person was shown).
+    (the rows the person was shown), and the rest of them come back as
+    `skipped`.
     """
     ref, key, found = await similar(session, workspace_id, tx_id, exclude_rule=exclude_rule)
     if key == UNKNOWN_KEY:
@@ -1206,7 +1215,15 @@ async def apply_similar(
     if result.applied:
         await memory.learn_choice(session, workspace_id, stored_key(key), ref.category_id)
         await events.mark_picks(session, result.event_ids[:1])
-    return result
+    changed = set(result.transaction_ids)
+    skipped = [i for i in dict.fromkeys(transaction_ids or []) if i not in changed]
+    return SimilarApplied(
+        applied=result.applied,
+        event_ids=result.event_ids,
+        by_tx=result.by_tx,
+        transaction_ids=result.transaction_ids,
+        skipped=skipped,
+    )
 
 
 async def rule_draft(

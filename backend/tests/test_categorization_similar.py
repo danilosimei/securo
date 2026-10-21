@@ -102,13 +102,24 @@ async def test_similar_lists_the_rows_it_counts(
 async def test_apply_similar_only_the_shown_rows(
     client, auth_headers, session, test_user, test_account, test_categories
 ):
+    from app.models.workspace import Workspace
+
     food, other = test_categories[0].id, test_categories[1].id
+    elsewhere = Workspace(id=uuid.uuid4(), name="Outro", created_by_user_id=test_user.id)
+    session.add(elsewhere)
     ref = _tx(session, test_user, test_account, "IFOOD 1", source="user", category_id=food)
     a = _tx(session, test_user, test_account, "IFOOD 2", source="ai", category_id=other)
     b = _tx(session, test_user, test_account, "IFOOD 3", source="none")
     c = _tx(session, test_user, test_account, "IFOOD 4", source="provider", category_id=other)
+    # Shown, then filed by hand in another tab before the click.
+    moved = _tx(session, test_user, test_account, "IFOOD 5", source="user", category_id=other)
     stranger = _tx(session, test_user, test_account, "UBER 9", source="none")
+    # Same store, another workspace: an id the caller cannot reach.
+    foreign = _tx(
+        session, test_user, test_account, "IFOOD 6", source="none", workspace_id=elsewhere.id
+    )
     await session.commit()
+    shown = [a.id, b.id, moved.id, stranger.id, foreign.id]
 
     resp = await client.post(
         f"{API}/similar/apply",
@@ -116,16 +127,46 @@ async def test_apply_similar_only_the_shown_rows(
         json={
             "transaction_id": str(ref.id),
             "exclude_rule": True,
-            "transaction_ids": [str(a.id), str(b.id), str(stranger.id)],
+            "transaction_ids": [str(i) for i in shown],
         },
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["applied"] == 2
+    body = resp.json()
+    assert body["applied"] == 2
+    assert sorted(body["transaction_ids"]) == sorted([str(a.id), str(b.id)])
+    # The shown ids left as they were, in the order they were given.
+    assert body["skipped"] == [str(moved.id), str(stranger.id), str(foreign.id)]
     for tx in (a, b):
         fresh = await session.get(Transaction, tx.id, populate_existing=True)
         assert (fresh.category_id, fresh.category_source) == (food, "user")
     assert (await session.get(Transaction, c.id, populate_existing=True)).category_id == other
+    assert (await session.get(Transaction, moved.id, populate_existing=True)).category_id == other
     assert (await session.get(Transaction, stranger.id, populate_existing=True)).category_source == "none"
+    fresh_foreign = await session.get(Transaction, foreign.id, populate_existing=True)
+    assert (fresh_foreign.category_id, fresh_foreign.category_source) == (None, "none")
+
+
+@pytest.mark.asyncio
+async def test_apply_similar_without_ids_leaves_rule_rows_alone(
+    client, auth_headers, session, test_user, test_account, test_categories
+):
+    food, other = test_categories[0].id, test_categories[1].id
+    ref = _tx(session, test_user, test_account, "IFOOD 1", source="user", category_id=food)
+    by_rule = _tx(session, test_user, test_account, "IFOOD 2", source="rule", category_id=other)
+    open_ = _tx(session, test_user, test_account, "IFOOD 3", source="ai", category_id=other)
+    await session.commit()
+
+    resp = await client.post(
+        f"{API}/similar/apply",
+        headers=auth_headers,
+        json={"transaction_id": str(ref.id), "exclude_rule": True},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert (body["applied"], body["transaction_ids"], body["skipped"]) == (1, [str(open_.id)], [])
+    fresh = await session.get(Transaction, by_rule.id, populate_existing=True)
+    assert (fresh.category_id, fresh.category_source) == (other, "rule")
+    assert (await session.get(Transaction, open_.id, populate_existing=True)).category_id == food
 
 
 @pytest.mark.asyncio
