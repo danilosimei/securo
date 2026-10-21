@@ -211,6 +211,16 @@ describe('Explore store transactions', () => {
     expect(screen.getByText('R$6,000.00')).toBeInTheDocument()
   })
 
+  it('without a category, the store total is its spending only, as in the report (credits are income to check)', async () => {
+    api.transactions.list.mockResolvedValue({
+      items: [tx(1)], total: 2, page: 1, limit: 50, pages: 1,
+      summary: { income: 500, expense: 900, net: -400, excluded: 0, currency: 'BRL' },
+    })
+    renderWithProviders(ui, { route: '/reports?tab=explore&period=last_12m&category=none&merchant=stellantis' })
+
+    expect(await screen.findByText('R$900.00')).toBeInTheDocument()
+  })
+
   it('pages with the arrows', async () => {
     const { user } = renderWithProviders(ui, { route })
     await screen.findByText('Parcela 1')

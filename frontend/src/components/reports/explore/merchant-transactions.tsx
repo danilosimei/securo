@@ -75,8 +75,13 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
   })
 
   const pages = data ? Math.max(1, Math.ceil(data.total / DRILLDOWN_PAGE_SIZE)) : 1
-  // Spending is the opposite of the list's net (income minus expenses).
-  const spent = data?.summary ? 0 - data.summary.net : null
+  // Same rule as the report: refunds in a category reduce its spending, but
+  // credits without a category are income to check, not a reduction.
+  const spent = data?.summary
+    ? categoryId === 'none'
+      ? data.summary.expense
+      : data.summary.expense - data.summary.income
+    : null
 
   return (
     <section className="space-y-3" aria-busy={query.isPlaceholderData}>
