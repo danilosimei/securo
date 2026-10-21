@@ -658,3 +658,44 @@ async def test_clearing_note_without_memory_creates_no_row(session, test_workspa
     assert await set_note(session, test_workspace.id, "AURINO", None) is None
     assert await set_note(session, test_workspace.id, "AURINO", "   ") is None
     assert await _memory_row(session, test_workspace.id, "AURINO") is None
+
+
+@pytest.mark.asyncio
+async def test_nameless_rows_never_teach_nor_take_back_picks(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """A row with no description and no payee has the key `UNKNOWN`, shared
+    by every such row: a choice on one is not a store's choice."""
+    from datetime import date
+    from decimal import Decimal
+
+    from app.models.categorization import CategorizationEvent
+    from app.models.transaction import Transaction
+    from app.services.categorization import memory
+    from app.services.categorization.merchant_key import UNKNOWN_KEY
+
+    food = test_categories[0].id
+    tx = Transaction(
+        id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id,
+        account_id=test_account.id, description="", amount=Decimal("10"), currency="BRL",
+        date=date(2026, 9, 10), type="debit", source="sync", status="posted",
+    )
+    session.add(tx)
+    await session.commit()
+    assert await key_for_transaction(session, tx) == UNKNOWN_KEY
+
+    assert await memory.on_user_choice(session, test_workspace.id, tx, food) is False
+    await learn_choice(session, test_workspace.id, UNKNOWN_KEY, food)
+    assert await memory.on_user_clear(session, test_workspace.id, tx, food) is False
+    assert (await lookup(session, test_workspace.id, [UNKNOWN_KEY]))[UNKNOWN_KEY].distribution == {
+        str(food): 1
+    }
+
+    await transaction_service.update_transaction(
+        session, tx.id, test_workspace.id, test_user.id, TransactionUpdate(category_id=food)
+    )
+    events_ = (await session.execute(select(CategorizationEvent))).scalars().all()
+    assert [e.memory_pick for e in events_] == [False]
+    assert (await lookup(session, test_workspace.id, [UNKNOWN_KEY]))[UNKNOWN_KEY].distribution == {
+        str(food): 1
+    }

@@ -158,7 +158,8 @@ async def _apply_to_rows(
     description and payee name now. A store teaches the memory only when
     one of its rows actually changed: that row's event carries the pick
     (`memory_pick`), so undoing the change, whole or row by row, takes back
-    exactly that one.
+    exactly that one. The nameless `UNKNOWN` teaches nothing
+    (`memory.teaches`).
     """
     pending = await _pending_of_rows(session, workspace_id, [tx.id for tx in txs])
     keys = await memory.keys_for(session, txs)
@@ -169,7 +170,7 @@ async def _apply_to_rows(
     carriers: dict[str, uuid.UUID] = {}
     for tx in txs:
         event_id = result.by_tx.get(tx.id)
-        if event_id is not None:
+        if event_id is not None and memory.teaches(keys[tx.id]):
             carriers.setdefault(keys[tx.id], event_id)
     for key in carriers:
         await memory.learn_choice(session, workspace_id, key, category_id)

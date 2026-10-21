@@ -267,6 +267,30 @@ async def test_memory_pass_ignores_inconsistent_memory(
 
 
 @pytest.mark.asyncio
+async def test_memory_pass_never_applies_the_nameless_store(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """`UNKNOWN` is no store: rows without description nor payee share it by
+    accident, so neither a memory nor a cached AI decision under it applies."""
+    from app.services.categorization.merchant_key import UNKNOWN_KEY
+
+    food = test_categories[0].id
+    for _ in range(3):
+        await learn_choice(session, test_workspace.id, UNKNOWN_KEY, food)
+    await remember_ai_decision(session, test_workspace.id, UNKNOWN_KEY, food, 99, None)
+    tx = _tx(session, test_user, test_account, "")
+    await session.commit()
+    groups = group_by_key(await collect_candidates(session, test_workspace.id))
+    assert set(groups) == {UNKNOWN_KEY}
+
+    rest = await memory_pass(session, test_workspace.id, groups, None)
+
+    assert set(rest) == {UNKNOWN_KEY}
+    assert (tx.category_id, tx.category_source) == (None, "none")
+    assert await _events(session) == []
+
+
+@pytest.mark.asyncio
 async def test_pipeline_skips_protected_sources(
     session, test_user, test_workspace, test_account, test_categories
 ):

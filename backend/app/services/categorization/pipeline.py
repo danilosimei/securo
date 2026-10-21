@@ -47,7 +47,7 @@ from app.services.categorization.events import (
     stage_change,
     write_staged,
 )
-from app.services.categorization.memory import CHUNK, MemoryHit, lookup, stored_key
+from app.services.categorization.memory import CHUNK, MemoryHit, lookup, stored_key, teaches
 from app.services.categorization.merchant_key import merchant_key, sample_description
 from app.services.categorization.settings import find_ai_connection, get_settings
 from app.services.category_service import get_assignable_category_ids
@@ -397,7 +397,12 @@ async def memory_pass(
     held: dict[uuid.UUID, str] = {}  # cleared row -> its store
     remaining: dict[str, MerchantGroup] = {}
     for key, group in groups.items():
-        decision = _decide(hits.get(key), settings.auto_apply_threshold, assignable)
+        # The nameless "store" is no store: nothing it holds applies.
+        decision = (
+            _decide(hits.get(key), settings.auto_apply_threshold, assignable)
+            if teaches(key)
+            else None
+        )
         if decision is None:
             remaining[key] = group
             continue

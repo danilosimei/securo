@@ -524,10 +524,11 @@ async def _accept_keys(
     # One pick per store, carried by one of the store's events. A store none
     # of whose rows was filed (all categorized by hand since) teaches
     # nothing: no event would carry the pick, so no undo could take it back.
+    # Nor does the nameless `UNKNOWN` (`memory.teaches`).
     carriers: dict[str, uuid.UUID] = {}
     for sug in suggestions:
         event_id = result.by_tx.get(sug.transaction_id)
-        if event_id is not None:
+        if event_id is not None and memory.teaches(sug.merchant_key):
             carriers.setdefault(sug.merchant_key, event_id)
     for key in carriers:
         await memory.learn_choice(session, workspace_id, key, category_id)

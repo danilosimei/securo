@@ -296,6 +296,46 @@ async def test_choose_with_ids_counts_one_pick_per_store_legacy_rows_included(
     assert picks == 2
 
 
+@pytest.mark.asyncio
+async def test_nameless_rows_are_filed_but_teach_no_pick(
+    client, auth_headers, session, test_user, test_account, test_categories
+):
+    """`UNKNOWN` (no description, no payee) is no store: choosing for such
+    rows, from Aplicadas or accepting them in Revisar, files them and
+    teaches nothing, so no future nameless row inherits the category."""
+    from app.services.categorization.merchant_key import UNKNOWN_KEY
+
+    food, transport = test_categories[0].id, test_categories[1].id
+    chosen = _tx(session, test_user, test_account, "", source="ai", category_id=transport)
+    pending = [_tx(session, test_user, test_account, "") for _ in range(2)]
+    await session.flush()
+    for tx in pending:
+        _suggest(session, tx, UNKNOWN_KEY, category_id=transport)
+    await session.commit()
+
+    by_ids = await _choose(client, auth_headers, {
+        "merchant_key": UNKNOWN_KEY, "category_id": str(food), "transaction_ids": [str(chosen.id)],
+    })
+    accepted = await client.post(
+        f"{API}/review/accept", headers=auth_headers,
+        json={"merchant_key": UNKNOWN_KEY, "category_id": str(food)},
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    for tx in (chosen, *pending):
+        fresh = await _fresh(session, Transaction, tx.id)
+        assert (fresh.category_id, fresh.category_source) == (food, "user")
+    assert await _counts(session, UNKNOWN_KEY) is None
+    ids = [uuid.UUID(e) for e in by_ids["event_ids"] + accepted.json()["event_ids"]]
+    assert len(ids) == 3
+    picks = await session.scalar(
+        select(func.count(CategorizationEvent.id)).where(
+            CategorizationEvent.id.in_(ids), CategorizationEvent.memory_pick.is_(True)
+        )
+    )
+    assert picks == 0
+
+
 async def _ai_cache(session, ws_id, key, category_id):
     await remember_ai_decision(session, ws_id, key, category_id, 91, None)
     await session.commit()

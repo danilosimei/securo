@@ -26,7 +26,7 @@ from app.models.payee import Payee
 from app.models.transaction import Transaction
 from app.services.categorization import events
 from app.services.categorization.merchant_key import NOTE_LENGTH as NOTE_LENGTH  # re-exported
-from app.services.categorization.merchant_key import clean_note, merchant_key
+from app.services.categorization.merchant_key import UNKNOWN_KEY, clean_note, merchant_key
 
 #: Choices needed before the memory is trusted.
 MIN_CHOICES = 2
@@ -51,6 +51,13 @@ class MemoryHit:
 
 def stored_key(key: str) -> str:
     return key[:KEY_WIDTH]
+
+
+def teaches(key: str) -> bool:
+    """Whether a choice for rows of `key` is a store's choice. `UNKNOWN` (no
+    description, no payee) is shared by unrelated rows: it never learns a
+    pick nor applies one."""
+    return key != UNKNOWN_KEY
 
 
 def _counts(raw: Any) -> dict[str, int]:
@@ -403,6 +410,8 @@ async def on_user_choice(
     # leaves the caller's transaction usable.
     async with session.begin_nested():
         key = stored_key(await key_for_transaction(session, tx))
+        if not teaches(key):
+            return False
         await learn_choice(session, workspace_id, key, new_category_id)
     return True
 
@@ -418,6 +427,8 @@ async def on_user_clear(
     Returns whether a pick was taken (none when the store had none)."""
     async with session.begin_nested():
         key = stored_key(await key_for_transaction(session, tx))
+        if not teaches(key):
+            return False
         took = await unlearn_choice(session, workspace_id, key, previous_category_id)
         await forget_ai_decisions(session, workspace_id, [key])
     return took
