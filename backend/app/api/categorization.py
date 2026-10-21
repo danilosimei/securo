@@ -260,9 +260,11 @@ _ASK_ERRORS: dict[str, tuple[int, str]] = {
 }
 
 
-async def ask_rate_limit(ctx: WorkspaceContext = Depends(current_writable_workspace)) -> None:
+async def ask_rate_limit(ctx: WorkspaceContext) -> None:
     """`ask.RATE_LIMIT` messages per workspace (not per IP: the money is the
-    workspace's)."""
+    workspace's). Called by the handler, not as a dependency: FastAPI runs
+    dependencies before it reports a body error, and a request rejected
+    with 422 must not spend a slot."""
     try:
         await rate_limit.hit(f"rate_limit:categorization-ask:{ctx.workspace.id}", *ask.RATE_LIMIT)
     except HTTPException as exc:
@@ -276,9 +278,7 @@ async def ask_rate_limit(ctx: WorkspaceContext = Depends(current_writable_worksp
         ) from exc
 
 
-@router.post(
-    "/ask", response_model=AskResponse, dependencies=[Depends(ask_rate_limit)]
-)
+@router.post("/ask", response_model=AskResponse)
 async def ask_about_store(
     data: AskRequest,
     ctx: WorkspaceContext = Depends(current_writable_workspace),
@@ -289,6 +289,7 @@ async def ask_about_store(
     Every error commits first: a failed call is still a run in the ledger
     the monthly cap reads.
     """
+    await ask_rate_limit(ctx)
     try:
         answer = await ask.ask(
             session,

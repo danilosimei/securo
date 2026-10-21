@@ -162,3 +162,15 @@ async def test_ask_rate_limit_per_workspace(
     keys = [key for key in _override_redis_with_counter if "categorization-ask" in key]
     assert keys == [f"rate_limit:categorization-ask:{test_workspace.id}"]
     assert _override_redis_with_counter[keys[0]] == 21
+
+
+async def test_ask_body_errors_spend_no_rate_limit_slot(
+    client: AsyncClient, auth_headers, test_workspace, _override_redis_with_counter
+):
+    """A request FastAPI rejects (422) never reached the model: it must not
+    count against the workspace's messages a minute."""
+    bad = {"merchant_key": "PADARIA", "messages": []}
+    for _ in range(25):
+        response = await client.post("/api/categorization/ask", headers=auth_headers, json=bad)
+        assert response.status_code == 422
+    assert not [key for key in _override_redis_with_counter if "categorization-ask" in key]
