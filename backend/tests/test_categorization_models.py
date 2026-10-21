@@ -612,7 +612,9 @@ async def test_migration_098_downgrade_round_trip_postgres():
         await conn.execute(text(f'CREATE DATABASE "{name}"'))
     scratch = create_async_engine(url)
     try:
-        await asyncio.to_thread(alembic, "upgrade", "098")
+        # Seeded at head: the ORM models carry every later column, so rows
+        # inserted at 098 would not fit. The round trip below still crosses 098.
+        await asyncio.to_thread(alembic, "upgrade", "head")
         assert (await scalar(scratch, column), await scalar(scratch, check)) == (1, 1)
         async with async_sessionmaker(scratch, expire_on_commit=False)() as session:
             ws, category, seed = await _seed_pg(session)
