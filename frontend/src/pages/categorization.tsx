@@ -64,11 +64,16 @@ export default function CategorizationPage() {
     else if (isCategorizationBusy(summary)) statusLine = t('categorization.running')
     else if (lastRun.finished_at) {
       const stat = (key: string) => Number(lastRun.stats?.[key] ?? 0) || 0
-      statusLine = t('categorization.lastRun', {
+      // "To review" is the situation now; the run only explains what it did.
+      const params = {
         when: formatRelativeFromNow(lastRun.finished_at, locale),
-        applied: stat('applied') + stat('memory'),
-        review: stat('suggested'),
-      })
+        count: stat('applied') + stat('memory'),
+        review: summary.pending_transactions,
+      }
+      statusLine = t(
+        summary.pending_transactions > 0 ? 'categorization.lastRun' : 'categorization.allReviewed',
+        params,
+      )
     }
   }
 

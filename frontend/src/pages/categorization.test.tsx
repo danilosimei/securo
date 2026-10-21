@@ -62,8 +62,36 @@ describe('CategorizationPage', () => {
     renderWithProviders(<CategorizationPage />, { route: '/categorization' })
 
     expect(await screen.findByTestId('categorization-review')).toBeInTheDocument()
-    expect(await screen.findByText(/47 applied · 5 to review/)).toBeInTheDocument()
+    expect(await screen.findByText(/12 to review · last run .* applied 47/)).toBeInTheDocument()
     expect(screen.queryByText(t('categorization.aiOff'))).not.toBeInTheDocument()
+  })
+
+  it('shows All reviewed, not the run suggestions, when nothing is pending now', async () => {
+    api.categorization.summary.mockResolvedValue(
+      summary({
+        pending_groups: 0,
+        pending_transactions: 0,
+        last_run: {
+          id: 'r', status: 'completed', stats: { applied: 400, memory: 35, suggested: 2660 },
+          finished_at: new Date(Date.now() - 3 * 3600_000).toISOString(),
+        },
+      }),
+    )
+    renderWithProviders(<CategorizationPage />, { route: '/categorization' })
+    const line = await screen.findByTestId('categorization-status')
+    expect(line).toHaveTextContent(/All reviewed · last run .* applied 435/)
+    expect(line).not.toHaveTextContent('2660')
+  })
+
+  it('uses the current pending count, not the last run suggestions', async () => {
+    api.categorization.summary.mockResolvedValue(
+      summary({ pending_transactions: 12, last_run: { ...summary().last_run, stats: { applied: 1, suggested: 2660 } } }),
+    )
+    renderWithProviders(<CategorizationPage />, { route: '/categorization' })
+    const line = await screen.findByTestId('categorization-status')
+    expect(line).toHaveTextContent(/12 to review/)
+    expect(line).toHaveTextContent(/applied 1$/)
+    expect(line).not.toHaveTextContent('2660')
   })
 
   it('switches tabs through ?tab=', async () => {
