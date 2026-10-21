@@ -3,6 +3,7 @@
 Nothing here calls the model: runs are queued for the worker.
 """
 import uuid
+from dataclasses import asdict
 from datetime import datetime
 from typing import Optional
 
@@ -40,6 +41,7 @@ from app.schemas.categorization import (
     RunRequest,
     SimilarRequest,
     SimilarResult,
+    SimilarTransaction,
     UndoRequest,
     UndoResultRead,
 )
@@ -264,10 +266,17 @@ async def find_similar(
     session: AsyncSession = Depends(get_async_session),
 ):
     try:
-        _, key, ids = await review.similar(session, ctx.workspace.id, data.transaction_id)
+        _, key, rows = await review.similar(
+            session, ctx.workspace.id, data.transaction_id, exclude_rule=data.exclude_rule
+        )
     except review.NotFound as exc:
         raise _not_found(exc)
-    return SimilarResult(merchant_key=key, count=len(ids), transaction_ids=ids)
+    return SimilarResult(
+        merchant_key=key,
+        count=len(rows),
+        transaction_ids=[row.id for row in rows],
+        transactions=[SimilarTransaction(**asdict(row)) for row in rows],
+    )
 
 
 @router.post("/similar/apply", response_model=AppliedResult)
@@ -278,7 +287,12 @@ async def apply_similar(
 ):
     try:
         result = await review.apply_similar(
-            session, ctx.workspace.id, ctx.user_id, data.transaction_id
+            session,
+            ctx.workspace.id,
+            ctx.user_id,
+            data.transaction_id,
+            exclude_rule=data.exclude_rule,
+            transaction_ids=data.transaction_ids,
         )
     except review.NotFound as exc:
         raise _not_found(exc)

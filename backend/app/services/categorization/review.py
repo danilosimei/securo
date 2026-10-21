@@ -16,6 +16,7 @@ from __future__ import annotations
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import date as date_type
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
@@ -888,21 +889,46 @@ async def provenance(
 # --- similar rows, rule draft ---------------------------------------------------
 
 
+@dataclass(frozen=True)
+class SimilarRow:
+    id: uuid.UUID
+    date: date_type
+    description: str
+    amount: Decimal
+    currency: str
+    type: str
+    category_id: uuid.UUID | None
+    category_source: str
+
+
 async def similar(
-    session: AsyncSession, workspace_id: uuid.UUID, tx_id: uuid.UUID
-) -> tuple[Transaction, str, list[uuid.UUID]]:
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    tx_id: uuid.UUID,
+    *,
+    exclude_rule: bool = False,
+) -> tuple[Transaction, str, list[SimilarRow]]:
     """Rows of the same store, not protected, filed elsewhere than the reference.
 
-    A row with no merchant identity (`UNKNOWN`) has no "same store": none.
+    `exclude_rule` also leaves out the rows a rule filed (the Categorization
+    section); the other screens' correction toast keeps them. A row with no
+    merchant identity (`UNKNOWN`) has no "same store": none.
     """
     ref = await get_transaction(session, workspace_id, tx_id)
     key = await memory.key_for_transaction(session, ref)
     if key == UNKNOWN_KEY:
         return ref, key, []
+    excluded = PROTECTED_SOURCES | {"rule"} if exclude_rule else PROTECTED_SOURCES
     rows = await session.execute(
         select(
             Transaction.id,
+            Transaction.date,
             Transaction.description,
+            Transaction.amount,
+            Transaction.currency,
+            Transaction.type,
+            Transaction.category_id,
+            Transaction.category_source,
             Payee.name.label("payee_name"),
             Payee.source.label("payee_source"),
         )
@@ -912,36 +938,57 @@ async def similar(
         .where(
             Transaction.workspace_id == workspace_id,
             Transaction.id != ref.id,
-            Transaction.category_source.not_in(PROTECTED_SOURCES),
+            Transaction.category_source.not_in(excluded),
             Transaction.category_id.is_distinct_from(ref.category_id),
             Transaction.transfer_pair_id.is_(None),
             Transaction.source != "opening_balance",
         )
         .order_by(Transaction.date, Transaction.id)
     )
-    ids = [
-        row.id
+    found = [
+        SimilarRow(
+            id=row.id,
+            date=row.date,
+            description=row.description,
+            amount=row.amount,
+            currency=row.currency,
+            type=row.type,
+            category_id=row.category_id,
+            category_source=row.category_source,
+        )
         for row in rows.all()
         if merchant_key(row.description, payee_name=row.payee_name, payee_source=row.payee_source)
         == key
     ]
-    return ref, key, ids
+    return ref, key, found
 
 
 async def apply_similar(
-    session: AsyncSession, workspace_id: uuid.UUID, user_id: uuid.UUID, tx_id: uuid.UUID
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    user_id: uuid.UUID,
+    tx_id: uuid.UUID,
+    *,
+    exclude_rule: bool = False,
+    transaction_ids: list[uuid.UUID] | None = None,
 ) -> Applied:
     """File the similar rows under the reference's category, as the person.
 
     One decision about the store: the memory learns it once (the reference's
     category may have come from the model, a rule or the bank, never from
-    the person's hook), and the rows themselves are derived.
+    the person's hook), and the rows themselves are derived. With
+    `transaction_ids`, only the intersection with the similar set is applied
+    (the rows the person was shown).
     """
-    ref, key, ids = await similar(session, workspace_id, tx_id)
+    ref, key, found = await similar(session, workspace_id, tx_id, exclude_rule=exclude_rule)
     if key == UNKNOWN_KEY:
         raise NoSafePattern("sem padrão seguro para esta transação")
     if ref.category_id is None:
         raise ValueError("A transação de referência não tem categoria")
+    ids = [row.id for row in found]
+    if transaction_ids is not None:
+        wanted = set(transaction_ids)
+        ids = [i for i in ids if i in wanted]
     txs = [
         tx
         for tx in await load_transactions(session, workspace_id, ids)

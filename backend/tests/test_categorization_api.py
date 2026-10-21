@@ -985,7 +985,7 @@ async def test_similar_has_no_store_without_merchant_identity(client, auth_heade
     _tx(session, test_user, test_account, "NULL", source="none")
     await session.commit()
     resp = await client.post(f"{API}/similar", headers=auth_headers, json={"transaction_id": str(ref.id)})
-    assert resp.json() == {"merchant_key": "UNKNOWN", "count": 0, "transaction_ids": []}
+    assert resp.json() == {"merchant_key": "UNKNOWN", "count": 0, "transaction_ids": [], "transactions": []}
     apply = await client.post(f"{API}/similar/apply", headers=auth_headers, json={"transaction_id": str(ref.id)})
     assert apply.status_code == 422
     assert "padrão seguro" in apply.json()["detail"]

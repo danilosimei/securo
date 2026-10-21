@@ -315,12 +315,29 @@ class Provenance(BaseModel):
 
 class SimilarRequest(BaseModel):
     transaction_id: uuid.UUID
+    #: Categorization section: leave rows a rule filed out of the set.
+    exclude_rule: bool = False
+    #: Only `/similar/apply`: apply just these (the rows the person was shown).
+    transaction_ids: Optional[list[uuid.UUID]] = Field(None, max_length=5000)
+
+
+class SimilarTransaction(BaseModel):
+    id: uuid.UUID
+    date: _Date
+    description: str
+    amount: Decimal
+    currency: str
+    type: str
+    category_id: Optional[uuid.UUID] = None
+    category_source: str
 
 
 class SimilarResult(BaseModel):
     merchant_key: str
     count: int
     transaction_ids: list[uuid.UUID]
+    #: The same N rows, in the same order as `transaction_ids`.
+    transactions: list[SimilarTransaction]
 
 
 class RuleDraftCondition(BaseModel):
