@@ -28,6 +28,7 @@ from app.api.assets import router as assets_router
 from app.api.asset_groups import router as asset_groups_router
 from app.api.collections import router as collections_router
 from app.api.reports import router as reports_router
+from app.api.reports_breakdown import router as reports_breakdown_router
 from app.api.search import router as search_router
 from app.api.setup import router as setup_router
 from app.api.currencies import router as currencies_router
@@ -190,6 +191,7 @@ app.include_router(asset_groups_router)
 app.include_router(collections_router)
 app.include_router(dashboard_router)
 app.include_router(reports_router)
+app.include_router(reports_breakdown_router)
 app.include_router(search_router)
 app.include_router(setup_router)
 app.include_router(currencies_router)
