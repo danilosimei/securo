@@ -216,6 +216,35 @@ class CreateCategoryResult(BaseModel):
     event_ids: list[uuid.UUID]
 
 
+class NewCategoryDraft(BaseModel):
+    group: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
+
+
+class ChooseRequest(BaseModel):
+    """One choice for a store: exactly one of `category_id` and `new_category`.
+
+    Without `transaction_ids`, the store's pending rows (Revisar); with them,
+    exactly those rows. `note` left out leaves the store's note as it is;
+    null (or empty) clears it.
+    """
+
+    merchant_key: str = Field(min_length=1, max_length=255)
+    category_id: Optional[uuid.UUID] = None
+    new_category: Optional[NewCategoryDraft] = None
+    transaction_ids: Optional[list[uuid.UUID]] = Field(default=None, max_length=500)
+    note: Optional[str] = Field(default=None, max_length=400)
+
+
+class ChooseResult(BaseModel):
+    category_id: uuid.UUID
+    created_group: bool
+    created_category: bool
+    applied: int
+    #: The events written, for "undo" (`POST /undo {event_ids}`).
+    event_ids: list[uuid.UUID]
+
+
 class AppliedTransaction(BaseModel):
     id: uuid.UUID
     date: _Date

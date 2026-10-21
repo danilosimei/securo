@@ -562,6 +562,7 @@ async def test_set_note_creates_row_without_picks(session, test_workspace):
     from app.services.categorization.memory import set_note
 
     row = await set_note(session, test_workspace.id, "AURINO", "jardineiro")
+    assert row is not None
     assert row.note == "jardineiro"
     assert row.note_updated_at is not None
     assert row.counts == {}
@@ -576,6 +577,7 @@ async def test_set_note_scrubs_documents_and_truncates(session, test_workspace):
         session, test_workspace.id, "AURINO",
         "Aurino jardineiro CPF 123.456.789-09 conta 12345-6 " + "x" * 300,
     )
+    assert row is not None
     assert row.note is not None
     assert "123.456.789-09" not in row.note
     assert "12345-6" not in row.note
@@ -588,6 +590,7 @@ async def test_set_note_forgets_ai_decision(session, test_workspace, test_catego
 
     await remember_ai_decision(session, test_workspace.id, "AURINO", test_categories[0].id, 90, "Aurino")
     row = await set_note(session, test_workspace.id, "AURINO", "jardineiro")
+    assert row is not None
     assert row.ai_category_id is None
     assert row.ai_confidence is None
     assert row.ai_clean_name == "Aurino"
@@ -601,6 +604,7 @@ async def test_set_note_unchanged_keeps_ai_decision(session, test_workspace, tes
     stamp = (await _memory_row(session, test_workspace.id, "AURINO")).note_updated_at
     await remember_ai_decision(session, test_workspace.id, "AURINO", test_categories[0].id, 90, None)
     row = await set_note(session, test_workspace.id, "AURINO", "jardineiro")
+    assert row is not None
     assert row.ai_category_id == test_categories[0].id
     assert row.ai_confidence == 90
     assert row.note_updated_at == stamp
@@ -614,6 +618,7 @@ async def test_clearing_note_keeps_counts(session, test_workspace, test_categori
     await learn_choice(session, test_workspace.id, "AURINO", cat)
     await set_note(session, test_workspace.id, "AURINO", "jardineiro")
     row = await set_note(session, test_workspace.id, "AURINO", "   ")
+    assert row is not None
     assert row.note is None
     assert row.counts == {str(cat): 1}
 
@@ -626,3 +631,12 @@ async def test_lookup_returns_note(session, test_workspace):
     hits = await lookup(session, test_workspace.id, ["AURINO", "OUTRA"])
     assert hits["AURINO"].note == "jardineiro"
     assert hits["OUTRA"].note is None
+
+
+@pytest.mark.asyncio
+async def test_clearing_note_without_memory_creates_no_row(session, test_workspace):
+    from app.services.categorization.memory import set_note
+
+    assert await set_note(session, test_workspace.id, "AURINO", None) is None
+    assert await set_note(session, test_workspace.id, "AURINO", "   ") is None
+    assert await _memory_row(session, test_workspace.id, "AURINO") is None

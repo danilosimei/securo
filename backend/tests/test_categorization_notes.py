@@ -79,3 +79,12 @@ async def test_provenance_carries_store_note(client, auth_headers, session, test
     )
     resp = await client.get(f"{API}/transactions/{tx.id}/provenance", headers=auth_headers)
     assert resp.json()["store_note"] == {"merchant_key": key, "note": "jardineiro"}
+
+
+async def test_put_note_clearing_unknown_store_creates_nothing(client, auth_headers, session, test_workspace):
+    resp = await client.put(
+        f"{API}/notes", json={"merchant_key": "NUNCA VISTA", "note": None}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"merchant_key": "NUNCA VISTA", "note": None}
+    assert await _note(session, test_workspace.id, "NUNCA VISTA") is None

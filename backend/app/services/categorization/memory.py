@@ -229,16 +229,30 @@ async def lookup(
 
 async def set_note(
     session: AsyncSession, workspace_id: uuid.UUID, key: str, note: str | None
-) -> MerchantMemory:
+) -> MerchantMemory | None:
     """Set (or clear, with empty text) what the person says about a store.
 
     The text is stripped of documents and account numbers and cut at
     `NOTE_LENGTH`. A changed note makes the store's cached AI decision stale,
     so it is dropped; an unchanged one touches nothing. It is not a choice:
-    `counts` stay as they are and no pick is counted.
+    `counts` stay as they are and no pick is counted. Clearing the note of a
+    store the memory never saw creates nothing and returns None.
     """
-    row = await _get_or_create(session, workspace_id, stored_key(key))
     clean = sanitize_text(note or "")[:NOTE_LENGTH].strip() or None
+    key = stored_key(key)
+    if clean is None:
+        row = (
+            await session.execute(
+                select(MerchantMemory).where(
+                    MerchantMemory.workspace_id == workspace_id,
+                    MerchantMemory.merchant_key == key,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+    else:
+        row = await _get_or_create(session, workspace_id, key)
     if clean != row.note:
         row.note = clean
         row.note_updated_at = datetime.now(timezone.utc)

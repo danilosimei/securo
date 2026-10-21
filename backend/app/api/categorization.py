@@ -22,6 +22,8 @@ from app.schemas.categorization import (
     CategorizationSettingsRead,
     CategorizationSettingsUpdate,
     CategorizationSummary,
+    ChooseRequest,
+    ChooseResult,
     CreateCategoryRequest,
     CreateCategoryResult,
     DismissRequest,
@@ -42,7 +44,8 @@ from app.schemas.categorization import (
     UndoResultRead,
 )
 from app.models.categorization import CategorizationRun
-from app.services.categorization import memory, organizer, review
+from app.services.categorization import choose, memory, organizer, review
+from app.services.categorization.events import UNSET
 from app.services.categorization import settings as categorization_settings
 from app.tasks import categorization_tasks
 
@@ -142,6 +145,51 @@ async def create_category_from_review(
     )
 
 
+@router.post("/choose", response_model=ChooseResult)
+async def choose_category(
+    data: ChooseRequest,
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """File a store's rows under an existing category or one created here
+    (a same-named visible one is reused), and save its note when sent."""
+    try:
+        outcome = await choose.choose(
+            session,
+            ctx.workspace.id,
+            ctx.user_id,
+            merchant_key=data.merchant_key,
+            category_id=data.category_id,
+            new_category=(
+                (data.new_category.group, data.new_category.name)
+                if data.new_category is not None
+                else None
+            ),
+            transaction_ids=data.transaction_ids,
+            note=data.note if "note" in data.model_fields_set else UNSET,
+        )
+    except review.NotFound as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": str(exc)},
+        )
+    except ValueError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={"code": "invalid_choice", "message": str(exc)},
+        )
+    await session.commit()
+    return ChooseResult(
+        category_id=outcome.category_id,
+        created_group=outcome.created_group,
+        created_category=outcome.created_category,
+        applied=outcome.applied.applied,
+        event_ids=outcome.applied.event_ids,
+    )
+
+
 @router.put("/notes", response_model=NoteRead)
 async def put_note(
     data: NoteRequest,
@@ -150,6 +198,9 @@ async def put_note(
 ):
     row = await memory.set_note(session, ctx.workspace.id, data.merchant_key, data.note)
     await session.commit()
+    if row is None:
+        # Cleared on a store the memory never saw: nothing was stored.
+        return NoteRead(merchant_key=memory.stored_key(data.merchant_key), note=None)
     return NoteRead(merchant_key=row.merchant_key, note=row.note)
 
 

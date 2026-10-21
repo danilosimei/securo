@@ -31,10 +31,10 @@ from app.services.categorization.memory import DOMINANCE
 from app.services.categorization.merchant_key import (
     PAYEE_PREFIX,
     PERSON_PREFIX,
+    TRAILING_JUNK,
     UNKNOWN_KEY,
     sample_description,
     scrub_documents,
-    TRAILING_JUNK,
     strip_account_numbers,
 )
 from app.services.categorization.pipeline import MerchantGroup

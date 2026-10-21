@@ -13,7 +13,6 @@ Nothing here commits: the API owns the transaction.
 """
 from __future__ import annotations
 
-import unicodedata
 import uuid
 from collections import Counter
 from dataclasses import dataclass, field
@@ -31,14 +30,10 @@ from app.models.categorization import (
     CategorizationRun,
     CategorizationSuggestion,
 )
-from app.models.category import Category
-from app.models.category_group import CategoryGroup
 from app.models.payee import Payee
 from app.models.transaction import Transaction
-from app.schemas.category import CategoryCreate
-from app.schemas.category_group import CategoryGroupCreate
-from app.services import category_group_service, category_service
-from app.services.categorization import events, memory
+from app.services import category_service
+from app.services.categorization import creation, events, memory
 from app.services.categorization.costs import month_spend
 from app.services.categorization.events import (
     PROTECTED_SOURCES,
@@ -93,14 +88,9 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _fold(text: str) -> str:
-    """Uppercase, accents removed: how the rule engine compares text."""
-    decomposed = unicodedata.normalize("NFKD", text)
-    return "".join(c for c in decomposed if not unicodedata.combining(c)).upper()
-
-
-def _norm_name(text: str) -> str:
-    return " ".join(_fold(text).split())
+#: How names and descriptions are compared (shared with `creation`).
+_fold = creation.fold
+_norm_name = creation.norm_name
 
 
 def _open_row(workspace_id: uuid.UUID):
@@ -359,7 +349,7 @@ async def _load_transactions(
     return found
 
 
-async def _apply_as_user(
+async def apply_as_user(
     session: AsyncSession,
     workspace_id: uuid.UUID,
     user_id: uuid.UUID,
@@ -428,7 +418,7 @@ async def _resolve(
         )
 
 
-async def _assignable_category(
+async def ensure_assignable(
     session: AsyncSession, workspace_id: uuid.UUID, category_id: uuid.UUID
 ) -> None:
     if category_id not in await category_service.get_assignable_category_ids(
@@ -460,7 +450,7 @@ async def _accept_keys(
         for tx in await _load_transactions(session, workspace_id, tx_ids)
         if tx.category_source not in PROTECTED_SOURCES
     ]
-    result = await _apply_as_user(session, workspace_id, user_id, txs, category_id)
+    result = await apply_as_user(session, workspace_id, user_id, txs, category_id)
     # One pick per store, carried by one of the store's events.
     carriers: dict[str, uuid.UUID | None] = {}
     for sug in suggestions:
@@ -483,7 +473,7 @@ async def accept(
     transaction_ids: list[uuid.UUID] | None = None,
 ) -> Applied:
     """Apply a category to a store's pending rows (or the chosen ones)."""
-    await _assignable_category(session, workspace_id, category_id)
+    await ensure_assignable(session, workspace_id, category_id)
     return await _accept_keys(
         session, workspace_id, user_id, [merchant_key], category_id, transaction_ids
     )
@@ -494,24 +484,6 @@ async def dismiss(session: AsyncSession, workspace_id: uuid.UUID, merchant_key: 
     suggestions = await _pending_suggestions(session, workspace_id, [merchant_key])
     await _resolve(session, suggestions, "dismissed")
     return len(suggestions)
-
-
-async def _find_or_create_group(
-    session: AsyncSession, workspace_id: uuid.UUID, user_id: uuid.UUID, name: str
-) -> CategoryGroup:
-    wanted = _norm_name(name)
-    groups = (
-        await session.execute(
-            select(CategoryGroup).where(CategoryGroup.workspace_id == workspace_id)
-        )
-    ).scalars().all()
-    for group in groups:
-        # A hidden group would hide the category created in it.
-        if not group.is_hidden and _norm_name(group.name) == wanted:
-            return group
-    return await category_group_service.create_group(
-        session, workspace_id, user_id, CategoryGroupCreate(name=name.strip()), commit=False
-    )
 
 
 async def create_category(
@@ -526,37 +498,16 @@ async def create_category(
     """Create a proposed category (and its group) and file the stores under it.
 
     An existing visible group, or assignable category, of the same
-    (normalized) name is reused; a hidden one is not. Nothing commits here
-    (the category services only flush): a failure while filing the stores
-    takes the new category and group back with everything else.
+    (normalized) name is reused; a hidden one is not (`creation`). Nothing
+    commits here (the category services only flush): a failure while filing
+    the stores takes the new category and group back with everything else.
     """
-    category_group = await _find_or_create_group(session, workspace_id, user_id, group)
-    wanted = _norm_name(name)
-    existing = (
-        await session.execute(
-            select(Category).where(
-                Category.workspace_id == workspace_id,
-                Category.group_id == category_group.id,
-            )
-        )
-    ).scalars().all()
-    assignable = await category_service.get_assignable_category_ids(session, workspace_id)
-    category = next(
-        (c for c in existing if c.id in assignable and _norm_name(c.name) == wanted), None
+    created = await creation.find_or_create_category(
+        session, workspace_id, user_id, group=group, name=name
     )
-    if category is None:
-        category = await category_service.create_category(
-            session,
-            workspace_id,
-            user_id,
-            CategoryCreate(name=name.strip(), group_id=category_group.id),
-            commit=False,
-        )
     keys = list(dict.fromkeys(k for k in merchant_keys if k))
-    result = await _accept_keys(session, workspace_id, user_id, keys, category.id)
-    # The tree changed: cached model decisions were made without this category.
-    await memory.forget_ai_decisions(session, workspace_id)
-    return category.id, result
+    result = await _accept_keys(session, workspace_id, user_id, keys, created.category_id)
+    return created.category_id, result
 
 
 # --- audit list, undo, provenance ---------------------------------------------
@@ -991,7 +942,7 @@ async def apply_similar(
         for tx in await _load_transactions(session, workspace_id, ids)
         if tx.category_source not in PROTECTED_SOURCES
     ]
-    result = await _apply_as_user(session, workspace_id, user_id, txs, ref.category_id)
+    result = await apply_as_user(session, workspace_id, user_id, txs, ref.category_id)
     if result.applied:
         await memory.learn_choice(session, workspace_id, stored_key(key), ref.category_id)
         await events.mark_picks(session, result.event_ids[:1])
