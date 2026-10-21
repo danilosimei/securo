@@ -621,3 +621,45 @@ async def test_request_run_under_a_held_lock_never_returns_a_stale_run(postgres_
     async with postgres_sessions() as session:
         expired = await session.get(CategorizationRun, stale.id)
         assert expired is not None and (expired.status, expired.error) == ("failed", "abandoned")
+
+
+@pytest.mark.asyncio
+async def test_a_redistribution_that_fails_after_sending_its_batch_keeps_waiting(
+    session, test_workspace
+):
+    """The organizer task records a failure the same way: a run whose batch
+    was sent (and committed) stays `processing_batch` for the beat."""
+    ws = test_workspace.id
+    queued = _run(ws, "queued", trigger="manual", kind="redistribute")
+    session.add(queued)
+    await session.commit()
+    run_id = queued.id
+
+    async def send_then_fail(session_, workspace_id, run):
+        run.status, run.batch_id = "processing_batch", "batch_sent"
+        await session_.commit()
+        raise RuntimeError("after the batch")
+
+    with patch.object(categorization_tasks.organizer, "redistribute", side_effect=send_then_fail):
+        result = await categorization_tasks._organize(_session_maker(session), ws, run_id)
+
+    assert result == {"status": "processing_batch", "run_id": str(run_id)}
+    run = await _reload(session, run_id)
+    assert (run.status, run.batch_id, run.error) == ("processing_batch", "batch_sent", "RuntimeError")
+    assert run.finished_at is None
+
+
+@pytest.mark.asyncio
+async def test_a_failed_run_without_a_batch_still_ends_failed(session, test_workspace):
+    """`processing_batch` alone is not enough: with no `batch_id` there is
+    nothing to collect."""
+    ws = test_workspace.id
+    run = _run(ws, "processing_batch")
+    session.add(run)
+    await session.commit()
+
+    status = await categorization_tasks.record_failure(session, run.id, ValueError("x"))
+
+    assert status == "failed"
+    run = await _reload(session, run.id)
+    assert (run.status, run.error) == ("failed", "ValueError") and run.finished_at is not None
