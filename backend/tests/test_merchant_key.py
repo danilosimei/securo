@@ -1,7 +1,6 @@
 import pytest
 
 from app.services.categorization.merchant_key import (
-    MERCHANT_KEY_VERSION,
     merchant_key,
     sample_description,
     scrub_documents,
@@ -115,7 +114,10 @@ UBER = "UBER DO BRASIL TECNOLOGIA LTDA."
     ],
 )
 def test_real_world_samples(desc, payee, expected):
-    assert merchant_key(desc, payee_name=payee, payee_source="sync" if payee else None) == expected
+    # Version 2: IOF lines are grouped by version 3 (test_merchant_key_v3).
+    assert merchant_key(
+        desc, payee_name=payee, payee_source="sync" if payee else None, version=2
+    ) == expected
 
 
 def test_scrub_documents():
@@ -310,7 +312,7 @@ REAL_PREFIX_CASES: list[tuple[str, str]] = [
 
 @pytest.mark.parametrize("raw,expected", REAL_PREFIX_CASES)
 def test_real_acquirer_prefixes(raw, expected):
-    assert merchant_key(raw) == expected
+    assert merchant_key(raw, version=2) == expected
 
 
 @pytest.mark.parametrize(
@@ -329,7 +331,7 @@ def test_real_acquirer_prefixes(raw, expected):
     ],
 )
 def test_star_heads_that_stay(raw, expected):
-    assert merchant_key(raw) == expected
+    assert merchant_key(raw, version=2) == expected
     assert merchant_key(raw, version=1) == expected
 
 
@@ -344,10 +346,6 @@ def test_star_heads_that_stay(raw, expected):
 )
 def test_version_1_keeps_previous_keys(raw, expected):
     assert merchant_key(raw, version=1) == expected
-
-
-def test_current_version_is_2():
-    assert MERCHANT_KEY_VERSION == 2
 
 
 @pytest.mark.parametrize(

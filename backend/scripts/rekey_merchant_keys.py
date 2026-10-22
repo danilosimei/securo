@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Re-key stores from the v1 merchant-key rule to v2, once, at deploy.
+"""Re-key stores from the previous merchant-key rule to the current one
+(now v2 -> v3), once, at deploy.
 
 Run inside the backend container, after `alembic upgrade head`:
     docker exec <backend> python scripts/rekey_merchant_keys.py --dry-run
@@ -45,7 +46,7 @@ TOP = 20
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Regrava as chaves de loja da regra v1 para a v2 (idempotente)."
+        description="Regrava as chaves de loja da regra anterior para a atual (idempotente)."
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="só mostra o que mudaria; não grava nada"

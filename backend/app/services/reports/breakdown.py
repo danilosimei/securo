@@ -18,7 +18,7 @@ from app.models.account import Account
 from app.models.categorization import CategorizationSuggestion, MerchantMemory
 from app.models.category import Category
 from app.models.category_group import CategoryGroup
-from app.services.reports.merchant_labels import readable_label
+from app.services.reports.merchant_labels import FIXED_LABELS, readable_label
 from app.services.reports.periods import Period, _month_end, _shift_months
 from app.services.reports.rules import (
     CENT,
@@ -178,6 +178,9 @@ async def _store_names(
     for key, name in memories.all():
         if name and name.strip():
             names[key] = name.strip()
+    # A grouped store (IOF, broker fees...) keeps its own name, not the
+    # name of one of the stores it gathers.
+    names.update({key: FIXED_LABELS[key] for key in keys if key in FIXED_LABELS})
     return names
 
 

@@ -1,4 +1,6 @@
-"""Re-keying stores from the v1 description rule to v2 (`rekey`)."""
+"""Re-keying stores from the v1 description rule to v2 (`rekey`). The
+re-key now runs from v2 to v3 (test_categorization_rekey_v3); these cases
+pin the v1 -> v2 step, which works the same way."""
 import importlib.util
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -20,6 +22,12 @@ from tests.test_merchant_key import REAL_PREFIX_CASES
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "rekey_merchant_keys.py"
 NOON = datetime(2026, 10, 20, 12, 0, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _v1_to_v2(monkeypatch):
+    monkeypatch.setattr(rekey, "OLD_VERSION", 1)
+    monkeypatch.setattr(rekey, "NEW_VERSION", 2)
 
 
 def _memory(session, ws_id, key, counts, *, note=None, note_at=None, updated_at=None,

@@ -21,13 +21,19 @@ Versoes da regra da descricao (payee e Pix nao mudam entre elas):
   O nome repetido em volta de um hifen fica uma vez so
   ("Mlp *Kabum-Kabum" -> "KABUM", como "Mlp*Kabum").
   A versao 1 continua disponivel para achar as chaves gravadas antes.
+- 3 (atual): antes de qualquer outra regra (payee inclusive), taxas e
+  impostos que trazem o nome de outra loja ou um ticker em cada linha viram
+  uma loja so (GROUPED_KEYS): IOF de compra no exterior, taxa de
+  intermediacao da corretora, IRRF sobre aluguel de acoes (BTC) e sobre
+  resgate de fundos, e a remuneracao do aluguel de acoes. As versoes 1 e 2
+  continuam disponiveis.
 """
 
 import hashlib
 import re
 import unicodedata
 
-MERCHANT_KEY_VERSION = 2
+MERCHANT_KEY_VERSION = 3
 UNKNOWN_KEY = "UNKNOWN"
 SAMPLE_MAX_LENGTH = 60
 PERSON_PREFIX = "PIX:"
@@ -40,6 +46,28 @@ HASHED_PERSON_PREFIX = PERSON_PREFIX + "#"
 # partir dela. Usa-los como chave mudaria a chave da linha depois de
 # categorizada e separaria a loja da memoria dela.
 DERIVED_PAYEE_SOURCES = frozenset({"description", "ai"})
+
+# v3: lojas agrupadas, na ordem em que sao testadas, sobre a descricao
+# dobrada (sem acento, maiuscula). Cada linha dessas traz outra loja ou um
+# ticker ("Best Buy Iof", "TAXA DE INTERMEDIACAO AZZA3"); separadas, viravam
+# dezenas de lojas de uma compra so.
+IOF_ABROAD_KEY = "IOF COMPRAS NO EXTERIOR"
+BROKER_FEES_KEY = "TAXAS DA CORRETORA"
+LENT_SHARES_TAX_KEY = "IR SOBRE ALUGUEL DE ACOES"
+FUND_WITHDRAWAL_TAX_KEY = "IR SOBRE RESGATE DE FUNDOS"
+LENT_SHARES_INCOME_KEY = "ALUGUEL DE ACOES"
+# IOF de credito (emprestimo, cheque especial...) nao e compra no exterior.
+_IOF_CREDIT_RE = re.compile(
+    r"\b(?:EMPREST\w*|CHEQUE|ESPECIAL|ROTATIVO|FINANC\w*|PARCELAM\w*|SAQUE|LIMITE"
+    r"|RESGATE|CREDITO PESSOAL|OPERACAO DE CREDITO)\b"
+)
+GROUPED_KEYS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bIRRF\b.*\b(?:BTC|ALUGUEL)\b"), LENT_SHARES_TAX_KEY),
+    (re.compile(r"\bIRRF\b.*\bRESGATE\b"), FUND_WITHDRAWAL_TAX_KEY),
+    (re.compile(r"\bREMUNERACAO\b.*\bBTC\b"), LENT_SHARES_INCOME_KEY),
+    (re.compile(r"^TAXA\s+(?:DE\s+)?INTERMEDIA"), BROKER_FEES_KEY),
+    (re.compile(r"\bIOF\b"), IOF_ABROAD_KEY),
+)
 
 # Prefixos de adquirente/carteira que vem colados a um "*" (ex.: "PG *UBER").
 STAR_PREFIXES = (
@@ -352,6 +380,17 @@ def _is_generic_rest(key: str) -> bool:
     )
 
 
+def _grouped_key(description: str) -> str | None:
+    """v3: the one store a fee or tax line belongs to, if any."""
+    folded = _squeeze(_fold(description))
+    for pattern, key in GROUPED_KEYS:
+        if pattern.search(folded):
+            if key == IOF_ABROAD_KEY and _IOF_CREDIT_RE.search(folded):
+                continue
+            return key
+    return None
+
+
 def _normalize_description(text: str, version: int) -> str:
     folded = _INSTALLMENT_RE.sub(" ", _fold(scrub_documents(text)))
     if version >= 2:
@@ -429,6 +468,10 @@ def merchant_key(
     gravadas antes da regra de prefixo curto (ver docstring do modulo)."""
     if description is not None and _fold(description).strip() in EMPTY_WORDS:
         description = None
+    if version >= 3 and description and not is_person_transfer:
+        grouped = _grouped_key(description)
+        if grouped:
+            return grouped
     parts = _split_counterpart(description) if description else None
     derived_payee = payee_source in DERIVED_PAYEE_SOURCES
     payee_ok = bool(payee_name and not derived_payee and _has_letters(payee_name))

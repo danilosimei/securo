@@ -54,6 +54,29 @@ async def test_backfill_fills_nulls_fixes_stale_and_is_idempotent(
 
 
 @pytest.mark.asyncio
+async def test_backfill_moves_v2_keys_to_the_grouped_v3_store(
+    session, test_user, test_account, test_workspace
+):
+    ws_id = test_workspace.id
+    test_account.workspace_id = ws_id
+    _tx(session, test_user, test_account, "Best Buy Iof")
+    _tx(session, test_user, test_account, "Guitar Center IOF")
+    await session.commit()
+    # What the rows carry after the v2 backfill.
+    for description, old in (("Best Buy Iof", "BEST BUY IOF"), ("Guitar Center IOF", "GUITAR CENTER IOF")):
+        await session.execute(
+            update(Transaction).where(Transaction.description == description).values(merchant_key=old)
+        )
+    await session.commit()
+
+    dry = await backfill_all(TestSessionLocal, dry_run=True, workspace_id=ws_id)
+    assert dry[0].corrected == 2
+    assert (await _keys(session))["Best Buy Iof"] == "BEST BUY IOF"
+    await backfill_all(TestSessionLocal, workspace_id=ws_id)
+    assert set((await _keys(session)).values()) == {"IOF COMPRAS NO EXTERIOR"}
+
+
+@pytest.mark.asyncio
 async def test_script_dry_run_prints_totals(monkeypatch, capsys):
     spec = importlib.util.spec_from_file_location("backfill_script", SCRIPT)
     assert spec and spec.loader

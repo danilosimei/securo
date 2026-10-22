@@ -1,4 +1,8 @@
-"""Re-keying stores from the v1 description rule to v2 (spec §5, decision 5).
+"""Re-keying stores from the previous description rule to the current one
+(spec §5, decision 5): from v1 to v2 at first, now from v2 to v3, which
+gathers fee and tax lines (IOF abroad, broker fees...) into one store each,
+merging many keys into one (the picks are recounted from the facts, so they
+add up).
 
 The v2 rule of `merchant_key` drops a short acquirer prefix before the "*"
 ("Mlp*Netshoes" was the store "MLP", now "NETSHOES"). Rows keyed under v1
@@ -107,10 +111,11 @@ from app.models.transaction import Transaction
 from app.models.workspace import Workspace
 from app.services.categorization import memory
 from app.services.categorization.events import CATEGORY_MERGE_REASON
-from app.services.categorization.merchant_key import merchant_key
+from app.services.categorization.merchant_key import MERCHANT_KEY_VERSION, merchant_key
 
-OLD_VERSION = 1
-NEW_VERSION = 2
+#: The rule the stored keys came from and the one they move to.
+OLD_VERSION = MERCHANT_KEY_VERSION - 1
+NEW_VERSION = MERCHANT_KEY_VERSION
 #: Run kinds that write suggestions or memory; one busy holds the re-key back.
 BUSY_KINDS = ("classify", "redistribute")
 SKIPPED_BUSY = "busy"
