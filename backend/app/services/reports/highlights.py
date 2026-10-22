@@ -16,7 +16,8 @@ the story without a second request:
 `month_pace` is about the current month whatever the period: it compares the
 spending so far with a normal month and comes first when it fires. Then at
 most `MAX_HIGHLIGHTS` cards, biggest impact first; the review card is never
-the one cut.
+the one cut, and `frequent_spot` (the habits) always gets a place: it takes
+the place of the lowest impact card.
 """
 import json
 import uuid
@@ -308,9 +309,14 @@ async def build(ctx: Context) -> list[dict]:
             found.append(item)
     review = await _to_review(ctx, cards)
 
-    # Biggest impact first; the review card is never the one cut.
+    # Biggest impact first; the review card is never the one cut, and the
+    # habits card always makes it (it gives up the lowest impact one).
     found.sort(key=lambda c: (-c["_impact"], c["rule"]))
-    chosen = found[: MAX_HIGHLIGHTS - 1] + [review] if review is not None else found[:MAX_HIGHLIGHTS]
+    room = MAX_HIGHLIGHTS - 1 if review is not None else MAX_HIGHLIGHTS
+    spot = next((c for c in found if c["rule"] == "frequent_spot"), None)
+    if spot is not None and spot not in found[:room]:
+        found = found[: room - 1] + [spot]
+    chosen = found[:room] + ([review] if review is not None else [])
     out = ([pace] if pace is not None else []) + chosen
     for item in out:
         item.pop("_impact", None)

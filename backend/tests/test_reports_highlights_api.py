@@ -191,3 +191,32 @@ async def test_frequent_spot_skips_taxes_and_fees(client, auth_headers, world): 
     _visits(world, "Impostos & Taxas", [("IOF Compras no Exterior", 12)])
     await world["session"].commit()
     assert "frequent_spot" not in _rules(await _get(client, auth_headers))
+
+
+@pytest.mark.asyncio
+async def test_frequent_spot_always_gets_one_of_the_four_places(client, auth_headers, world, monkeypatch):  # noqa: F811
+    from app.services.reports import highlights
+
+    def big(rule, impact):
+        async def rule_fn(ctx, cards):
+            return highlights.card(rule, rule, 1, "", tone="info", actions=[], impact=impact)
+
+        return rule_fn
+
+    def big_sync(rule, impact):
+        return lambda ctx, cards: highlights.card(rule, rule, 1, "", tone="info", actions=[], impact=impact)
+
+    monkeypatch.setattr(highlights, "_spike", big_sync("spike", 90000))
+    monkeypatch.setattr(highlights, "_heavy_group", big_sync("heavy_group", 80000))
+    monkeypatch.setattr(highlights, "_what_changed", big_sync("what_changed", 5000))
+    monkeypatch.setattr(highlights, "_recurring_expensive", big("recurring_expensive", 70000))
+    monkeypatch.setattr(highlights, "_to_review", big("to_review", 1))
+    _category(world, "Restaurantes")
+    await world["session"].flush()
+    _visits(world, "Restaurantes", [("Baker Bar", 10)])  # R$ 600 a month: small impact
+    await world["session"].commit()
+    rules = [h["rule"] for h in (await _get(client, auth_headers))["highlights"]]
+    assert "frequent_spot" in rules
+    assert "to_review" in rules
+    assert "what_changed" not in rules  # the lowest impact among the others gave way
+    assert len(rules) <= highlights.MAX_HIGHLIGHTS + 1
