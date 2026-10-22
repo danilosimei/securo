@@ -77,6 +77,7 @@ from app.services.categorization.classifier import (
 )
 from app.services.categorization.claude_client import create_message, resolve_client
 from app.services.categorization.merchant_key import PERSON_PREFIX
+from app.services.categorization.corrections import load_corrections
 from app.services.categorization.prompts import build_examples, prompt_sample
 from app.services.categorization.settings import get_settings
 
@@ -393,7 +394,12 @@ async def ask(
         ).scalars().all()
         ctx, rows = await store_context(session, workspace_id, merchant_key, transaction_ids)
         params = ask_params(
-            build_ask_system_blocks(index, build_examples(memory_rows, index), ctx),
+            build_ask_system_blocks(
+                index,
+                build_examples(memory_rows, index),
+                ctx,
+                await load_corrections(session, workspace_id, index),
+            ),
             conversation_messages(turns),
             build_ask_schema(index),
         )

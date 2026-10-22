@@ -11,6 +11,8 @@ from app.services.categorization.prompts import (
     CLASSIFIER_MODEL,
     OUTPUT_FIELDS,
     build_category_index,
+    EXAMPLES_PER_CATEGORY,
+    build_corrections,
     build_examples,
     build_history,
     build_result_schema,
@@ -30,11 +32,15 @@ def group(name: str, position: int, hidden: bool = False) -> CategoryGroup:
 
 
 def category(
-    name: str, grp: CategoryGroup | None, hidden: bool = False, transfer: bool = False
+    name: str,
+    grp: CategoryGroup | None,
+    hidden: bool = False,
+    transfer: bool = False,
+    description: str | None = None,
 ) -> Category:
     return Category(
         id=uuid.uuid4(), name=name, group_id=grp.id if grp else None, is_hidden=hidden,
-        treat_as_transfer=transfer,
+        treat_as_transfer=transfer, description=description,
     )
 
 
@@ -150,23 +156,103 @@ def test_examples_use_dominant_choice_and_hide_private_keys():
         memory("EMPTY", {}),
     ]
     text = build_examples(rows, index)
+    # Grouped by category (tree order), so every category with a dominant
+    # store shows up.
     assert text.splitlines() == [
-        "CARREFOUR -> c4",
-        "Pix JOAO SILVA -> c3",
         "CINEMARK -> c1",
+        "Pix JOAO SILVA -> c3",
+        "CARREFOUR -> c4",
     ]
     assert "#" not in text and "UNKNOWN" not in text and "P:" not in text
 
 
-def test_examples_are_limited_and_stable():
+def test_examples_take_three_per_category_and_cover_every_category():
     cats, groups = tree()
     index = build_category_index(cats, groups)
     mercado = by_name(cats, "Mercado").id
-    rows = [memory(f"LOJA {i:02d}", {mercado: 2}) for i in range(50)]
-    text = build_examples(rows, index, limit=40)
-    assert len(text.splitlines()) == 40
-    assert text == build_examples(list(reversed(rows)), index, limit=40)
-    assert text.splitlines()[0] == "LOJA 00 -> c4"
+    cinema = by_name(cats, "Cinema").id
+    aluguel = by_name(cats, "Aluguel").id
+    rows = [memory(f"LOJA {i:02d}", {mercado: 2 + (i % 5)}) for i in range(50)]
+    rows += [memory("CINEMARK", {cinema: 1}), memory("IMOBILIARIA", {aluguel: 1})]
+    text = build_examples(rows, index)
+    lines = text.splitlines()
+    assert EXAMPLES_PER_CATEGORY == 3
+    assert [line for line in lines if line.endswith("-> c4")].__len__() == 3
+    # Few picks elsewhere still get their slot.
+    assert "CINEMARK -> c1" in lines and "IMOBILIARIA -> c3" in lines
+    # Most picked first inside a category; the same input in any order is the same text.
+    mercado_lines = [line for line in lines if line.endswith("-> c4")]
+    assert mercado_lines == ["LOJA 04 -> c4", "LOJA 09 -> c4", "LOJA 14 -> c4"]
+    assert text == build_examples(list(reversed(rows)), index)
+
+
+# --- descriptions ---------------------------------------------------------
+
+
+def test_tree_line_carries_the_description_and_others_stay_as_before():
+    casa = group("Casa", 0)
+    cats = [
+        category("Mercado", casa, description="  Supermercado e açougue.\n Não inclui restaurante. "),
+        category("Aluguel", casa),
+    ]
+    index = build_category_index(cats, [casa])
+    assert index.render().splitlines() == [
+        "c1 Casa › Aluguel",
+        "c2 Casa › Mercado: Supermercado e açougue. Não inclui restaurante.",
+    ]
+    assert build_category_index(
+        [category("Mercado", casa), category("Aluguel", casa)], [casa]
+    ).render() == "c1 Casa › Aluguel\nc2 Casa › Mercado"
+
+
+def test_description_with_cpf_and_account_comes_out_clean():
+    casa = group("Casa", 0)
+    cats = [
+        category("Aluguel", casa, description="Pago ao João, CPF 123.456.789-09, conta 0012345-6 ag 1234"),
+    ]
+    line = build_category_index(cats, [casa]).render()
+    assert "123.456.789-09" not in line and "12345678909" not in line
+    assert "0012345" not in line
+    assert line.startswith("c1 Casa › Aluguel: Pago ao João")
+    assert "\n" not in line
+
+
+# --- corrections ----------------------------------------------------------
+
+
+def test_corrections_use_the_format_and_skip_unnamed_stores():
+    cats, groups = tree()
+    index = build_category_index(cats, groups)
+    mercado, cinema = by_name(cats, "Mercado").id, by_name(cats, "Cinema").id
+    gone = by_name(cats, "Velha").id
+    pairs = [
+        ("P:CARREFOUR", mercado, cinema),
+        ("PIX:#0a1b2c3d4e", mercado, cinema),
+        ("UNKNOWN", mercado, cinema),
+        ("CINEMARK", cinema, mercado),
+        ("CARREFOUR", mercado, cinema),  # same line again, once
+        ("SUMIU", mercado, gone),  # a category no longer in the tree
+    ]
+    text = build_corrections(pairs, index)
+    assert text.splitlines() == ["CARREFOUR -> c4 (não c1)", "CINEMARK -> c1 (não c4)"]
+
+
+def test_corrections_are_limited_and_recent_first():
+    cats, groups = tree()
+    index = build_category_index(cats, groups)
+    mercado, cinema = by_name(cats, "Mercado").id, by_name(cats, "Cinema").id
+    pairs = [(f"LOJA {i:02d}", mercado, cinema) for i in range(30)]
+    lines = build_corrections(pairs, index).splitlines()
+    assert len(lines) == 20 and lines[0] == "LOJA 00 -> c4 (não c1)"
+
+
+def test_corrections_join_the_cached_block_and_stay_out_when_empty():
+    cats, groups = tree()
+    index = build_category_index(cats, groups)
+    with_corrections = build_system_blocks(index, "X -> c1", "LOJA -> c4 (não c1)")[1]["text"]
+    assert "LOJA -> c4 (não c1)" in with_corrections
+    assert category_context(index, "X -> c1") == build_system_blocks(index, "X -> c1")[1]["text"]
+    assert "(não" not in category_context(index, "X -> c1")
 
 
 # --- system prompt --------------------------------------------------------
@@ -444,7 +530,8 @@ def test_category_context_is_the_cached_tree_block():
     index = build_category_index(cats, groups)
     assert build_system_blocks(index, "X -> c1")[1]["text"] == category_context(index, "X -> c1")
     assert category_context(build_category_index([], []), "") == (
-        "Categorias desta pessoa (id Grupo › Categoria):\n(nenhuma)\n\n"
-        "Exemplos desta pessoa (loja -> id), dos mais usados para os menos usados:\n"
+        "Categorias desta pessoa (id Grupo › Categoria: descrição, quando ela escreveu uma):\n"
+        "(nenhuma)\n\n"
+        "Exemplos desta pessoa (loja -> id), até 3 por categoria, dos mais usados para os menos usados:\n"
         "(nenhum ainda)"
     )

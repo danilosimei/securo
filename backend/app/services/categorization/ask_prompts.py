@@ -181,11 +181,15 @@ def render_store_context(ctx: StoreContext, index: CategoryIndex) -> str:
 
 
 def build_ask_system_blocks(
-    index: CategoryIndex, examples: str, ctx: StoreContext
+    index: CategoryIndex, examples: str, ctx: StoreContext, corrections: str = ""
 ) -> list[dict[str, Any]]:
-    """[instructions, tree + examples, store], each closing a cache
-    breakpoint: the tree block is byte-identical to the classifier's."""
-    texts = (ASK_INSTRUCTIONS, category_context(index, examples), render_store_context(ctx, index))
+    """[instructions, tree + examples + corrections, store], each closing a
+    cache breakpoint: the tree block is byte-identical to the classifier's."""
+    texts = (
+        ASK_INSTRUCTIONS,
+        category_context(index, examples, corrections),
+        render_store_context(ctx, index),
+    )
     return [{"type": "text", "text": text, "cache_control": dict(_EPHEMERAL)} for text in texts]
 
 

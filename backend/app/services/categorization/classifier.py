@@ -61,6 +61,7 @@ from app.services.categorization.claude_client import (
     create_message,
     resolve_client,
 )
+from app.services.categorization.corrections import load_corrections
 from app.services.categorization.costs import cost_usd, month_bounds
 from app.services.categorization.events import (
     PROTECTED_SOURCES,
@@ -811,7 +812,8 @@ async def classify(
     )
     history = await _history(session, workspace_id, groups, memory_rows, index)
     notes = _notes(groups, memory_rows)
-    system = build_system_blocks(index, build_examples(memory_rows, index))
+    corrections = await load_corrections(session, workspace_id, index)
+    system = build_system_blocks(index, build_examples(memory_rows, index), corrections)
     schema = build_result_schema(index)
     ordered = [groups[key] for key in sorted(groups)]
     plans = [

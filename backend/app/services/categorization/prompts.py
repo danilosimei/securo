@@ -4,7 +4,8 @@ The request has three parts, ordered for prompt caching:
 
 1. fixed instructions (identical for every workspace);
 2. the workspace's category tree with short ids (`c1`, `c2`...) and up to
-   40 of the person's own choices, marked `cache_control` -- the cached
+   the person's own choices (up to 3 stores per category) and recent
+   corrections of the model's guesses, marked `cache_control` -- the cached
    prefix ends here, so this block must be byte-identical across calls for
    the same workspace state: sorted, no dates, no uuids, no run ids;
 3. the batch itself as a compact JSON user message, where each store is an
@@ -35,13 +36,20 @@ from app.services.categorization.merchant_key import (
     clean_note,
     is_unnamed_key,
     sample_description,
+    sanitize_text,
     scrub_documents,
     strip_account_numbers,
 )
 from app.services.categorization.pipeline import MerchantGroup
 
 CLASSIFIER_MODEL = "claude-haiku-5-5"
-#: Person's examples in the cached block.
+#: Person's examples in the cached block: up to this many stores per category.
+EXAMPLES_PER_CATEGORY = 3
+#: Recent corrections (the person chose another category than the model's)
+#: in the cached block.
+CORRECTIONS_LIMIT = 20
+#: The old global cap of examples, kept for `build_global_examples` (the
+#: baseline the evaluation script compares against).
 EXAMPLES_LIMIT = 40
 #: Output budget: up to 120 tokens per item plus the envelope, capped so a
 #: non-streaming call stays well under the SDK timeout. A ceiling, not a
@@ -88,7 +96,7 @@ Um objeto por item recebido, sem omitir nenhum, com os campos nesta ordem:
 - new: só quando nenhuma categoria da lista serve razoavelmente: {"g": grupo, "name": nome}, curtos e em português, no estilo da árvore existente (de preferência um grupo que já existe). Caso contrário, null. Com new, c continua sendo a categoria mais próxima, se houver, ou null.
 
 ## Como decidir
-1. O histórico h e os exemplos desta pessoa são os sinais mais fortes: a mesma loja, ou uma muito parecida, vai para a categoria que ela já usou. Os exemplos mostram também como ela organiza (se ela põe padaria em Mercado, siga isso).
+1. O histórico h e os exemplos desta pessoa são os sinais mais fortes: a mesma loja, ou uma muito parecida, vai para a categoria que ela já usou. Os exemplos mostram também como ela organiza (se ela põe padaria em Mercado, siga isso). A descrição depois dos dois-pontos numa categoria é a regra dela para o que entra ali, e as correções são a preferência dela onde a sugestão anterior errou: siga as duas.
 2. Depois: o que a loja vende, o sentido (t), a recorrência (m) e o tipo de conta (a).
 3. Na dúvida entre duas categorias, ponha a melhor em c, a outra em alt e baixe p.
 4. Categorias marcadas "(movimentação)" são para dinheiro que só muda de lugar (entre contas, cartão e aplicações); nunca as use para compras.
@@ -134,6 +142,9 @@ class CategoryIndex:
     """Assignable categories <-> short ids (`c1`, `c2`...) in a stable order."""
 
     entries: tuple[tuple[str, uuid.UUID, str], ...]
+    #: Category id -> its description (one line, already cleaned), for the
+    #: categories that have one.
+    descriptions: dict[uuid.UUID, str] = field(default_factory=dict, compare=False)
     _by_short: dict[str, uuid.UUID] = field(init=False, repr=False, compare=False)
     _by_id: dict[uuid.UUID, str] = field(init=False, repr=False, compare=False)
 
@@ -152,8 +163,13 @@ class CategoryIndex:
         return self._by_short.get(short) if short else None
 
     def render(self) -> str:
-        """One line per category: `c3 Lazer › Cinema`."""
-        return "\n".join(f"{short} {label}" for short, _, label in self.entries)
+        """One line per category: `c3 Lazer › Cinema`, followed by `: <description>`
+        when the person wrote one."""
+        lines = []
+        for short, cid, label in self.entries:
+            description = self.descriptions.get(cid)
+            lines.append(f"{short} {label}: {description}" if description else f"{short} {label}")
+        return "\n".join(lines)
 
 
 def build_category_index(
@@ -172,6 +188,7 @@ def build_category_index(
     rows are redistributed only among its children).
     """
     by_group = {g.id: g for g in groups}
+    described: dict[uuid.UUID, str | None] = {}
     ranked: list[tuple[tuple[Any, ...], uuid.UUID, str]] = []
     for cat in categories:
         if cat.is_hidden:
@@ -194,11 +211,24 @@ def build_category_index(
             label = name
         if cat.treat_as_transfer:
             label += TRANSFER_MARK
+        described[cat.id] = cat.description
         ranked.append((sort_key, cat.id, label))
     ranked.sort(key=lambda item: item[0])
+    descriptions = {
+        cid: text for _, cid, _ in ranked if (text := _description_text(described.get(cid)))
+    }
     return CategoryIndex(
-        tuple((f"c{n}", cid, label) for n, (_, cid, label) in enumerate(ranked, start=1))
+        tuple((f"c{n}", cid, label) for n, (_, cid, label) in enumerate(ranked, start=1)),
+        descriptions,
     )
+
+
+def _description_text(text: str | None) -> str:
+    """A category description as the prompt carries it: free text cleaned like
+    a store note (no documents, no account or card numbers), on one line."""
+    if not text:
+        return ""
+    return sanitize_text(_one_line(text))
 
 
 def _example_name(key: str) -> str | None:
@@ -241,14 +271,12 @@ def _dominant(counts: dict[str, Any] | None) -> tuple[uuid.UUID, int] | None:
         return None
 
 
-def build_examples(
-    memory_rows: Iterable[MerchantMemory], index: CategoryIndex, limit: int = EXAMPLES_LIMIT
-) -> str:
-    """The person's own choices as `IFOOD -> c7` lines, most picked first.
-
-    Only stores with a dominant choice of a category still in the index.
-    """
-    ranked: list[tuple[int, str, str]] = []
+def _dominant_examples(
+    memory_rows: Iterable[MerchantMemory], index: CategoryIndex
+) -> list[tuple[int, str, str, str]]:
+    """(-picks, key, short id, `NAME -> id`) of every store with a dominant
+    choice of a category still in the index, most picked first."""
+    ranked: list[tuple[int, str, str, str]] = []
     for row in memory_rows:
         name = _example_name(row.merchant_key)
         dominant = _dominant(row.counts)
@@ -258,10 +286,35 @@ def build_examples(
         short = index.to_short(category_id)
         if short is None:
             continue
-        ranked.append((-total, row.merchant_key, f"{name} -> {short}"))
+        ranked.append((-total, row.merchant_key, short, f"{name} -> {short}"))
     ranked.sort()
+    return ranked
+
+
+def build_examples(
+    memory_rows: Iterable[MerchantMemory],
+    index: CategoryIndex,
+    per_category: int = EXAMPLES_PER_CATEGORY,
+) -> str:
+    """The person's own choices as `IFOOD -> c7` lines: up to `per_category`
+    stores for each category (the most picked first), so every category with
+    a dominant store is shown. Lines follow the tree's order."""
+    chosen: dict[str, list[str]] = {}
+    for _, _, short, line in _dominant_examples(memory_rows, index):
+        lines = chosen.setdefault(short, [])
+        if line not in lines and len(lines) < per_category:
+            lines.append(line)
+    return "\n".join(line for short in index.short_ids for line in chosen.get(short, []))
+
+
+def build_global_examples(
+    memory_rows: Iterable[MerchantMemory], index: CategoryIndex, limit: int = EXAMPLES_LIMIT
+) -> str:
+    """The previous format: the `limit` most picked stores overall, whatever
+    their category. Not used by the classifier; the evaluation script builds
+    the old prompt with it."""
     lines: list[str] = []
-    for _, _, line in ranked:
+    for _, _, _, line in _dominant_examples(memory_rows, index):
         if line not in lines:
             lines.append(line)
         if len(lines) >= limit:
@@ -269,25 +322,58 @@ def build_examples(
     return "\n".join(lines)
 
 
-def category_context(index: CategoryIndex, examples: str) -> str:
-    """The workspace's tree with short ids and the person's examples: the
-    cached block shared by the batch and the chat about one store."""
-    return (
-        "Categorias desta pessoa (id Grupo › Categoria):\n"
+def build_corrections(
+    pairs: Iterable[tuple[str, uuid.UUID, uuid.UUID]],
+    index: CategoryIndex,
+    limit: int = CORRECTIONS_LIMIT,
+) -> str:
+    """Counter-examples as `LOJA -> c4 (não c1)`: the person chose c4 where
+    the model had put c1. `pairs` (merchant key, chosen, rejected) come most
+    recent first; only named stores with both categories still in the tree."""
+    lines: list[str] = []
+    for key, chosen, rejected in pairs:
+        name = _example_name(key)
+        chosen_short, rejected_short = index.to_short(chosen), index.to_short(rejected)
+        if name is None or chosen_short is None or rejected_short is None:
+            continue
+        line = f"{name} -> {chosen_short} (não {rejected_short})"
+        if line not in lines:
+            lines.append(line)
+        if len(lines) >= limit:
+            break
+    return "\n".join(lines)
+
+
+def category_context(index: CategoryIndex, examples: str, corrections: str = "") -> str:
+    """The workspace's tree with short ids, descriptions, the person's
+    examples and corrections: the cached block shared by the batch and the
+    chat about one store. Without corrections the block has no such section."""
+    text = (
+        "Categorias desta pessoa (id Grupo › Categoria: descrição, quando ela escreveu uma):\n"
         f"{index.render() or '(nenhuma)'}\n\n"
-        "Exemplos desta pessoa (loja -> id), dos mais usados para os menos usados:\n"
+        "Exemplos desta pessoa (loja -> id), até 3 por categoria, dos mais usados para os menos usados:\n"
         f"{examples or '(nenhum ainda)'}"
     )
+    if corrections:
+        text += (
+            "\n\nCorreções desta pessoa (loja -> categoria que ela escolheu (não a que foi sugerida)),"
+            " das mais recentes para as mais antigas:\n"
+            f"{corrections}"
+        )
+    return text
 
 
-def build_system_blocks(index: CategoryIndex, examples: str) -> list[dict[str, Any]]:
-    """[instructions, tree + examples], each closing a cache breakpoint: the
-    instructions stay cached when the tree or the examples change."""
+def build_system_blocks(
+    index: CategoryIndex, examples: str, corrections: str = ""
+) -> list[dict[str, Any]]:
+    """[instructions, tree + examples + corrections], each closing a cache
+    breakpoint: the instructions stay cached when the tree or the examples
+    change."""
     return [
         {"type": "text", "text": INSTRUCTIONS, "cache_control": {"type": "ephemeral"}},
         {
             "type": "text",
-            "text": category_context(index, examples),
+            "text": category_context(index, examples, corrections),
             "cache_control": {"type": "ephemeral"},
         },
     ]

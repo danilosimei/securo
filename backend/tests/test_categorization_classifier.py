@@ -118,7 +118,7 @@ def message(items, *, stop_reason="end_turn", use=None):
 def shorts(params) -> dict[str, str]:
     """Category name -> short id, read from the cached context block."""
     context = params["system"][1]["text"]
-    return {label.split(" › ")[-1]: short for short, label in _SHORT_RE.findall(context)}
+    return {label.split(": ")[0].split(" › ")[-1]: short for short, label in _SHORT_RE.findall(context)}
 
 
 def sent_items(params) -> list[dict]:
@@ -763,6 +763,30 @@ async def test_classify_sends_memory_notes(
     uber = next(item for sample, item in by_sample.items() if "UBER" in sample)
     assert ifood["o"] == "Aurino: jardineiro cpf"
     assert "o" not in uber
+
+
+@pytest.mark.asyncio
+async def test_prompt_carries_descriptions_and_corrections(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    cat = await session.get(Category, cats["Lazer"])
+    cat.description = "Bares e passeios. Não inclui delivery."
+    old = _tx(session, test_user, test_account, "CINEMARK 33", source="user", category_id=cats["Lazer"])
+    await session.flush()
+    session.add(CategorizationEvent(
+        id=uuid.uuid4(), workspace_id=test_workspace.id, transaction_id=old.id, source="user",
+        previous_source="ai", previous_category_id=cats["Transporte"],
+        new_category_id=cats["Lazer"],
+    ))
+    _tx(session, test_user, test_account, "NETFLIX.COM")
+    await session.commit()
+    client = wire(fake_client(answer(lambda item, ids: out(ids["Lazer"], p=95))))
+
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    context = client.messages.create.await_args.kwargs["system"][1]["text"]
+    assert "Lazer: Bares e passeios. Não inclui delivery." in context
+    assert "CINEMARK -> c2 (não c3)" in context
 
 
 @pytest.mark.asyncio
