@@ -648,9 +648,9 @@ async def _recurring_changed(ctx: Context, cards: _Cards) -> Optional[dict]:
                 counts.append(f"{n} {_CHANGE_NOTES[kind][0 if n == 1 else 1]}")
         compare = ", ".join(counts)
 
-    actions = [action("recurring", "Ver fixos", cards.recurring_link())]
+    actions = [action("recurring", "Ver gastos fixos", cards.recurring_link())]
     if len(moving) == 1:
-        actions.insert(0, action("explore", "Ver as cobranças", store_link(moving[0][0])))
+        actions.append(action("explore", "Ver as cobranças", store_link(moving[0][0])))
     return card(
         "recurring_changed",
         title,
@@ -688,7 +688,7 @@ async def _recurring_expensive(ctx: Context, cards: _Cards) -> Optional[dict]:
         drivers=drivers,
         actions=[
             action("explore", "Ver as cobranças", store_link),
-            action("recurring", "Ver fixos", cards.recurring_link()),
+            action("recurring", "Ver gastos fixos", cards.recurring_link()),
         ],
     )
 

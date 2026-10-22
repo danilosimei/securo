@@ -2254,10 +2254,9 @@
         "title": "Куда вы возвращаетесь чаще всего",
         "sum": "Вместе эти покупки дают {{value}} в месяц.",
         "times": "{{times}}× за {{months}} мес.",
-        "perMonth": "~{{n}}×/мес.",
-        "monthly": "~{{value}}/мес.",
+        "monthly": "{{value}}/мес.",
         "inPeriod": "{{value}} за период",
-        "categoryLine": "~{{n}}×/мес. · ~{{value}}/мес.",
+        "categoryLine": "{{freq}} · {{value}}/мес.",
         "seeAll": "Все магазины",
         "aria": "{{name}}: покупок — {{times}} за {{months}} мес., примерно {{month}} в месяц. Открыть в Обзоре.",
         "categories": "Категории, которые повторяются чаще всего"
@@ -2374,7 +2373,8 @@
         "description": "Сколько в среднем стоит одна покупка там, где вы покупали больше одного раза."
       },
       "timesPerMonth_few": "{{n}} раза в месяц",
-      "timesPerMonth_many": "{{n}} раз в месяц"
+      "timesPerMonth_many": "{{n}} раз в месяц",
+      "timesPerMonthLess": "реже 1 раза в месяц"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Период: {{period}}",

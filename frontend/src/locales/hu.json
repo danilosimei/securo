@@ -2235,10 +2235,9 @@
         "title": "Ahová a legtöbbször visszamész",
         "sum": "Együtt ezek a vásárlások havi {{value}}-t tesznek ki.",
         "times": "{{times}}× {{months}} hónap alatt",
-        "perMonth": "~{{n}}×/hó",
-        "monthly": "~{{value}}/hó",
+        "monthly": "havi {{value}}",
         "inPeriod": "{{value}} az időszakban",
-        "categoryLine": "~{{n}}×/hó · ~{{value}}/hó",
+        "categoryLine": "{{freq}} · havi {{value}}",
         "seeAll": "Összes bolt megtekintése",
         "aria": "{{name}}: {{times}} vásárlás {{months}} hónap alatt, havonta kb. {{month}}. Megnyitás a Felfedezésben.",
         "categories": "A leggyakrabban ismétlődő kategóriák"
@@ -2349,7 +2348,8 @@
         "question": "Hol kerül a legtöbbe egy vásárlás?",
         "answer": "{{name}}: {{value}} vásárlásonként",
         "description": "Átlagosan mennyibe kerül egy vásárlás ott, ahol többször is vettél."
-      }
+      },
+      "timesPerMonthLess": "havonta egynél kevesebbszer"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Időszak: {{period}}",

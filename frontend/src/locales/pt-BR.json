@@ -1926,7 +1926,7 @@
   },
   "reports": {
     "section": "Análises",
-    "netWorth": "Patrimônio Líquido",
+    "netWorth": "Patrimônio",
     "trend": "Ao Longo do Tempo",
     "breakdown": "Divisão",
     "noData": "Nenhum dado disponível para este período",
@@ -2239,10 +2239,9 @@
         "title": "Onde você mais volta",
         "sum": "Somadas, essas compras dão {{value}} por mês.",
         "times": "{{times}}× em {{months}} meses",
-        "perMonth": "~{{n}}×/mês",
-        "monthly": "~{{value}}/mês",
+        "monthly": "{{value}} por mês",
         "inPeriod": "{{value}} no período",
-        "categoryLine": "~{{n}}×/mês · ~{{value}}/mês",
+        "categoryLine": "{{freq}} · {{value}} por mês",
         "seeAll": "Ver todas as lojas",
         "aria": "{{name}}: {{times}} compras em {{months}} meses, cerca de {{month}} por mês. Abrir no Explorar.",
         "categories": "Categorias que mais se repetem"
@@ -2353,7 +2352,8 @@
         "question": "Onde cada compra pesa mais?",
         "answer": "{{name}}: {{value}} por compra",
         "description": "Quanto custa cada compra, em média, onde você comprou mais de uma vez."
-      }
+      },
+      "timesPerMonthLess": "menos de 1 vez por mês"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Período: {{period}}",

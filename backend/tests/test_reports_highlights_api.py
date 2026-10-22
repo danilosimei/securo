@@ -103,7 +103,7 @@ async def test_a_fixed_cost_that_ended_is_good_news(client, auth_headers, world)
     ]
     # 12 months up to October: the charges, then nothing.
     assert card["sparkline"][-7:] == ["4265.00"] * 4 + ["0.00"] * 3
-    assert [a["kind"] for a in card["actions"]] == ["explore", "recurring"]
+    assert [a["kind"] for a in card["actions"]] == ["recurring", "explore"]
 
 
 @pytest.mark.asyncio

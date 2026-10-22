@@ -2235,10 +2235,9 @@
         "title": "Where you go back most",
         "sum": "Together, these purchases add up to {{value}} a month.",
         "times": "{{times}}× in {{months}} months",
-        "perMonth": "~{{n}}×/month",
-        "monthly": "~{{value}}/month",
+        "monthly": "{{value}} per month",
         "inPeriod": "{{value}} in the period",
-        "categoryLine": "~{{n}}×/month · ~{{value}}/month",
+        "categoryLine": "{{freq}} · {{value}} per month",
         "seeAll": "See all stores",
         "aria": "{{name}}: {{times}} purchases in {{months}} months, about {{month}} a month. Open in Explore.",
         "categories": "Categories that come back most"
@@ -2349,7 +2348,8 @@
         "question": "Where does each purchase cost most?",
         "answer": "{{name}}: {{value}} a purchase",
         "description": "What each purchase costs on average, where you bought more than once."
-      }
+      },
+      "timesPerMonthLess": "less than once a month"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Period: {{period}}",

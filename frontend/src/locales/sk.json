@@ -2349,10 +2349,9 @@
         "title": "Kam sa vraciate najčastejšie",
         "sum": "Spolu tieto nákupy dávajú {{value}} mesačne.",
         "times": "{{times}}× za {{months}} mes.",
-        "perMonth": "~{{n}}×/mesiac",
-        "monthly": "~{{value}}/mesiac",
+        "monthly": "{{value}}/mes.",
         "inPeriod": "{{value}} za obdobie",
-        "categoryLine": "~{{n}}×/mesiac · ~{{value}}/mesiac",
+        "categoryLine": "{{freq}} · {{value}}/mes.",
         "seeAll": "Zobraziť všetky obchody",
         "aria": "{{name}}: {{times}} nákupov za {{months}} mes., asi {{month}} mesačne. Otvoriť v Preskúmať.",
         "categories": "Kategórie, ktoré sa opakujú najčastejšie"
@@ -2469,7 +2468,8 @@
         "description": "Koľko v priemere stojí jeden nákup tam, kde ste nakúpili viac ako raz."
       },
       "timesPerMonth_few": "{{n}}× mesačne",
-      "timesPerMonth_many": "{{n}}× mesačne"
+      "timesPerMonth_many": "{{n}}× mesačne",
+      "timesPerMonthLess": "menej ako 1× mesačne"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Obdobie: {{period}}",

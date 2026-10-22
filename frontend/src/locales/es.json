@@ -2239,10 +2239,9 @@
         "title": "Donde más vuelves",
         "sum": "Juntas, estas compras suman {{value}} al mes.",
         "times": "{{times}}× en {{months}} meses",
-        "perMonth": "~{{n}}×/mes",
-        "monthly": "~{{value}}/mes",
+        "monthly": "{{value}}/mes",
         "inPeriod": "{{value}} en el período",
-        "categoryLine": "~{{n}}×/mes · ~{{value}}/mes",
+        "categoryLine": "{{freq}} · {{value}}/mes",
         "seeAll": "Ver todas las tiendas",
         "aria": "{{name}}: {{times}} compras en {{months}} meses, unos {{month}} al mes. Abrir en Explorar.",
         "categories": "Categorías que más se repiten"
@@ -2353,7 +2352,8 @@
         "question": "¿Dónde cuesta más cada compra?",
         "answer": "{{name}}: {{value}} por compra",
         "description": "Lo que cuesta cada compra en promedio, donde compraste más de una vez."
-      }
+      },
+      "timesPerMonthLess": "menos de 1 vez al mes"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Período: {{period}}",

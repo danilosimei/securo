@@ -2323,10 +2323,9 @@
         "title": "Gdzie wracasz najczęściej",
         "sum": "Razem te zakupy dają {{value}} miesięcznie.",
         "times": "{{times}}× w {{months}} mies.",
-        "perMonth": "~{{n}}×/mies.",
-        "monthly": "~{{value}}/mies.",
+        "monthly": "{{value}}/mies.",
         "inPeriod": "{{value}} w okresie",
-        "categoryLine": "~{{n}}×/mies. · ~{{value}}/mies.",
+        "categoryLine": "{{freq}} · {{value}}/mies.",
         "seeAll": "Zobacz wszystkie sklepy",
         "aria": "{{name}}: {{times}} zakupów w {{months}} mies., około {{month}} miesięcznie. Otwórz w Przeglądaj.",
         "categories": "Kategorie, które powtarzają się najczęściej"
@@ -2443,7 +2442,8 @@
         "description": "Ile średnio kosztuje jeden zakup tam, gdzie kupiłeś więcej niż raz."
       },
       "timesPerMonth_few": "{{n}} razy w miesiącu",
-      "timesPerMonth_many": "{{n}} razy w miesiącu"
+      "timesPerMonth_many": "{{n}} razy w miesiącu",
+      "timesPerMonthLess": "rzadziej niż raz w miesiącu"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Okres: {{period}}",

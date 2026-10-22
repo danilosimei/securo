@@ -1,7 +1,7 @@
 /** "O que se repete": the stores the person goes back to, several times a
  *  month, which nobody notices one purchase at a time. One line per store:
  *  its category icon in the group's color, how often ("10× in 4 months,
- *  about 2.5× a month"), what it adds up to, and its last 12 months. A line
+ *  about 2.5 times a month"), what it adds up to, and its last 12 months. A line
  *  opens the store in Explore; "see all stores" opens Explore by store. The
  *  categories bought from most often sit on top, one line each. */
 import { useTranslation } from 'react-i18next'
@@ -13,6 +13,7 @@ import { CategoryIcon } from '@/components/category-icon'
 import { Button } from '@/components/ui/button'
 import { formatMoneyShort } from '@/components/reports/common/chart-utils'
 import type { GroupPalette } from '@/components/reports/common/group-colors'
+import { timesPerMonth } from '@/components/reports/common/times-per-month'
 import { MiniTrend } from '@/components/reports/common/mini-trend'
 import { exploreLink, tabLink } from '@/components/reports/common/report-url'
 
@@ -30,7 +31,7 @@ export function Repeats({ data, query, currency, locale, palette }: RepeatsProps
   const repeats = data.repeats ?? []
   const categories = data.repeat_categories ?? []
   const money = (v: number) => mask(formatMoneyShort(v, currency, locale))
-  const times = (n: number) => n.toLocaleString(locale, { maximumFractionDigits: 1 })
+  const often = (n: number) => timesPerMonth(t, n, locale)
 
   const storeLink = (r: OverviewRepeat) =>
     exploreLink(
@@ -64,7 +65,7 @@ export function Repeats({ data, query, currency, locale, palette }: RepeatsProps
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-foreground">{c.category}</span>
                     <span className="block truncate text-xs tabular-nums text-muted-foreground">
-                      {t('reports.overview.repeats.categoryLine', { n: times(c.per_month), value: money(Number(c.month_total)) })}
+                      {t('reports.overview.repeats.categoryLine', { freq: often(c.per_month), value: money(Number(c.month_total)) })}
                     </span>
                   </span>
                 </Link>
@@ -89,7 +90,7 @@ export function Repeats({ data, query, currency, locale, palette }: RepeatsProps
                   months: r.months,
                   month: money(Number(r.month_total)),
                 })}
-                className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 rounded-md px-1.5 py-2.5 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[auto_minmax(0,1fr)_10rem_9rem_6rem]"
+                className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 rounded-md px-1.5 py-2.5 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[auto_minmax(0,1fr)_17rem_8rem_5rem]"
               >
                 <CategoryIcon icon={palette.categoryIcon(r.category_id)} color={color} size="sm" className="row-span-2 self-start sm:row-span-1 sm:self-center" />
                 <span className="min-w-0">
@@ -100,7 +101,7 @@ export function Repeats({ data, query, currency, locale, palette }: RepeatsProps
                 </span>
                 <span className="col-span-2 col-start-2 row-start-2 text-xs tabular-nums text-muted-foreground sm:col-span-1 sm:col-start-auto sm:row-start-auto">
                   {t('reports.overview.repeats.times', { times: r.times, months: r.months })}
-                  <span className="text-muted-foreground/80"> · {t('reports.overview.repeats.perMonth', { n: times(r.per_month) })}</span>
+                  <span className="text-muted-foreground/80"> · {often(r.per_month)}</span>
                 </span>
                 <span className="col-start-3 row-start-1 text-right text-xs tabular-nums sm:col-start-auto sm:row-start-auto">
                   <span className="block font-semibold text-foreground">{t('reports.overview.repeats.monthly', { value: money(Number(r.month_total)) })}</span>

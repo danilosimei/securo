@@ -2237,10 +2237,9 @@
         "title": "Waar je het vaakst terugkomt",
         "sum": "Samen zijn deze aankopen {{value}} per maand.",
         "times": "{{times}}× in {{months}} maanden",
-        "perMonth": "~{{n}}×/maand",
-        "monthly": "~{{value}}/maand",
+        "monthly": "{{value}}/maand",
         "inPeriod": "{{value}} in de periode",
-        "categoryLine": "~{{n}}×/maand · ~{{value}}/maand",
+        "categoryLine": "{{freq}} · {{value}}/maand",
         "seeAll": "Alle winkels bekijken",
         "aria": "{{name}}: {{times}} aankopen in {{months}} maanden, ongeveer {{month}} per maand. Openen in Verkennen.",
         "categories": "Categorieën die het vaakst terugkomen"
@@ -2351,7 +2350,8 @@
         "question": "Waar kost elke aankoop het meest?",
         "answer": "{{name}}: {{value}} per aankoop",
         "description": "Wat een aankoop gemiddeld kost, waar je meer dan eens kocht."
-      }
+      },
+      "timesPerMonthLess": "minder dan 1 keer per maand"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Periode: {{period}}",

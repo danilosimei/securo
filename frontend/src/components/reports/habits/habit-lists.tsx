@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next'
 import type { HabitsMerchant } from '@/lib/api'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort } from '@/components/reports/common/chart-utils'
+import { timesPerMonth } from '@/components/reports/common/times-per-month'
 import { habitRanking } from './habits-model'
 
 /** Rows shown at first; the rest behind "show all". */
@@ -31,11 +32,7 @@ export function HabitList({ merchants, measure, currency, locale, colorOf, onOpe
   const rows = all ? ranked : ranked.slice(0, HABIT_LIST_FIRST)
   const valueOf = (m: HabitsMerchant) => (measure === 'often' ? m.per_month : Number(m.avg_ticket))
   const max = Math.max(...rows.map(valueOf), 0) || 1
-  const times = (m: HabitsMerchant) =>
-    t('reports.habits.timesPerMonth', {
-      count: Math.round(m.per_month),
-      n: m.per_month.toLocaleString(locale, { maximumFractionDigits: m.per_month < 1 ? 1 : 0 }),
-    })
+  const times = (m: HabitsMerchant) => timesPerMonth(t, m.per_month, locale)
   const perPurchase = (m: HabitsMerchant) =>
     t('reports.habits.perPurchase', { value: mask(formatMoneyShort(Number(m.avg_ticket), currency, locale)) })
   return (

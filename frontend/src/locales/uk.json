@@ -2254,10 +2254,9 @@
         "title": "Куди ви повертаєтеся найчастіше",
         "sum": "Разом ці покупки дають {{value}} на місяць.",
         "times": "{{times}}× за {{months}} міс.",
-        "perMonth": "~{{n}}×/міс.",
-        "monthly": "~{{value}}/міс.",
+        "monthly": "{{value}}/міс.",
         "inPeriod": "{{value}} за період",
-        "categoryLine": "~{{n}}×/міс. · ~{{value}}/міс.",
+        "categoryLine": "{{freq}} · {{value}}/міс.",
         "seeAll": "Усі магазини",
         "aria": "{{name}}: покупок — {{times}} за {{months}} міс., приблизно {{month}} на місяць. Відкрити в Огляді.",
         "categories": "Категорії, що повторюються найчастіше"
@@ -2374,7 +2373,8 @@
         "description": "Скільки в середньому коштує одна покупка там, де ви купували більше одного разу."
       },
       "timesPerMonth_few": "{{n}} рази на місяць",
-      "timesPerMonth_many": "{{n}} разів на місяць"
+      "timesPerMonth_many": "{{n}} разів на місяць",
+      "timesPerMonthLess": "рідше ніж 1 раз на місяць"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Період: {{period}}",

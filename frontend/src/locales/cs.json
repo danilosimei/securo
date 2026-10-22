@@ -2365,10 +2365,9 @@
         "title": "Kam se vracíte nejčastěji",
         "sum": "Dohromady tyto nákupy dávají {{value}} měsíčně.",
         "times": "{{times}}× za {{months}} měs.",
-        "perMonth": "~{{n}}×/měsíc",
-        "monthly": "~{{value}}/měsíc",
+        "monthly": "{{value}}/měs.",
         "inPeriod": "{{value}} za období",
-        "categoryLine": "~{{n}}×/měsíc · ~{{value}}/měsíc",
+        "categoryLine": "{{freq}} · {{value}}/měs.",
         "seeAll": "Zobrazit všechny obchody",
         "aria": "{{name}}: {{times}} nákupů za {{months}} měs., asi {{month}} měsíčně. Otevřít v Prozkoumat.",
         "categories": "Kategorie, které se opakují nejčastěji"
@@ -2485,7 +2484,8 @@
         "description": "Kolik v průměru stojí jeden nákup tam, kde jste nakoupili víc než jednou."
       },
       "timesPerMonth_few": "{{n}}× měsíčně",
-      "timesPerMonth_many": "{{n}}× měsíčně"
+      "timesPerMonth_many": "{{n}}× měsíčně",
+      "timesPerMonthLess": "méně než 1× měsíčně"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Období: {{period}}",

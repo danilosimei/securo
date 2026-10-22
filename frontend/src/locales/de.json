@@ -2236,10 +2236,9 @@
         "title": "Wo du am häufigsten hingehst",
         "sum": "Zusammen ergeben diese Käufe {{value}} pro Monat.",
         "times": "{{times}}× in {{months}} Monaten",
-        "perMonth": "~{{n}}×/Monat",
-        "monthly": "~{{value}}/Monat",
+        "monthly": "{{value}}/Monat",
         "inPeriod": "{{value}} im Zeitraum",
-        "categoryLine": "~{{n}}×/Monat · ~{{value}}/Monat",
+        "categoryLine": "{{freq}} · {{value}}/Monat",
         "seeAll": "Alle Geschäfte ansehen",
         "aria": "{{name}}: {{times}} Käufe in {{months}} Monaten, etwa {{month}} pro Monat. In Erkunden öffnen.",
         "categories": "Kategorien, die sich am meisten wiederholen"
@@ -2350,7 +2349,8 @@
         "question": "Wo kostet ein Kauf am meisten?",
         "answer": "{{name}}: {{value}} pro Kauf",
         "description": "Was ein Kauf im Schnitt kostet, wo du mehr als einmal gekauft hast."
-      }
+      },
+      "timesPerMonthLess": "weniger als 1-mal im Monat"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Zeitraum: {{period}}",

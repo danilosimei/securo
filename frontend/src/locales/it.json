@@ -2239,10 +2239,9 @@
         "title": "Dove torni di più",
         "sum": "Insieme, questi acquisti fanno {{value}} al mese.",
         "times": "{{times}}× in {{months}} mesi",
-        "perMonth": "~{{n}}×/mese",
-        "monthly": "~{{value}}/mese",
+        "monthly": "{{value}}/mese",
         "inPeriod": "{{value}} nel periodo",
-        "categoryLine": "~{{n}}×/mese · ~{{value}}/mese",
+        "categoryLine": "{{freq}} · {{value}}/mese",
         "seeAll": "Vedi tutti i negozi",
         "aria": "{{name}}: {{times}} acquisti in {{months}} mesi, circa {{month}} al mese. Apri in Esplora.",
         "categories": "Categorie che si ripetono di più"
@@ -2353,7 +2352,8 @@
         "question": "Dove ogni acquisto costa di più?",
         "answer": "{{name}}: {{value}} ad acquisto",
         "description": "Quanto costa in media ogni acquisto, dove hai comprato più di una volta."
-      }
+      },
+      "timesPerMonthLess": "meno di 1 volta al mese"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Periodo: {{period}}",

@@ -2235,10 +2235,9 @@
         "title": "よく行くところ",
         "sum": "これらの買い物は合わせて月{{value}}です。",
         "times": "{{months}}か月で{{times}}×",
-        "perMonth": "~{{n}}×/月",
-        "monthly": "~{{value}}/月",
+        "monthly": "月{{value}}",
         "inPeriod": "期間中{{value}}",
-        "categoryLine": "~{{n}}×/月 · ~{{value}}/月",
+        "categoryLine": "{{freq}} · 月{{value}}",
         "seeAll": "すべての店舗を見る",
         "aria": "{{name}}：{{months}}か月で{{times}}回の買い物、月約{{month}}。探索で開く。",
         "categories": "よく繰り返されるカテゴリ"
@@ -2349,7 +2348,8 @@
         "question": "1回の買い物が高いのはどこ？",
         "answer": "{{name}}：1回あたり{{value}}",
         "description": "2回以上買った店舗での、1回あたりの平均額。"
-      }
+      },
+      "timesPerMonthLess": "月1回未満"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "期間: {{period}}",

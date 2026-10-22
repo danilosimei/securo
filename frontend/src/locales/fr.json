@@ -2239,10 +2239,9 @@
         "title": "Là où vous revenez le plus",
         "sum": "Ensemble, ces achats font {{value}} par mois.",
         "times": "{{times}}× en {{months}} mois",
-        "perMonth": "~{{n}}×/mois",
-        "monthly": "~{{value}}/mois",
+        "monthly": "{{value}}/mois",
         "inPeriod": "{{value}} sur la période",
-        "categoryLine": "~{{n}}×/mois · ~{{value}}/mois",
+        "categoryLine": "{{freq}} · {{value}}/mois",
         "seeAll": "Voir tous les commerces",
         "aria": "{{name}} : {{times}} achats en {{months}} mois, environ {{month}} par mois. Ouvrir dans Explorer.",
         "categories": "Catégories qui reviennent le plus"
@@ -2353,7 +2352,8 @@
         "question": "Où chaque achat coûte-t-il le plus ?",
         "answer": "{{name}} : {{value}} par achat",
         "description": "Ce que coûte un achat en moyenne, là où vous avez acheté plus d'une fois."
-      }
+      },
+      "timesPerMonthLess": "moins d'une fois par mois"
     },
     "periodRange": "{{from}} – {{to}}",
     "periodMenu": "Période : {{period}}",

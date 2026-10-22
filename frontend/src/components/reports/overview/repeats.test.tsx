@@ -59,7 +59,7 @@ describe('Overview: what keeps coming back', () => {
     const [baker, padoca] = within(block).getAllByTestId('repeat-store')
     expect(baker).toHaveTextContent('Baker Bar')
     expect(baker).toHaveTextContent(t('reports.overview.repeats.times', { times: 10, months: 4 }))
-    expect(baker).toHaveTextContent(t('reports.overview.repeats.perMonth', { n: '2.5' }))
+    expect(baker).toHaveTextContent(t('reports.habits.timesPerMonth', { count: 3, n: '2.5' }))
     expect(baker).toHaveTextContent(t('reports.overview.repeats.monthly', { value: 'R$280' }))
     expect(baker).toHaveTextContent(t('reports.overview.repeats.inPeriod', { value: 'R$1,120' }))
     await waitFor(() => expect(api.categoryGroups.list).toHaveBeenCalled())
@@ -70,7 +70,7 @@ describe('Overview: what keeps coming back', () => {
     expect(padoca.getAttribute('href')).toContain('category=none&merchant=PADOCA')
     expect(within(block).getByTestId('repeats-all')).toHaveAttribute('href', '/reports?tab=explore&period=last_month&view=merchant')
     expect(within(block).getByTestId('repeat-categories')).toHaveTextContent(
-      t('reports.overview.repeats.categoryLine', { n: '20', value: 'R$2,200' }),
+      t('reports.overview.repeats.categoryLine', { freq: t('reports.habits.timesPerMonth', { count: 20, n: '20' }), value: 'R$2,200' }),
     )
   })
 
