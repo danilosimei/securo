@@ -281,15 +281,20 @@ def driver(label: str, value: Decimal, link: Optional[dict] = None) -> dict:
     return {"label": label, "value": _money(value), "link": link}
 
 
-async def build(ctx: Context) -> list[dict]:
-    rows = (
-        await ctx.session.execute(
-            select(Category.id, Category.name, Category.group_id, Category.report_kind).where(
-                Category.workspace_id == ctx.workspace_id
-            )
+async def category_rows(
+    session: AsyncSession, workspace_id: uuid.UUID
+) -> dict[Any, tuple[str, Optional[uuid.UUID], str]]:
+    """Category id -> (name, group id, report kind)."""
+    rows = await session.execute(
+        select(Category.id, Category.name, Category.group_id, Category.report_kind).where(
+            Category.workspace_id == workspace_id
         )
-    ).all()
-    cards = _Cards(ctx, {cid: (name, gid, kind) for cid, name, gid, kind in rows})
+    )
+    return {cid: (name, gid, kind) for cid, name, gid, kind in rows.all()}
+
+
+async def build(ctx: Context) -> list[dict]:
+    cards = _Cards(ctx, await category_rows(ctx.session, ctx.workspace_id))
 
     pace = _month_pace(ctx, cards)
     found: list[dict] = []

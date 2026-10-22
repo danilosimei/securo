@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.category_group import CategoryGroup
 from app.services.reports import highlights as highlights_service
 from app.services.reports import recurring as recurring_service
+from app.services.reports import repeats as repeats_service
 from app.services.reports.breakdown import (
     NO_CATEGORY_LABEL,
     NO_GROUP_LABEL,
@@ -137,7 +138,7 @@ async def overview(
     ]
 
     changes = await _changes(session, row_of, period, today, kinds, flow_kwargs)
-    highlights = await _highlights(
+    highlights, repeats = await _highlights(
         session,
         workspace_id=workspace_id,
         primary_currency=primary_currency,
@@ -165,6 +166,7 @@ async def overview(
         "kpis": kpis,
         "changes": [_change_api(c) for c in changes],
         "highlights": highlights,
+        **repeats,
         "monthly": monthly,
         "money_map": await _money_map(session, workspace_id, flows, kinds),
     }
@@ -285,8 +287,8 @@ async def _highlights(
     recurring: list,
     kinds: dict,
     flow_kwargs: dict[str, Any],
-) -> list[dict]:
-    """The reads the highlight rules share, then the rules."""
+) -> tuple[list[dict], dict]:
+    """The reads the highlight rules and "O que se repete" share, then both."""
     last = period.to.replace(day=1)
     spark_starts = [_shift_months(last, -back) for back in range(SPARKLINE_MONTHS - 1, -1, -1)]
     current = today.replace(day=1)
@@ -320,4 +322,6 @@ async def _highlights(
         debits=debits,
         month_so_far=month_so_far,
     )
-    return await highlights_service.build(ctx)
+    return await highlights_service.build(ctx), await repeats_service.build(
+        ctx, await highlights_service.category_rows(session, workspace_id)
+    )

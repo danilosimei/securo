@@ -226,12 +226,45 @@ class MoneyMap(BaseModel):
     left: str
 
 
+class OverviewRepeat(BaseModel):
+    """A store bought from several times a month ("O que se repete")."""
+
+    merchant: str
+    label: str
+    category_id: Optional[str]
+    category: str
+    group_id: Optional[str]
+    #: Purchases in the period, and in how many different months.
+    times: int
+    months: int
+    #: Purchases per month of the period.
+    per_month: float
+    month_total: str
+    year_total: str
+    avg_purchase: str
+    #: 12 decimal strings, oldest month first.
+    sparkline: list[str]
+
+
+class OverviewRepeatCategory(BaseModel):
+    category_id: str
+    category: str
+    group_id: Optional[str]
+    times: int
+    per_month: float
+    month_total: str
+
+
 class OverviewResponse(BaseModel):
     period: OverviewPeriod
     currency: str
     kpis: OverviewKpis
     changes: list[OverviewChange]
     highlights: list[OverviewHighlight]
+    #: Up to 8 stores, biggest spending per month first.
+    repeats: list[OverviewRepeat]
+    #: Up to 3 categories, bought from most often first.
+    repeat_categories: list[OverviewRepeatCategory]
     monthly: list[OverviewMonth]
     money_map: MoneyMap
 
