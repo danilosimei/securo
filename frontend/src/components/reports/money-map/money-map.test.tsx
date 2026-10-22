@@ -103,6 +103,20 @@ describe('MoneyMapView', () => {
     expect(nodeLabels('hub')).toEqual([t('reports.moneyMap.hubIncome')])
   })
 
+  it('draws one income node per category, biggest first, and "A conferir" without id', () => {
+    renderMap({
+      ...MAP,
+      income: [
+        { id: 'c-salary', label: 'Salário', value: '30000.00' },
+        { id: 'c-div', label: 'Dividendos', value: '5000.00' },
+        { id: null, label: 'A conferir', value: '1000.00' },
+      ],
+      left: '0.00',
+    })
+
+    expect(nodeLabels('income')).toEqual(['Salário', 'Dividendos', 'A conferir'])
+  })
+
   it('a group opens in Explore, and a category opens under its group', async () => {
     const { user } = renderMap()
 
