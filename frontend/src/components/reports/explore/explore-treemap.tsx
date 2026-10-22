@@ -26,7 +26,7 @@ interface Tile {
 
 interface TreemapProps {
   rows: BreakdownRow[]
-  level: 'group' | 'category' | 'merchant'
+  level: 'group' | 'category' | 'merchant' | 'account'
   currency: string
   locale: string
   colorOf: (row: BreakdownRow) => string

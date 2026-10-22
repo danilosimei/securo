@@ -89,7 +89,10 @@ const ui = (
   </>
 )
 const url = () => screen.getByTestId('url').textContent
-const rowOf = (text: string) => screen.getByText(text).closest('tr') as HTMLElement
+const table = () => within(screen.getByTestId('explore-table'))
+const rowOf = (text: string) => table().getByText(text).closest('tr') as HTMLElement
+/** Waits for `text` in the table (the bars above list the same names). */
+const inTable = async (text: string) => within(await screen.findByTestId('explore-table')).findByText(text)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -106,14 +109,14 @@ describe('Explore drill-down', () => {
   it('goes group, category, store, calling the API with the right filters and updating the URL', async () => {
     const { user } = renderWithProviders(ui, { route: '/reports?tab=explore&period=last_12m' })
 
-    await screen.findByText('Carro')
+    await inTable('Carro')
     await user.click(rowOf('Carro'))
-    expect(await screen.findByText('Financiamento')).toBeInTheDocument()
+    expect(await inTable('Financiamento')).toBeInTheDocument()
     expect(api.reports.breakdown).toHaveBeenLastCalledWith({ level: 'category', group_id: 'g1', period: 'last_12m' })
     expect(url()).toContain('group=g1')
 
     await user.click(rowOf('Financiamento'))
-    expect(await screen.findByText('Stellantis')).toBeInTheDocument()
+    expect(await inTable('Stellantis')).toBeInTheDocument()
     expect(api.reports.breakdown).toHaveBeenLastCalledWith({ level: 'merchant', category_id: 'c1', period: 'last_12m' })
 
     await user.click(rowOf('Stellantis'))
@@ -124,66 +127,86 @@ describe('Explore drill-down', () => {
     expect(within(nav).getByText('Stellantis')).toBeInTheDocument()
   })
 
+  it('with a store open, shows only the store and a way back to the stores of its category', async () => {
+    const { user } = renderWithProviders(ui, { route: '/reports?tab=explore' })
+    await user.click(await inTable('Carro'))
+    await user.click(await inTable('Financiamento'))
+    await user.click(await inTable('Stellantis'))
+
+    expect(await screen.findByTestId('explore-store-title')).toHaveTextContent('Stellantis · Financiamento')
+    expect(screen.getByTestId('explore-store')).toHaveTextContent(t('reports.explore.storeCount', { count: 3 }))
+    // The other stores and the chart are gone while the store is open.
+    expect(screen.queryByTestId('explore-table')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('explore-chart')).not.toBeInTheDocument()
+    expect(screen.queryByText('Outra')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: t('reports.explore.backToCategory', { category: 'Financiamento' }) }))
+    expect(await inTable('Outra')).toBeInTheDocument()
+    expect(url()).not.toContain('merchant=')
+  })
+
   it('opens a row with Enter', async () => {
     const { user } = renderWithProviders(ui, { route: '/reports?tab=explore' })
-    await screen.findByText('Carro')
+    await inTable('Carro')
     rowOf('Carro').focus()
     await user.keyboard('{Enter}')
-    expect(await screen.findByText('Financiamento')).toBeInTheDocument()
+    expect(await inTable('Financiamento')).toBeInTheDocument()
   })
 
   it('climbs a level with the browser Back', async () => {
     const { user } = renderWithProviders(ui, { route: '/reports?tab=explore' })
-    await screen.findByText('Carro')
+    await inTable('Carro')
     await user.click(rowOf('Carro'))
-    await screen.findByText('Financiamento')
+    await inTable('Financiamento')
 
     await user.click(screen.getByRole('button', { name: 'browser-back' }))
 
-    expect(await screen.findByText('Carro')).toBeInTheDocument()
+    expect(await inTable('Carro')).toBeInTheDocument()
     expect(url()).not.toContain('group=')
   })
 
   it('climbs with the breadcrumb', async () => {
     const { user } = renderWithProviders(ui, { route: '/reports?tab=explore' })
-    await screen.findByText('Carro')
+    await inTable('Carro')
     await user.click(rowOf('Carro'))
-    await screen.findByText('Financiamento')
+    await inTable('Financiamento')
     await user.click(rowOf('Financiamento'))
-    await screen.findByText('Stellantis')
+    await inTable('Stellantis')
+    await user.click(rowOf('Stellantis'))
+    await screen.findByTestId('explore-store')
 
     const nav = screen.getByRole('navigation', { name: t('reports.explore.breadcrumb') })
     await user.click(within(nav).getByRole('button', { name: 'Carro' }))
-    expect(await screen.findByText('Financiamento')).toBeInTheDocument()
+    expect(await inTable('Financiamento')).toBeInTheDocument()
     expect(url()).toContain('group=g1')
     expect(url()).not.toContain('category=')
 
     await user.click(within(screen.getByRole('navigation')).getByRole('button', { name: t('reports.explore.root') }))
-    expect(await screen.findByText('Sem grupo')).toBeInTheDocument()
+    expect(await inTable('Sem grupo')).toBeInTheDocument()
     expect(url()).not.toContain('group=')
   })
 
   it('sends the no-category row straight to the stores', async () => {
     const { user } = renderWithProviders(ui, { route: '/reports?tab=explore' })
-    await screen.findByText('Carro')
+    await inTable('Carro')
     await user.click(rowOf('Sem categoria'))
-    await screen.findByText('Stellantis')
+    await inTable('Stellantis')
     expect(api.reports.breakdown).toHaveBeenLastCalledWith({ level: 'merchant', category_id: 'none', period: 'last_12m' })
   })
 
   it('sends the no-group row to the categories without group', async () => {
     const { user } = renderWithProviders(ui, { route: '/reports?tab=explore' })
-    await screen.findByText('Carro')
+    await inTable('Carro')
     await user.click(rowOf('Sem grupo'))
-    await screen.findByText('Financiamento')
+    await inTable('Financiamento')
     expect(api.reports.breakdown).toHaveBeenLastCalledWith({ level: 'category', group_id: 'none', period: 'last_12m' })
   })
 
   it('sends the refunds category straight to its stores', async () => {
     const { user } = renderWithProviders(ui, { route: '/reports?tab=explore' })
-    await screen.findByText('Carro')
+    await inTable('Carro')
     await user.click(rowOf('Estornos'))
-    await screen.findByText('Stellantis')
+    await inTable('Stellantis')
     expect(api.reports.breakdown).toHaveBeenLastCalledWith({ level: 'merchant', category_id: 'c9', period: 'last_12m' })
   })
 

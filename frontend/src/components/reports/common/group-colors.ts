@@ -21,9 +21,11 @@ export const SHORT_COLOR = 'var(--destructive)'
 /** The hub of the money map: all the money, before it splits. */
 export const HUB_COLOR = 'color-mix(in oklab, var(--foreground) 55%, var(--card))'
 
-// Validated categorical palette (adjacent CVD ΔE ≥ 8 in light and dark),
-// only used to break a collision between two groups with the same color.
-const FALLBACK = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948']
+// Validated categorical palette (adjacent CVD ΔE ≥ 8 in light and dark), in
+// its fixed order: breaks a collision between two groups with the same color
+// and colors rows with no group (accounts).
+export const CATEGORICAL = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948']
+const FALLBACK = CATEGORICAL
 
 // Below this OKLab distance (×100) two colors read as the same series.
 const MIN_DISTANCE = 10
@@ -96,6 +98,9 @@ export interface GroupPalette {
   /** Names by id, for Explore's breadcrumb. */
   groupName: (id: string) => string | undefined
   categoryName: (id: string) => string | undefined
+  /** The icon the Categories page shows for a group or a category. */
+  groupIcon: (id: string | null | undefined) => string | null
+  categoryIcon: (id: string | null | undefined) => string | null
 }
 
 export function buildPalette(groups: CategoryGroup[]): GroupPalette {
@@ -103,11 +108,14 @@ export function buildPalette(groups: CategoryGroup[]): GroupPalette {
   const groupByName = new Map<string, string>()
   const categories = new Map<string, { groupId: string; index: number; name: string }>()
   const groupNames = new Map<string, string>()
+  const icons = new Map<string, string>()
   const categoryNames = new Map<string, { id: string; groupId: string; groupName: string }>()
   for (const group of groups) {
     groupByName.set(group.name.toLowerCase(), group.id)
     groupNames.set(group.id, group.name)
+    if (group.icon) icons.set(group.id, group.icon)
     group.categories?.forEach((category, index) => {
+      if (category.icon) icons.set(category.id, category.icon)
       categories.set(category.id, { groupId: group.id, index, name: category.name })
       const key = category.name.toLowerCase()
       if (!categoryNames.has(key)) categoryNames.set(key, { id: category.id, groupId: group.id, groupName: group.name })
@@ -131,6 +139,8 @@ export function buildPalette(groups: CategoryGroup[]): GroupPalette {
     groupOfCategory: (id) => categories.get(id)?.groupId ?? null,
     groupName: (id) => groupNames.get(id),
     categoryName: (id) => categories.get(id)?.name,
+    groupIcon: (id) => (id ? (icons.get(id) ?? null) : null),
+    categoryIcon: (id) => (id ? (icons.get(id) ?? null) : null),
   }
 }
 

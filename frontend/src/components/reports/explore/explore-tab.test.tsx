@@ -36,6 +36,9 @@ function response(overrides: Partial<BreakdownResponse> = {}): BreakdownResponse
   }
 }
 
+/** Waits for `text` in the table (the bars above list the same names). */
+const inTable = async (text: string) => within(await screen.findByTestId('explore-table')).findByText(text)
+
 beforeEach(() => {
   vi.clearAllMocks()
   api.reports.breakdown.mockResolvedValue(response())
@@ -45,13 +48,16 @@ describe('ExploreTab', () => {
   it('lists groups with total, share and change, and the header total with its variation', async () => {
     renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
 
-    const row = (await screen.findByText('Compras')).closest('tr') as HTMLElement
+    const row = (await inTable('Compras')).closest('tr') as HTMLElement
     expect(within(row).getByText('R$600.00')).toBeInTheDocument()
     expect(within(row).getByText('60%')).toBeInTheDocument()
     expect(within(row).getByText('+20%')).toBeInTheDocument()
     expect(within(row).getByTestId('explore-sparkline')).toBeInTheDocument()
-    expect(screen.getByText('R$1,000.00')).toBeInTheDocument()
-    expect(screen.getByText(t('reports.explore.vsPrevious', { change: '+25%' }))).toBeInTheDocument()
+    expect(screen.getByTestId('explore-total')).toHaveTextContent('R$1,000.00')
+    // Spending went up 25%: a red pill.
+    const pill = screen.getByTestId('delta-pill')
+    expect(pill).toHaveTextContent('25%')
+    expect(pill).toHaveAttribute('data-tone', 'bad')
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'last_12m' })
     expect(screen.getByText(/Oct 25 – Sep 26, closed months/)).toBeInTheDocument()
   })
@@ -59,7 +65,7 @@ describe('ExploreTab', () => {
   it('shows a negative group with its sign and "offsets" instead of a share', async () => {
     renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
 
-    const row = (await screen.findByText('Estornos')).closest('tr') as HTMLElement
+    const row = (await inTable('Estornos')).closest('tr') as HTMLElement
     expect(within(row).getByText('-R$100.00')).toBeInTheDocument()
     expect(within(row).getByText(t('reports.explore.offsets'))).toBeInTheDocument()
     expect(within(row).queryByText(/%/)).not.toBeInTheDocument()
@@ -69,13 +75,13 @@ describe('ExploreTab', () => {
     api.reports.breakdown.mockResolvedValue(response({ previous_total: '0.00' }))
     renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
 
-    await screen.findByText('Compras')
-    expect(screen.queryByText(/vs previous/)).not.toBeInTheDocument()
+    await inTable('Compras')
+    expect(screen.queryByTestId('delta-pill')).not.toBeInTheDocument()
   })
 
   it('keeps the old table dimmed and busy while a new period loads', async () => {
     const { user } = renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
-    await screen.findByText('Compras')
+    await inTable('Compras')
     expect(screen.getByTestId('explore-content')).toHaveAttribute('aria-busy', 'false')
 
     let resolve!: (value: BreakdownResponse) => void
@@ -88,7 +94,7 @@ describe('ExploreTab', () => {
     const content = screen.getByTestId('explore-content')
     expect(content).toHaveAttribute('aria-busy', 'true')
     expect(content).toHaveClass('opacity-60')
-    expect(screen.getByText('Compras')).toBeInTheDocument()
+    expect(within(screen.getByTestId('explore-table')).getByText('Compras')).toBeInTheDocument()
 
     resolve(response({ total: '10.00' }))
     await waitFor(() => expect(screen.getByTestId('explore-content')).toHaveAttribute('aria-busy', 'false'))
@@ -118,7 +124,7 @@ describe('ExploreTab', () => {
     expect(await screen.findByText(t('reports.explore.error'))).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: t('reports.explore.retry') }))
 
-    expect(await screen.findByText('Compras')).toBeInTheDocument()
+    expect(await inTable('Compras')).toBeInTheDocument()
     expect(api.reports.breakdown).toHaveBeenCalledTimes(2)
   })
 
@@ -132,7 +138,7 @@ describe('ExploreTab', () => {
   it('reads the period and a custom range from the URL', async () => {
     renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>, { route: '/reports?tab=explore&period=custom&from=2026-01-01&to=2026-03-31' })
 
-    await screen.findByText('Compras')
+    await inTable('Compras')
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'custom', from: '2026-01-01', to: '2026-03-31' })
   })
 })

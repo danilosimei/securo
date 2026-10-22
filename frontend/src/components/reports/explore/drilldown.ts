@@ -23,20 +23,29 @@ export function nextStep(level: 'group' | 'category' | 'merchant', row: Breakdow
 
 export interface DrilldownInput {
   range: { from: string; to: string }
-  /** Category id, or 'none' for the uncategorized transactions. */
+  /** Category id, 'none' for the uncategorized transactions, or 'all' for
+   *  every category (a store seen across all of them). */
   categoryId: string
   merchantKey: string
   page: number
+  /** Only the transactions of this account. */
+  accountId?: string | null
+}
+
+function categoryFilter(categoryId: string) {
+  if (categoryId === 'all') return {}
+  return categoryId === 'none' ? { uncategorized: true } : { category_id: categoryId }
 }
 
 export const DRILLDOWN_PAGE_SIZE = 50
 
 /** Params of `GET /api/transactions` for the transactions of one store. */
-export function drilldownTransactionParams({ range, categoryId, merchantKey, page }: DrilldownInput) {
+export function drilldownTransactionParams({ range, categoryId, merchantKey, page, accountId }: DrilldownInput) {
   return {
     from: range.from,
     to: range.to,
-    ...(categoryId === 'none' ? { uncategorized: true } : { category_id: categoryId }),
+    ...categoryFilter(categoryId),
+    ...(accountId ? { account_id: accountId } : {}),
     merchant_key: merchantKey,
     status: 'posted',
     user_pnl_only: true,
@@ -46,10 +55,11 @@ export function drilldownTransactionParams({ range, categoryId, merchantKey, pag
 }
 
 /** Same filters as a link to the Transactions page. */
-export function transactionsPageLink({ range, categoryId, merchantKey }: Omit<DrilldownInput, 'page'>) {
+export function transactionsPageLink({ range, categoryId, merchantKey, accountId }: Omit<DrilldownInput, 'page'>) {
   const params = new URLSearchParams({ from: range.from, to: range.to })
   if (categoryId === 'none') params.set('uncategorized', '1')
-  else params.set('category_id', categoryId)
+  else if (categoryId !== 'all') params.set('category_id', categoryId)
+  if (accountId) params.set('account_id', accountId)
   params.set('merchant_key', merchantKey)
   return `/transactions?${params}`
 }

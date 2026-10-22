@@ -40,6 +40,12 @@
   --sidebar-border: #E8ECF1;
   --sidebar-ring: #6366F1;
   --sidebar-muted: #64748B;
+  /* Reports: categorical series (fixed order, validated for colorblind
+     separation) and the blue ramp of the month table (light to dark). */
+  --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100;
+  --cat-5: #e87ba4; --cat-6: #008300; --cat-7: #6250d6; --cat-8: #e34948;
+  --heat-1: #86b6ef; --heat-2: #5598e7; --heat-3: #2a78d6; --heat-4: #1c5cab; --heat-5: #104281;
+  --heat-ink-1: #0F172A; --heat-ink-2: #0F172A; --heat-ink-3: #FFFFFF; --heat-ink-4: #FFFFFF; --heat-ink-5: #FFFFFF;
 }
 
 .dark {
@@ -71,6 +77,12 @@
   --sidebar-border: #2A2D3A;
   --sidebar-ring: #818CF8;
   --sidebar-muted: #8A8F9E;
+  /* The same hues stepped for the dark surface; the ramp runs from near the
+     surface to bright, so "more" still reads as stronger. */
+  --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;
+  --cat-5: #d55181; --cat-6: #008300; --cat-7: #9085e9; --cat-8: #e66767;
+  --heat-1: #184f95; --heat-2: #256abf; --heat-3: #3987e5; --heat-4: #6da7ec; --heat-5: #9ec5f4;
+  --heat-ink-1: #FFFFFF; --heat-ink-2: #FFFFFF; --heat-ink-3: #FFFFFF; --heat-ink-4: #0C0D12; --heat-ink-5: #0C0D12;
 }
 
 @theme inline {

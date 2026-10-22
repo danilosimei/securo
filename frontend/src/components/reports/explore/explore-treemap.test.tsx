@@ -57,7 +57,7 @@ describe('Explore treemap', () => {
       row('g-ref', 'Estornos', -300),
     ]
     api.reports.breakdown.mockResolvedValue(response(rows))
-    renderWithProviders(<ExploreTab />)
+    renderWithProviders(<ExploreTab />, { route: '/reports?tab=explore&chart=treemap' })
 
     await waitFor(() => expect(screen.getAllByTestId('treemap-tile')).toHaveLength(12))
     const rest = screen.getByTestId('treemap-rest')
@@ -67,7 +67,7 @@ describe('Explore treemap', () => {
 
   it('a tile goes down a level, like its row, and wears its group color', async () => {
     api.reports.breakdown.mockResolvedValue(response([row('g-car', 'Carro', 2000), row('g-home', 'Moradia', 1000)]))
-    const { user } = renderWithProviders(<ExploreTab />)
+    const { user } = renderWithProviders(<ExploreTab />, { route: '/reports?tab=explore&chart=treemap' })
 
     const tile = await screen.findByRole('button', { name: /^Carro: R\$2,000\.00 \(67%\)/ })
     await waitFor(() => expect(tile.style.borderTop).toContain('rgb(59, 130, 246)'))

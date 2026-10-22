@@ -31,12 +31,13 @@ import type { Transaction } from '@/types'
 interface MerchantTransactionsProps {
   merchantLabel: string
   merchantKey: string
-  /** Category id, or 'none'. */
+  /** Category id, 'none', or 'all'. */
   categoryId: string
   range: { from: string; to: string }
+  accountId?: string | null
 }
 
-export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, range }: MerchantTransactionsProps) {
+export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, range, accountId }: MerchantTransactionsProps) {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
@@ -44,7 +45,7 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<Transaction | null>(null)
 
-  const params = drilldownTransactionParams({ range, categoryId, merchantKey, page })
+  const params = drilldownTransactionParams({ range, categoryId, merchantKey, page, accountId })
   const query = useQuery({
     queryKey: ['transactions', 'explore-merchant', params],
     queryFn: () => transactions.list(params),
@@ -95,7 +96,7 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
           )}
         </h3>
         <Link
-          to={transactionsPageLink({ range, categoryId, merchantKey })}
+          to={transactionsPageLink({ range, categoryId, merchantKey, accountId })}
           className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
         >
           {t('reports.explore.openInTransactions')}
@@ -138,10 +139,16 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
                     onClick={() => setEditing(tx)}
                     className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-muted/50 sm:px-4"
                   >
-                    <span className="w-24 shrink-0 text-xs tabular-nums text-muted-foreground">
+                    <span className="hidden w-24 shrink-0 text-xs tabular-nums text-muted-foreground sm:block">
                       {new Date(tx.date + 'T00:00:00').toLocaleDateString(locale)}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-foreground">{tx.description}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-foreground">{tx.description}</span>
+                      {/* On a phone the date goes under the description. */}
+                      <span className="block text-xs tabular-nums text-muted-foreground sm:hidden">
+                        {new Date(tx.date + 'T00:00:00').toLocaleDateString(locale)}
+                      </span>
+                    </span>
                     <span className="shrink-0 tabular-nums">{mask(formatCurrency(value, tx.currency, locale))}</span>
                   </button>
                 </li>

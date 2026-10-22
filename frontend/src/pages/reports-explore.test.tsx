@@ -53,7 +53,7 @@ describe('Reports page: Explore tab', () => {
   it('opens on Explore with the period from the URL', async () => {
     renderWithProviders(<ReportsPage />, { route: '/reports?tab=explore&period=last_6m' })
 
-    expect(await screen.findByText('Compras')).toBeInTheDocument()
+    expect((await screen.findAllByText('Compras'))[0]).toBeInTheDocument()
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'last_6m' })
     expectPeriod(t('reports.explore.period.last_6m'))
     expect(api.reports.netWorth).not.toHaveBeenCalled()
@@ -61,7 +61,7 @@ describe('Reports page: Explore tab', () => {
 
   it('switches to another tab and back, and Explore comes right after the Overview', async () => {
     const { user } = renderWithProviders(<ReportsPage />, { route: '/reports?tab=explore' })
-    await screen.findByText('Compras')
+    await screen.findAllByText('Compras')
 
     const tabs = screen.getAllByRole('button').filter((b) => b.className.includes('px-4 py-2.5'))
     expect(tabs[0]).toHaveTextContent(t('reports.overview.tab'))
@@ -69,9 +69,9 @@ describe('Reports page: Explore tab', () => {
 
     await user.click(screen.getByRole('button', { name: t('reports.netWorth') }))
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalled())
-    expect(screen.queryByText('Compras')).not.toBeInTheDocument()
+    expect(screen.queryAllByText('Compras')).toHaveLength(0)
 
     await user.click(screen.getByRole('button', { name: t('reports.explore.tab') }))
-    expect(await screen.findByText('Compras')).toBeInTheDocument()
+    expect((await screen.findAllByText('Compras'))[0]).toBeInTheDocument()
   })
 })
