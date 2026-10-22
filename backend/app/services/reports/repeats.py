@@ -1,8 +1,9 @@
 """"O que se repete" on the Visão geral tab: where the person goes back to,
 several times a month. It is about behaviour, which nobody sees from one
 purchase to the next: the stores bought from at least `MIN_TIMES` times in
-the period and in at least `MIN_MONTHS` different months, biggest spending
-per month first, and the categories bought from most often.
+the period, in at least `MIN_MONTHS` different months and, in the months
+they showed up, at least `MIN_PER_ACTIVE_MONTH` times a month (a habit, not a
+rare big purchase), biggest spending per month first, and the categories bought from most often.
 
 Left out on purpose: bills and subscriptions (fixed costs, already in Fixos),
 fees and taxes the store key groups (IOF, broker fees...), seeded tax and
@@ -24,7 +25,9 @@ from app.services.reports.merchant_labels import FIXED_LABELS
 from app.services.reports.rules import KIND_NORMAL, ZERO
 
 MIN_TIMES = 3
-MIN_MONTHS = 2
+MIN_MONTHS = 3
+#: Purchases per month, counting only the months the store appeared in.
+MIN_PER_ACTIVE_MONTH = Decimal("1.5")
 MAX_STORES = 8
 MAX_CATEGORIES = 3
 NO_CATEGORY_NAME = "Sem categoria"
@@ -72,7 +75,9 @@ async def build(ctx: Context, categories: dict[Any, tuple[str, Optional[uuid.UUI
     chosen = [
         (key, s)
         for key, s in stores.items()
-        if s["times"] >= MIN_TIMES and len(s["months"]) >= MIN_MONTHS
+        if s["times"] >= MIN_TIMES
+        and len(s["months"]) >= MIN_MONTHS
+        and Decimal(s["times"]) / len(s["months"]) >= MIN_PER_ACTIVE_MONTH
     ]
     chosen.sort(key=lambda item: (-item[1]["total"], item[0]))
     chosen = chosen[:MAX_STORES]

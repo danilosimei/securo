@@ -71,7 +71,7 @@ async def test_stores_you_go_back_to_most_per_month_with_their_numbers(client, a
 @pytest.mark.asyncio
 async def test_repeats_are_ordered_by_money_a_month(client, auth_headers, world):  # noqa: F811
     await _food(world)
-    for month in (8, 9):
+    for month in (7, 8, 9):
         for day in (3, 10):
             world["add"]("Cafe Pequeno", "Padaria", 10, date(2026, month, day))
             world["add"]("Bistro Caro", "Restaurantes", 200, date(2026, month, day))
@@ -87,7 +87,7 @@ async def test_bills_fees_and_people_are_not_repeats(client, auth_headers, world
     # Fees grouped by the store key, and a tax category.
     impostos = _category(world, "Impostos & Taxas")
     await world["session"].flush()
-    for month in (8, 9):
+    for month in (7, 8, 9):
         for day in (3, 10):
             world["add"]("Best Buy Iof", None, 12, date(2026, month, day))
             world["add"]("Prefeitura", "Impostos & Taxas", 30, date(2026, month, day))
@@ -103,7 +103,7 @@ async def test_bills_fees_and_people_are_not_repeats(client, auth_headers, world
 async def test_at_most_eight_repeats(client, auth_headers, world):  # noqa: F811
     await _food(world)
     for n in range(10):
-        for month in (8, 9):
+        for month in (7, 8, 9):
             for day in (3, 10):
                 world["add"](f"Loja {chr(65 + n)}", "Restaurantes", 10 + n, date(2026, month, day))
     await world["session"].commit()
@@ -128,3 +128,47 @@ async def test_the_three_categories_bought_most_often(client, auth_headers, worl
     assert first["per_month"] == 10.0
     assert Decimal(first["month_total"]) == Decimal("300.00")
     assert len(cats) <= 3
+
+
+@pytest.mark.asyncio
+async def test_a_restaurant_you_keep_going_to_enters(client, auth_headers, world):  # noqa: F811
+    await _food(world)
+    # Baker Bar: 10 visits in 4 months = 2.5 a month where it showed up.
+    for month, times in ((6, 3), (7, 2), (8, 3), (9, 2)):
+        for day in range(1, times + 1):
+            world["add"]("Baker Bar", "Restaurantes", 60, date(2026, month, day))
+    await world["session"].commit()
+    keys = [r["merchant"] for r in (await _get(client, auth_headers))["repeats"]]
+    assert "BAKER BAR" in keys
+
+
+@pytest.mark.asyncio
+async def test_a_rare_expensive_store_is_not_a_habit(client, auth_headers, world):  # noqa: F811
+    await _food(world)
+    # Wise: 6 purchases in 6 months = 1 a month, and a lot of money.
+    for month in range(4, 10):
+        world["add"]("Wise", "Restaurantes", 3000, date(2026, month, 5))
+    # Booking.com: 5 purchases, 2 a month, but only in 2 months.
+    for month in (8, 9):
+        for day in (3, 10):
+            world["add"]("Booking.com", "Restaurantes", 2000, date(2026, month, day))
+    world["add"]("Booking.com", "Restaurantes", 2000, date(2026, 9, 20))
+    # A small habit that does qualify, so the list is not empty by accident.
+    for month in (7, 8, 9):
+        for day in (2, 9):
+            world["add"]("Padoca Boa", "Padaria", 20, date(2026, month, day))
+    await world["session"].commit()
+    keys = [r["merchant"] for r in (await _get(client, auth_headers))["repeats"]]
+    assert "WISE" not in keys and "BOOKING.COM" not in keys
+    assert "PADOCA BOA" in keys
+
+
+@pytest.mark.asyncio
+async def test_a_store_you_buy_from_all_the_time_enters(client, auth_headers, world):  # noqa: F811
+    await _food(world)
+    for month in range(4, 10):
+        for day in range(1, 19):
+            world["add"]("Amazon", "Padaria", 40, date(2026, month, day))
+    await world["session"].commit()
+    amazon = next(r for r in (await _get(client, auth_headers))["repeats"] if r["merchant"] == "AMAZON")
+    assert amazon["times"] == 108
