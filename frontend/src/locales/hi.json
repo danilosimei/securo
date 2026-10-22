@@ -1991,7 +1991,34 @@
     "category": "श्रेणी",
     "amount": "राशि",
     "investments": "निवेश",
-    "moneyMap": "मनी मैप",
+    "moneyMap": {
+      "title": "पैसे का नक्शा",
+      "hubIncome": "आय",
+      "hubSpending": "खर्च",
+      "income": "आय",
+      "spending": "खर्च",
+      "left": "बचा",
+      "short": "कम पड़ा",
+      "folded": "बाकी समूह ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "एक्सप्लोर में खोलने के लिए क्लिक करें",
+      "expandHint": "ये समूह देखने के लिए क्लिक करें",
+      "value": "राशि",
+      "ofIncome": "आय का",
+      "ofSpending": "खर्च का",
+      "ofGroup": "{{group}} का",
+      "tapGroups": "समूह देखने के लिए टैप करें",
+      "refunds": "{{value}} रिफंड पहले ही खर्च से घटाए गए।",
+      "collapse": "छोटे समूह फिर से मिलाएँ",
+      "empty": "इस अवधि में कोई आय या खर्च नहीं।",
+      "answerIncome": "{{income}} की आय में से सबसे ज़्यादा {{group}} पर जाता है: {{share}}।",
+      "answerSpending": "आपने {{spending}} खर्च किए; सबसे बड़ा समूह {{group}} है ({{share}})।",
+      "answerLeft": "{{left}} बचे।",
+      "answerShort": "{{left}} कम पड़े।",
+      "viewChart": "चार्ट",
+      "viewTable": "तालिका",
+      "colItem": "मद"
+    },
     "range30d": "30D",
     "customRange": "कस्टम सीमा",
     "pickCustomRange": "प्रारंभ और समाप्ति तिथि चुनें",
@@ -2036,6 +2063,11 @@
       "nextPage": "अगला पृष्ठ",
       "pageOf": "पृष्ठ {{page}} / {{pages}}",
       "periodGroup": "अवधि"
+    },
+    "common": {
+      "empty": "इस अवधि में दिखाने को कुछ नहीं है।",
+      "error": "यह हिस्सा लोड नहीं हो सका।",
+      "retry": "फिर से कोशिश करें"
     }
   },
   "payees": {

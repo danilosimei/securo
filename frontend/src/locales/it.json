@@ -1995,7 +1995,34 @@
     "category": "Categoria",
     "amount": "Importo",
     "investments": "Investimenti",
-    "moneyMap": "Mappa del Denaro",
+    "moneyMap": {
+      "title": "Mappa del denaro",
+      "hubIncome": "Entrate",
+      "hubSpending": "Spesa",
+      "income": "Entrate",
+      "spending": "Spesa",
+      "left": "Avanzo",
+      "short": "Ammanco",
+      "folded": "Altri gruppi ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Fai clic per aprire in Esplora",
+      "expandHint": "Fai clic per vedere questi gruppi",
+      "value": "importo",
+      "ofIncome": "delle entrate",
+      "ofSpending": "della spesa",
+      "ofGroup": "di {{group}}",
+      "tapGroups": "Tocca per vedere i gruppi",
+      "refunds": "{{value}} di rimborsi già detratti dalla spesa.",
+      "collapse": "Raggruppa di nuovo i gruppi piccoli",
+      "empty": "Nessuna entrata né spesa in questo periodo.",
+      "answerIncome": "Di {{income}} di entrate, {{group}} prende la parte maggiore: {{share}}.",
+      "answerSpending": "Hai speso {{spending}}; {{group}} è il gruppo più grande ({{share}}).",
+      "answerLeft": "Sono avanzati {{left}}.",
+      "answerShort": "Sono mancati {{left}}.",
+      "viewChart": "Grafico",
+      "viewTable": "Tabella",
+      "colItem": "Voce"
+    },
     "range30d": "30D",
     "customRange": "Intervallo personalizzato",
     "pickCustomRange": "Scegli una data di inizio e fine",
@@ -2040,6 +2067,11 @@
       "nextPage": "Pagina successiva",
       "pageOf": "Pagina {{page}} di {{pages}}",
       "periodGroup": "Periodo"
+    },
+    "common": {
+      "empty": "Niente da mostrare per questo periodo.",
+      "error": "Impossibile caricare questa sezione.",
+      "retry": "Riprova"
     }
   },
   "payees": {

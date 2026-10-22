@@ -1995,7 +1995,34 @@
     "category": "Catégorie",
     "amount": "Montant",
     "investments": "Investissements",
-    "moneyMap": "Carte de l'argent",
+    "moneyMap": {
+      "title": "Carte de l'argent",
+      "hubIncome": "Revenus",
+      "hubSpending": "Dépenses",
+      "income": "Revenus",
+      "spending": "Dépenses",
+      "left": "Reste",
+      "short": "Manque",
+      "folded": "Autres groupes ({{n}})",
+      "nodeAria": "{{name}} : {{value}} ({{share}})",
+      "openHint": "Cliquez pour ouvrir dans Explorer",
+      "expandHint": "Cliquez pour voir ces groupes",
+      "value": "montant",
+      "ofIncome": "des revenus",
+      "ofSpending": "des dépenses",
+      "ofGroup": "de {{group}}",
+      "tapGroups": "Touchez pour voir les groupes",
+      "refunds": "{{value}} de remboursements déjà déduits des dépenses.",
+      "collapse": "Regrouper à nouveau les petits groupes",
+      "empty": "Aucun revenu ni dépense sur cette période.",
+      "answerIncome": "Sur {{income}} de revenus, {{group}} prend la plus grande part : {{share}}.",
+      "answerSpending": "Vous avez dépensé {{spending}} ; {{group}} est le premier groupe ({{share}}).",
+      "answerLeft": "Il est resté {{left}}.",
+      "answerShort": "Il a manqué {{left}}.",
+      "viewChart": "Graphique",
+      "viewTable": "Tableau",
+      "colItem": "Élément"
+    },
     "range30d": "30J",
     "customRange": "Plage personnalisée",
     "pickCustomRange": "Choisir une date de début et de fin",
@@ -2040,6 +2067,11 @@
       "nextPage": "Page suivante",
       "pageOf": "Page {{page}} sur {{pages}}",
       "periodGroup": "Période"
+    },
+    "common": {
+      "empty": "Rien à afficher pour cette période.",
+      "error": "Impossible de charger cette section.",
+      "retry": "Réessayer"
     }
   },
   "payees": {

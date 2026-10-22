@@ -2119,7 +2119,34 @@
     "category": "Kategorie",
     "amount": "Částka",
     "investments": "Investice",
-    "moneyMap": "Mapa peněz",
+    "moneyMap": {
+      "title": "Mapa peněz",
+      "hubIncome": "Příjmy",
+      "hubSpending": "Výdaje",
+      "income": "Příjmy",
+      "spending": "Výdaje",
+      "left": "Zbylo",
+      "short": "Chybělo",
+      "folded": "Ostatní skupiny ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Klikněte pro otevření v Prozkoumat",
+      "expandHint": "Klikněte pro zobrazení skupin",
+      "value": "částka",
+      "ofIncome": "příjmů",
+      "ofSpending": "výdajů",
+      "ofGroup": "z {{group}}",
+      "tapGroups": "Klepněte pro zobrazení skupin",
+      "refunds": "{{value}} vratek už odečteno od výdajů.",
+      "collapse": "Znovu sloučit malé skupiny",
+      "empty": "V tomto období žádné příjmy ani výdaje.",
+      "answerIncome": "Z příjmů {{income}} jde nejvíc na {{group}}: {{share}}.",
+      "answerSpending": "Utratili jste {{spending}}; největší skupina je {{group}} ({{share}}).",
+      "answerLeft": "Zbylo {{left}}.",
+      "answerShort": "Chybělo {{left}}.",
+      "viewChart": "Graf",
+      "viewTable": "Tabulka",
+      "colItem": "Položka"
+    },
     "range30d": "30D",
     "customRange": "Vlastní rozsah",
     "pickCustomRange": "Vybrat datum začátku a konce",
@@ -2164,6 +2191,11 @@
       "nextPage": "Další strana",
       "pageOf": "Strana {{page}} z {{pages}}",
       "periodGroup": "Období"
+    },
+    "common": {
+      "empty": "Pro toto období není co zobrazit.",
+      "error": "Tuto část se nepodařilo načíst.",
+      "retry": "Zkusit znovu"
     }
   },
   "payees": {

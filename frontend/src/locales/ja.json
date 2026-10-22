@@ -1991,7 +1991,34 @@
     "category": "カテゴリ",
     "amount": "金額",
     "investments": "投資",
-    "moneyMap": "マネーマップ",
+    "moneyMap": {
+      "title": "お金のマップ",
+      "hubIncome": "収入",
+      "hubSpending": "支出",
+      "income": "収入",
+      "spending": "支出",
+      "left": "残り",
+      "short": "不足",
+      "folded": "その他のグループ（{{n}}）",
+      "nodeAria": "{{name}}: {{value}}（{{share}}）",
+      "openHint": "クリックして探索で開く",
+      "expandHint": "クリックしてグループを見る",
+      "value": "金額",
+      "ofIncome": "収入に対して",
+      "ofSpending": "支出に対して",
+      "ofGroup": "{{group}}に対して",
+      "tapGroups": "タップしてグループを見る",
+      "refunds": "{{value}}の返金は支出から差し引き済みです。",
+      "collapse": "小さなグループをまとめ直す",
+      "empty": "この期間に収入も支出もありません。",
+      "answerIncome": "収入{{income}}のうち、最も多いのは{{group}}：{{share}}。",
+      "answerSpending": "支出は{{spending}}。最大のグループは{{group}}（{{share}}）。",
+      "answerLeft": "{{left}}残りました。",
+      "answerShort": "{{left}}不足しました。",
+      "viewChart": "グラフ",
+      "viewTable": "表",
+      "colItem": "項目"
+    },
     "range30d": "30日",
     "customRange": "期間を指定",
     "pickCustomRange": "開始日と終了日を選択",
@@ -2036,6 +2063,11 @@
       "nextPage": "次のページ",
       "pageOf": "{{page}} / {{pages}} ページ",
       "periodGroup": "期間"
+    },
+    "common": {
+      "empty": "この期間に表示するものはありません。",
+      "error": "このセクションを読み込めませんでした。",
+      "retry": "再試行"
     }
   },
   "payees": {

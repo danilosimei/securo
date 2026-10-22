@@ -2077,7 +2077,34 @@
     "category": "Kategoria",
     "amount": "Kwota",
     "investments": "Inwestycje",
-    "moneyMap": "Mapa Pieniędzy",
+    "moneyMap": {
+      "title": "Mapa pieniędzy",
+      "hubIncome": "Przychody",
+      "hubSpending": "Wydatki",
+      "income": "Przychody",
+      "spending": "Wydatki",
+      "left": "Zostało",
+      "short": "Zabrakło",
+      "folded": "Pozostałe grupy ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Kliknij, aby otworzyć w Eksploruj",
+      "expandHint": "Kliknij, aby zobaczyć te grupy",
+      "value": "kwota",
+      "ofIncome": "przychodów",
+      "ofSpending": "wydatków",
+      "ofGroup": "z {{group}}",
+      "tapGroups": "Dotknij, aby zobaczyć grupy",
+      "refunds": "{{value}} zwrotów już odjętych od wydatków.",
+      "collapse": "Znowu połącz małe grupy",
+      "empty": "Brak przychodów i wydatków w tym okresie.",
+      "answerIncome": "Z {{income}} przychodów najwięcej idzie na {{group}}: {{share}}.",
+      "answerSpending": "Wydałeś {{spending}}; {{group}} to największa grupa ({{share}}).",
+      "answerLeft": "Zostało {{left}}.",
+      "answerShort": "Zabrakło {{left}}.",
+      "viewChart": "Wykres",
+      "viewTable": "Tabela",
+      "colItem": "Pozycja"
+    },
     "range30d": "30D",
     "customRange": "Zakres niestandardowy",
     "pickCustomRange": "Wybierz datę początkową i końcową",
@@ -2122,6 +2149,11 @@
       "nextPage": "Następna strona",
       "pageOf": "Strona {{page}} z {{pages}}",
       "periodGroup": "Okres"
+    },
+    "common": {
+      "empty": "Brak danych dla tego okresu.",
+      "error": "Nie udało się wczytać tej sekcji.",
+      "retry": "Spróbuj ponownie"
     }
   },
   "payees": {

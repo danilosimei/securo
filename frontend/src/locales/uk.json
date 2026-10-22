@@ -2008,7 +2008,34 @@
     "category": "Категорія",
     "amount": "Сума",
     "investments": "Інвестиції",
-    "moneyMap": "Money Map",
+    "moneyMap": {
+      "title": "Карта грошей",
+      "hubIncome": "Доходи",
+      "hubSpending": "Витрати",
+      "income": "Доходи",
+      "spending": "Витрати",
+      "left": "Залишилося",
+      "short": "Забракло",
+      "folded": "Інші групи ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Натисніть, щоб відкрити в Огляді витрат",
+      "expandHint": "Натисніть, щоб побачити ці групи",
+      "value": "сума",
+      "ofIncome": "доходу",
+      "ofSpending": "витрат",
+      "ofGroup": "від {{group}}",
+      "tapGroups": "Торкніться, щоб побачити групи",
+      "refunds": "{{value}} повернень уже віднято від витрат.",
+      "collapse": "Знову об’єднати дрібні групи",
+      "empty": "Немає доходів і витрат за цей період.",
+      "answerIncome": "З доходу {{income}} найбільше йде на {{group}}: {{share}}.",
+      "answerSpending": "Ви витратили {{spending}}; найбільша група — {{group}} ({{share}}).",
+      "answerLeft": "Залишилося {{left}}.",
+      "answerShort": "Забракло {{left}}.",
+      "viewChart": "Графік",
+      "viewTable": "Таблиця",
+      "colItem": "Стаття"
+    },
     "range30d": "30Д",
     "customRange": "Довільний діапазон",
     "pickCustomRange": "Виберіть дату початку та кінця",
@@ -2053,6 +2080,11 @@
       "nextPage": "Наступна сторінка",
       "pageOf": "Сторінка {{page}} з {{pages}}",
       "periodGroup": "Період"
+    },
+    "common": {
+      "empty": "Немає даних за цей період.",
+      "error": "Не вдалося завантажити цей блок.",
+      "retry": "Спробувати ще"
     }
   },
   "payees": {

@@ -1993,7 +1993,34 @@
     "category": "Categorie",
     "amount": "Bedrag",
     "investments": "Investeringen",
-    "moneyMap": "Geld kaart",
+    "moneyMap": {
+      "title": "Geldkaart",
+      "hubIncome": "Inkomsten",
+      "hubSpending": "Uitgaven",
+      "income": "Inkomsten",
+      "spending": "Uitgaven",
+      "left": "Over",
+      "short": "Tekort",
+      "folded": "Overige groepen ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Klik om te openen in Verkennen",
+      "expandHint": "Klik om deze groepen te zien",
+      "value": "bedrag",
+      "ofIncome": "van de inkomsten",
+      "ofSpending": "van de uitgaven",
+      "ofGroup": "van {{group}}",
+      "tapGroups": "Tik om de groepen te zien",
+      "refunds": "{{value}} aan terugbetalingen al van de uitgaven afgetrokken.",
+      "collapse": "Kleine groepen weer samenvoegen",
+      "empty": "Geen inkomsten of uitgaven in deze periode.",
+      "answerIncome": "Van {{income}} inkomsten gaat het meeste naar {{group}}: {{share}}.",
+      "answerSpending": "Je gaf {{spending}} uit; {{group}} is de grootste groep ({{share}}).",
+      "answerLeft": "Er bleef {{left}} over.",
+      "answerShort": "Je kwam {{left}} tekort.",
+      "viewChart": "Grafiek",
+      "viewTable": "Tabel",
+      "colItem": "Post"
+    },
     "range30d": "30D",
     "customRange": "Aangepast bereik",
     "pickCustomRange": "Kies een start- en einddatum",
@@ -2038,6 +2065,11 @@
       "nextPage": "Volgende pagina",
       "pageOf": "Pagina {{page}} van {{pages}}",
       "periodGroup": "Periode"
+    },
+    "common": {
+      "empty": "Niets te tonen voor deze periode.",
+      "error": "Dit onderdeel kon niet worden geladen.",
+      "retry": "Opnieuw proberen"
     }
   },
   "payees": {

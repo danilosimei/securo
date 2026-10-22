@@ -2008,7 +2008,34 @@
     "category": "Категория",
     "amount": "Сумма",
     "investments": "Инвестиции",
-    "moneyMap": "Money Map",
+    "moneyMap": {
+      "title": "Карта денег",
+      "hubIncome": "Доходы",
+      "hubSpending": "Расходы",
+      "income": "Доходы",
+      "spending": "Расходы",
+      "left": "Осталось",
+      "short": "Не хватило",
+      "folded": "Прочие группы ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Нажмите, чтобы открыть в Обзоре расходов",
+      "expandHint": "Нажмите, чтобы увидеть эти группы",
+      "value": "сумма",
+      "ofIncome": "дохода",
+      "ofSpending": "расходов",
+      "ofGroup": "от {{group}}",
+      "tapGroups": "Нажмите, чтобы увидеть группы",
+      "refunds": "{{value}} возвратов уже вычтено из расходов.",
+      "collapse": "Снова объединить мелкие группы",
+      "empty": "Нет доходов и расходов за этот период.",
+      "answerIncome": "Из дохода {{income}} больше всего уходит на {{group}}: {{share}}.",
+      "answerSpending": "Вы потратили {{spending}}; крупнейшая группа — {{group}} ({{share}}).",
+      "answerLeft": "Осталось {{left}}.",
+      "answerShort": "Не хватило {{left}}.",
+      "viewChart": "График",
+      "viewTable": "Таблица",
+      "colItem": "Статья"
+    },
     "range30d": "30D",
     "customRange": "Произвольный диапазон",
     "pickCustomRange": "Выберите дату начала и конца",
@@ -2053,6 +2080,11 @@
       "nextPage": "Следующая страница",
       "pageOf": "Страница {{page}} из {{pages}}",
       "periodGroup": "Период"
+    },
+    "common": {
+      "empty": "Нет данных за этот период.",
+      "error": "Не удалось загрузить этот блок.",
+      "retry": "Повторить"
     }
   },
   "payees": {

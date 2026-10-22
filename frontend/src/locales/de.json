@@ -1992,7 +1992,34 @@
     "category": "Kategorie",
     "amount": "Betrag",
     "investments": "Investitionen",
-    "moneyMap": "Geld-Karte",
+    "moneyMap": {
+      "title": "Geldkarte",
+      "hubIncome": "Einnahmen",
+      "hubSpending": "Ausgaben",
+      "income": "Einnahmen",
+      "spending": "Ausgaben",
+      "left": "Übrig",
+      "short": "Fehlbetrag",
+      "folded": "Weitere Gruppen ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Klicke, um in Erkunden zu öffnen",
+      "expandHint": "Klicke, um diese Gruppen zu sehen",
+      "value": "Betrag",
+      "ofIncome": "der Einnahmen",
+      "ofSpending": "der Ausgaben",
+      "ofGroup": "von {{group}}",
+      "tapGroups": "Tippe, um die Gruppen zu sehen",
+      "refunds": "{{value}} Erstattungen bereits von den Ausgaben abgezogen.",
+      "collapse": "Kleine Gruppen wieder zusammenfassen",
+      "empty": "Keine Einnahmen oder Ausgaben in diesem Zeitraum.",
+      "answerIncome": "Von {{income}} Einnahmen geht der größte Teil an {{group}}: {{share}}.",
+      "answerSpending": "Du hast {{spending}} ausgegeben; {{group}} ist die größte Gruppe ({{share}}).",
+      "answerLeft": "{{left}} sind übrig geblieben.",
+      "answerShort": "Es fehlten {{left}}.",
+      "viewChart": "Diagramm",
+      "viewTable": "Tabelle",
+      "colItem": "Posten"
+    },
     "range30d": "30T",
     "customRange": "Benutzerdefinierter Zeitraum",
     "pickCustomRange": "Start- und Enddatum wählen",
@@ -2037,6 +2064,11 @@
       "nextPage": "Nächste Seite",
       "pageOf": "Seite {{page}} von {{pages}}",
       "periodGroup": "Zeitraum"
+    },
+    "common": {
+      "empty": "Für diesen Zeitraum gibt es nichts anzuzeigen.",
+      "error": "Dieser Bereich konnte nicht geladen werden.",
+      "retry": "Erneut versuchen"
     }
   },
   "payees": {

@@ -1991,7 +1991,34 @@
     "category": "Kategória",
     "amount": "Összeg",
     "investments": "Befektetések",
-    "moneyMap": "Pénztérkép",
+    "moneyMap": {
+      "title": "Pénztérkép",
+      "hubIncome": "Bevétel",
+      "hubSpending": "Kiadás",
+      "income": "Bevétel",
+      "spending": "Kiadás",
+      "left": "Maradt",
+      "short": "Hiányzott",
+      "folded": "További csoportok ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Kattints a megnyitáshoz a Felfedezésben",
+      "expandHint": "Kattints a csoportok megtekintéséhez",
+      "value": "összeg",
+      "ofIncome": "a bevételből",
+      "ofSpending": "a kiadásból",
+      "ofGroup": "{{group}} csoportból",
+      "tapGroups": "Koppints a csoportokért",
+      "refunds": "{{value}} visszatérítés már levonva a kiadásból.",
+      "collapse": "Kis csoportok újra összevonása",
+      "empty": "Ebben az időszakban nincs bevétel vagy kiadás.",
+      "answerIncome": "A {{income}} bevételből a legtöbb {{group}} csoportra megy: {{share}}.",
+      "answerSpending": "{{spending}} volt a költésed; a legnagyobb csoport {{group}} ({{share}}).",
+      "answerLeft": "{{left}} maradt.",
+      "answerShort": "{{left}} hiányzott.",
+      "viewChart": "Diagram",
+      "viewTable": "Táblázat",
+      "colItem": "Tétel"
+    },
     "range30d": "30 nap",
     "customRange": "Egyéni időszak",
     "pickCustomRange": "Válassz kezdő és záró dátumot",
@@ -2036,6 +2063,11 @@
       "nextPage": "Következő oldal",
       "pageOf": "{{page}}. oldal / {{pages}}",
       "periodGroup": "Időszak"
+    },
+    "common": {
+      "empty": "Ebben az időszakban nincs mit mutatni.",
+      "error": "Ezt a részt nem sikerült betölteni.",
+      "retry": "Újra"
     }
   },
   "payees": {

@@ -1991,7 +1991,34 @@
     "category": "Category",
     "amount": "Amount",
     "investments": "Investments",
-    "moneyMap": "Money Map",
+    "moneyMap": {
+      "title": "Money Map",
+      "hubIncome": "Income",
+      "hubSpending": "Spending",
+      "income": "Income",
+      "spending": "Spending",
+      "left": "Left over",
+      "short": "Short",
+      "folded": "Other groups ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Click to open in Explore",
+      "expandHint": "Click to see these groups",
+      "value": "amount",
+      "ofIncome": "of income",
+      "ofSpending": "of spending",
+      "ofGroup": "of {{group}}",
+      "tapGroups": "Tap to see the groups",
+      "refunds": "{{value}} in refunds already taken off spending.",
+      "collapse": "Fold the small groups again",
+      "empty": "No income or spending in this period.",
+      "answerIncome": "Of {{income}} in income, {{group}} takes the most: {{share}}.",
+      "answerSpending": "You spent {{spending}}; {{group}} is the biggest group ({{share}}).",
+      "answerLeft": "{{left}} was left over.",
+      "answerShort": "You were {{left}} short.",
+      "viewChart": "Chart",
+      "viewTable": "Table",
+      "colItem": "Item"
+    },
     "range30d": "30D",
     "customRange": "Custom range",
     "pickCustomRange": "Pick a start and end date",
@@ -2036,6 +2063,11 @@
       "nextPage": "Next page",
       "pageOf": "Page {{page}} of {{pages}}",
       "periodGroup": "Period"
+    },
+    "common": {
+      "empty": "Nothing to show for this period.",
+      "error": "Couldn't load this section.",
+      "retry": "Try again"
     }
   },
   "payees": {

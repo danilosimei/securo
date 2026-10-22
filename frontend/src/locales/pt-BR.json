@@ -1995,7 +1995,34 @@
     "category": "Categoria",
     "amount": "Valor",
     "investments": "Investimentos",
-    "moneyMap": "Mapa do Dinheiro",
+    "moneyMap": {
+      "title": "Mapa do Dinheiro",
+      "hubIncome": "Renda",
+      "hubSpending": "Gasto",
+      "income": "Renda",
+      "spending": "Gasto",
+      "left": "Sobrou",
+      "short": "Faltou",
+      "folded": "Demais grupos ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Clique para abrir no Explorar",
+      "expandHint": "Clique para ver esses grupos",
+      "value": "valor",
+      "ofIncome": "da renda",
+      "ofSpending": "do gasto",
+      "ofGroup": "de {{group}}",
+      "tapGroups": "Toque para ver os grupos",
+      "refunds": "{{value}} de estornos já abatidos do gasto.",
+      "collapse": "Juntar de novo os grupos pequenos",
+      "empty": "Nenhuma renda ou gasto neste período.",
+      "answerIncome": "Da renda de {{income}}, {{group}} leva a maior parte: {{share}}.",
+      "answerSpending": "Você gastou {{spending}}; {{group}} é o maior grupo ({{share}}).",
+      "answerLeft": "Sobraram {{left}}.",
+      "answerShort": "Faltaram {{left}}.",
+      "viewChart": "Gráfico",
+      "viewTable": "Tabela",
+      "colItem": "Item"
+    },
     "range30d": "30D",
     "customRange": "Período personalizado",
     "pickCustomRange": "Escolha uma data inicial e final",
@@ -2040,6 +2067,11 @@
       "nextPage": "Próxima página",
       "pageOf": "Página {{page}} de {{pages}}",
       "periodGroup": "Período"
+    },
+    "common": {
+      "empty": "Nada para mostrar neste período.",
+      "error": "Não deu para carregar este bloco.",
+      "retry": "Tentar de novo"
     }
   },
   "payees": {
