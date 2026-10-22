@@ -185,6 +185,31 @@ async def test_frequent_spot_stays_quiet_below_the_limits(client, auth_headers, 
 
 
 @pytest.mark.asyncio
+async def test_frequent_spot_skips_the_generic_other_group_categories(client, auth_headers, world):  # noqa: F811
+    # "Compras" and "Outros" are seeded under the generic "Other" group: they
+    # buy often by nature, which says nothing about a habit.
+    for name in ("Compras", "Outros", "Restaurantes"):
+        _category(world, name)
+    await world["session"].flush()
+    _visits(world, "Compras", [("Amazon", 25)], amount=60)
+    _visits(world, "Outros", [("Diversos", 22)], amount=60)
+    _visits(world, "Restaurantes", [("Baker Bar", 20)], amount=60)
+    await world["session"].commit()
+    card = _rules(await _get(client, auth_headers))["frequent_spot"]
+    assert card["title"].startswith("Restaurantes:")
+    assert card["drivers"][0]["label"] == "Baker Bar (120×)"
+
+
+@pytest.mark.asyncio
+async def test_frequent_spot_stays_quiet_when_only_generic_categories_repeat(client, auth_headers, world):  # noqa: F811
+    _category(world, "Compras")
+    await world["session"].flush()
+    _visits(world, "Compras", [("Amazon", 25)], amount=60)
+    await world["session"].commit()
+    assert "frequent_spot" not in _rules(await _get(client, auth_headers))
+
+
+@pytest.mark.asyncio
 async def test_frequent_spot_skips_taxes_and_fees(client, auth_headers, world):  # noqa: F811
     _category(world, "Impostos & Taxas")
     await world["session"].flush()

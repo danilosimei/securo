@@ -2,8 +2,10 @@
 several times a month. It is about behaviour, which nobody sees from one
 purchase to the next: the stores bought from at least `MIN_TIMES` times in
 the period, in at least `MIN_MONTHS` different months and, in the months
-they showed up, at least `MIN_PER_ACTIVE_MONTH` times a month (a habit, not a
-rare big purchase), biggest spending per month first, and the categories bought from most often.
+they showed up, at least `MIN_PER_ACTIVE_MONTH` times a month and at least
+`MIN_IN_A_MONTH` times in some single month (a habit, not a rare big purchase
+or a bill), most purchases first (biggest spending per month breaks a tie),
+and the categories bought from most often.
 
 Left out on purpose: bills and subscriptions (fixed costs, already in Fixos),
 fees and taxes the store key groups (IOF, broker fees...), seeded tax and
@@ -28,6 +30,8 @@ MIN_TIMES = 3
 MIN_MONTHS = 3
 #: Purchases per month, counting only the months the store appeared in.
 MIN_PER_ACTIVE_MONTH = Decimal("1.5")
+#: Purchases in the busiest month: a bill (1-2 a month) never gets here.
+MIN_IN_A_MONTH = 3
 MAX_STORES = 8
 MAX_CATEGORIES = 3
 NO_CATEGORY_NAME = "Sem categoria"
@@ -66,10 +70,11 @@ async def build(ctx: Context, categories: dict[Any, tuple[str, Optional[uuid.UUI
             entry[1] += value
         if _skip_store(key, fixed):
             continue
-        store = stores.setdefault(key, {"times": 0, "total": ZERO, "months": set(), "cats": {}})
+        store = stores.setdefault(key, {"times": 0, "total": ZERO, "months": {}, "cats": {}})
         store["times"] += 1
         store["total"] += value
-        store["months"].add(_month_index(day))
+        month = _month_index(day)
+        store["months"][month] = store["months"].get(month, 0) + 1
         store["cats"][cid] = store["cats"].get(cid, 0) + 1
 
     chosen = [
@@ -78,8 +83,9 @@ async def build(ctx: Context, categories: dict[Any, tuple[str, Optional[uuid.UUI
         if s["times"] >= MIN_TIMES
         and len(s["months"]) >= MIN_MONTHS
         and Decimal(s["times"]) / len(s["months"]) >= MIN_PER_ACTIVE_MONTH
+        and max(s["months"].values()) >= MIN_IN_A_MONTH
     ]
-    chosen.sort(key=lambda item: (-item[1]["total"], item[0]))
+    chosen.sort(key=lambda item: (-item[1]["times"], -item[1]["total"], item[0]))
     chosen = chosen[:MAX_STORES]
     names = await store_labels(ctx.session, ctx.workspace_id, [key for key, _ in chosen])
 

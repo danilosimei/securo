@@ -85,7 +85,8 @@ HEAVY_GROUP_MIN_SHARE = Decimal("0.05")
 #: frequent_spot: the category bought most often, if this often and this much.
 FREQUENT_SPOT_MIN_PER_MONTH = Decimal("8")
 FREQUENT_SPOT_MIN_MONTH = Decimal("500")
-#: Seeded categories that are never a "place": fees, taxes and transfers.
+#: Seeded categories that are never a "place": fees, taxes and transfers (and
+#: the generic "Other" group's categories, see `generic_category_names`).
 FREQUENT_SPOT_SKIP_SEEDS = ("taxes", "transfers", "investments")
 
 _MONTHS_PT = ("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
@@ -111,6 +112,17 @@ def _seed_names(entry: dict) -> set[str]:
 def generic_group_names() -> frozenset[str]:
     """Seeded "Other" group names in every language: too vague to be a highlight."""
     return frozenset(_seed_names(_taxonomy()["groups"]["other"]))
+
+
+@lru_cache(maxsize=1)
+def generic_category_names() -> frozenset[str]:
+    """Seeded categories of the generic "Other" group (Shopping, Other...) and
+    the group's own names: bought from often by nature, not a place."""
+    names = set(generic_group_names())
+    for entry in _taxonomy()["categories"].values():
+        if entry.get("group") == "other":
+            names |= _seed_names(entry)
+    return frozenset(names)
 
 
 @lru_cache(maxsize=1)
@@ -516,7 +528,7 @@ async def _frequent_spot(ctx: Context, cards: _Cards) -> Optional[dict]:
         if cid is None or not (period.from_ <= day <= period.to):
             continue
         name, _, kind = cards.categories.get(cid, ("", None, KIND_NORMAL))
-        if kind != KIND_NORMAL or name.lower() in _not_a_place_names():
+        if kind != KIND_NORMAL or name.lower() in _not_a_place_names() | generic_category_names():
             continue
         count[cid] = count.get(cid, 0) + 1
         if key:
