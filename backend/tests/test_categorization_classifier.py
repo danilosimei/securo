@@ -367,8 +367,12 @@ async def test_manual_payee_is_kept(
 
     await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
 
+    # A payee names a `P:` store, which only ever gets a suggestion: the
+    # manual payee is neither replaced nor duplicated.
     tx = await _reload(session, tx)
-    assert tx.category_id == cats["Alimentação"] and tx.payee_id == manual.id
+    assert tx.category_id is None and tx.payee_id == manual.id
+    [sug] = await _all(session, CategorizationSuggestion)
+    assert sug.category_id == cats["Alimentação"]
     assert [p.name for p in await _all(session, Payee)] == ["Padaria do Zé"]
 
 
@@ -1643,3 +1647,70 @@ async def test_concurrent_batch_submissions_respect_the_cap_postgres(
         ).scalars().all()
         assert sorted(run.status for run in runs) == ["capped", "processing_batch"]
         assert await classifier.committed_spend(session, ws) == Decimal("0.60")
+
+
+# --- fixed lock: only description-keyed stores apply on their own ---------------------
+
+
+@pytest.mark.asyncio
+async def test_person_transfer_is_always_a_suggestion_even_at_99(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    tx = _tx(session, test_user, test_account, "Transferência enviada pelo Pix|Maria Souza Lima")
+    await session.commit()
+    wire(fake_client(answer(lambda item, ids: out(ids["Lazer"], p=99, n="Maria Souza"))))
+
+    run = await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    tx = await _reload(session, tx)
+    assert (tx.category_id, tx.category_source) == (None, "none")
+    [sug] = await _all(session, CategorizationSuggestion)
+    assert sug.merchant_key.startswith("PIX:")
+    assert (sug.status, sug.category_id, sug.confidence) == ("pending", cats["Lazer"], 99)
+    assert run.stats["applied"] == 0 and run.stats["suggested"] == 1
+    assert await _all(session, CategorizationEvent) == []
+    # The cached decision stays empty too: the next run must not apply it either.
+    assert await _all(session, MerchantMemory) == []
+
+
+@pytest.mark.asyncio
+async def test_payee_keyed_store_is_always_a_suggestion_at_95(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    payee = Payee(
+        id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id,
+        name="Padaria Estrela", source="sync",
+    )
+    session.add(payee)
+    await session.flush()
+    tx = _tx(session, test_user, test_account, "PADARIA ESTRELA 22", payee_id=payee.id)
+    await session.commit()
+    wire(fake_client(answer(lambda item, ids: out(ids["Alimentação"], p=95))))
+
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    tx = await _reload(session, tx)
+    assert (tx.category_id, tx.category_source) == (None, "none")
+    [sug] = await _all(session, CategorizationSuggestion)
+    assert sug.merchant_key.startswith("P:") and sug.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_description_keyed_store_applies_at_95_and_waits_at_80(
+    session, test_user, test_workspace, test_account, cats, ai_connection, wire
+):
+    sure = _tx(session, test_user, test_account, "IFOOD *REST 8812")
+    unsure = _tx(session, test_user, test_account, "CINEMARK 33")
+    await session.commit()
+    wire(fake_client(answer(
+        lambda item, ids: out(ids["Alimentação"], p=95)
+        if "IFOOD" in item["s"][0]
+        else out(ids["Lazer"], p=80)
+    )))
+
+    await run_categorization(session, test_workspace.id, trigger="manual", use_ai=True)
+
+    assert (await _reload(session, sure)).category_source == "ai"
+    assert (await _reload(session, unsure)).category_source == "none"
+    [sug] = await _all(session, CategorizationSuggestion)
+    assert sug.transaction_id == unsure.id

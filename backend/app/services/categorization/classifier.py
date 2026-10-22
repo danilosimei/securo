@@ -72,7 +72,11 @@ from app.services.categorization.events import (
     write_staged,
 )
 from app.services.categorization.memory import lookup, remember_ai_decision, repoint_store
-from app.services.categorization.merchant_key import merchant_key, scrub_documents
+from app.services.categorization.merchant_key import (
+    is_description_key,
+    merchant_key,
+    scrub_documents,
+)
 from app.services.categorization.pipeline import (
     AUTO_APPLY_SOURCES,
     PIPELINE_SOURCES,
@@ -340,6 +344,7 @@ def _person_disagrees(rows: list[Transaction], category_id: uuid.UUID | None) ->
 
 def _applied_category(
     answer: _Answer | None,
+    key: str,
     rows: list[Transaction],
     threshold: int,
     allowed_category_ids: set[uuid.UUID] | None,
@@ -347,15 +352,21 @@ def _applied_category(
     """The category an answer applies to its store's rows, or None (a
     suggestion, or nothing in a redistribution).
 
-    A classification applies at or above `threshold`, unless a person filed
-    a row of the store elsewhere meanwhile. A redistribution applies any
+    A classification applies at or above `threshold`, only for a store keyed
+    by its description (a `P:` or `PIX:` store is always a suggestion, at
+    any confidence), unless a person filed a row of the store elsewhere
+    meanwhile. A redistribution applies any
     child of the split family: the person approved the split.
     """
     if answer is None or answer.category_id is None:
         return None
     if allowed_category_ids is not None:
         return answer.category_id if answer.category_id in allowed_category_ids else None
-    if answer.confidence < threshold or _person_disagrees(rows, answer.category_id):
+    if (
+        answer.confidence < threshold
+        or not is_description_key(key)
+        or _person_disagrees(rows, answer.category_id)
+    ):
         return None
     return answer.category_id
 
@@ -517,7 +528,7 @@ async def apply_results(
         ]
         stats.skipped += len(set(group.tx_ids)) - len(open_rows)
         answer = answers.get(item_id)
-        category_id = _applied_category(answer, rows, threshold, allowed_category_ids)
+        category_id = _applied_category(answer, group.key, rows, threshold, allowed_category_ids)
 
         if answer is not None and category_id is not None:
             # A guess the model confirms becomes its decision; a row already

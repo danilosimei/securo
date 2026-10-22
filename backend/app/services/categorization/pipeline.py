@@ -48,7 +48,12 @@ from app.services.categorization.events import (
     write_staged,
 )
 from app.services.categorization.memory import CHUNK, MemoryHit, lookup, stored_key, teaches
-from app.services.categorization.merchant_key import UNKNOWN_KEY, merchant_key, sample_description
+from app.services.categorization.merchant_key import (
+    UNKNOWN_KEY,
+    is_description_key,
+    merchant_key,
+    sample_description,
+)
 from app.services.categorization.settings import find_ai_connection, get_settings
 from app.services.category_service import get_assignable_category_ids
 
@@ -348,7 +353,7 @@ class _Decision:
 
 
 def _decide(
-    hit: MemoryHit | None, threshold: int, assignable: set[uuid.UUID]
+    hit: MemoryHit | None, threshold: int, assignable: set[uuid.UUID], key: str
 ) -> _Decision | None:
     """What the memory settles for a store: the person's habit first.
 
@@ -360,7 +365,8 @@ def _decide(
     if hit.consistent and hit.category_id is not None and hit.category_id in assignable:
         return _Decision(hit.category_id, "memory")
     if (
-        hit.ai_category_id is not None
+        is_description_key(key)
+        and hit.ai_category_id is not None
         and hit.ai_category_id in assignable
         and hit.ai_confidence is not None
         and hit.ai_confidence >= threshold
@@ -405,7 +411,7 @@ async def memory_pass(
     for key, group in groups.items():
         # The nameless "store" is no store: nothing it holds applies.
         decision = (
-            _decide(hits.get(key), settings.auto_apply_threshold, assignable)
+            _decide(hits.get(key), settings.auto_apply_threshold, assignable, key)
             if teaches(key)
             else None
         )

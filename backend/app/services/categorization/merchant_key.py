@@ -388,6 +388,13 @@ def is_unnamed_key(key: str) -> bool:
     return key == UNKNOWN_KEY or key.startswith(HASHED_PERSON_PREFIX)
 
 
+def is_description_key(key: str) -> bool:
+    """Whether the key was read from the transaction's description. A payee
+    (`P:`) or a person (`PIX:`) key says who was paid, not what was bought:
+    the model's word on those is never applied on its own."""
+    return not key.startswith((PAYEE_PREFIX, PERSON_PREFIX))
+
+
 def _has_letters(text: str) -> bool:
     return bool(re.search(r"[A-Z]", _fold(text)))
 

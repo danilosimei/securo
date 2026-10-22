@@ -886,3 +886,39 @@ async def test_a_below_threshold_answer_for_a_cleared_row_is_an_ordinary_suggest
     sugs = {s.transaction_id: s for s in await _suggestions(session)}
     assert set(sugs) == {blank.id, cleared.id}
     assert {(s.category_id, s.confidence, s.reason) for s in sugs.values()} == {(food, 60, "talvez")}
+
+
+@pytest.mark.asyncio
+async def test_memory_pass_applies_person_choices_for_payee_keys_but_not_cached_ai(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """The lock is for the model's word: two choices of the person still
+    apply to a `P:` store, a cached AI decision for one does not."""
+    from app.models.payee import Payee
+
+    food = test_categories[0].id
+    payee = Payee(
+        id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id,
+        name="Padaria Estrela", source="sync",
+    )
+    other = Payee(
+        id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id,
+        name="Loja Do Ze", source="sync",
+    )
+    session.add_all([payee, other])
+    await session.flush()
+    await learn_choice(session, test_workspace.id, "P:PADARIA ESTRELA", food)
+    await learn_choice(session, test_workspace.id, "P:PADARIA ESTRELA", food)
+    await remember_ai_decision(session, test_workspace.id, "P:LOJA DO ZE", food, 99, "Loja do Zé")
+    await remember_ai_decision(session, test_workspace.id, "PIX:MARIA SOUZA LIMA", food, 99, None)
+    habit = _tx(session, test_user, test_account, "PADARIA ESTRELA 22", payee_id=payee.id)
+    cached = _tx(session, test_user, test_account, "LOJA DO ZE 9", payee_id=other.id)
+    pix = _tx(session, test_user, test_account, "Transferência enviada pelo Pix|Maria Souza Lima")
+    await session.commit()
+    groups = group_by_key(await collect_candidates(session, test_workspace.id))
+
+    rest = await memory_pass(session, test_workspace.id, groups, None)
+
+    assert (habit.category_id, habit.category_source) == (food, "memory")
+    assert cached.category_id is None and pix.category_id is None
+    assert set(rest) == {"P:LOJA DO ZE", "PIX:MARIA SOUZA LIMA"}
