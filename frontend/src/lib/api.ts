@@ -1542,6 +1542,8 @@ export interface BreakdownRow {
   count: number
   /** 12 decimal strings, oldest month first. */
   sparkline: string[]
+  /** Only on `level=category&group_id=all`: the group the category sits in. */
+  group_label?: string | null
 }
 
 export interface BreakdownResponse {
@@ -1557,6 +1559,139 @@ export interface BreakdownResponse {
   previous_total: string | null
   rows: BreakdownRow[]
   unconverted_count: number
+}
+
+/** `period`, plus `from`/`to` (YYYY-MM-DD) when it is `custom`. */
+export interface ReportPeriodParams {
+  period: ReportPeriod
+  from?: string
+  to?: string
+}
+
+export type ReportPeriodInfo = BreakdownResponse['period']
+
+export type HighlightRule =
+  | 'spike'
+  | 'what_changed'
+  | 'recurring_new_or_up'
+  | 'recurring_expensive'
+  | 'small_purchases'
+  | 'heavy_group'
+  | 'to_review'
+
+/** Monthly averages over the period; shares are 0..1, null without a base. */
+export interface OverviewKpis {
+  spending: string
+  income: string
+  left: string
+  left_share: number | null
+  fixed_share: number | null
+}
+
+export interface OverviewChange {
+  kind: 'group' | 'category'
+  id: string | null
+  label: string
+  change: number | null
+  delta: string
+}
+
+export interface OverviewHighlight {
+  rule: HighlightRule
+  title: string
+  /** Money as a decimal string; a plain count on `to_review`. */
+  value: string
+  compare: string
+  /** `tab`, `period` and only the filters that apply (`from`/`to`,
+   *  `group_id`, `category_id`, `merchant`). */
+  link: Record<string, string>
+}
+
+export interface OverviewMonth {
+  /** YYYY-MM */
+  month: string
+  spending: string
+  income: string
+  median_spending: string
+}
+
+export interface MoneyMapNode {
+  id: string | null
+  label: string
+  value: string
+}
+
+export interface MoneyMapGroup extends MoneyMapNode {
+  categories: MoneyMapNode[]
+}
+
+/** Totals of the period. `left` is negative when spending beat income. */
+export interface MoneyMap {
+  income: MoneyMapNode[]
+  groups: MoneyMapGroup[]
+  refunds: string
+  left: string
+}
+
+export interface OverviewResponse {
+  period: ReportPeriodInfo
+  currency?: string
+  kpis: OverviewKpis
+  changes: OverviewChange[]
+  highlights: OverviewHighlight[]
+  monthly: OverviewMonth[]
+  money_map: MoneyMap
+}
+
+export type RecurringStatus = 'new' | 'up' | 'stopped' | 'steady'
+
+export interface RecurringRow {
+  merchant_key: string
+  label: string
+  /** Category name. */
+  category: string
+  amount_month: string
+  amount_year: string
+  status: RecurringStatus
+  last_date: string
+  months_seen: number
+}
+
+export interface HabitsMerchant {
+  /** Store key. */
+  id: string
+  label: string
+  count: number
+  per_month: number
+  avg_ticket: string
+  total: string
+  /** Category name. */
+  category: string
+}
+
+export interface HabitsWeekday {
+  /** 0 = Monday … 6 = Sunday. */
+  weekday: number
+  label: string
+  total: string
+  count: number
+}
+
+export interface HabitsBand {
+  label: string
+  min: string
+  /** Null on the open-ended last band. */
+  max: string | null
+  count: number
+  total: string
+}
+
+export interface HabitsResponse {
+  period: ReportPeriodInfo
+  merchants: HabitsMerchant[]
+  weekdays: HabitsWeekday[]
+  bands: HabitsBand[]
+  days: { date: string; total: string }[]
 }
 
 // Reports
@@ -1613,6 +1748,18 @@ export const reports = {
   },
   breakdown: async (params: BreakdownParams): Promise<BreakdownResponse> => {
     const { data } = await api.get('/reports/breakdown', { params })
+    return data
+  },
+  overview: async (params: ReportPeriodParams): Promise<OverviewResponse> => {
+    const { data } = await api.get('/reports/overview', { params })
+    return data
+  },
+  recurring: async (params: ReportPeriodParams): Promise<RecurringRow[]> => {
+    const { data } = await api.get('/reports/recurring', { params })
+    return data
+  },
+  habits: async (params: ReportPeriodParams): Promise<HabitsResponse> => {
+    const { data } = await api.get('/reports/habits', { params })
     return data
   },
 }
