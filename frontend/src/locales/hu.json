@@ -2068,6 +2068,79 @@
       "empty": "Ebben az időszakban nincs mit mutatni.",
       "error": "Ezt a részt nem sikerült betölteni.",
       "retry": "Újra"
+    },
+    "overview": {
+      "tab": "Áttekintés",
+      "error": "Az áttekintést nem sikerült betölteni.",
+      "empty": "Ebben az időszakban nincs kiadás vagy bevétel. Válassz másik időszakot fent.",
+      "headline": {
+        "month": "{{month}} hónapban {{spending}} volt a költésed",
+        "monthUp": "{{month}} hónapban {{spending}} volt a költésed, {{change}} több, mint {{previous}} hónapban",
+        "monthDown": "{{month}} hónapban {{spending}} volt a költésed, {{change}} kevesebb, mint {{previous}} hónapban",
+        "monthPartial": "{{month}} hónapban eddig {{spending}} volt a költésed",
+        "average": "{{from}} és {{to}} között havi {{spending}} volt a költésed",
+        "averageUp": "{{from}} és {{to}} között havi {{spending}} volt a költésed, {{change}} több, mint az előző {{months}} hónapban",
+        "averageDown": "{{from}} és {{to}} között havi {{spending}} volt a költésed, {{change}} kevesebb, mint az előző {{months}} hónapban",
+        "end": ".",
+        "left": ", és {{left}} maradt.",
+        "leftMonthly": ", és havi {{left}} maradt.",
+        "short": ", és {{left}} hiányzott.",
+        "shortMonthly": ", és havi {{left}} hiányzott."
+      },
+      "kpi": {
+        "spending": "Havi kiadás",
+        "income": "Havi bevétel",
+        "left": "Havi maradék",
+        "short": "Havi hiány",
+        "leftShare": "a bevétel {{share}}-a",
+        "shortShare": "{{share}}-kal a bevétel felett",
+        "noIncome": "Nincs bevétel az időszakban",
+        "leftMore": "{{value}} több, mint korábban",
+        "leftLess": "{{value}} kevesebb, mint korábban",
+        "fixed": "Fix × változó",
+        "fixedValue": "{{share}} fix",
+        "fixedAria": "A kiadás {{fixed}}-a fix, {{variable}}-a változó",
+        "fixedSub": "{{variable}} változó · havi {{value}} fix költség",
+        "vsPrevious": "{{change}} az előzőhöz"
+      },
+      "highlights": {
+        "title": "Kiemelések",
+        "description": "Ami kilógott a megszokottból az időszakban. Koppints egy kártyára a részletekért.",
+        "none": "Semmi szokatlan ebben az időszakban.",
+        "see": "Megnézem",
+        "rule": {
+          "spike": "Csúcs",
+          "what_changed": "Mi változott",
+          "recurring_new_or_up": "Új vagy drágább fix költségek",
+          "recurring_expensive": "Drága fix költség",
+          "small_purchases": "Apró vásárlások",
+          "heavy_group": "Nehéz csoport",
+          "to_review": "Átnézendő"
+        }
+      },
+      "changes": {
+        "title": "Mi változott",
+        "description": "Az utolsó lezárt hónap az előző 3 hónap átlagához képest.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "A legjobban {{name}} nőtt: {{value}} többlet.",
+        "answerDown": "A legjobban {{name}} csökkent: {{value}} kevesebb.",
+        "empty": "Nincs figyelemre méltó változás."
+      },
+      "monthly": {
+        "title": "Hónapról hónapra",
+        "spending": "Kiadás",
+        "income": "Bevétel",
+        "median": "Kiadás mediánja",
+        "spike": "A medián 1,5× vagy több",
+        "aria": "A legdrágább hónap {{month}} volt: {{value}}, közel a {{median}} mediánhoz.",
+        "ariaSpike": "{{month}} volt a legdrágább: {{value}}, a {{median}} medián {{multiple}}×-e.",
+        "barAria": "{{month}}: kiadás {{spending}}, bevétel {{income}}. Megnyitás a Felfedezésben.",
+        "left": "Maradt",
+        "short": "Hiányzott",
+        "vsMedian": "a medián {{multiple}}×-e",
+        "clickHint": "Kattints a hónap megtekintéséhez",
+        "tooShort": "Hónapok összevetéséhez válassz egy hónapnál hosszabb időszakot."
+      }
     }
   },
   "payees": {

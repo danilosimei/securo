@@ -2180,6 +2180,79 @@
       "empty": "Pre toto obdobie nie je čo zobraziť.",
       "error": "Túto časť sa nepodarilo načítať.",
       "retry": "Skúsiť znova"
+    },
+    "overview": {
+      "tab": "Prehľad",
+      "error": "Prehľad sa nepodarilo načítať.",
+      "empty": "V tomto období nie sú výdavky ani príjmy. Vyberte iné obdobie vyššie.",
+      "headline": {
+        "month": "V {{month}} ste minuli {{spending}}",
+        "monthUp": "V {{month}} ste minuli {{spending}}, o {{change}} viac ako v {{previous}}",
+        "monthDown": "V {{month}} ste minuli {{spending}}, o {{change}} menej ako v {{previous}}",
+        "monthPartial": "V {{month}} ste zatiaľ minuli {{spending}}",
+        "average": "Od {{from}} do {{to}} ste míňali {{spending}} mesačne",
+        "averageUp": "Od {{from}} do {{to}} ste míňali {{spending}} mesačne, o {{change}} viac ako {{months}} mesiacov predtým",
+        "averageDown": "Od {{from}} do {{to}} ste míňali {{spending}} mesačne, o {{change}} menej ako {{months}} mesiacov predtým",
+        "end": ".",
+        "left": ", a zostalo {{left}}.",
+        "leftMonthly": ", a zostávalo {{left}} mesačne.",
+        "short": ", a chýbalo {{left}}.",
+        "shortMonthly": ", a chýbalo {{left}} mesačne."
+      },
+      "kpi": {
+        "spending": "Výdavky za mesiac",
+        "income": "Príjmy za mesiac",
+        "left": "Zostáva za mesiac",
+        "short": "Chýba za mesiac",
+        "leftShare": "{{share}} príjmov",
+        "shortShare": "{{share}} nad príjmy",
+        "noIncome": "V období žiadne príjmy",
+        "leftMore": "o {{value}} viac ako predtým",
+        "leftLess": "o {{value}} menej ako predtým",
+        "fixed": "Fixné × variabilné",
+        "fixedValue": "{{share}} fixné",
+        "fixedAria": "{{fixed}} výdavkov je fixných a {{variable}} variabilných",
+        "fixedSub": "{{variable}} variabilné · {{value}}/mes. fixne",
+        "vsPrevious": "{{change}} vs predchádzajúce"
+      },
+      "highlights": {
+        "title": "Zaujímavosti",
+        "description": "Čo sa v období vymykalo. Ťuknite na kartu pre podrobnosti.",
+        "none": "V tomto období nič nezvyčajné.",
+        "see": "Zobraziť",
+        "rule": {
+          "spike": "Špička",
+          "what_changed": "Čo sa zmenilo",
+          "recurring_new_or_up": "Nové alebo drahšie fixné",
+          "recurring_expensive": "Drahý fixný náklad",
+          "small_purchases": "Drobné nákupy",
+          "heavy_group": "Ťažká skupina",
+          "to_review": "Na kontrolu"
+        }
+      },
+      "changes": {
+        "title": "Čo sa zmenilo",
+        "description": "Posledný uzavretý mesiac oproti priemeru 3 predchádzajúcich.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "Najviac stúplo {{name}}: o {{value}}.",
+        "answerDown": "Najviac kleslo {{name}}: o {{value}}.",
+        "empty": "Žiadna podstatná zmena."
+      },
+      "monthly": {
+        "title": "Mesiac po mesiaci",
+        "spending": "Výdavky",
+        "income": "Príjmy",
+        "median": "Medián výdavkov",
+        "spike": "1,5× medián a viac",
+        "aria": "Najdrahší mesiac bol {{month}}: {{value}}, blízko mediánu {{median}}.",
+        "ariaSpike": "{{month}} bol najdrahší mesiac: {{value}}, {{multiple}}× medián {{median}}.",
+        "barAria": "{{month}}: výdavky {{spending}}, príjmy {{income}}. Otvoriť v Preskúmať.",
+        "left": "Zostalo",
+        "short": "Chýbalo",
+        "vsMedian": "{{multiple}}× medián",
+        "clickHint": "Kliknite pre zobrazenie mesiaca",
+        "tooShort": "Na porovnanie mesiacov vyberte dlhšie obdobie ako mesiac."
+      }
     }
   },
   "payees": {

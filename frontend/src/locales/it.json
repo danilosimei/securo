@@ -2072,6 +2072,79 @@
       "empty": "Niente da mostrare per questo periodo.",
       "error": "Impossibile caricare questa sezione.",
       "retry": "Riprova"
+    },
+    "overview": {
+      "tab": "Panoramica",
+      "error": "Impossibile caricare la Panoramica.",
+      "empty": "Nessuna spesa né entrata in questo periodo. Scegli un altro periodo qui sopra.",
+      "headline": {
+        "month": "A {{month}} hai speso {{spending}}",
+        "monthUp": "A {{month}} hai speso {{spending}}, {{change}} in più rispetto a {{previous}}",
+        "monthDown": "A {{month}} hai speso {{spending}}, {{change}} in meno rispetto a {{previous}}",
+        "monthPartial": "A {{month}}, finora, hai speso {{spending}}",
+        "average": "Da {{from}} a {{to}} hai speso {{spending}} al mese",
+        "averageUp": "Da {{from}} a {{to}} hai speso {{spending}} al mese, {{change}} in più dei {{months}} mesi precedenti",
+        "averageDown": "Da {{from}} a {{to}} hai speso {{spending}} al mese, {{change}} in meno dei {{months}} mesi precedenti",
+        "end": ".",
+        "left": ", e sono avanzati {{left}}.",
+        "leftMonthly": ", e sono avanzati {{left}} al mese.",
+        "short": ", e sono mancati {{left}}.",
+        "shortMonthly": ", e sono mancati {{left}} al mese."
+      },
+      "kpi": {
+        "spending": "Spesa al mese",
+        "income": "Entrate al mese",
+        "left": "Avanzo al mese",
+        "short": "Ammanco al mese",
+        "leftShare": "{{share}} delle entrate",
+        "shortShare": "{{share}} oltre le entrate",
+        "noIncome": "Nessuna entrata nel periodo",
+        "leftMore": "{{value}} in più di prima",
+        "leftLess": "{{value}} in meno di prima",
+        "fixed": "Fisso × variabile",
+        "fixedValue": "{{share}} fisso",
+        "fixedAria": "{{fixed}} della spesa è fisso e {{variable}} variabile",
+        "fixedSub": "{{variable}} variabile · {{value}}/mese in fissi",
+        "vsPrevious": "{{change}} vs precedente"
+      },
+      "highlights": {
+        "title": "In evidenza",
+        "description": "Ciò che è uscito dal solito nel periodo. Tocca una scheda per i dettagli.",
+        "none": "Niente di insolito in questo periodo.",
+        "see": "Vedi",
+        "rule": {
+          "spike": "Picco",
+          "what_changed": "Cosa è cambiato",
+          "recurring_new_or_up": "Fissi nuovi o più cari",
+          "recurring_expensive": "Fisso costoso",
+          "small_purchases": "Piccoli acquisti",
+          "heavy_group": "Gruppo pesante",
+          "to_review": "Da rivedere"
+        }
+      },
+      "changes": {
+        "title": "Cosa è cambiato",
+        "description": "Ultimo mese chiuso rispetto alla media dei 3 mesi precedenti.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "{{name}} è salito di più: {{value}} in più.",
+        "answerDown": "{{name}} è sceso di più: {{value}} in meno.",
+        "empty": "Nessun cambiamento rilevante."
+      },
+      "monthly": {
+        "title": "Mese per mese",
+        "spending": "Spesa",
+        "income": "Entrate",
+        "median": "Mediana della spesa",
+        "spike": "1,5× la mediana o più",
+        "aria": "Il mese più caro è stato {{month}}: {{value}}, vicino alla mediana di {{median}}.",
+        "ariaSpike": "{{month}} è stato il mese più caro: {{value}}, {{multiple}}× la mediana di {{median}}.",
+        "barAria": "{{month}}: spesa {{spending}}, entrate {{income}}. Apri in Esplora.",
+        "left": "Avanzo",
+        "short": "Ammanco",
+        "vsMedian": "{{multiple}}× la mediana",
+        "clickHint": "Fai clic per vedere il mese",
+        "tooShort": "Scegli un periodo di più di un mese per confrontare i mesi."
+      }
     }
   },
   "payees": {

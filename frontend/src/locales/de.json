@@ -2069,6 +2069,79 @@
       "empty": "Für diesen Zeitraum gibt es nichts anzuzeigen.",
       "error": "Dieser Bereich konnte nicht geladen werden.",
       "retry": "Erneut versuchen"
+    },
+    "overview": {
+      "tab": "Überblick",
+      "error": "Der Überblick konnte nicht geladen werden.",
+      "empty": "Keine Ausgaben oder Einnahmen in diesem Zeitraum. Wähle oben einen anderen Zeitraum.",
+      "headline": {
+        "month": "Im {{month}} hast du {{spending}} ausgegeben",
+        "monthUp": "Im {{month}} hast du {{spending}} ausgegeben, {{change}} mehr als im {{previous}}",
+        "monthDown": "Im {{month}} hast du {{spending}} ausgegeben, {{change}} weniger als im {{previous}}",
+        "monthPartial": "Im {{month}} hast du bisher {{spending}} ausgegeben",
+        "average": "Von {{from}} bis {{to}} hast du {{spending}} pro Monat ausgegeben",
+        "averageUp": "Von {{from}} bis {{to}} hast du {{spending}} pro Monat ausgegeben, {{change}} mehr als in den {{months}} Monaten davor",
+        "averageDown": "Von {{from}} bis {{to}} hast du {{spending}} pro Monat ausgegeben, {{change}} weniger als in den {{months}} Monaten davor",
+        "end": ".",
+        "left": ", und {{left}} sind übrig geblieben.",
+        "leftMonthly": ", und {{left}} pro Monat sind übrig geblieben.",
+        "short": ", und es fehlten {{left}}.",
+        "shortMonthly": ", und es fehlten {{left}} pro Monat."
+      },
+      "kpi": {
+        "spending": "Ausgaben pro Monat",
+        "income": "Einnahmen pro Monat",
+        "left": "Übrig pro Monat",
+        "short": "Fehlbetrag pro Monat",
+        "leftShare": "{{share}} der Einnahmen",
+        "shortShare": "{{share}} über den Einnahmen",
+        "noIncome": "Keine Einnahmen im Zeitraum",
+        "leftMore": "{{value}} mehr als vorher",
+        "leftLess": "{{value}} weniger als vorher",
+        "fixed": "Fix × variabel",
+        "fixedValue": "{{share}} fix",
+        "fixedAria": "{{fixed}} der Ausgaben sind fix und {{variable}} variabel",
+        "fixedSub": "{{variable}} variabel · {{value}}/Monat Fixkosten",
+        "vsPrevious": "{{change}} ggü. vorher"
+      },
+      "highlights": {
+        "title": "Auffälliges",
+        "description": "Was im Zeitraum aus dem Rahmen fiel. Tippe auf eine Karte für Details.",
+        "none": "Nichts Ungewöhnliches in diesem Zeitraum.",
+        "see": "Ansehen",
+        "rule": {
+          "spike": "Spitze",
+          "what_changed": "Was sich geändert hat",
+          "recurring_new_or_up": "Neue oder teurere Fixkosten",
+          "recurring_expensive": "Teure Fixkosten",
+          "small_purchases": "Kleine Käufe",
+          "heavy_group": "Schwere Gruppe",
+          "to_review": "Zu prüfen"
+        }
+      },
+      "changes": {
+        "title": "Was sich geändert hat",
+        "description": "Letzter abgeschlossener Monat gegen den Schnitt der 3 Monate davor.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "{{name}} ist am stärksten gestiegen: {{value}} mehr.",
+        "answerDown": "{{name}} ist am stärksten gesunken: {{value}} weniger.",
+        "empty": "Keine nennenswerte Änderung."
+      },
+      "monthly": {
+        "title": "Monat für Monat",
+        "spending": "Ausgaben",
+        "income": "Einnahmen",
+        "median": "Median der Ausgaben",
+        "spike": "1,5× Median oder mehr",
+        "aria": "Der teuerste Monat war {{month}}: {{value}}, nahe am Median von {{median}}.",
+        "ariaSpike": "{{month}} war der teuerste Monat: {{value}}, {{multiple}}× der Median von {{median}}.",
+        "barAria": "{{month}}: Ausgaben {{spending}}, Einnahmen {{income}}. In Erkunden öffnen.",
+        "left": "Übrig",
+        "short": "Fehlbetrag",
+        "vsMedian": "{{multiple}}× Median",
+        "clickHint": "Klicke, um den Monat zu sehen",
+        "tooShort": "Wähle einen Zeitraum über einen Monat, um Monate zu vergleichen."
+      }
     }
   },
   "payees": {

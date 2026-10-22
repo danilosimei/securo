@@ -2068,6 +2068,79 @@
       "empty": "この期間に表示するものはありません。",
       "error": "このセクションを読み込めませんでした。",
       "retry": "再試行"
+    },
+    "overview": {
+      "tab": "概要",
+      "error": "概要を読み込めませんでした。",
+      "empty": "この期間に支出も収入もありません。上で別の期間を選んでください。",
+      "headline": {
+        "month": "{{month}}の支出は{{spending}}でした",
+        "monthUp": "{{month}}の支出は{{spending}}で、{{previous}}より{{change}}多くなりました",
+        "monthDown": "{{month}}の支出は{{spending}}で、{{previous}}より{{change}}少なくなりました",
+        "monthPartial": "{{month}}のこれまでの支出は{{spending}}です",
+        "average": "{{from}}〜{{to}}の支出は月{{spending}}でした",
+        "averageUp": "{{from}}〜{{to}}の支出は月{{spending}}で、前の{{months}}か月より{{change}}多くなりました",
+        "averageDown": "{{from}}〜{{to}}の支出は月{{spending}}で、前の{{months}}か月より{{change}}少なくなりました",
+        "end": "。",
+        "left": "。{{left}}残りました。",
+        "leftMonthly": "。毎月{{left}}残りました。",
+        "short": "。{{left}}不足しました。",
+        "shortMonthly": "。毎月{{left}}不足しました。"
+      },
+      "kpi": {
+        "spending": "月の支出",
+        "income": "月の収入",
+        "left": "月の残り",
+        "short": "月の不足",
+        "leftShare": "収入の{{share}}",
+        "shortShare": "収入を{{share}}超過",
+        "noIncome": "期間中の収入なし",
+        "leftMore": "以前より{{value}}多い",
+        "leftLess": "以前より{{value}}少ない",
+        "fixed": "固定費 × 変動費",
+        "fixedValue": "固定費 {{share}}",
+        "fixedAria": "支出の{{fixed}}が固定費、{{variable}}が変動費です",
+        "fixedSub": "変動費 {{variable}} · 固定費 月{{value}}",
+        "vsPrevious": "前期比 {{change}}"
+      },
+      "highlights": {
+        "title": "ハイライト",
+        "description": "期間中にいつもと違ったこと。カードをタップすると詳細が見られます。",
+        "none": "この期間に特別なことはありません。",
+        "see": "見る",
+        "rule": {
+          "spike": "急増",
+          "what_changed": "変化",
+          "recurring_new_or_up": "新しい・値上がりした固定費",
+          "recurring_expensive": "高い固定費",
+          "small_purchases": "少額の買い物",
+          "heavy_group": "大きなグループ",
+          "to_review": "要確認"
+        }
+      },
+      "changes": {
+        "title": "変化",
+        "description": "直近の締め月と、その前3か月の平均との比較。",
+        "row": "{{name}}: {{value}}（{{change}}）",
+        "answerUp": "最も増えたのは{{name}}：{{value}}増。",
+        "answerDown": "最も減ったのは{{name}}：{{value}}減。",
+        "empty": "目立った変化はありません。"
+      },
+      "monthly": {
+        "title": "月ごと",
+        "spending": "支出",
+        "income": "収入",
+        "median": "支出の中央値",
+        "spike": "中央値の1.5倍以上",
+        "aria": "最も支出が多かった月は{{month}}：{{value}}（中央値{{median}}に近い）。",
+        "ariaSpike": "{{month}}が最も支出の多い月でした：{{value}}、中央値{{median}}の{{multiple}}倍。",
+        "barAria": "{{month}}：支出 {{spending}}、収入 {{income}}。探索で開く。",
+        "left": "残り",
+        "short": "不足",
+        "vsMedian": "中央値の{{multiple}}倍",
+        "clickHint": "クリックしてその月を見る",
+        "tooShort": "月を比較するには1か月より長い期間を選んでください。"
+      }
     }
   },
   "payees": {

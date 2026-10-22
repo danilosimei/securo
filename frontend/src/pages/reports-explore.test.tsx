@@ -58,12 +58,13 @@ describe('Reports page: Explore tab', () => {
     expect(api.reports.netWorth).not.toHaveBeenCalled()
   })
 
-  it('switches to another tab and back, and Explore is listed first', async () => {
+  it('switches to another tab and back, and Explore comes right after the Overview', async () => {
     const { user } = renderWithProviders(<ReportsPage />, { route: '/reports?tab=explore' })
     await screen.findByText('Compras')
 
     const tabs = screen.getAllByRole('button').filter((b) => b.className.includes('px-4 py-2.5'))
-    expect(tabs[0]).toHaveTextContent(t('reports.explore.tab'))
+    expect(tabs[0]).toHaveTextContent(t('reports.overview.tab'))
+    expect(tabs[1]).toHaveTextContent(t('reports.explore.tab'))
 
     await user.click(screen.getByRole('button', { name: t('reports.netWorth') }))
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalled())

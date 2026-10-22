@@ -2068,6 +2068,79 @@
       "empty": "इस अवधि में दिखाने को कुछ नहीं है।",
       "error": "यह हिस्सा लोड नहीं हो सका।",
       "retry": "फिर से कोशिश करें"
+    },
+    "overview": {
+      "tab": "सारांश",
+      "error": "सारांश लोड नहीं हो सका।",
+      "empty": "इस अवधि में कोई खर्च या आय नहीं। ऊपर कोई और अवधि चुनें।",
+      "headline": {
+        "month": "{{month}} में आपने {{spending}} खर्च किए",
+        "monthUp": "{{month}} में आपने {{spending}} खर्च किए, {{previous}} से {{change}} ज़्यादा",
+        "monthDown": "{{month}} में आपने {{spending}} खर्च किए, {{previous}} से {{change}} कम",
+        "monthPartial": "{{month}} में अब तक आपने {{spending}} खर्च किए",
+        "average": "{{from}} से {{to}} तक आपने हर महीने {{spending}} खर्च किए",
+        "averageUp": "{{from}} से {{to}} तक आपने हर महीने {{spending}} खर्च किए, पिछले {{months}} महीनों से {{change}} ज़्यादा",
+        "averageDown": "{{from}} से {{to}} तक आपने हर महीने {{spending}} खर्च किए, पिछले {{months}} महीनों से {{change}} कम",
+        "end": "।",
+        "left": ", और {{left}} बचे।",
+        "leftMonthly": ", और हर महीने {{left}} बचे।",
+        "short": ", और {{left}} कम पड़े।",
+        "shortMonthly": ", और हर महीने {{left}} कम पड़े।"
+      },
+      "kpi": {
+        "spending": "मासिक खर्च",
+        "income": "मासिक आय",
+        "left": "मासिक बचत",
+        "short": "मासिक कमी",
+        "leftShare": "आय का {{share}}",
+        "shortShare": "आय से {{share}} ज़्यादा",
+        "noIncome": "अवधि में कोई आय नहीं",
+        "leftMore": "पहले से {{value}} ज़्यादा",
+        "leftLess": "पहले से {{value}} कम",
+        "fixed": "स्थिर × परिवर्तनशील",
+        "fixedValue": "{{share}} स्थिर",
+        "fixedAria": "खर्च का {{fixed}} स्थिर और {{variable}} परिवर्तनशील है",
+        "fixedSub": "{{variable}} परिवर्तनशील · {{value}}/माह स्थिर",
+        "vsPrevious": "पिछले से {{change}}"
+      },
+      "highlights": {
+        "title": "मुख्य बातें",
+        "description": "इस अवधि में जो सामान्य से अलग रहा। विवरण के लिए कार्ड पर टैप करें।",
+        "none": "इस अवधि में कुछ असामान्य नहीं।",
+        "see": "देखें",
+        "rule": {
+          "spike": "उछाल",
+          "what_changed": "क्या बदला",
+          "recurring_new_or_up": "नए या महंगे स्थिर खर्च",
+          "recurring_expensive": "महंगा स्थिर खर्च",
+          "small_purchases": "छोटी खरीदारी",
+          "heavy_group": "भारी समूह",
+          "to_review": "समीक्षा के लिए"
+        }
+      },
+      "changes": {
+        "title": "क्या बदला",
+        "description": "पिछला बंद महीना बनाम उससे पहले के 3 महीनों का औसत।",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "{{name}} सबसे ज़्यादा बढ़ा: {{value}} ज़्यादा।",
+        "answerDown": "{{name}} सबसे ज़्यादा घटा: {{value}} कम।",
+        "empty": "कोई खास बदलाव नहीं।"
+      },
+      "monthly": {
+        "title": "महीने दर महीने",
+        "spending": "खर्च",
+        "income": "आय",
+        "median": "खर्च का माध्यिका",
+        "spike": "माध्यिका का 1.5× या ज़्यादा",
+        "aria": "सबसे महंगा महीना {{month}} था: {{value}}, {{median}} की माध्यिका के पास।",
+        "ariaSpike": "{{month}} सबसे महंगा महीना था: {{value}}, {{median}} की माध्यिका का {{multiple}}×।",
+        "barAria": "{{month}}: खर्च {{spending}}, आय {{income}}। एक्सप्लोर में खोलें।",
+        "left": "बचा",
+        "short": "कम पड़ा",
+        "vsMedian": "माध्यिका का {{multiple}}×",
+        "clickHint": "महीना देखने के लिए क्लिक करें",
+        "tooShort": "महीनों की तुलना के लिए एक महीने से लंबी अवधि चुनें।"
+      }
     }
   },
   "payees": {

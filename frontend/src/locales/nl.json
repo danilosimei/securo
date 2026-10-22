@@ -2070,6 +2070,79 @@
       "empty": "Niets te tonen voor deze periode.",
       "error": "Dit onderdeel kon niet worden geladen.",
       "retry": "Opnieuw proberen"
+    },
+    "overview": {
+      "tab": "Overzicht",
+      "error": "Het overzicht kon niet worden geladen.",
+      "empty": "Geen uitgaven of inkomsten in deze periode. Kies hierboven een andere periode.",
+      "headline": {
+        "month": "In {{month}} gaf je {{spending}} uit",
+        "monthUp": "In {{month}} gaf je {{spending}} uit, {{change}} meer dan in {{previous}}",
+        "monthDown": "In {{month}} gaf je {{spending}} uit, {{change}} minder dan in {{previous}}",
+        "monthPartial": "In {{month}} gaf je tot nu toe {{spending}} uit",
+        "average": "Van {{from}} tot {{to}} gaf je {{spending}} per maand uit",
+        "averageUp": "Van {{from}} tot {{to}} gaf je {{spending}} per maand uit, {{change}} meer dan de {{months}} maanden ervoor",
+        "averageDown": "Van {{from}} tot {{to}} gaf je {{spending}} per maand uit, {{change}} minder dan de {{months}} maanden ervoor",
+        "end": ".",
+        "left": ", en er bleef {{left}} over.",
+        "leftMonthly": ", en er bleef {{left}} per maand over.",
+        "short": ", en je kwam {{left}} tekort.",
+        "shortMonthly": ", en je kwam {{left}} per maand tekort."
+      },
+      "kpi": {
+        "spending": "Uitgaven per maand",
+        "income": "Inkomsten per maand",
+        "left": "Over per maand",
+        "short": "Tekort per maand",
+        "leftShare": "{{share}} van de inkomsten",
+        "shortShare": "{{share}} boven de inkomsten",
+        "noIncome": "Geen inkomsten in de periode",
+        "leftMore": "{{value}} meer dan eerder",
+        "leftLess": "{{value}} minder dan eerder",
+        "fixed": "Vast × variabel",
+        "fixedValue": "{{share}} vast",
+        "fixedAria": "{{fixed}} van de uitgaven is vast en {{variable}} variabel",
+        "fixedSub": "{{variable}} variabel · {{value}}/maand aan vaste lasten",
+        "vsPrevious": "{{change}} t.o.v. vorige"
+      },
+      "highlights": {
+        "title": "Opvallend",
+        "description": "Wat in de periode opviel. Tik op een kaart voor details.",
+        "none": "Niets ongewoons in deze periode.",
+        "see": "Bekijk",
+        "rule": {
+          "spike": "Piek",
+          "what_changed": "Wat veranderde",
+          "recurring_new_or_up": "Nieuwe of duurdere vaste lasten",
+          "recurring_expensive": "Dure vaste last",
+          "small_purchases": "Kleine aankopen",
+          "heavy_group": "Zware groep",
+          "to_review": "Te controleren"
+        }
+      },
+      "changes": {
+        "title": "Wat veranderde",
+        "description": "Laatste afgesloten maand tegen het gemiddelde van de 3 maanden ervoor.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "{{name}} steeg het meest: {{value}} meer.",
+        "answerDown": "{{name}} daalde het meest: {{value}} minder.",
+        "empty": "Geen opvallende verandering."
+      },
+      "monthly": {
+        "title": "Maand per maand",
+        "spending": "Uitgaven",
+        "income": "Inkomsten",
+        "median": "Mediaan van de uitgaven",
+        "spike": "1,5× de mediaan of meer",
+        "aria": "De duurste maand was {{month}}: {{value}}, dicht bij de mediaan van {{median}}.",
+        "ariaSpike": "{{month}} was de duurste maand: {{value}}, {{multiple}}× de mediaan van {{median}}.",
+        "barAria": "{{month}}: uitgaven {{spending}}, inkomsten {{income}}. Openen in Verkennen.",
+        "left": "Over",
+        "short": "Tekort",
+        "vsMedian": "{{multiple}}× de mediaan",
+        "clickHint": "Klik om de maand te zien",
+        "tooShort": "Kies een periode langer dan een maand om maanden te vergelijken."
+      }
     }
   },
   "payees": {

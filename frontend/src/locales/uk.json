@@ -2085,6 +2085,79 @@
       "empty": "Немає даних за цей період.",
       "error": "Не вдалося завантажити цей блок.",
       "retry": "Спробувати ще"
+    },
+    "overview": {
+      "tab": "Огляд",
+      "error": "Не вдалося завантажити огляд.",
+      "empty": "Немає витрат і доходів за цей період. Виберіть інший період вище.",
+      "headline": {
+        "month": "У {{month}} ви витратили {{spending}}",
+        "monthUp": "У {{month}} ви витратили {{spending}}, на {{change}} більше, ніж у {{previous}}",
+        "monthDown": "У {{month}} ви витратили {{spending}}, на {{change}} менше, ніж у {{previous}}",
+        "monthPartial": "У {{month}} ви поки витратили {{spending}}",
+        "average": "З {{from}} по {{to}} ви витрачали {{spending}} на місяць",
+        "averageUp": "З {{from}} по {{to}} ви витрачали {{spending}} на місяць, на {{change}} більше, ніж за {{months}} міс. до того",
+        "averageDown": "З {{from}} по {{to}} ви витрачали {{spending}} на місяць, на {{change}} менше, ніж за {{months}} міс. до того",
+        "end": ".",
+        "left": ", і залишилося {{left}}.",
+        "leftMonthly": ", і залишалося {{left}} на місяць.",
+        "short": ", і забракло {{left}}.",
+        "shortMonthly": ", і бракувало {{left}} на місяць."
+      },
+      "kpi": {
+        "spending": "Витрати на місяць",
+        "income": "Доходи на місяць",
+        "left": "Залишок на місяць",
+        "short": "Нестача на місяць",
+        "leftShare": "{{share}} доходу",
+        "shortShare": "{{share}} понад дохід",
+        "noIncome": "Немає доходів за період",
+        "leftMore": "на {{value}} більше, ніж раніше",
+        "leftLess": "на {{value}} менше, ніж раніше",
+        "fixed": "Постійні × змінні",
+        "fixedValue": "{{share}} постійні",
+        "fixedAria": "{{fixed}} витрат постійні, {{variable}} змінні",
+        "fixedSub": "{{variable}} змінні · {{value}}/міс. постійних",
+        "vsPrevious": "{{change}} до попереднього"
+      },
+      "highlights": {
+        "title": "Головне",
+        "description": "Що вибивалося зі звичного за період. Торкніться картки, щоб побачити деталі.",
+        "none": "Нічого незвичного за цей період.",
+        "see": "Переглянути",
+        "rule": {
+          "spike": "Пік",
+          "what_changed": "Що змінилося",
+          "recurring_new_or_up": "Нові або дорожчі постійні",
+          "recurring_expensive": "Дорогий постійний",
+          "small_purchases": "Дрібні покупки",
+          "heavy_group": "Важка група",
+          "to_review": "Перевірити"
+        }
+      },
+      "changes": {
+        "title": "Що змінилося",
+        "description": "Останній закритий місяць проти середнього за 3 попередні.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "Найбільше зросло {{name}}: на {{value}}.",
+        "answerDown": "Найбільше знизилося {{name}}: на {{value}}.",
+        "empty": "Помітних змін немає."
+      },
+      "monthly": {
+        "title": "По місяцях",
+        "spending": "Витрати",
+        "income": "Доходи",
+        "median": "Медіана витрат",
+        "spike": "1,5× медіани або більше",
+        "aria": "Найдорожчий місяць — {{month}}: {{value}}, близько до медіани {{median}}.",
+        "ariaSpike": "{{month}} — найдорожчий місяць: {{value}}, {{multiple}}× медіани {{median}}.",
+        "barAria": "{{month}}: витрати {{spending}}, доходи {{income}}. Відкрити в Огляді витрат.",
+        "left": "Залишилося",
+        "short": "Забракло",
+        "vsMedian": "{{multiple}}× медіани",
+        "clickHint": "Натисніть, щоб відкрити місяць",
+        "tooShort": "Виберіть період, довший за місяць, щоб порівняти місяці."
+      }
     }
   },
   "payees": {

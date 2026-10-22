@@ -2068,6 +2068,79 @@
       "empty": "Nothing to show for this period.",
       "error": "Couldn't load this section.",
       "retry": "Try again"
+    },
+    "overview": {
+      "tab": "Overview",
+      "error": "Couldn't load the Overview.",
+      "empty": "No spending or income in this period. Pick another period above.",
+      "headline": {
+        "month": "In {{month}} you spent {{spending}}",
+        "monthUp": "In {{month}} you spent {{spending}}, {{change}} more than in {{previous}}",
+        "monthDown": "In {{month}} you spent {{spending}}, {{change}} less than in {{previous}}",
+        "monthPartial": "So far in {{month}} you have spent {{spending}}",
+        "average": "From {{from}} to {{to}} you spent {{spending}} a month",
+        "averageUp": "From {{from}} to {{to}} you spent {{spending}} a month, {{change}} more than the {{months}} months before",
+        "averageDown": "From {{from}} to {{to}} you spent {{spending}} a month, {{change}} less than the {{months}} months before",
+        "end": ".",
+        "left": ", and {{left}} was left over.",
+        "leftMonthly": ", and {{left}} a month was left over.",
+        "short": ", and you were {{left}} short.",
+        "shortMonthly": ", and you were {{left}} a month short."
+      },
+      "kpi": {
+        "spending": "Spending per month",
+        "income": "Income per month",
+        "left": "Left over per month",
+        "short": "Short per month",
+        "leftShare": "{{share}} of income",
+        "shortShare": "{{share}} beyond income",
+        "noIncome": "No income in the period",
+        "leftMore": "{{value}} more than before",
+        "leftLess": "{{value}} less than before",
+        "fixed": "Fixed vs variable",
+        "fixedValue": "{{share}} fixed",
+        "fixedAria": "{{fixed}} of spending is fixed and {{variable}} is variable",
+        "fixedSub": "{{variable}} variable · {{value}}/month in fixed costs",
+        "vsPrevious": "{{change}} vs previous"
+      },
+      "highlights": {
+        "title": "Highlights",
+        "description": "What stood out in the period. Tap a card to see the details.",
+        "none": "Nothing out of the ordinary in this period.",
+        "see": "See",
+        "rule": {
+          "spike": "Spike",
+          "what_changed": "What changed",
+          "recurring_new_or_up": "New or pricier fixed costs",
+          "recurring_expensive": "Costly fixed cost",
+          "small_purchases": "Small purchases",
+          "heavy_group": "Heavy group",
+          "to_review": "To review"
+        }
+      },
+      "changes": {
+        "title": "What changed",
+        "description": "Last closed month against the average of the 3 months before.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "{{name}} rose the most: {{value}} more.",
+        "answerDown": "{{name}} fell the most: {{value}} less.",
+        "empty": "No change worth a look."
+      },
+      "monthly": {
+        "title": "Month by month",
+        "spending": "Spending",
+        "income": "Income",
+        "median": "Median spending",
+        "spike": "1.5× the median or more",
+        "aria": "The costliest month was {{month}}: {{value}}, close to the {{median}} median.",
+        "ariaSpike": "{{month}} was the costliest month: {{value}}, {{multiple}}× the {{median}} median.",
+        "barAria": "{{month}}: spending {{spending}}, income {{income}}. Open in Explore.",
+        "left": "Left over",
+        "short": "Short",
+        "vsMedian": "{{multiple}}× the median",
+        "clickHint": "Click to see the month",
+        "tooShort": "Pick a period longer than one month to compare months."
+      }
     }
   },
   "payees": {

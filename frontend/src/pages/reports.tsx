@@ -26,11 +26,11 @@ import { extractApiError } from '@/lib/api-errors'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { ReportPeriodSelector } from '@/components/reports/period-selector'
-import { DEFAULT_REPORT_PERIOD, reportPeriodRange, type ReportPeriodKey } from '@/lib/report-period'
+import { reportPeriodRange, type ReportPeriodKey } from '@/lib/report-period'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { PageHeader } from '@/components/page-header'
-import { CashflowSankey } from '@/components/reports/CashflowSankey'
 import { ExploreTab } from '@/components/reports/explore/explore-tab'
+import { OverviewTab } from '@/components/reports/overview/overview-tab'
 import { FadePanel } from '@/components/ui/fade-panel'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
@@ -86,18 +86,6 @@ const FORWARD_RANGE_OPTIONS: readonly RangeOption[] = [
   { key: '3m', months: 3 },
   { key: '6m', months: 6 },
   { key: '12m', months: 12 },
-]
-
-// Income & Expenses and the Money Map use the closed periods shared with
-// Explore (the key is the `period` the API takes); the month count only feeds
-// the generic query plumbing. "Custom" is handled apart, like in other tabs.
-const CLOSED_RANGE_OPTIONS: readonly RangeOption[] = [
-  { key: 'this_month', months: 1, period: 'this_month' },
-  { key: 'last_month', months: 1, period: 'last_month' },
-  { key: 'last_3m', months: 3, period: 'last_3m' },
-  { key: 'last_6m', months: 6, period: 'last_6m' },
-  { key: 'last_12m', months: 12, period: 'last_12m' },
-  { key: 'ytd', months: 12, period: 'ytd' },
 ]
 
 const HISTORICAL_INTERVAL_OPTIONS = [
@@ -156,6 +144,9 @@ interface ReportTab {
   intervalOptions: readonly { key: string; value: string }[]
   /** Closed periods shared with Explore, instead of the rolling presets. */
   closedPeriods?: boolean
+  /** Renders its own view, period selector and URL state (Explore and the
+   *  views built on the closed periods); the page's range plumbing is off. */
+  selfManaged?: boolean
   /** Cash flow is a forward-only forecast, so it's the only tab that can't offer a past-only calendar range. */
   supportsCustomRange: boolean
   /** Preset selected when switching to this tab drops the current preset, or when Reset+Apply clears a custom range on it. */
@@ -163,40 +154,41 @@ interface ReportTab {
   fallbackInterval: string
 }
 
+// Tabs that bring their own view; the range fields only keep the shared tab
+// shape valid.
+const selfManagedTab = (key: string, labelKey: string): ReportTab => ({
+  key, labelKey, enabled: true, selfManaged: true,
+  rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+  supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
+})
+
 const REPORT_TABS: ReportTab[] = [
-  {
-    // Has its own period selector and URL state (see ExploreTab); the range
-    // fields only keep the shared tab shape valid.
-    key: 'explore', labelKey: 'reports.explore.tab', enabled: true,
-    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
-    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
-  },
-  {
-    key: 'net_worth', labelKey: 'reports.netWorth', enabled: true,
-    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
-    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
-  },
-  {
-    key: 'income_expenses', labelKey: 'reports.incomeExpenses', enabled: true,
-    rangeOptions: CLOSED_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
-    closedPeriods: true,
-    supportsCustomRange: true, fallbackRangeKey: DEFAULT_REPORT_PERIOD, fallbackInterval: 'monthly',
-  },
+  selfManagedTab('overview', 'reports.overview.tab'),
+  selfManagedTab('explore', 'reports.explore.tab'),
   {
     key: 'cash_flow', labelKey: 'reports.cashFlow', enabled: true,
     rangeOptions: FORWARD_RANGE_OPTIONS, intervalOptions: CASH_FLOW_INTERVAL_OPTIONS,
     supportsCustomRange: false, fallbackRangeKey: '6m', fallbackInterval: 'daily',
   },
   {
-    key: 'money_map', labelKey: 'reports.moneyMap', enabled: true,
-    rangeOptions: CLOSED_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
-    closedPeriods: true,
-    supportsCustomRange: true, fallbackRangeKey: 'last_3m', fallbackInterval: 'monthly',
+    key: 'net_worth', labelKey: 'reports.netWorth', enabled: true,
+    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
   },
 ]
 
 /** The tab the page opens on when the URL does not ask for another. */
-const DEFAULT_TAB = REPORT_TABS.find((tab) => tab.key === 'net_worth') ?? REPORT_TABS[0]
+const DEFAULT_TAB = REPORT_TABS[0]
+/** Tabs folded into the Overview: old links land there. */
+const RETIRED_TABS = new Set(['income_expenses', 'money_map'])
+
+function tabFromUrl(key: string | null): ReportTab {
+  if (key && RETIRED_TABS.has(key)) return DEFAULT_TAB
+  return REPORT_TABS.find((tab) => tab.key === key) ?? DEFAULT_TAB
+}
+
+/** The range-driven tab whose stored range seeds the page's range state. */
+const RANGE_SEED_TAB = REPORT_TABS.find((tab) => tab.key === 'net_worth')!
 
 /** The range last used on `tab`, if it is still one the tab offers. */
 function storedReportsRange(tab: ReportTab): ReportsRange | null {
@@ -222,13 +214,19 @@ export default function ReportsPage() {
   const locale = useDisplayLocale()
 
   const customDefaults = defaultCustomRange()
-  // The page opens on the first tab with the range last used there (issue
-  // #1053), or that tab's defaults if what was stored doesn't apply to it.
-  const [initialRange] = useState<ReportsRange>(() => storedReportsRange(DEFAULT_TAB) ?? {
-    rangeKey: DEFAULT_TAB.fallbackRangeKey,
-    from: '',
-    to: '',
-    interval: DEFAULT_TAB.fallbackInterval,
+  // `?tab=` picks the tab, so a link, a chart click or Back can switch it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlTab = tabFromUrl(searchParams.get('tab'))
+  // The page opens with the range last used on its tab (issue #1053), or that
+  // tab's defaults if what was stored doesn't apply to it.
+  const [initialRange] = useState<ReportsRange>(() => {
+    const seed = urlTab.selfManaged ? RANGE_SEED_TAB : urlTab
+    return storedReportsRange(seed) ?? {
+      rangeKey: seed.fallbackRangeKey,
+      from: '',
+      to: '',
+      interval: seed.fallbackInterval,
+    }
   })
   const [rangeKey, setRangeKey] = useState(initialRange.rangeKey)
   const [interval, setInterval] = useState(initialRange.interval)
@@ -238,19 +236,15 @@ export default function ReportsPage() {
   // selection while the user compares views.
   const [customFrom, setCustomFrom] = useState(initialRange.from)
   const [customTo, setCustomTo] = useState(initialRange.to)
-  // `?tab=` lets a link open a tab; only Explore keeps the rest of its state in
-  // the URL for now (its own period params).
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState(
-    () => REPORT_TABS.find((tab) => tab.key === searchParams.get('tab'))?.key ?? DEFAULT_TAB.key,
-  )
-  const isExplore = activeTab === 'explore'
+  const activeTab = urlTab.key
+  // Explore and the views on closed periods keep their own state in the URL.
+  const isSelfManaged = !!urlTab.selfManaged
   // Each tab keeps its own range: Cash Flow clamping to its forward presets
   // must not overwrite what Net Worth was showing.
   useEffect(() => {
-    if (activeTab === 'explore') return
+    if (isSelfManaged) return
     saveReportsRange(activeTab, { rangeKey, from: customFrom, to: customTo, interval })
-  }, [activeTab, rangeKey, customFrom, customTo, interval])
+  }, [activeTab, isSelfManaged, rangeKey, customFrom, customTo, interval])
   const [compositionView, setCompositionView] = useState<string>('netWorth')
   const [sparklineView, setSparklineView] = useState<'byExpenses' | 'byIncome'>('byExpenses')
   const [sparklinePage, setSparklinePage] = useState(0)
@@ -269,9 +263,6 @@ export default function ReportsPage() {
   const currentTab = REPORT_TABS.find((tab) => tab.key === activeTab) ?? REPORT_TABS[0]
 
   const isCashFlow = activeTab === 'cash_flow'
-  // The Money Map (Sankey) tab is driven by the same income/expenses
-  // composition, aggregated over the selected historical range.
-  const isMoneyMap = activeTab === 'money_map'
   const rangeOptions = currentTab.rangeOptions
   // Cash flow's forecast presets don't make sense with a past-only calendar
   // range, so custom is only offered for the historical tabs (Net Worth,
@@ -310,8 +301,15 @@ export default function ReportsPage() {
 
   const handleSelectTab = (key: string) => {
     const nextTab = REPORT_TABS.find((tab) => tab.key === key) ?? REPORT_TABS[0]
-    setActiveTab(key)
-    setSearchParams({ tab: key }, { replace: true })
+    // The views on closed periods share the period: it follows the switch.
+    const next = new URLSearchParams({ tab: key })
+    if (nextTab.selfManaged && isSelfManaged) {
+      for (const param of ['period', 'from', 'to']) {
+        const value = searchParams.get(param)
+        if (value) next.set(param, value)
+      }
+    }
+    setSearchParams(next, { replace: true })
     setCompositionView(key === 'net_worth' ? 'netWorth' : 'net')
     setSparklinePage(0)
     setSelectedDate(null)
@@ -342,11 +340,11 @@ export default function ReportsPage() {
     queryFn: () =>
       isCashFlow
         ? reports.cashFlow(months, interval, cashFlowBaseline, acctIds)
-        : activeTab === 'income_expenses' || isMoneyMap
+        : activeTab === 'income_expenses'
           ? reports.incomeExpenses(months, interval, acctIds, period, days, apiStart, apiEnd)
           : reports.netWorth(months, interval, acctIds, walletIds, period, apiStart, apiEnd),
     // Only request a custom report with both committed endpoints.
-    enabled: currentTab.enabled && !isExplore && !(noAccounts && activeTab !== 'net_worth') && (!isCustomRange || hasCustomRange),
+    enabled: currentTab.enabled && !isSelfManaged && !(noAccounts && activeTab !== 'net_worth') && (!isCustomRange || hasCustomRange),
   })
 
   const summary = data?.summary
@@ -627,7 +625,7 @@ export default function ReportsPage() {
         section={t('reports.section')}
         title={t(currentTab.labelKey)}
         action={
-          <div className={`flex items-center gap-2 ${isExplore ? 'hidden' : ''}`}>
+          <div className={`flex items-center gap-2 ${isSelfManaged ? 'hidden' : ''}`}>
             {isCashFlow && (
               <div
                 className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
@@ -718,7 +716,7 @@ export default function ReportsPage() {
               )}
             </div>
             )}
-            <div className={`flex items-center rounded-lg border border-border bg-card overflow-hidden ${isMoneyMap ? 'hidden' : ''}`}>
+            <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
               {intervalOptions.map((opt) => (
                 <button
                   key={opt.key}
@@ -737,14 +735,15 @@ export default function ReportsPage() {
         }
       />
 
-      {/* Tab Bar */}
-      <div className="flex items-center gap-1 mb-5 border-b border-border">
+      {/* Tab Bar: scrolls on its own on a phone, never the page. */}
+      <div className="flex items-center gap-1 mb-5 border-b border-border overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {REPORT_TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => { if (tab.enabled) handleSelectTab(tab.key) }}
             disabled={!tab.enabled}
-            className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+            aria-current={activeTab === tab.key ? 'page' : undefined}
+            className={`relative px-4 py-2.5 shrink-0 whitespace-nowrap text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? 'text-foreground'
                 : tab.enabled
@@ -765,13 +764,14 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      {isExplore && (
-        <FadePanel panelKey="explore">
-          <ExploreTab />
+      {isSelfManaged && (
+        <FadePanel panelKey={activeTab}>
+          {activeTab === 'overview' && <OverviewTab />}
+          {activeTab === 'explore' && <ExploreTab />}
         </FadePanel>
       )}
 
-      {!isExplore && isError && (
+      {!isSelfManaged && isError && (
         <div className="flex items-center justify-between gap-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-lg px-4 py-2.5 mb-5">
           <div className="flex items-center gap-2.5 min-w-0">
             <AlertCircle size={16} className="shrink-0 text-rose-600 dark:text-rose-400" />
@@ -789,7 +789,7 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {!isExplore && !isError && (
+      {!isSelfManaged && !isError && (
       <>
       {/* Hero Card */}
       <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
@@ -879,40 +879,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Flow (Sankey) */}
-      {isMoneyMap && (
-        <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
-          <div className="px-5 pt-5 pb-2 flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">
-              {t('reports.moneyMap')}
-            </p>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10B981' }} />
-                <span className="text-[11px] text-muted-foreground">{t('reports.income')}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F43F5E' }} />
-                <span className="text-[11px] text-muted-foreground">{t('reports.expenses')}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F59E0B' }} />
-                <span className="text-[11px] text-muted-foreground">{t('reports.deficit')}</span>
-              </div>
-            </div>
-          </div>
-          <div className="px-3 pb-5">
-            {isLoading ? (
-              <div className="px-2"><Skeleton className="h-[360px] w-full" /></div>
-            ) : (
-              <CashflowSankey composition={composition} currency={userCurrency} locale={locale} />
-            )}
-          </div>
-        </div>
-      )}
-
-      {!isMoneyMap && (
-      <>
       {/* Main Trend Chart */}
       <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
         <div className="px-5 pt-5 pb-2 flex items-center justify-between">
@@ -1718,8 +1684,6 @@ export default function ReportsPage() {
           )}
         </div>
       </div>
-      </>
-      )}
       </>
       )}
     </div>
