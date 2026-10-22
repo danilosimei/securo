@@ -2206,6 +2206,52 @@
       "perMonth": "月{{value}}",
       "perYear": "年{{value}}",
       "rowAria": "{{name}}、{{status}}：月{{month}}、年{{year}}。探索で開く。"
+    },
+    "habits": {
+      "tab": "習慣",
+      "headline": "期間中の購入は{{n}}回、月{{perMonth}}回。最も頻繁なのは{{name}}：月{{freq}}回。",
+      "headlineCount": "期間中の購入は{{n}}回。",
+      "empty": "この期間に購入はありません。",
+      "openHint": "クリックして探索で開く",
+      "bubbles": {
+        "title": "頻度 × 単価",
+        "answer": "最もお金のかかる習慣は{{name}}：月{{perMonth}}回、平均{{ticket}}、期間中{{total}}。",
+        "xAxis": "月あたりの購入回数",
+        "yAxis": "平均単価",
+        "costlyHabit": "高い習慣",
+        "bigRare": "大きくてまれ",
+        "small": "細かい出費",
+        "aria": "{{name}}：月{{perMonth}}回、平均単価{{ticket}}、合計{{total}}。探索で開く。",
+        "total": "期間中",
+        "ticket": "平均単価",
+        "perMonthLabel": "月あたりの購入回数",
+        "legend": "グループ別の色"
+      },
+      "weekdays": {
+        "title": "曜日",
+        "answer": "最も支出が多いのは{{day}}：{{n}}回の購入で{{total}}。",
+        "aria": "{{day}}：{{n}}回で{{total}}"
+      },
+      "bands": {
+        "title": "金額帯",
+        "answer": "{{limit}}未満の購入{{n}}回で合計{{total}}。",
+        "upTo": "{{max}}まで",
+        "above": "{{min}}超",
+        "between": "{{min}}〜{{max}}",
+        "band": "金額帯",
+        "count": "購入数",
+        "total": "合計",
+        "aria": "{{band}}：{{n}}回、{{total}}"
+      },
+      "calendar": {
+        "title": "日ごと",
+        "answer": "最も支出が多かった日は{{day}}：{{total}}。",
+        "dayAria": "{{day}}：{{total}}。その日の取引を開く。",
+        "spent": "その日の支出",
+        "openHint": "クリックしてその日の取引を見る",
+        "less": "少",
+        "more": "多"
+      }
     }
   },
   "payees": {

@@ -2210,6 +2210,52 @@
       "perMonth": "{{value}}/mês",
       "perYear": "{{value}}/ano",
       "rowAria": "{{name}}, {{status}}: {{month}} por mês, {{year}} por ano. Abrir no Explorar."
+    },
+    "habits": {
+      "tab": "Hábitos",
+      "headline": "Fez {{n}} compras no período, {{perMonth}} por mês; {{name}} é onde mais volta: {{freq}} vezes por mês.",
+      "headlineCount": "Fez {{n}} compras no período.",
+      "empty": "Nenhuma compra neste período.",
+      "openHint": "Clique para abrir no Explorar",
+      "bubbles": {
+        "title": "Frequência × valor médio",
+        "answer": "{{name}} é o seu hábito mais caro: {{perMonth}} compras por mês, valor médio de {{ticket}}, {{total}} no período.",
+        "xAxis": "compras por mês",
+        "yAxis": "valor médio",
+        "costlyHabit": "Hábito caro",
+        "bigRare": "Grande e raro",
+        "small": "Miudezas",
+        "aria": "{{name}}: {{perMonth}} compras por mês, valor médio {{ticket}}, total {{total}}. Abrir no Explorar.",
+        "total": "no período",
+        "ticket": "valor médio",
+        "perMonthLabel": "compras por mês",
+        "legend": "Cores por grupo"
+      },
+      "weekdays": {
+        "title": "Dia da semana",
+        "answer": "{{day}} é o dia em que mais gasta: {{total}} em {{n}} compras.",
+        "aria": "{{day}}: {{total}} em {{n}} compras"
+      },
+      "bands": {
+        "title": "Escalões de valor",
+        "answer": "{{n}} compras abaixo de {{limit}} somam {{total}}.",
+        "upTo": "até {{max}}",
+        "above": "acima de {{min}}",
+        "between": "{{min}} a {{max}}",
+        "band": "Escalão",
+        "count": "Compras",
+        "total": "Total",
+        "aria": "{{band}}: {{n}} compras, {{total}}"
+      },
+      "calendar": {
+        "title": "Dia a dia",
+        "answer": "O dia mais caro foi {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Abrir os movimentos do dia.",
+        "spent": "gasto no dia",
+        "openHint": "Clique para ver os movimentos do dia",
+        "less": "Menos",
+        "more": "Mais"
+      }
     }
   },
   "payees": {

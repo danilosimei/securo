@@ -2292,6 +2292,52 @@
       "perMonth": "{{value}}/mies.",
       "perYear": "{{value}}/rok",
       "rowAria": "{{name}}, {{status}}: {{month}} miesięcznie, {{year}} rocznie. Otwórz w Eksploruj."
+    },
+    "habits": {
+      "tab": "Nawyki",
+      "headline": "W okresie zrobiłeś {{n}} zakupów, {{perMonth}} miesięcznie; najczęściej wracasz do {{name}}: {{freq}} razy w miesiącu.",
+      "headlineCount": "W okresie zrobiłeś {{n}} zakupów.",
+      "empty": "Brak zakupów w tym okresie.",
+      "openHint": "Kliknij, aby otworzyć w Eksploruj",
+      "bubbles": {
+        "title": "Częstotliwość × paragon",
+        "answer": "{{name}} to twój najdroższy nawyk: {{perMonth}} zakupów miesięcznie, średnio {{ticket}}, {{total}} w okresie.",
+        "xAxis": "zakupy miesięcznie",
+        "yAxis": "średni paragon",
+        "costlyHabit": "Drogi nawyk",
+        "bigRare": "Duże i rzadkie",
+        "small": "Drobiazgi",
+        "aria": "{{name}}: {{perMonth}} zakupów miesięcznie, średnio {{ticket}}, razem {{total}}. Otwórz w Eksploruj.",
+        "total": "w okresie",
+        "ticket": "średni paragon",
+        "perMonthLabel": "zakupy miesięcznie",
+        "legend": "Kolory według grup"
+      },
+      "weekdays": {
+        "title": "Dzień tygodnia",
+        "answer": "Najwięcej wydajesz w {{day}}: {{total}} w {{n}} zakupach.",
+        "aria": "{{day}}: {{total}} w {{n}} zakupach"
+      },
+      "bands": {
+        "title": "Przedziały kwot",
+        "answer": "{{n}} zakupów poniżej {{limit}} daje razem {{total}}.",
+        "upTo": "do {{max}}",
+        "above": "ponad {{min}}",
+        "between": "{{min}} – {{max}}",
+        "band": "Przedział",
+        "count": "Zakupy",
+        "total": "Suma",
+        "aria": "{{band}}: {{n}} zakupów, {{total}}"
+      },
+      "calendar": {
+        "title": "Dzień po dniu",
+        "answer": "Najdroższy dzień: {{day}}, {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Otwórz transakcje z tego dnia.",
+        "spent": "wydane tego dnia",
+        "openHint": "Kliknij, aby zobaczyć transakcje z tego dnia",
+        "less": "Mniej",
+        "more": "Więcej"
+      }
     }
   },
   "payees": {

@@ -2210,6 +2210,52 @@
       "perMonth": "{{value}}/mois",
       "perYear": "{{value}}/an",
       "rowAria": "{{name}}, {{status}} : {{month}} par mois, {{year}} par an. Ouvrir dans Explorer."
+    },
+    "habits": {
+      "tab": "Habitudes",
+      "headline": "Vous avez fait {{n}} achats sur la période, {{perMonth}} par mois ; {{name}} est l’endroit où vous revenez le plus : {{freq}} fois par mois.",
+      "headlineCount": "Vous avez fait {{n}} achats sur la période.",
+      "empty": "Aucun achat sur cette période.",
+      "openHint": "Cliquez pour ouvrir dans Explorer",
+      "bubbles": {
+        "title": "Fréquence × panier",
+        "answer": "{{name}} est votre habitude la plus coûteuse : {{perMonth}} achats par mois, panier moyen de {{ticket}}, {{total}} sur la période.",
+        "xAxis": "achats par mois",
+        "yAxis": "panier moyen",
+        "costlyHabit": "Habitude coûteuse",
+        "bigRare": "Gros et rare",
+        "small": "Menus achats",
+        "aria": "{{name}} : {{perMonth}} achats par mois, panier moyen {{ticket}}, total {{total}}. Ouvrir dans Explorer.",
+        "total": "sur la période",
+        "ticket": "panier moyen",
+        "perMonthLabel": "achats par mois",
+        "legend": "Couleurs par groupe"
+      },
+      "weekdays": {
+        "title": "Jour de la semaine",
+        "answer": "{{day}} est le jour où vous dépensez le plus : {{total}} en {{n}} achats.",
+        "aria": "{{day}} : {{total}} en {{n}} achats"
+      },
+      "bands": {
+        "title": "Tranches de montant",
+        "answer": "{{n}} achats de moins de {{limit}} font {{total}}.",
+        "upTo": "jusqu’à {{max}}",
+        "above": "plus de {{min}}",
+        "between": "{{min}} à {{max}}",
+        "band": "Tranche",
+        "count": "Achats",
+        "total": "Total",
+        "aria": "{{band}} : {{n}} achats, {{total}}"
+      },
+      "calendar": {
+        "title": "Jour par jour",
+        "answer": "Le jour le plus cher a été le {{day}} : {{total}}.",
+        "dayAria": "{{day}} : {{total}}. Ouvrir les opérations du jour.",
+        "spent": "dépensé ce jour-là",
+        "openHint": "Cliquez pour voir les opérations du jour",
+        "less": "Moins",
+        "more": "Plus"
+      }
     }
   },
   "payees": {

@@ -2207,6 +2207,52 @@
       "perMonth": "{{value}}/Monat",
       "perYear": "{{value}}/Jahr",
       "rowAria": "{{name}}, {{status}}: {{month}} pro Monat, {{year}} pro Jahr. In Erkunden öffnen."
+    },
+    "habits": {
+      "tab": "Gewohnheiten",
+      "headline": "Du hast im Zeitraum {{n}} Einkäufe gemacht, {{perMonth}} pro Monat; bei {{name}} bist du am häufigsten: {{freq}}-mal pro Monat.",
+      "headlineCount": "Du hast im Zeitraum {{n}} Einkäufe gemacht.",
+      "empty": "Keine Einkäufe in diesem Zeitraum.",
+      "openHint": "Klicke, um in Erkunden zu öffnen",
+      "bubbles": {
+        "title": "Häufigkeit × Bon",
+        "answer": "{{name}} ist deine teuerste Gewohnheit: {{perMonth}} Einkäufe pro Monat, durchschnittlich {{ticket}}, {{total}} im Zeitraum.",
+        "xAxis": "Einkäufe pro Monat",
+        "yAxis": "Durchschnittsbon",
+        "costlyHabit": "Teure Gewohnheit",
+        "bigRare": "Groß und selten",
+        "small": "Kleinkram",
+        "aria": "{{name}}: {{perMonth}} Einkäufe pro Monat, Durchschnitt {{ticket}}, gesamt {{total}}. In Erkunden öffnen.",
+        "total": "im Zeitraum",
+        "ticket": "Durchschnittsbon",
+        "perMonthLabel": "Einkäufe pro Monat",
+        "legend": "Farben nach Gruppe"
+      },
+      "weekdays": {
+        "title": "Wochentag",
+        "answer": "Am {{day}} gibst du am meisten aus: {{total}} in {{n}} Einkäufen.",
+        "aria": "{{day}}: {{total}} in {{n}} Einkäufen"
+      },
+      "bands": {
+        "title": "Betragsstufen",
+        "answer": "{{n}} Einkäufe unter {{limit}} ergeben zusammen {{total}}.",
+        "upTo": "bis {{max}}",
+        "above": "über {{min}}",
+        "between": "{{min}} bis {{max}}",
+        "band": "Stufe",
+        "count": "Einkäufe",
+        "total": "Summe",
+        "aria": "{{band}}: {{n}} Einkäufe, {{total}}"
+      },
+      "calendar": {
+        "title": "Tag für Tag",
+        "answer": "Der teuerste Tag war der {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Buchungen des Tages öffnen.",
+        "spent": "an dem Tag ausgegeben",
+        "openHint": "Klicke für die Buchungen des Tages",
+        "less": "Weniger",
+        "more": "Mehr"
+      }
     }
   },
   "payees": {

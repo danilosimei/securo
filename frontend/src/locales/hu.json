@@ -2206,6 +2206,52 @@
       "perMonth": "havi {{value}}",
       "perYear": "évi {{value}}",
       "rowAria": "{{name}}, {{status}}: havi {{month}}, évi {{year}}. Megnyitás a Felfedezésben."
+    },
+    "habits": {
+      "tab": "Szokások",
+      "headline": "Az időszakban {{n}} vásárlásod volt, havi {{perMonth}}; leggyakrabban ide térsz vissza: {{name}}, havi {{freq}} alkalommal.",
+      "headlineCount": "Az időszakban {{n}} vásárlásod volt.",
+      "empty": "Nincs vásárlás ebben az időszakban.",
+      "openHint": "Kattints a megnyitáshoz a Felfedezésben",
+      "bubbles": {
+        "title": "Gyakoriság × kosárérték",
+        "answer": "A legdrágább szokásod: {{name}}, havi {{perMonth}} vásárlás, átlagosan {{ticket}}, {{total}} az időszakban.",
+        "xAxis": "vásárlás havonta",
+        "yAxis": "átlagos kosárérték",
+        "costlyHabit": "Drága szokás",
+        "bigRare": "Nagy és ritka",
+        "small": "Apróságok",
+        "aria": "{{name}}: havi {{perMonth}} vásárlás, átlag {{ticket}}, összesen {{total}}. Megnyitás a Felfedezésben.",
+        "total": "az időszakban",
+        "ticket": "átlagos kosárérték",
+        "perMonthLabel": "vásárlás havonta",
+        "legend": "Színek csoportonként"
+      },
+      "weekdays": {
+        "title": "A hét napja",
+        "answer": "{{day}} napon költesz a legtöbbet: {{total}}, {{n}} vásárlás.",
+        "aria": "{{day}}: {{total}}, {{n}} vásárlás"
+      },
+      "bands": {
+        "title": "Összegsávok",
+        "answer": "{{n}} vásárlás {{limit}} alatt összesen {{total}}.",
+        "upTo": "legfeljebb {{max}}",
+        "above": "{{min}} felett",
+        "between": "{{min}} – {{max}}",
+        "band": "Sáv",
+        "count": "Vásárlás",
+        "total": "Összesen",
+        "aria": "{{band}}: {{n}} vásárlás, {{total}}"
+      },
+      "calendar": {
+        "title": "Napról napra",
+        "answer": "A legdrágább nap: {{day}}, {{total}}.",
+        "dayAria": "{{day}}: {{total}}. A nap tranzakcióinak megnyitása.",
+        "spent": "aznapi költés",
+        "openHint": "Kattints a nap tranzakcióiért",
+        "less": "Kevesebb",
+        "more": "Több"
+      }
     }
   },
   "payees": {

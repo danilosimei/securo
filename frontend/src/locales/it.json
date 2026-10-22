@@ -2210,6 +2210,52 @@
       "perMonth": "{{value}}/mese",
       "perYear": "{{value}}/anno",
       "rowAria": "{{name}}, {{status}}: {{month}} al mese, {{year}} all’anno. Apri in Esplora."
+    },
+    "habits": {
+      "tab": "Abitudini",
+      "headline": "Hai fatto {{n}} acquisti nel periodo, {{perMonth}} al mese; {{name}} è dove torni di più: {{freq}} volte al mese.",
+      "headlineCount": "Hai fatto {{n}} acquisti nel periodo.",
+      "empty": "Nessun acquisto in questo periodo.",
+      "openHint": "Fai clic per aprire in Esplora",
+      "bubbles": {
+        "title": "Frequenza × scontrino",
+        "answer": "{{name}} è la tua abitudine più cara: {{perMonth}} acquisti al mese, scontrino medio di {{ticket}}, {{total}} nel periodo.",
+        "xAxis": "acquisti al mese",
+        "yAxis": "scontrino medio",
+        "costlyHabit": "Abitudine cara",
+        "bigRare": "Grande e raro",
+        "small": "Spese minute",
+        "aria": "{{name}}: {{perMonth}} acquisti al mese, scontrino medio {{ticket}}, totale {{total}}. Apri in Esplora.",
+        "total": "nel periodo",
+        "ticket": "scontrino medio",
+        "perMonthLabel": "acquisti al mese",
+        "legend": "Colori per gruppo"
+      },
+      "weekdays": {
+        "title": "Giorno della settimana",
+        "answer": "{{day}} è il giorno in cui spendi di più: {{total}} in {{n}} acquisti.",
+        "aria": "{{day}}: {{total}} in {{n}} acquisti"
+      },
+      "bands": {
+        "title": "Fasce di importo",
+        "answer": "{{n}} acquisti sotto {{limit}} sommano {{total}}.",
+        "upTo": "fino a {{max}}",
+        "above": "oltre {{min}}",
+        "between": "da {{min}} a {{max}}",
+        "band": "Fascia",
+        "count": "Acquisti",
+        "total": "Totale",
+        "aria": "{{band}}: {{n}} acquisti, {{total}}"
+      },
+      "calendar": {
+        "title": "Giorno per giorno",
+        "answer": "Il giorno più caro è stato il {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Apri le transazioni del giorno.",
+        "spent": "speso quel giorno",
+        "openHint": "Fai clic per vedere le transazioni del giorno",
+        "less": "Meno",
+        "more": "Più"
+      }
     }
   },
   "payees": {

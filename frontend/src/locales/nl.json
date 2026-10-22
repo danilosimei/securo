@@ -2208,6 +2208,52 @@
       "perMonth": "{{value}}/maand",
       "perYear": "{{value}}/jaar",
       "rowAria": "{{name}}, {{status}}: {{month}} per maand, {{year}} per jaar. Openen in Verkennen."
+    },
+    "habits": {
+      "tab": "Gewoontes",
+      "headline": "Je deed {{n}} aankopen in de periode, {{perMonth}} per maand; bij {{name}} kom je het vaakst terug: {{freq}} keer per maand.",
+      "headlineCount": "Je deed {{n}} aankopen in de periode.",
+      "empty": "Geen aankopen in deze periode.",
+      "openHint": "Klik om te openen in Verkennen",
+      "bubbles": {
+        "title": "Frequentie × bon",
+        "answer": "{{name}} is je duurste gewoonte: {{perMonth}} aankopen per maand, gemiddeld {{ticket}}, {{total}} in de periode.",
+        "xAxis": "aankopen per maand",
+        "yAxis": "gemiddelde bon",
+        "costlyHabit": "Dure gewoonte",
+        "bigRare": "Groot en zeldzaam",
+        "small": "Kleintjes",
+        "aria": "{{name}}: {{perMonth}} aankopen per maand, gemiddeld {{ticket}}, totaal {{total}}. Openen in Verkennen.",
+        "total": "in de periode",
+        "ticket": "gemiddelde bon",
+        "perMonthLabel": "aankopen per maand",
+        "legend": "Kleuren per groep"
+      },
+      "weekdays": {
+        "title": "Dag van de week",
+        "answer": "Op {{day}} geef je het meest uit: {{total}} in {{n}} aankopen.",
+        "aria": "{{day}}: {{total}} in {{n}} aankopen"
+      },
+      "bands": {
+        "title": "Bedragklassen",
+        "answer": "{{n}} aankopen onder {{limit}} zijn samen {{total}}.",
+        "upTo": "tot {{max}}",
+        "above": "boven {{min}}",
+        "between": "{{min}} tot {{max}}",
+        "band": "Klasse",
+        "count": "Aankopen",
+        "total": "Totaal",
+        "aria": "{{band}}: {{n}} aankopen, {{total}}"
+      },
+      "calendar": {
+        "title": "Dag voor dag",
+        "answer": "De duurste dag was {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Transacties van die dag openen.",
+        "spent": "uitgegeven die dag",
+        "openHint": "Klik voor de transacties van die dag",
+        "less": "Minder",
+        "more": "Meer"
+      }
     }
   },
   "payees": {

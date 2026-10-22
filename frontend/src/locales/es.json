@@ -2210,6 +2210,52 @@
       "perMonth": "{{value}}/mes",
       "perYear": "{{value}}/año",
       "rowAria": "{{name}}, {{status}}: {{month}} al mes, {{year}} al año. Abrir en Explorar."
+    },
+    "habits": {
+      "tab": "Hábitos",
+      "headline": "Hiciste {{n}} compras en el período, {{perMonth}} al mes; {{name}} es donde más vuelves: {{freq}} veces al mes.",
+      "headlineCount": "Hiciste {{n}} compras en el período.",
+      "empty": "Sin compras en este período.",
+      "openHint": "Haz clic para abrir en Explorar",
+      "bubbles": {
+        "title": "Frecuencia × ticket",
+        "answer": "{{name}} es tu hábito más caro: {{perMonth}} compras al mes, ticket medio de {{ticket}}, {{total}} en el período.",
+        "xAxis": "compras al mes",
+        "yAxis": "ticket medio",
+        "costlyHabit": "Hábito caro",
+        "bigRare": "Grande y raro",
+        "small": "Menudencias",
+        "aria": "{{name}}: {{perMonth}} compras al mes, ticket medio {{ticket}}, total {{total}}. Abrir en Explorar.",
+        "total": "en el período",
+        "ticket": "ticket medio",
+        "perMonthLabel": "compras al mes",
+        "legend": "Colores por grupo"
+      },
+      "weekdays": {
+        "title": "Día de la semana",
+        "answer": "{{day}} es el día en que más gastas: {{total}} en {{n}} compras.",
+        "aria": "{{day}}: {{total}} en {{n}} compras"
+      },
+      "bands": {
+        "title": "Tramos de importe",
+        "answer": "{{n}} compras por debajo de {{limit}} suman {{total}}.",
+        "upTo": "hasta {{max}}",
+        "above": "más de {{min}}",
+        "between": "{{min}} a {{max}}",
+        "band": "Tramo",
+        "count": "Compras",
+        "total": "Total",
+        "aria": "{{band}}: {{n}} compras, {{total}}"
+      },
+      "calendar": {
+        "title": "Día a día",
+        "answer": "El día más caro fue {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Abrir las transacciones del día.",
+        "spent": "gastado ese día",
+        "openHint": "Haz clic para ver las transacciones del día",
+        "less": "Menos",
+        "more": "Más"
+      }
     }
   },
   "payees": {

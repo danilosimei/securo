@@ -2318,6 +2318,52 @@
       "perMonth": "{{value}}/mes.",
       "perYear": "{{value}}/rok",
       "rowAria": "{{name}}, {{status}}: {{month}} mesačne, {{year}} ročne. Otvoriť v Preskúmať."
+    },
+    "habits": {
+      "tab": "Návyky",
+      "headline": "V období ste nakúpili {{n}}×, {{perMonth}}× mesačne; najčastejšie sa vraciate do {{name}}: {{freq}}× mesačne.",
+      "headlineCount": "V období ste nakúpili {{n}}×.",
+      "empty": "V tomto období žiadne nákupy.",
+      "openHint": "Kliknite pre otvorenie v Preskúmať",
+      "bubbles": {
+        "title": "Frekvencia × útrata",
+        "answer": "{{name}} je váš najdrahší návyk: {{perMonth}} nákupov mesačne, priemerne {{ticket}}, {{total}} za obdobie.",
+        "xAxis": "nákupy za mesiac",
+        "yAxis": "priemerná útrata",
+        "costlyHabit": "Drahý návyk",
+        "bigRare": "Veľké a zriedkavé",
+        "small": "Drobnosti",
+        "aria": "{{name}}: {{perMonth}} nákupov mesačne, priemer {{ticket}}, spolu {{total}}. Otvoriť v Preskúmať.",
+        "total": "za obdobie",
+        "ticket": "priemerná útrata",
+        "perMonthLabel": "nákupy za mesiac",
+        "legend": "Farby podľa skupín"
+      },
+      "weekdays": {
+        "title": "Deň v týždni",
+        "answer": "Najviac míňate v {{day}}: {{total}} za {{n}} nákupov.",
+        "aria": "{{day}}: {{total}}, nákupov {{n}}"
+      },
+      "bands": {
+        "title": "Pásma súm",
+        "answer": "{{n}} nákupov pod {{limit}} dáva spolu {{total}}.",
+        "upTo": "do {{max}}",
+        "above": "nad {{min}}",
+        "between": "{{min}} až {{max}}",
+        "band": "Pásmo",
+        "count": "Nákupy",
+        "total": "Spolu",
+        "aria": "{{band}}: nákupov {{n}}, {{total}}"
+      },
+      "calendar": {
+        "title": "Deň po dni",
+        "answer": "Najdrahší deň bol {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Otvoriť transakcie dňa.",
+        "spent": "minuté v ten deň",
+        "openHint": "Kliknite pre transakcie dňa",
+        "less": "Menej",
+        "more": "Viac"
+      }
     }
   },
   "payees": {

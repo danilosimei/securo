@@ -2206,6 +2206,52 @@
       "perMonth": "{{value}}/month",
       "perYear": "{{value}}/year",
       "rowAria": "{{name}}, {{status}}: {{month}} a month, {{year}} a year. Open in Explore."
+    },
+    "habits": {
+      "tab": "Habits",
+      "headline": "You made {{n}} purchases in the period, {{perMonth}} a month; {{name}} is where you go back most: {{freq}} times a month.",
+      "headlineCount": "You made {{n}} purchases in the period.",
+      "empty": "No purchases in this period.",
+      "openHint": "Click to open in Explore",
+      "bubbles": {
+        "title": "Frequency × ticket",
+        "answer": "{{name}} is your costliest habit: {{perMonth}} purchases a month, {{ticket}} on average, {{total}} in the period.",
+        "xAxis": "purchases per month",
+        "yAxis": "average ticket",
+        "costlyHabit": "Costly habit",
+        "bigRare": "Big and rare",
+        "small": "Small stuff",
+        "aria": "{{name}}: {{perMonth}} purchases a month, {{ticket}} average ticket, {{total}} in total. Open in Explore.",
+        "total": "in the period",
+        "ticket": "average ticket",
+        "perMonthLabel": "purchases per month",
+        "legend": "Colors by group"
+      },
+      "weekdays": {
+        "title": "Day of the week",
+        "answer": "{{day}} is the day you spend most: {{total}} in {{n}} purchases.",
+        "aria": "{{day}}: {{total}} in {{n}} purchases"
+      },
+      "bands": {
+        "title": "Purchase size",
+        "answer": "{{n}} purchases under {{limit}} add up to {{total}}.",
+        "upTo": "up to {{max}}",
+        "above": "over {{min}}",
+        "between": "{{min}} to {{max}}",
+        "band": "Size",
+        "count": "Purchases",
+        "total": "Total",
+        "aria": "{{band}}: {{n}} purchases, {{total}}"
+      },
+      "calendar": {
+        "title": "Day by day",
+        "answer": "The costliest day was {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Open that day’s transactions.",
+        "spent": "spent that day",
+        "openHint": "Click to see that day’s transactions",
+        "less": "Less",
+        "more": "More"
+      }
     }
   },
   "payees": {

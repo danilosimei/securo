@@ -181,6 +181,7 @@ describe('Reports page, tabs', () => {
       t('reports.explore.tab'),
       t('reports.trends.tab'),
       t('reports.recurring.tab'),
+      t('reports.habits.tab'),
       t('reports.cashFlow'),
       t('reports.netWorth'),
     ])

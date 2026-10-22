@@ -33,6 +33,7 @@ import { ExploreTab } from '@/components/reports/explore/explore-tab'
 import { OverviewTab } from '@/components/reports/overview/overview-tab'
 import { TrendsTab } from '@/components/reports/trends/trends-tab'
 import { RecurringTab } from '@/components/reports/recurring/recurring-tab'
+import { HabitsTab } from '@/components/reports/habits/habits-tab'
 import { FadePanel } from '@/components/ui/fade-panel'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
@@ -169,6 +170,7 @@ const REPORT_TABS: ReportTab[] = [
   selfManagedTab('explore', 'reports.explore.tab'),
   selfManagedTab('trends', 'reports.trends.tab'),
   selfManagedTab('recurring', 'reports.recurring.tab'),
+  selfManagedTab('habits', 'reports.habits.tab'),
   {
     key: 'cash_flow', labelKey: 'reports.cashFlow', enabled: true,
     rangeOptions: FORWARD_RANGE_OPTIONS, intervalOptions: CASH_FLOW_INTERVAL_OPTIONS,
@@ -774,6 +776,7 @@ export default function ReportsPage() {
           {activeTab === 'explore' && <ExploreTab />}
           {activeTab === 'trends' && <TrendsTab />}
           {activeTab === 'recurring' && <RecurringTab />}
+          {activeTab === 'habits' && <HabitsTab />}
         </FadePanel>
       )}
 
