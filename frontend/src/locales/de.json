@@ -121,19 +121,18 @@
     "recurring": "Wiederkehrend",
     "assets": "Vermögenswerte",
     "payees": "Zahlungsempfänger",
-    "splitGroups": "Gruppen",
+    "splitGroups": "Ausgabengruppen",
     "goals": "Ziele",
     "reports": "Berichte",
     "groupAnalysis": "Analyse",
-    "groupSetup": "Einrichtung",
-    "groupAccounts": "Konten",
     "groupAdmin": "Administration",
-    "groupAgents": "KI",
     "agents": "Agenten",
-    "aiAgents": "KI-Agenten",
     "collapseSidebar": "Seitenleiste einklappen",
     "expandSidebar": "Seitenleiste ausklappen",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "Alltag",
+    "groupPlanning": "Planung",
+    "groupOrganization": "Organisation"
   },
   "invoices": {
     "title": "Invoices",
@@ -2517,7 +2516,7 @@
   "splitGroups": {
     "searchPlaceholder": "Gruppen suchen...",
     "clearSearch": "Suche löschen",
-    "title": "Gruppen",
+    "title": "Ausgabengruppen",
     "section": "Einrichtung",
     "add": "Gruppe hinzufügen",
     "edit": "Gruppe bearbeiten",

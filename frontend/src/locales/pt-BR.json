@@ -121,19 +121,18 @@
     "recurring": "Recorrentes",
     "assets": "Patrimônio",
     "payees": "Pessoas",
-    "splitGroups": "Grupos",
+    "splitGroups": "Grupos de despesas",
     "goals": "Metas",
     "reports": "Relatórios",
     "groupAnalysis": "Análise",
-    "groupSetup": "Configuração",
-    "groupAccounts": "Contas",
     "groupAdmin": "Administração",
-    "groupAgents": "IA",
     "agents": "Agentes",
-    "aiAgents": "Agentes IA",
     "collapseSidebar": "Recolher barra lateral",
     "expandSidebar": "Expandir barra lateral",
-    "categorization": "Categorização"
+    "categorization": "Categorização",
+    "groupDaily": "Dia a dia",
+    "groupPlanning": "Planejamento",
+    "groupOrganization": "Organização"
   },
   "invoices": {
     "title": "Cobranças",
@@ -2520,7 +2519,7 @@
   "splitGroups": {
     "searchPlaceholder": "Buscar grupos...",
     "clearSearch": "Limpar busca",
-    "title": "Grupos",
+    "title": "Grupos de despesas",
     "section": "Configuração",
     "add": "Adicionar grupo",
     "edit": "Editar grupo",

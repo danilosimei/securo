@@ -121,19 +121,18 @@
     "recurring": "Регулярні",
     "assets": "Активи",
     "payees": "Отримувачі",
-    "splitGroups": "Групи",
+    "splitGroups": "Групи витрат",
     "goals": "Цілі",
     "reports": "Звіти",
     "groupAnalysis": "Аналіз",
-    "groupSetup": "Налаштування",
-    "groupAccounts": "Рахунки",
     "groupAdmin": "Адміністрування",
-    "groupAgents": "ШІ",
     "agents": "Агенти",
-    "aiAgents": "ШІ-агенти",
     "collapseSidebar": "Згорнути бічну панель",
     "expandSidebar": "Розгорнути бічну панель",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "Щодня",
+    "groupPlanning": "Планування",
+    "groupOrganization": "Організація"
   },
   "invoices": {
     "title": "Invoices",
@@ -2541,7 +2540,7 @@
   "splitGroups": {
     "searchPlaceholder": "Пошук груп...",
     "clearSearch": "Очистити пошук",
-    "title": "Групи",
+    "title": "Групи витрат",
     "section": "Налаштування",
     "add": "Додати групу",
     "edit": "Редагувати групу",

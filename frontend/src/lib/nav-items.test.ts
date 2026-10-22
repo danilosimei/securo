@@ -33,19 +33,20 @@ const linkKeys = (items: NavItem[]) =>
 describe('nav catalog', () => {
   it('maps every link to a known module', () => {
     for (const item of navItems) {
-      if (item.type !== 'link') continue
+      if (item.type !== 'link' || !item.module) continue
       expect(MODULE_IDS).toContain(item.module)
     }
   })
 
   it('has a link for every module in the catalog', () => {
-    const covered = navItems.filter((i) => i.type === 'link').map((i) => i.module)
+    const covered = navItems.flatMap((i) => (i.type === 'link' && i.module ? [i.module] : []))
     expect([...new Set(covered)].sort()).toEqual([...MODULE_IDS].sort())
   })
 
   it('gives every link a distinct module, except the ones that live inside another', () => {
-    // Categorization is a view over the categories module, not a module of its own.
-    const sharesModule = new Set(['categorization'])
+    // Categorization is a view over the categories module, and collections
+    // live with accounts: neither is a module of its own.
+    const sharesModule = new Set(['categorization', 'collections', 'dashboard'])
     const covered = navItems
       .filter((i) => i.type === 'link' && !sharesModule.has(i.key))
       .map((i) => (i.type === 'link' ? i.module : ''))
@@ -57,29 +58,31 @@ describe('visibleNavItems', () => {
   it('renders a personal workspace exactly as before modules existed', () => {
     const personal = visibleNavItems(navItems, (id) => PERSONAL_MODULES.includes(id))
     expect(linkKeys(personal)).toEqual([
+      'dashboard',
       'transactions',
-      'categorization',
       'accounts',
       'import',
-      'reports',
-      'assets',
       'budgets',
       'goals',
       'recurring',
+      'reports',
+      'assets',
       'categories',
+      'categorization',
+      'rules',
       'payees',
       'splitGroups',
-      'rules',
+      'collections',
     ])
-    // All three section headers survive.
-    expect(personal.filter((i) => i.type === 'separator')).toHaveLength(3)
+    // All four section headers survive.
+    expect(personal.filter((i) => i.type === 'separator')).toHaveLength(4)
   })
 
   it('adds invoices for a workspace that has it', () => {
     const business = visibleNavItems(navItems, all)
     expect(linkKeys(business)).toContain('invoices')
     // And it does not disturb the rest of the order.
-    expect(linkKeys(business).indexOf('invoices')).toBe(2)
+    expect(linkKeys(business).indexOf('invoices')).toBe(3)
   })
 
   it('hides a section header once its last link goes', () => {
@@ -99,12 +102,13 @@ describe('visibleNavItems', () => {
   it('keeps a section header while any of its links remain', () => {
     const result = visibleNavItems(navItems, allExcept('transactions', 'invoices'))
     const labels = result.filter((i) => i.type === 'separator').map((i) => i.labelKey)
-    expect(labels).toContain('nav.groupAccounts')
+    expect(labels).toContain('nav.groupDaily')
     expect(linkKeys(result)).toContain('accounts')
   })
 
-  it('drops every header when no module is on', () => {
-    expect(visibleNavItems(navItems, none)).toEqual([])
+  it('drops every header when no module is on, keeping only the dashboard', () => {
+    expect(linkKeys(visibleNavItems(navItems, none))).toEqual(['dashboard'])
+    expect(visibleNavItems(navItems, none).some((i) => i.type === 'separator')).toBe(false)
   })
 
   it('leaves a trailing header out rather than dangling', () => {

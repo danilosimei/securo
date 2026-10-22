@@ -121,19 +121,18 @@
     "recurring": "Регулярные",
     "assets": "Активы",
     "payees": "Получатели",
-    "splitGroups": "Группы",
+    "splitGroups": "Группы расходов",
     "goals": "Цели",
     "reports": "Отчёты",
     "groupAnalysis": "Анализ",
-    "groupSetup": "Настройка",
-    "groupAccounts": "Счета",
     "groupAdmin": "Администрирование",
-    "groupAgents": "ИИ",
     "agents": "Агенты",
-    "aiAgents": "ИИ-агенты",
     "collapseSidebar": "Свернуть боковую панель",
     "expandSidebar": "Развернуть боковую панель",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "Каждый день",
+    "groupPlanning": "Планирование",
+    "groupOrganization": "Организация"
   },
   "invoices": {
     "title": "Invoices",
@@ -2541,7 +2540,7 @@
   "splitGroups": {
     "searchPlaceholder": "Поиск групп...",
     "clearSearch": "Очистить поиск",
-    "title": "Группы",
+    "title": "Группы расходов",
     "section": "Настройка",
     "add": "Добавить группу",
     "edit": "Редактировать группу",

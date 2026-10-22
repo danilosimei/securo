@@ -413,14 +413,9 @@ export function AppLayout() {
             {workspaceLoading && <NavSkeleton />}
             {!workspaceLoading && finalNavItems.map((item, idx) => {
               if (item.type === 'separator') {
-                // The first separator sits right below the search bar
-                // — without trimming the top padding it leaves a wide
-                // gap that makes the section header feel disconnected
-                // from the search trigger.
-                const isFirstSep = idx === 0
                 return (
                   <div key={`sep-${idx}`} className={cn(
-                    isFirstSep ? 'pt-1 pb-1 px-3' : 'pt-3 pb-1 px-3',
+                    'pt-3 pb-1 px-3',
                     desktopSidebarCollapsed && 'lg:hidden',
                   )}>
                     <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-sidebar-muted/50">
@@ -724,7 +719,7 @@ function UserMenu({
             className="flex items-center gap-2"
           >
             <Sparkles size={14} />
-            {t('nav.aiAgents')}
+            {t('nav.agents')}
           </DropdownMenuItem>
         )}
         <DropdownMenuSub>

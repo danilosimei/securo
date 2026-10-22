@@ -121,19 +121,18 @@
     "recurring": "आवर्ती",
     "assets": "संपत्तियाँ",
     "payees": "प्राप्तकर्ता",
-    "splitGroups": "समूह",
+    "splitGroups": "खर्च समूह",
     "goals": "लक्ष्य",
     "reports": "रिपोर्ट",
     "groupAnalysis": "विश्लेषण",
-    "groupSetup": "सेटअप",
-    "groupAccounts": "खाते",
     "groupAdmin": "प्रशासन",
-    "groupAgents": "AI",
     "agents": "एजेंट",
-    "aiAgents": "AI एजेंट",
     "collapseSidebar": "साइडबार छोटा करें",
     "expandSidebar": "साइडबार बड़ा करें",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "रोज़ का काम",
+    "groupPlanning": "योजना",
+    "groupOrganization": "व्यवस्था"
   },
   "invoices": {
     "title": "इनवॉइस",
@@ -2516,7 +2515,7 @@
   "splitGroups": {
     "searchPlaceholder": "समूह खोजें...",
     "clearSearch": "खोज साफ़ करें",
-    "title": "समूह",
+    "title": "खर्च समूह",
     "section": "सेटअप",
     "add": "समूह जोड़ें",
     "edit": "समूह संपादित करें",

@@ -121,19 +121,18 @@
     "recurring": "Ismétlődő",
     "assets": "Eszközök",
     "payees": "Partnerek",
-    "splitGroups": "Csoportok",
+    "splitGroups": "Kiadási csoportok",
     "goals": "Célok",
     "reports": "Jelentések",
     "groupAnalysis": "Elemzés",
-    "groupSetup": "Beállítás",
-    "groupAccounts": "Számlák",
     "groupAdmin": "Adminisztráció",
-    "groupAgents": "AI",
     "agents": "Ügynökök",
-    "aiAgents": "AI-ügynökök",
     "collapseSidebar": "Oldalsáv összecsukása",
     "expandSidebar": "Oldalsáv kinyitása",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "Mindennapok",
+    "groupPlanning": "Tervezés",
+    "groupOrganization": "Rendszerezés"
   },
   "invoices": {
     "title": "Számlázás",
@@ -2516,7 +2515,7 @@
   "splitGroups": {
     "searchPlaceholder": "Csoportok keresése...",
     "clearSearch": "Keresés törlése",
-    "title": "Csoportok",
+    "title": "Kiadási csoportok",
     "section": "Beállítás",
     "add": "Csoport hozzáadása",
     "edit": "Csoport szerkesztése",

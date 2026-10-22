@@ -121,19 +121,18 @@
     "recurring": "Terugkerend",
     "assets": "Activa",
     "payees": "Begunstigden",
-    "splitGroups": "Groepen",
+    "splitGroups": "Uitgavengroepen",
     "goals": "Doelen",
     "reports": "Rapporten",
     "groupAnalysis": "Analyse",
-    "groupSetup": "Instellen",
-    "groupAccounts": "Rekeningen",
     "groupAdmin": "Administratie",
-    "groupAgents": "AI",
     "agents": "Agents",
-    "aiAgents": "AI-agents",
     "collapseSidebar": "Zijbalk inklappen",
     "expandSidebar": "Zijbalk uitklappen",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "Dagelijks",
+    "groupPlanning": "Planning",
+    "groupOrganization": "Organisatie"
   },
   "invoices": {
     "title": "Invoices",
@@ -2518,7 +2517,7 @@
   "splitGroups": {
     "searchPlaceholder": "Groepen zoeken...",
     "clearSearch": "Zoekopdracht wissen",
-    "title": "Groepen",
+    "title": "Uitgavengroepen",
     "section": "Instellen",
     "add": "Groep toevoegen",
     "edit": "Groep bewerken",

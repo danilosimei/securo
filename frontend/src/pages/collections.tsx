@@ -71,7 +71,7 @@ export default function CollectionsPage() {
   return (
     <div>
       <PageHeader
-        section={t('nav.groupSetup')}
+        section={t('nav.groupOrganization')}
         title={t('collections.title')}
         action={
           <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>

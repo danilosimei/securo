@@ -283,7 +283,7 @@ export function WorkspaceSwitcher({
               className="flex items-center gap-2"
             >
               <Sparkles size={14} />
-              {t('nav.aiAgents')}
+              {t('nav.agents')}
             </DropdownMenuItem>
           )}
 

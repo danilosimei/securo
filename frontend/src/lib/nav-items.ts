@@ -2,6 +2,8 @@ import {
   ArrowLeftRight,
   BarChart3,
   Building2,
+  FolderOpen,
+  LayoutDashboard,
   Landmark,
   PiggyBank,
   Receipt,
@@ -32,34 +34,34 @@ export type NavItem =
       key: string
       path: string
       icon: React.ElementType
-      module: ModuleId
+      /** Absent for destinations every workspace has (the dashboard). */
+      module?: ModuleId
       /** Query whose data carries a pending count, shown as an amber pill. */
       badgeQueryKey?: readonly string[]
     }
   | { type: 'separator'; labelKey: string }
 
 export const navItems: NavItem[] = [
-  // The dashboard ("Painel") is now reachable by clicking the Securo
-  // logo + name in the sidebar header — no dedicated menu item to keep
-  // the sidebar focused on the main destinations. Transactions sits
-  // inside the ACCOUNTS section since it's account-scoped data.
-  { type: 'separator', labelKey: 'nav.groupAccounts' },
+  { type: 'link', key: 'dashboard', path: '/', icon: LayoutDashboard },
+  { type: 'separator', labelKey: 'nav.groupDaily' },
   { type: 'link', key: 'transactions', path: '/transactions', icon: ArrowLeftRight, module: 'transactions' },
-  { type: 'link', key: 'categorization', path: '/categorization', icon: Sparkles, module: 'categories', badgeQueryKey: ['categorization', 'summary'] },
-  { type: 'link', key: 'invoices', path: '/invoices', icon: Receipt, module: 'invoices' },
   { type: 'link', key: 'accounts', path: '/accounts', icon: Building2, module: 'accounts' },
+  { type: 'link', key: 'invoices', path: '/invoices', icon: Receipt, module: 'invoices' },
   { type: 'link', key: 'import', path: '/import', icon: Upload, module: 'import' },
-  { type: 'separator', labelKey: 'nav.groupAnalysis' },
-  { type: 'link', key: 'reports', path: '/reports', icon: BarChart3, module: 'reports' },
-  { type: 'link', key: 'assets', path: '/assets', icon: Landmark, module: 'assets' },
-  { type: 'separator', labelKey: 'nav.groupSetup' },
+  { type: 'separator', labelKey: 'nav.groupPlanning' },
   { type: 'link', key: 'budgets', path: '/budgets', icon: PiggyBank, module: 'budgets' },
   { type: 'link', key: 'goals', path: '/goals', icon: Target, module: 'goals' },
   { type: 'link', key: 'recurring', path: '/recurring', icon: Repeat, module: 'recurring' },
+  { type: 'separator', labelKey: 'nav.groupAnalysis' },
+  { type: 'link', key: 'reports', path: '/reports', icon: BarChart3, module: 'reports' },
+  { type: 'link', key: 'assets', path: '/assets', icon: Landmark, module: 'assets' },
+  { type: 'separator', labelKey: 'nav.groupOrganization' },
   { type: 'link', key: 'categories', path: '/categories', icon: Tag, module: 'categories' },
+  { type: 'link', key: 'categorization', path: '/categorization', icon: Sparkles, module: 'categories', badgeQueryKey: ['categorization', 'summary'] },
+  { type: 'link', key: 'rules', path: '/rules', icon: SlidersHorizontal, module: 'rules' },
   { type: 'link', key: 'payees', path: '/payees', icon: Users, module: 'payees' },
   { type: 'link', key: 'splitGroups', path: '/groups', icon: Split, module: 'split_groups' },
-  { type: 'link', key: 'rules', path: '/rules', icon: SlidersHorizontal, module: 'rules' },
+  { type: 'link', key: 'collections', path: '/collections', icon: FolderOpen, module: 'accounts' },
 ]
 
 /**
@@ -71,7 +73,7 @@ export function visibleNavItems(
   items: NavItem[],
   hasModule: (id: ModuleId) => boolean,
 ): NavItem[] {
-  const kept = items.filter((item) => item.type !== 'link' || hasModule(item.module))
+  const kept = items.filter((item) => item.type !== 'link' || !item.module || hasModule(item.module))
   return kept.filter((item, index) => {
     if (item.type !== 'separator') return true
     // Links always follow their own header, so the item right after a

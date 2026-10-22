@@ -83,7 +83,7 @@ export default function CategorizationPage() {
   return (
     <div>
       <PageHeader
-        section={t('nav.groupAccounts')}
+        section={t('nav.groupDaily')}
         title={t('nav.categorization')}
         action={
           <div className="flex items-center gap-2">

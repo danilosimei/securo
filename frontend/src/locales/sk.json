@@ -121,19 +121,18 @@
     "recurring": "Opakované",
     "assets": "Aktíva",
     "payees": "Príjemcovia",
-    "splitGroups": "Skupiny",
+    "splitGroups": "Skupiny výdavkov",
     "goals": "Ciele",
     "reports": "Reporty",
     "groupAnalysis": "Analýza",
-    "groupSetup": "Konfigurácia",
-    "groupAccounts": "Účty",
     "groupAdmin": "Administrácia",
-    "groupAgents": "AI",
     "agents": "Agenti",
-    "aiAgents": "AI agenti",
     "collapseSidebar": "Zbaliť bočný panel",
     "expandSidebar": "Rozbaliť bočný panel",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "Každý deň",
+    "groupPlanning": "Plánovanie",
+    "groupOrganization": "Organizácia"
   },
   "invoices": {
     "title": "Faktúry",
@@ -2648,7 +2647,7 @@
   "splitGroups": {
     "searchPlaceholder": "Hľadať skupiny...",
     "clearSearch": "Vymazať vyhľadávanie",
-    "title": "Skupiny",
+    "title": "Skupiny výdavkov",
     "section": "Nastavenie",
     "add": "Pridať skupinu",
     "edit": "Upraviť skupinu",

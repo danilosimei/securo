@@ -121,19 +121,18 @@
     "recurring": "定期取引",
     "assets": "資産",
     "payees": "取引相手",
-    "splitGroups": "グループ",
+    "splitGroups": "支出グループ",
     "goals": "目標",
     "reports": "レポート",
     "groupAnalysis": "分析",
-    "groupSetup": "設定",
-    "groupAccounts": "口座",
     "groupAdmin": "管理",
-    "groupAgents": "AI",
     "agents": "エージェント",
-    "aiAgents": "AIエージェント",
     "collapseSidebar": "サイドバーを折りたたむ",
     "expandSidebar": "サイドバーを展開する",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "日常",
+    "groupPlanning": "計画",
+    "groupOrganization": "整理"
   },
   "invoices": {
     "title": "請求書",
@@ -2516,7 +2515,7 @@
   "splitGroups": {
     "searchPlaceholder": "グループを検索...",
     "clearSearch": "検索をクリア",
-    "title": "グループ",
+    "title": "支出グループ",
     "section": "設定",
     "add": "グループを追加",
     "edit": "グループを編集",

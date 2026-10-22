@@ -121,19 +121,18 @@
     "recurring": "Επαναλαμβανόμενα",
     "assets": "Περιουσιακά στοιχεία",
     "payees": "Δικαιούχοι",
-    "splitGroups": "Ομάδες",
+    "splitGroups": "Ομάδες εξόδων",
     "goals": "Στόχοι",
     "reports": "Αναφορές",
     "groupAnalysis": "Ανάλυση",
-    "groupSetup": "Ρύθμιση",
-    "groupAccounts": "Λογαριασμοί",
     "groupAdmin": "Διαχείριση",
-    "groupAgents": "AI",
     "agents": "Βοηθοί",
-    "aiAgents": "Βοηθοί AI",
     "collapseSidebar": "Σύμπτυξη πλευρικής γραμμής",
     "expandSidebar": "Ανάπτυξη πλευρικής γραμμής",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "Καθημερινά",
+    "groupPlanning": "Προγραμματισμός",
+    "groupOrganization": "Οργάνωση"
   },
   "invoices": {
     "title": "Τιμολόγια",
@@ -2516,7 +2515,7 @@
   "splitGroups": {
     "searchPlaceholder": "Αναζήτηση ομάδων...",
     "clearSearch": "Εκκαθάριση αναζήτησης",
-    "title": "Ομάδες",
+    "title": "Ομάδες εξόδων",
     "section": "Ρύθμιση",
     "add": "Προσθήκη ομάδας",
     "edit": "Επεξεργασία ομάδας",

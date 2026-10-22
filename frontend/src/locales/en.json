@@ -121,19 +121,18 @@
     "recurring": "Recurring",
     "assets": "Assets",
     "payees": "Payees",
-    "splitGroups": "Groups",
+    "splitGroups": "Expense groups",
     "goals": "Goals",
     "reports": "Reports",
     "groupAnalysis": "Analysis",
-    "groupSetup": "Setup",
-    "groupAccounts": "Accounts",
     "groupAdmin": "Administration",
-    "groupAgents": "AI",
     "agents": "Agents",
-    "aiAgents": "AI Agents",
     "collapseSidebar": "Collapse sidebar",
     "expandSidebar": "Expand sidebar",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "Day to day",
+    "groupPlanning": "Planning",
+    "groupOrganization": "Organization"
   },
   "invoices": {
     "title": "Invoices",
@@ -2516,7 +2515,7 @@
   "splitGroups": {
     "searchPlaceholder": "Search groups...",
     "clearSearch": "Clear search",
-    "title": "Groups",
+    "title": "Expense groups",
     "section": "Setup",
     "add": "Add group",
     "edit": "Edit group",

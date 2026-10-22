@@ -121,19 +121,18 @@
     "recurring": "Ricorrenti",
     "assets": "Beni",
     "payees": "Beneficiari",
-    "splitGroups": "Gruppi",
+    "splitGroups": "Gruppi di spesa",
     "goals": "Obiettivi",
     "reports": "Report",
     "groupAnalysis": "Analisi",
-    "groupSetup": "Configurazione",
-    "groupAccounts": "Conti",
     "groupAdmin": "Amministrazione",
-    "groupAgents": "IA",
     "agents": "Agenti",
-    "aiAgents": "Agenti IA",
     "collapseSidebar": "Riduci barra laterale",
     "expandSidebar": "Espandi barra laterale",
-    "categorization": "Categorization"
+    "categorization": "Categorization",
+    "groupDaily": "Ogni giorno",
+    "groupPlanning": "Pianificazione",
+    "groupOrganization": "Organizzazione"
   },
   "invoices": {
     "title": "Invoices",
@@ -2520,7 +2519,7 @@
   "splitGroups": {
     "searchPlaceholder": "Cerca gruppi...",
     "clearSearch": "Cancella ricerca",
-    "title": "Gruppi",
+    "title": "Gruppi di spesa",
     "section": "Configurazione",
     "add": "Aggiungi gruppo",
     "edit": "Modifica gruppo",
