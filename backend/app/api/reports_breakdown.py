@@ -39,6 +39,8 @@ class BreakdownRow(BaseModel):
     change: Optional[float]
     count: int
     sparkline: list[str]
+    #: Only on `level=category&group_id=all`.
+    group_label: Optional[str] = None
 
 
 class BreakdownResponse(BaseModel):
@@ -73,12 +75,13 @@ async def get_breakdown(
     ] = Query("last_12m"),
     from_: date | None = Query(None, alias="from"),
     to: date | None = Query(None),
-    group_id: str | None = Query(None, description="Group uuid, or 'none' for categories without a group"),
+    group_id: str | None = Query(None, description="Group uuid, 'none' for categories without a group, or 'all' (category level) for every category"),
     category_id: str | None = Query(None, description="Category uuid, or 'none' for rows without a category"),
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    group_uuid, no_group = _scope_id("group_id", group_id)
+    all_groups = group_id == "all"
+    group_uuid, no_group = (None, False) if all_groups else _scope_id("group_id", group_id)
     category_uuid, no_category = _scope_id("category_id", category_id)
     resolved = resolve_period(
         period,
@@ -96,6 +99,7 @@ async def get_breakdown(
         level=level,
         group_id=group_uuid,
         no_group=no_group,
+        all_groups=all_groups,
         category_id=category_uuid,
         no_category=no_category,
     )

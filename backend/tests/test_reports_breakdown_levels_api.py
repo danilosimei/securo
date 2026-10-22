@@ -223,3 +223,24 @@ async def test_scope_id_must_be_uuid_or_none(client, auth_headers, world):
     response = await _get(client, auth_headers, level="category", group_id="casa")
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "invalid_id"
+
+
+@pytest.mark.asyncio
+async def test_all_groups_lists_every_spending_category_with_its_group(
+    client, auth_headers, world
+):
+    response = await _get(client, auth_headers, level="category", group_id="all")
+    assert response.status_code == 200, response.text
+    rows = {row["label"]: row for row in response.json()["rows"]}
+    assert set(rows) == {"Mercado", "Luz", "Cinema", "Avulsa"}  # no income, no refund
+    assert rows["Mercado"]["group_label"] == "Casa"
+    assert rows["Cinema"]["group_label"] == "Lazer"
+    assert rows["Avulsa"]["group_label"] == "Sem grupo"
+    assert len(rows["Mercado"]["sparkline"]) == 12
+    assert rows["Mercado"]["total"] == "280.00"
+
+
+@pytest.mark.asyncio
+async def test_group_label_is_null_outside_the_all_groups_listing(client, auth_headers, world):
+    response = await _get(client, auth_headers, level="category", group_id=str(world["casa"].id))
+    assert all(row["group_label"] is None for row in response.json()["rows"])
