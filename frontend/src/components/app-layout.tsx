@@ -404,6 +404,9 @@ export function AppLayout() {
             </button>
           </div>
 
+          {/* Active collection (issue #105): one fixed place, under the search. */}
+          <CollectionSelector collapsed={desktopSidebarCollapsed} />
+
           <div className="flex-1 min-h-0 overflow-y-auto">
           {/* Nav */}
           <nav className={cn('flex flex-col gap-0.5 px-3 pt-1 pb-2', desktopSidebarCollapsed && 'lg:items-center lg:gap-1 lg:px-0 lg:pt-3')} data-tour="sidebar">
@@ -577,9 +580,6 @@ export function AppLayout() {
           desktopSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-60',
         )}>
           <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-            {/* Active-collection filter (issue #105): sticky bar above the
-                content so the scope is visible right where the data is. */}
-            <CollectionSelector variant="header" />
             <Outlet />
           </div>
         </main>
