@@ -301,7 +301,7 @@ export function AppLayout() {
               so nothing the expanded header offers goes missing in the
               rail. */}
           <div className={cn(
-            'flex h-16 min-h-16 items-center justify-between px-5 border-b border-sidebar-border shrink-0',
+            'flex h-14 min-h-14 items-center justify-between px-5 border-b border-sidebar-border shrink-0',
             desktopSidebarCollapsed && 'lg:h-auto lg:min-h-0 lg:flex-col lg:justify-center lg:gap-2 lg:px-0 lg:py-3',
           )}>
             <Link
@@ -384,12 +384,12 @@ export function AppLayout() {
           </button>
 
           {/* Command palette trigger */}
-          <div className={cn('px-3 pt-3', desktopSidebarCollapsed && 'lg:px-2')}>
+          <div className={cn('px-3 pt-2', desktopSidebarCollapsed && 'lg:px-2')}>
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
               className={cn(
-                'group flex w-full items-center gap-2 rounded-lg border border-sidebar-border/80 bg-sidebar-accent/40 px-3 py-2',
+                'group flex w-full items-center gap-2 rounded-lg border border-sidebar-border/80 bg-sidebar-accent/40 px-3 py-1.5',
                 'text-[12.5px] text-sidebar-muted transition-all',
                 'hover:bg-sidebar-accent hover:text-sidebar-foreground hover:border-sidebar-border',
                 desktopSidebarCollapsed && 'lg:justify-center lg:px-0',
@@ -406,7 +406,7 @@ export function AppLayout() {
 
           <div className="flex-1 min-h-0 overflow-y-auto">
           {/* Nav */}
-          <nav className={cn('flex flex-col gap-0.5 px-3 pt-1 pb-3', desktopSidebarCollapsed && 'lg:items-center lg:gap-1 lg:px-0 lg:pt-3')} data-tour="sidebar">
+          <nav className={cn('flex flex-col gap-0.5 px-3 pt-1 pb-2', desktopSidebarCollapsed && 'lg:items-center lg:gap-1 lg:px-0 lg:pt-3')} data-tour="sidebar">
             {/* Which modules this workspace shows is resolved server-side,
                 so until the workspace list lands there is no honest answer
                 — a placeholder beats both an empty sidebar and a guess. */}
@@ -415,7 +415,7 @@ export function AppLayout() {
               if (item.type === 'separator') {
                 return (
                   <div key={`sep-${idx}`} className={cn(
-                    'pt-3 pb-1 px-3',
+                    'pt-2.5 pb-0.5 px-3',
                     desktopSidebarCollapsed && 'lg:hidden',
                   )}>
                     <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-sidebar-muted/50">
