@@ -14,7 +14,7 @@ from app.services.reports import breakdown as breakdown_service
 from app.services.reports import habits as habits_service
 from app.services.reports import overview as overview_service
 from app.services.reports import recurring as recurring_service
-from app.services.reports.periods import resolve_period
+from app.services.reports.periods import compare_period, resolve_period
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -33,7 +33,7 @@ class BreakdownPeriod(BaseModel):
 class BreakdownRow(BaseModel):
     id: Optional[str]
     label: str
-    kind: Literal["group", "category", "merchant"]
+    kind: Literal["group", "category", "merchant", "account"]
     total: str
     share: Optional[float]
     previous_total: str
@@ -42,6 +42,10 @@ class BreakdownRow(BaseModel):
     sparkline: list[str]
     #: Only on `level=category&group_id=all`.
     group_label: Optional[str] = None
+    #: Only on `level=merchant&category_id=all`: the category where the store
+    #: weighs most (null = no category).
+    category_id: Optional[str] = None
+    category_label: Optional[str] = None
 
 
 class BreakdownResponse(BaseModel):
@@ -70,26 +74,40 @@ def _scope_id(name: str, raw: str | None) -> tuple[uuid.UUID | None, bool]:
 
 @router.get("/breakdown", response_model=BreakdownResponse)
 async def get_breakdown(
-    level: Literal["group", "category", "merchant"] = Query("group"),
+    level: Literal["group", "category", "merchant", "account"] = Query("group"),
     period: Literal[
         "this_month", "last_month", "last_3m", "last_6m", "last_12m", "ytd", "custom"
     ] = Query("last_12m"),
     from_: date | None = Query(None, alias="from"),
     to: date | None = Query(None),
     group_id: str | None = Query(None, description="Group uuid, 'none' for categories without a group, or 'all' (category level) for every category"),
-    category_id: str | None = Query(None, description="Category uuid, or 'none' for rows without a category"),
+    category_id: str | None = Query(None, description="Category uuid, 'none' for rows without a category, or 'all' (store level) for every store"),
+    account_id: uuid.UUID | None = Query(None, description="Only the movements of this account"),
+    compare: Literal["previous", "year_ago", "custom"] = Query(
+        "previous", description="What the period is compared with"
+    ),
+    compare_from: date | None = Query(None, description="Start of the comparison (compare=custom)"),
+    compare_to: date | None = Query(None, description="End of the comparison (compare=custom)"),
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
     all_groups = group_id == "all"
     group_uuid, no_group = (None, False) if all_groups else _scope_id("group_id", group_id)
-    category_uuid, no_category = _scope_id("category_id", category_id)
-    resolved = resolve_period(
-        period,
-        app_today(),
-        from_=from_,
-        to=to,
-        fy_start_month=_financial_year_start_month(ctx.workspace.tax_jurisdiction),
+    all_categories = category_id == "all"
+    category_uuid, no_category = (
+        (None, False) if all_categories else _scope_id("category_id", category_id)
+    )
+    resolved = compare_period(
+        resolve_period(
+            period,
+            app_today(),
+            from_=from_,
+            to=to,
+            fy_start_month=_financial_year_start_month(ctx.workspace.tax_jurisdiction),
+        ),
+        compare,
+        compare_from,
+        compare_to,
     )
     return await breakdown_service.breakdown(
         session,
@@ -103,6 +121,8 @@ async def get_breakdown(
         all_groups=all_groups,
         category_id=category_uuid,
         no_category=no_category,
+        all_categories=all_categories,
+        account_id=account_id,
     )
 
 

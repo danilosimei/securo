@@ -5,7 +5,7 @@ closed months everywhere, and the comparison period is always the stretch of
 the same size right before it.
 """
 import calendar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
 from fastapi import HTTPException
@@ -118,3 +118,33 @@ def _validate_custom(from_: date | None, to: date | None, today: date) -> tuple[
             f"The custom period is too wide (max {MAX_CUSTOM_RANGE_YEARS} years)",
         )
     return from_, to
+
+
+#: What a period can be compared with: the stretch right before it (the
+#: default), the same dates a year earlier, or any range of choice.
+COMPARE_MODES = ("previous", "year_ago", "custom")
+
+
+def compare_period(
+    period: Period,
+    mode: str,
+    from_: date | None = None,
+    to: date | None = None,
+) -> Period:
+    """`period` with its comparison range swapped for the one `mode` names."""
+    if mode == "previous":
+        return period
+    if mode == "year_ago":
+        previous_from, previous_to = _shift_months(period.from_, -12), _shift_months(period.to, -12)
+    elif mode == "custom":
+        if from_ is None or to is None or from_ > to:
+            raise _error("compare_dates", "A custom comparison needs a start and an end, in order")
+        if to > _add_years(from_, MAX_CUSTOM_RANGE_YEARS):
+            raise _error(
+                "compare_dates",
+                f"The comparison period is too wide (max {MAX_CUSTOM_RANGE_YEARS} years)",
+            )
+        previous_from, previous_to = from_, to
+    else:
+        raise _error("compare_invalid", f"Unknown comparison: {mode}")
+    return replace(period, previous_from=previous_from, previous_to=previous_to)

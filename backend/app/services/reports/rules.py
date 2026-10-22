@@ -117,7 +117,94 @@ async def collect_flows(
     out = [SegmentFlows() for _ in segments]
     if not segments:
         return out
+    key_col = Transaction.merchant_key if store_scope is not None else Transaction.category_id
+    scope_filter = []
+    if store_scope is not None:
+        (scope_category,) = store_scope
+        scope_filter.append(
+            Transaction.category_id.is_(None)
+            if scope_category is None
+            else Transaction.category_id == scope_category
+        )
+    async for index, (key,), is_unconverted, tx_type, total, count in _flow_rows(
+        session,
+        workspace_id=workspace_id,
+        primary_currency=primary_currency,
+        segments=segments,
+        key_cols=(key_col,),
+        filters=scope_filter,
+        account_ids=account_ids,
+    ):
+        _add_flow(out[index], key, is_unconverted, tx_type, total, count)
 
+    if store_scope is None and account_ids is None:
+        await _apply_split_offsets(session, workspace_id, user_id, primary_currency, segments, out)
+    return out
+
+
+#: What `collect_split_flows` splits the rows by before the category.
+SPLIT_KEYS = ("account", "store")
+
+
+async def collect_split_flows(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    primary_currency: str,
+    segments: list[Segment],
+    split_by: str,
+    account_ids: Optional[list[uuid.UUID]] = None,
+) -> list[dict[Any, SegmentFlows]]:
+    """Like `collect_flows`, but first split by account (`account_id`) or by
+    store (`merchant_key`): for each segment, split key -> flows per
+    category. The same rows and values, so a split adds up to the whole;
+    split shares are not redistributed (raw movements, as on any narrowed
+    view)."""
+    out: list[dict[Any, SegmentFlows]] = [{} for _ in segments]
+    if not segments:
+        return out
+    outer = Transaction.account_id if split_by == "account" else Transaction.merchant_key
+    async for index, (split, category_id), is_unconverted, tx_type, total, count in _flow_rows(
+        session,
+        workspace_id=workspace_id,
+        primary_currency=primary_currency,
+        segments=segments,
+        key_cols=(outer, Transaction.category_id),
+        filters=[],
+        account_ids=account_ids,
+    ):
+        seg = out[index].setdefault(split, SegmentFlows())
+        _add_flow(seg, category_id, is_unconverted, tx_type, total, count)
+    return out
+
+
+def _add_flow(
+    seg: SegmentFlows, key: Any, is_unconverted: bool, tx_type: str, total: Any, count: int
+) -> None:
+    if is_unconverted:
+        seg.unconverted_count += count
+        return
+    flow = seg.flow(key)
+    value = Decimal(total or 0)
+    if tx_type == "credit":
+        flow.credit += value
+    else:
+        flow.debit += value
+    flow.count += count
+
+
+async def _flow_rows(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    primary_currency: str,
+    segments: list[Segment],
+    key_cols: tuple,
+    filters: list,
+    account_ids: Optional[list[uuid.UUID]],
+):
+    """The one base query of every report: (segment index, keys,
+    unconverted?, type, sum, count) of the rows inside the segments."""
     accounting_mode = await get_credit_card_accounting_mode(session)
     report_date = reporting_date_col(accounting_mode)
     lo = min(start for start, _ in segments)
@@ -131,24 +218,15 @@ async def collect_flows(
         ),
         else_=False,
     )
-    day = report_date.label("day")
-    key_col = Transaction.merchant_key if store_scope is not None else Transaction.category_id
-    scope_filter = []
+    scope_filter = list(filters)
     if account_ids is not None:
         scope_filter.append(Transaction.account_id.in_(account_ids))
-    if store_scope is not None:
-        (scope_category,) = store_scope
-        scope_filter.append(
-            Transaction.category_id.is_(None)
-            if scope_category is None
-            else Transaction.category_id == scope_category
-        )
     rows = await session.execute(
         select(
-            key_col,
+            *key_cols,
             Transaction.type,
             unconverted.label("unconverted"),
-            day,
+            report_date.label("day"),
             func.sum(amount),
             func.count(Transaction.id),
         )
@@ -161,32 +239,22 @@ async def collect_flows(
             counts_as_user_pnl(),
             *scope_filter,
         )
-        .group_by(key_col, Transaction.type, unconverted, report_date)
+        .group_by(*key_cols, Transaction.type, unconverted, report_date)
     )
 
     order = sorted(range(len(segments)), key=lambda i: segments[i][0])
     starts = [segments[i][0] for i in order]
-    for category_id, tx_type, is_unconverted, row_day, total, count in rows.all():
+    width = len(key_cols)
+    for row in rows.all():
+        keys = tuple(row[:width])
+        tx_type, is_unconverted, row_day, total, count = row[width:]
         pos = bisect_right(starts, row_day) - 1
         if pos < 0:
             continue
         index = order[pos]
         if row_day > segments[index][1]:
             continue
-        if is_unconverted:
-            out[index].unconverted_count += count
-            continue
-        flow = out[index].flow(category_id)
-        value = Decimal(total or 0)
-        if tx_type == "credit":
-            flow.credit += value
-        else:
-            flow.debit += value
-        flow.count += count
-
-    if store_scope is None and account_ids is None:
-        await _apply_split_offsets(session, workspace_id, user_id, primary_currency, segments, out)
-    return out
+        yield index, keys, is_unconverted, tx_type, total, count
 
 
 async def _apply_split_offsets(

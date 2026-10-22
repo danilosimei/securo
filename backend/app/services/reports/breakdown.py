@@ -1,8 +1,8 @@
-"""Spending broken down by group, by category and by store.
+"""Spending broken down by group, by category, by store and by account.
 
 The levels share everything but the row a transaction falls into, so a level
-is one function from "category" (or store key) to "row"; the sums, the
-comparison period and the sparkline are the same for all of them.
+is one function from "category" (or store key, or account) to "row"; the
+sums, the comparison period and the sparkline are the same for all of them.
 """
 import uuid
 from collections.abc import Callable
@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.account import Account
 from app.models.categorization import CategorizationSuggestion, MerchantMemory
 from app.models.category import Category
 from app.models.category_group import CategoryGroup
@@ -27,18 +28,20 @@ from app.services.reports.rules import (
     RangeTotals,
     SegmentFlows,
     collect_flows,
+    collect_split_flows,
     load_category_kinds,
     spend_of,
     totals_from,
 )
 
-LEVELS = ("group", "category", "merchant")
+LEVELS = ("group", "category", "merchant", "account")
 SPARKLINE_MONTHS = 12
 
 # The two rows a level can need that no real group/category stands for.
 # Fixed pt-BR labels, as the dashboard does for its "Sem categoria".
 NO_GROUP_LABEL = "Sem grupo"
 NO_CATEGORY_LABEL = "Sem categoria"
+NO_ACCOUNT_LABEL = "Conta sem nome"
 
 
 @dataclass(frozen=True)
@@ -231,6 +234,60 @@ def _month_segments(period: Period) -> list[tuple]:
     return out
 
 
+def _split_totals(segments: list[dict[Any, SegmentFlows]], kinds: dict) -> list[RangeTotals]:
+    """Spending per split key (account or store) of each segment, by the
+    same rules as the group level: a category's debits minus its credits,
+    debits only without a category, income categories left out."""
+    out = []
+    for seg in segments:
+        spend: dict[Any, Decimal] = {}
+        count: dict[Any, int] = {}
+        unconverted = 0
+        for split, flows in seg.items():
+            unconverted += flows.unconverted_count
+            totals = totals_from([flows], kinds)
+            if not totals.spend_by_category:
+                continue
+            spend[split] = totals.spending
+            count[split] = sum(totals.count_by_category[c] for c in totals.spend_by_category)
+        out.append(
+            RangeTotals(
+                spend_by_category=spend,
+                count_by_category=count,
+                income_by_category={},
+                uncategorized_income=ZERO,
+                unconverted_count=unconverted,
+            )
+        )
+    return out
+
+
+def _main_category(flows: dict[Any, SegmentFlows], kinds: dict) -> dict[Any, Optional[uuid.UUID]]:
+    """Store key -> the category where the store weighs most in the period."""
+    out: dict[Any, Optional[uuid.UUID]] = {}
+    for key, seg in flows.items():
+        spend = totals_from([seg], kinds).spend_by_category
+        if spend:
+            out[key] = max(spend, key=lambda c: (spend[c], str(c)))
+    return out
+
+
+async def _account_names(session: AsyncSession, workspace_id: uuid.UUID) -> dict[Any, str]:
+    rows = await session.execute(
+        select(Account.id, Account.name, Account.display_name).where(
+            Account.workspace_id == workspace_id
+        )
+    )
+    return {aid: (display or name) for aid, name, display in rows.all()}
+
+
+async def _category_names(session: AsyncSession, workspace_id: uuid.UUID) -> dict[Any, str]:
+    rows = await session.execute(
+        select(Category.id, Category.name).where(Category.workspace_id == workspace_id)
+    )
+    return {cid: name for cid, name in rows.all()}
+
+
 async def breakdown(
     session: AsyncSession,
     *,
@@ -244,23 +301,53 @@ async def breakdown(
     all_groups: bool = False,
     category_id: Optional[uuid.UUID] = None,
     no_category: bool = False,
+    all_categories: bool = False,
+    account_id: Optional[uuid.UUID] = None,
 ) -> dict:
     if level not in LEVELS:
         raise _bad_request("level_unknown", f"Unknown breakdown level '{level}'")
     if level == "category" and group_id is None and not no_group and not all_groups:
         raise _bad_request("group_required", "The category level needs a group_id")
-    if level == "merchant" and category_id is None and not no_category:
+    if level == "merchant" and category_id is None and not no_category and not all_categories:
         raise _bad_request("category_required", "The store level needs a category_id")
 
     kinds = await load_category_kinds(session, workspace_id)
+    account_ids = [account_id] if account_id is not None else None
     flow_kwargs: dict[str, Any] = {
         "workspace_id": workspace_id,
-        "user_id": user_id,
         "primary_currency": primary_currency,
+        "account_ids": account_ids,
     }
+    segments = [(period.from_, period.to), (period.previous_from, period.previous_to)]
     month_segments = _month_segments(period)
     row_of: RowOf
-    if level == "merchant":
+    main_category: dict[Any, Optional[uuid.UUID]] = {}
+    category_names: dict[Any, str] = {}
+    if level == "account" or (level == "merchant" and all_categories):
+        split_by = "account" if level == "account" else "store"
+        current_flows, previous_flows = await collect_split_flows(
+            session, segments=segments, split_by=split_by, **flow_kwargs
+        )
+        monthly = await collect_split_flows(
+            session, segments=month_segments, split_by=split_by, **flow_kwargs
+        )
+        current, previous = _split_totals([current_flows, previous_flows], kinds)
+        monthly_totals = _split_totals(monthly, kinds)
+        if level == "account":
+            accounts = await _account_names(session, workspace_id)
+
+            def row_of(key: Any) -> Optional[RowRef]:
+                return RowRef(str(key), accounts.get(key, NO_ACCOUNT_LABEL), "account")
+        else:
+            main_category = _main_category(current_flows, kinds)
+            category_names = await _category_names(session, workspace_id)
+            keys: set[str] = {k for k in current.count_by_category if isinstance(k, str)}
+            names = await _store_names(session, workspace_id, keys)
+
+            def row_of(key: Any) -> Optional[RowRef]:
+                store = key if isinstance(key, str) else None
+                return RowRef(store, names.get(key) or readable_label(store), "merchant")
+    elif level == "merchant":
         scope = (None if no_category else category_id,)
         scope_kind = None if no_category else kinds.get(category_id, KIND_NORMAL)
         if scope_kind == KIND_INCOME:  # income is not spending: nothing to list
@@ -270,11 +357,10 @@ async def breakdown(
             return _store_totals(seg_flows, scope_kind, not no_category)
 
         current_flows, previous_flows = await collect_flows(
-            session, segments=[(period.from_, period.to), (period.previous_from, period.previous_to)],
-            store_scope=scope, **flow_kwargs,
+            session, segments=segments, store_scope=scope, user_id=user_id, **flow_kwargs
         )
         monthly = await collect_flows(
-            session, segments=month_segments, store_scope=scope, **flow_kwargs
+            session, segments=month_segments, store_scope=scope, user_id=user_id, **flow_kwargs
         )
         current = fold([current_flows])
         previous = fold([previous_flows])
@@ -291,10 +377,9 @@ async def breakdown(
         else:
             row_of = await _category_level(session, workspace_id, group_id, no_group, all_groups)
         current_flows, previous_flows = await collect_flows(
-            session, segments=[(period.from_, period.to), (period.previous_from, period.previous_to)],
-            **flow_kwargs,
+            session, segments=segments, user_id=user_id, **flow_kwargs
         )
-        monthly = await collect_flows(session, segments=month_segments, **flow_kwargs)
+        monthly = await collect_flows(session, segments=month_segments, user_id=user_id, **flow_kwargs)
         current = totals_from([current_flows], kinds)
         previous = totals_from([previous_flows], kinds)
         monthly_totals = [totals_from([seg], kinds) for seg in monthly]
@@ -339,6 +424,11 @@ async def breakdown(
         labels = {ref.id: ref.group_label for ref in counts}
         for row in rows:
             row["group_label"] = labels.get(row["id"])
+    if level == "merchant" and all_categories:
+        for row in rows:
+            main = main_category.get(row["id"])
+            row["category_id"] = str(main) if main is not None else None
+            row["category_label"] = category_names.get(main, NO_CATEGORY_LABEL)
 
     return {
         "period": {
