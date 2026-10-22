@@ -64,6 +64,7 @@ vi.mock('@/lib/api', () => ({
   },
   accounts: { list: async () => [] },
   workspaces: { create: vi.fn() },
+  categorization: { summary: async () => ({ pending: 0 }) },
   info: { get: async () => ({ features: {} }) },
 }))
 vi.mock('@/lib/webauthn', () => ({
