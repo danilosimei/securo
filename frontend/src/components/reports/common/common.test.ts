@@ -22,14 +22,13 @@ describe('group colors', () => {
     expect(assignGroupColors([...GROUPS].reverse()).get('g-gifts')).toBe(gifts)
   })
 
-  it('derives category shades from the group and finds categories by name', () => {
+  it('derives category shades from the group and finds group of a category', () => {
     const palette = buildPalette(GROUPS)
     expect(palette.category('c-loan')).toBe('#3B82F6')
     expect(palette.category('c-fuel')).toContain('color-mix(in oklab, #3B82F6')
     expect(palette.category(null, 'Pets')).toBe('#EC4899')
     expect(palette.category('nope')).toBe(NEUTRAL_COLOR)
     expect(palette.group(null, 'carro')).toBe('#3B82F6')
-    expect(palette.categoryByName('Combustível')).toEqual({ id: 'c-fuel', groupId: 'g-car', groupName: 'Carro' })
     expect(palette.groupOfCategory('c-pets')).toBe('g-life')
   })
 })

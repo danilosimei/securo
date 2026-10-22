@@ -1662,6 +1662,8 @@ export interface RecurringRow {
 export interface HabitsMerchant {
   /** Store key. */
   id: string
+  /** Most common category of the store; null when uncategorized. */
+  category_id: string | null
   label: string
   count: number
   per_month: number

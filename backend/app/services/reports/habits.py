@@ -41,6 +41,12 @@ def _merchant_id(key: Optional[str]) -> str:
     return key
 
 
+def _top_category(entry: dict[str, Any]) -> Optional[str]:
+    """Most common category id of a store (None: uncategorized)."""
+    top = entry["categories"].most_common(1)[0][0]
+    return str(top) if top else None
+
+
 def _band_of(value: Decimal) -> int:
     index = 0
     for i, edge in enumerate(BAND_EDGES):
@@ -92,6 +98,7 @@ async def habits(
     merchants = [
         {
             "id": mid,
+            "category_id": _top_category(entry),
             "label": names.get(mid) or readable_label(mid),
             "count": entry["count"],
             "per_month": round(entry["count"] / period.months, 1),

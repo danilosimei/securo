@@ -218,6 +218,7 @@ async def get_overview(
 
 class HabitMerchant(BaseModel):
     id: str
+    category_id: Optional[str]
     label: str
     count: int
     per_month: float

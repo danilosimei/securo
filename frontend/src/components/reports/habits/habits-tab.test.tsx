@@ -28,11 +28,11 @@ function fixture(overrides: Partial<HabitsResponse> = {}): HabitsResponse {
   return {
     period: { from: '2026-07-01', to: '2026-09-30', partial: false, previous_from: '2026-04-01', previous_to: '2026-06-30' },
     merchants: [
-      { id: 'IFOOD', label: 'iFood', count: 60, per_month: 20, avg_ticket: '62.00', total: '3720.00', category: 'Mercado' },
-      { id: 'SON PET VIDA', label: 'Son Pet Vida', count: 3, per_month: 1, avg_ticket: '786.00', total: '2358.00', category: 'Pets' },
-      { id: 'PADARIA', label: 'Padaria', count: 45, per_month: 15, avg_ticket: '12.00', total: '540.00', category: 'Mercado' },
-      { id: 'UBER', label: 'Uber', count: 24, per_month: 8, avg_ticket: '40.00', total: '960.00', category: 'Combustível' },
-      { id: 'IPVA', label: 'IPVA', count: 1, per_month: 0.3, avg_ticket: '3100.00', total: '3100.00', category: 'Sem categoria' },
+      { id: 'IFOOD', category_id: 'c-market', label: 'iFood', count: 60, per_month: 20, avg_ticket: '62.00', total: '3720.00', category: 'Mercado' },
+      { id: 'SON PET VIDA', category_id: 'c-pets', label: 'Son Pet Vida', count: 3, per_month: 1, avg_ticket: '786.00', total: '2358.00', category: 'Bichos' },
+      { id: 'PADARIA', category_id: 'c-market', label: 'Padaria', count: 45, per_month: 15, avg_ticket: '12.00', total: '540.00', category: 'Mercado' },
+      { id: 'UBER', category_id: 'c-fuel', label: 'Uber', count: 24, per_month: 8, avg_ticket: '40.00', total: '960.00', category: 'Combustível' },
+      { id: 'IPVA', category_id: null, label: 'IPVA', count: 1, per_month: 0.3, avg_ticket: '3100.00', total: '3100.00', category: 'Sem categoria' },
     ],
     weekdays: WEEKDAYS.map((label, weekday) => ({
       weekday,
@@ -122,6 +122,13 @@ describe('HabitsTab', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(
       '/reports?tab=explore&period=last_3m&group=g-life&category=c-pets&merchant=SON+PET+VIDA',
     )
+  })
+
+  it('a store without category opens in Explore under "none"', async () => {
+    const { user } = renderTab()
+
+    await user.click(await screen.findByRole('button', { name: /^IPVA/ }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/reports?tab=explore&period=last_3m&category=none&merchant=IPVA')
   })
 
   it('shows the 7 weekdays, Monday first, and names the heaviest', async () => {

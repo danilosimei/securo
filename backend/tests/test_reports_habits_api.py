@@ -50,7 +50,7 @@ async def world(session, test_user, test_account, test_workspace):
     add("Empresa", "salario", "5000.00", date(2026, 9, 5), "credit")  # income: out
     add("Amazon", "compras", "99.00", date(2026, 8, 20))     # outside the period
     await session.commit()
-    return {"add": add, "session": session}
+    return {"add": add, "session": session, "cats": cats}
 
 
 async def _get(client, auth_headers, **params):
@@ -63,6 +63,7 @@ async def _get(client, auth_headers, **params):
 async def test_merchants_rank_by_total_with_ticket_and_rhythm(client, auth_headers, world):
     body = await _get(client, auth_headers)
     assert body["merchants"][0] == {
+        "category_id": str(world["cats"]["compras"].id),
         "id": "LOJA X", "label": "Loja X", "count": 2, "per_month": 2.0,
         "avg_ticket": "600.00", "total": "1200.00", "category": "Compras",
     }
@@ -135,3 +136,13 @@ async def test_unnamed_stores_fold_into_one_line_each(client, auth_headers, worl
 async def test_example_shape(client, auth_headers, world):
     body = await _get(client, auth_headers)
     assert set(body) == {"period", "merchants", "weekdays", "bands", "days"}
+
+
+@pytest.mark.asyncio
+async def test_merchant_without_category_has_null_category_id(client, auth_headers, world):
+    world["add"]("Banca", None, "30.00", date(2026, 9, 10))
+    await world["session"].commit()
+    body = await _get(client, auth_headers)
+    banca = next(m for m in body["merchants"] if m["id"] == "BANCA")
+    assert banca["category_id"] is None
+    assert banca["category"] == "Sem categoria"

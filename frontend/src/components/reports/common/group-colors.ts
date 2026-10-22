@@ -91,8 +91,6 @@ export interface GroupPalette {
   group: (id: string | null | undefined, label?: string) => string
   /** Color of a category (a shade of its group's), by id or name. */
   category: (id: string | null | undefined, label?: string) => string
-  /** The category and group behind a category name (first match). */
-  categoryByName: (name: string) => { id: string; groupId: string | null; groupName?: string } | null
   /** Group id of a category id. */
   groupOfCategory: (id: string) => string | null
   /** Names by id, for Explore's breadcrumb. */
@@ -130,7 +128,6 @@ export function buildPalette(groups: CategoryGroup[]): GroupPalette {
       if (!known) return NEUTRAL_COLOR
       return shade(groupColor(known.groupId), known.index)
     },
-    categoryByName: (name) => categoryNames.get(name.toLowerCase()) ?? null,
     groupOfCategory: (id) => categories.get(id)?.groupId ?? null,
     groupName: (id) => groupNames.get(id),
     categoryName: (id) => categories.get(id)?.name,

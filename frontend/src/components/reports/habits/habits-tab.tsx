@@ -15,7 +15,6 @@ import { blockState } from '@/components/reports/common/block-state'
 import { formatMoneyShort } from '@/components/reports/common/chart-utils'
 import { useGroupPalette } from '@/components/reports/common/group-colors'
 import { exploreLink, useReportPeriod } from '@/components/reports/common/report-url'
-import { NO_CATEGORY_LABEL } from '@/components/reports/explore/drilldown'
 import { BubbleChart } from './bubble-chart'
 import { BandBars, WeekdayBars } from './habit-bars'
 import { CalendarHeatmap } from './calendar-heatmap'
@@ -95,15 +94,13 @@ export function HabitsTab() {
       })
     : ''
 
-  const colorOf = (m: HabitsMerchant) => {
-    const category = palette.categoryByName(m.category)
-    return palette.group(category?.groupId ?? null)
-  }
+  const groupOf = (m: HabitsMerchant) => (m.category_id ? palette.groupOfCategory(m.category_id) : null)
+  const colorOf = (m: HabitsMerchant) => palette.group(groupOf(m))
   const openMerchant = (m: HabitsMerchant) => {
-    const category = m.category === NO_CATEGORY_LABEL ? { id: 'none', groupId: null, groupName: undefined } : palette.categoryByName(m.category)
+    const groupId = groupOf(m)
     const link = exploreLink(
-      { ...query, group: category?.groupId ?? null, category: category?.id ?? null, merchant: m.id },
-      { group: category?.groupName, category: m.category, merchant: m.label },
+      { ...query, group: groupId, category: m.category_id ?? 'none', merchant: m.id },
+      { group: groupId ? palette.groupName(groupId) : undefined, category: m.category, merchant: m.label },
       data ? { from: data.period.from, to: data.period.to } : undefined,
     )
     navigate(link.to, { state: link.state })
@@ -113,8 +110,8 @@ export function HabitsTab() {
         [...data.merchants]
           .sort((a, b) => Number(b.total) - Number(a.total))
           .map((m) => {
-            const category = palette.categoryByName(m.category)
-            return [category?.groupId ?? '', category?.groupName] as const
+            const groupId = groupOf(m)
+            return [groupId ?? '', groupId ? palette.groupName(groupId) : undefined] as const
           })
           .filter(([id]) => id),
       ).entries()].slice(0, 6)
