@@ -818,7 +818,12 @@
     "deletePasskey": "Видалити ключ доступу",
     "passkeyCreated": "Створено",
     "passkeyLastUsed": "Останнє використання",
-    "passkeyNeverUsed": "Ніколи"
+    "passkeyNeverUsed": "Ніколи",
+    "oidc": {
+      "signingIn": "Виконується вхід…",
+      "completing": "Завершуємо безпечний вхід через OIDC.",
+      "noToken": "Вхід через OIDC не повернув токен доступу."
+    }
   },
   "dashboard": {
     "title": "Панель",
@@ -1959,9 +1964,9 @@
     "vsToday": "прогнозована зміна",
     "balance": "Баланс",
     "inflow": "Надходження",
-    "outflow": "Списання",
+    "outflow": "Витрата",
     "change": "Зміна",
-    "inflowOutflow": "Надходження vs Списання",
+    "inflowOutflow": "Дохід vs Витрати",
     "startingBalance": "Початковий баланс",
     "endingBalance": "Прогнозований баланс",
     "runwayNegativeOn": "Баланс стане від'ємним {{date}}",

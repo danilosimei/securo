@@ -812,7 +812,12 @@
     "deletePasskey": "Supprimer la clé d'accès",
     "passkeyCreated": "Créée le",
     "passkeyLastUsed": "Dernière utilisation",
-    "passkeyNeverUsed": "Jamais"
+    "passkeyNeverUsed": "Jamais",
+    "oidc": {
+      "signingIn": "Connexion en cours…",
+      "completing": "Finalisation de la connexion sécurisée OIDC.",
+      "noToken": "La connexion OIDC n'a pas renvoyé de jeton d'accès."
+    }
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -1945,10 +1950,10 @@
     "vsStart": "vs début de période",
     "vsToday": "variation projetée",
     "balance": "Solde",
-    "inflow": "Entrées",
-    "outflow": "Sorties",
+    "inflow": "Revenu",
+    "outflow": "Dépense",
     "change": "Variation",
-    "inflowOutflow": "Entrées vs sorties",
+    "inflowOutflow": "Revenus vs Dépenses",
     "startingBalance": "Solde de départ",
     "endingBalance": "Solde projeté",
     "runwayNegativeOn": "Le solde devient négatif le {{date}}",

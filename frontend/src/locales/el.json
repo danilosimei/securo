@@ -810,7 +810,12 @@
     "deletePasskey": "Διαγραφή κλειδιού πρόσβασης",
     "passkeyCreated": "Δημιουργήθηκε",
     "passkeyLastUsed": "Τελευταία χρήση",
-    "passkeyNeverUsed": "Ποτέ"
+    "passkeyNeverUsed": "Ποτέ",
+    "oidc": {
+      "signingIn": "Γίνεται σύνδεση…",
+      "completing": "Ολοκλήρωση της ασφαλούς σύνδεσης OIDC.",
+      "noToken": "Η σύνδεση OIDC δεν επέστρεψε διακριτικό πρόσβασης."
+    }
   },
   "dashboard": {
     "title": "Πίνακας ελέγχου",
@@ -1997,10 +2002,10 @@
     "vsStart": "έναντι έναρξης περιόδου",
     "vsToday": "προβλεπόμενη μεταβολή",
     "balance": "Υπόλοιπο",
-    "inflow": "Εισροή",
-    "outflow": "Εκροή",
+    "inflow": "Έσοδο",
+    "outflow": "Έξοδο",
     "change": "Μεταβολή",
-    "inflowOutflow": "Εισροές έναντι Εκροών",
+    "inflowOutflow": "Έσοδα vs Έξοδα",
     "startingBalance": "Αρχικό υπόλοιπο",
     "endingBalance": "Προβλεπόμενο υπόλοιπο",
     "runwayNegativeOn": "Το υπόλοιπο γίνεται αρνητικό στις {{date}}",

@@ -6,7 +6,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 
 import CategoriesPage from '@/pages/categories'
-import { renderWithProviders } from '@/test/utils'
+import { renderWithProviders, t } from '@/test/utils'
 
 const api = vi.hoisted(() => ({
   categories: {
@@ -99,7 +99,7 @@ describe('category dialog: reports and description', () => {
   it('creates a normal category with no description when nothing is typed', async () => {
     api.categories.listIncludingHidden.mockResolvedValue([])
     const { user } = renderWithProviders(<CategoriesPage />)
-    await user.click(await screen.findByRole('button', { name: /Add Category/i }))
+    await user.click(await screen.findByRole('button', { name: t('categories.addCategory') }))
     await screen.findByRole('dialog')
 
     expect(screen.getByLabelText('In reports')).toHaveValue('normal')

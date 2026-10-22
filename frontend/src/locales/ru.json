@@ -818,7 +818,12 @@
     "deletePasskey": "Удалить ключ доступа",
     "passkeyCreated": "Создан",
     "passkeyLastUsed": "Последнее использование",
-    "passkeyNeverUsed": "Никогда"
+    "passkeyNeverUsed": "Никогда",
+    "oidc": {
+      "signingIn": "Выполняется вход…",
+      "completing": "Завершаем безопасный вход через OIDC.",
+      "noToken": "Вход через OIDC не вернул токен доступа."
+    }
   },
   "dashboard": {
     "title": "Панель",
@@ -1958,10 +1963,10 @@
     "vsStart": "от начала периода",
     "vsToday": "прогнозируемое изменение",
     "balance": "Баланс",
-    "inflow": "Поступления",
-    "outflow": "Списания",
+    "inflow": "Приход",
+    "outflow": "Расход",
     "change": "Изменение",
-    "inflowOutflow": "Поступления vs Списания",
+    "inflowOutflow": "Доход vs Расходы",
     "startingBalance": "Начальный баланс",
     "endingBalance": "Прогнозируемый баланс",
     "runwayNegativeOn": "Баланс станет отрицательным {{date}}",

@@ -810,7 +810,12 @@
     "deletePasskey": "Passkey löschen",
     "passkeyCreated": "Erstellt",
     "passkeyLastUsed": "Zuletzt verwendet",
-    "passkeyNeverUsed": "Nie"
+    "passkeyNeverUsed": "Nie",
+    "oidc": {
+      "signingIn": "Anmeldung läuft…",
+      "completing": "Die sichere OIDC-Anmeldung wird abgeschlossen.",
+      "noToken": "Die OIDC-Anmeldung hat kein Zugriffstoken geliefert."
+    }
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1942,10 +1947,10 @@
     "vsStart": "vs. Anfang des Zeitraums",
     "vsToday": "prognostizierte Änderung",
     "balance": "Saldo",
-    "inflow": "Geldeingang",
-    "outflow": "Geldausgang",
+    "inflow": "Einnahme",
+    "outflow": "Ausgabe",
     "change": "Veränderung",
-    "inflowOutflow": "Einnahmen vs. Ausgaben",
+    "inflowOutflow": "Einnahmen vs Ausgaben",
     "startingBalance": "Anfangssaldo",
     "endingBalance": "Prognostizierter Saldo",
     "runwayNegativeOn": "Der Saldo wird am {{date}} negativ",

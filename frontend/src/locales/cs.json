@@ -834,7 +834,12 @@
     "deletePasskey": "Smazat passkey",
     "passkeyCreated": "Vytvořen",
     "passkeyLastUsed": "Naposledy použit",
-    "passkeyNeverUsed": "Nikdy"
+    "passkeyNeverUsed": "Nikdy",
+    "oidc": {
+      "signingIn": "Přihlašování…",
+      "completing": "Dokončuje se zabezpečené přihlášení OIDC.",
+      "noToken": "Přihlášení OIDC nevrátilo přístupový token."
+    }
   },
   "dashboard": {
     "title": "Přehled",
@@ -2069,10 +2074,10 @@
     "vsStart": "oproti začátku období",
     "vsToday": "předpokládaná změna",
     "balance": "Zůstatek",
-    "inflow": "Příliv",
-    "outflow": "Odliv",
+    "inflow": "Příjem",
+    "outflow": "Výdaj",
     "change": "Změna",
-    "inflowOutflow": "Příliv vs odliv",
+    "inflowOutflow": "Příjmy vs Výdaje",
     "startingBalance": "Počáteční zůstatek",
     "endingBalance": "Předpokládaný zůstatek",
     "runwayNegativeOn": "Zůstatek bude záporný {{date}}",

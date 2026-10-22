@@ -810,7 +810,12 @@
     "passkeyLastUsed": "Laatst gebruikt",
     "passkeyNeverUsed": "Nooit",
     "authConfigUnavailable": "De authenticatieopties konden niet worden geladen. Lokaal inloggen blijft beschikbaar; de server past het geconfigureerde beleid toe.",
-    "noAuthMethodConfigured": "Er is geen authenticatiemethode geconfigureerd. Neem contact op met de beheerder en controleer de OIDC-instellingen."
+    "noAuthMethodConfigured": "Er is geen authenticatiemethode geconfigureerd. Neem contact op met de beheerder en controleer de OIDC-instellingen.",
+    "oidc": {
+      "signingIn": "Je wordt aangemeld…",
+      "completing": "De beveiligde OIDC-aanmelding wordt afgerond.",
+      "noToken": "De OIDC-aanmelding gaf geen toegangstoken terug."
+    }
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1943,10 +1948,10 @@
     "vsStart": "vs. begin van de periode",
     "vsToday": "geprojecteerde verandering",
     "balance": "Balans",
-    "inflow": "Instroom",
-    "outflow": "Uitstroom",
+    "inflow": "Inkomen",
+    "outflow": "Kosten",
     "change": "Verandering",
-    "inflowOutflow": "Instroom versus uitstroom",
+    "inflowOutflow": "Inkomen vs Kosten",
     "startingBalance": "Beginsaldo",
     "endingBalance": "Geprojecteerd saldo",
     "runwayNegativeOn": "Het saldo wordt negatief op {{date}}",

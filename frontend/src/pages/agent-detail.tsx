@@ -89,7 +89,7 @@ export default function AgentDetailPage() {
         <div className="min-w-0 flex-1">
           <div className="font-semibold truncate">{agent.name}</div>
           <div className="text-xs text-muted-foreground truncate">
-            {providerLabel} · {modelLabel} · temp {agent.temperature}
+            {providerLabel} · {modelLabel} · {t('agents.form.temperature')} {agent.temperature}
           </div>
         </div>
         {canWrite && (

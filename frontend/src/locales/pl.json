@@ -818,7 +818,12 @@
     "deletePasskey": "Usuń klucz dostępu",
     "passkeyCreated": "Utworzono",
     "passkeyLastUsed": "Ostatnio użyty",
-    "passkeyNeverUsed": "Nigdy"
+    "passkeyNeverUsed": "Nigdy",
+    "oidc": {
+      "signingIn": "Trwa logowanie…",
+      "completing": "Kończenie bezpiecznego logowania OIDC.",
+      "noToken": "Logowanie OIDC nie zwróciło tokenu dostępu."
+    }
   },
   "dashboard": {
     "title": "Pulpit",
@@ -2027,10 +2032,10 @@
     "vsStart": "wzgl. początku okresu",
     "vsToday": "prognozowana zmiana",
     "balance": "Saldo",
-    "inflow": "Wpływy",
-    "outflow": "Wypływy",
+    "inflow": "Przychód",
+    "outflow": "Wydatek",
     "change": "Zmiana",
-    "inflowOutflow": "Wpływy a wypływy",
+    "inflowOutflow": "Przychody vs Wydatki",
     "startingBalance": "Saldo początkowe",
     "endingBalance": "Saldo prognozowane",
     "runwayNegativeOn": "Saldo spadnie poniżej zera {{date}}",

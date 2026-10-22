@@ -810,7 +810,12 @@
     "deletePasskey": "पासकी हटाएँ",
     "passkeyCreated": "बनाई गई",
     "passkeyLastUsed": "आख़िरी बार उपयोग",
-    "passkeyNeverUsed": "कभी नहीं"
+    "passkeyNeverUsed": "कभी नहीं",
+    "oidc": {
+      "signingIn": "साइन इन हो रहा है…",
+      "completing": "सुरक्षित OIDC लॉगिन पूरा किया जा रहा है।",
+      "noToken": "OIDC लॉगिन से एक्सेस टोकन नहीं मिला।"
+    }
   },
   "dashboard": {
     "title": "डैशबोर्ड",
@@ -1000,7 +1005,7 @@
     "income": "आय",
     "notes": "नोट्स",
     "notesHint": "वैकल्पिक — वर्गीकृत करने के लिए #टैग उपयोग करें",
-    "notesPlaceholder": "जैसे: बिज़नेस डिनर #work #reimbursable",
+    "notesPlaceholder": "जैसे: क्लाइंट के साथ डिनर #काम #प्रतिपूर्ति",
     "conversion": "रूपांतरण",
     "conversionHint": "वैकल्पिक — अपने आप दर के लिए खाली छोड़ें",
     "convertedAmount": "{{currency}} में राशि",
@@ -1941,10 +1946,10 @@
     "vsStart": "अवधि की शुरुआत की तुलना में",
     "vsToday": "अनुमानित बदलाव",
     "balance": "शेष राशि",
-    "inflow": "आवक",
-    "outflow": "जावक",
+    "inflow": "आय",
+    "outflow": "खर्च",
     "change": "बदलाव",
-    "inflowOutflow": "आवक बनाम जावक",
+    "inflowOutflow": "आय vs खर्च",
     "startingBalance": "आरंभिक शेष राशि",
     "endingBalance": "अनुमानित शेष राशि",
     "runwayNegativeOn": "{{date}} को शेष राशि ऋणात्मक हो जाती है",

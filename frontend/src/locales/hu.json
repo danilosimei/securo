@@ -810,7 +810,12 @@
     "deletePasskey": "Jelkulcs törlése",
     "passkeyCreated": "Létrehozva",
     "passkeyLastUsed": "Utoljára használva",
-    "passkeyNeverUsed": "Soha"
+    "passkeyNeverUsed": "Soha",
+    "oidc": {
+      "signingIn": "Bejelentkezés…",
+      "completing": "A biztonságos OIDC-bejelentkezés befejezése.",
+      "noToken": "Az OIDC-bejelentkezés nem adott vissza hozzáférési tokent."
+    }
   },
   "dashboard": {
     "title": "Áttekintés",
@@ -1941,10 +1946,10 @@
     "vsStart": "az időszak elejéhez képest",
     "vsToday": "várható változás",
     "balance": "Egyenleg",
-    "inflow": "Beáramlás",
-    "outflow": "Kiáramlás",
+    "inflow": "Bevétel",
+    "outflow": "Kiadás",
     "change": "Változás",
-    "inflowOutflow": "Beáramlás és kiáramlás",
+    "inflowOutflow": "Bevétel vs Kiadások",
     "startingBalance": "Nyitó egyenleg",
     "endingBalance": "Várható egyenleg",
     "runwayNegativeOn": "Az egyenleg negatívba fordul: {{date}}",

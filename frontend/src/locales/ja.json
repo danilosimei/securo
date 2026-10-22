@@ -810,7 +810,12 @@
     "deletePasskey": "パスキーを削除",
     "passkeyCreated": "作成日",
     "passkeyLastUsed": "最終使用",
-    "passkeyNeverUsed": "未使用"
+    "passkeyNeverUsed": "未使用",
+    "oidc": {
+      "signingIn": "サインインしています…",
+      "completing": "安全な OIDC ログインを完了しています。",
+      "noToken": "OIDC ログインでアクセストークンが返されませんでした。"
+    }
   },
   "dashboard": {
     "title": "ダッシュボード",
@@ -1941,10 +1946,10 @@
     "vsStart": "期間開始時と比較",
     "vsToday": "予測変化",
     "balance": "残高",
-    "inflow": "流入",
-    "outflow": "流出",
+    "inflow": "収入",
+    "outflow": "支出",
     "change": "変化",
-    "inflowOutflow": "流入と流出",
+    "inflowOutflow": "収入 vs 支出",
     "startingBalance": "期首残高",
     "endingBalance": "予測残高",
     "runwayNegativeOn": "{{date}}に残高がマイナスになります",

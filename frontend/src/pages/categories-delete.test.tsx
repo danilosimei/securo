@@ -9,7 +9,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 
 import CategoriesPage from '@/pages/categories'
-import { renderWithProviders } from '@/test/utils'
+import { renderWithProviders, t } from '@/test/utils'
 
 const api = vi.hoisted(() => ({
   categories: {
@@ -140,7 +140,7 @@ describe('creating a group', () => {
     api.categoryGroups.create.mockResolvedValue({ id: 'g1' })
     const { user } = renderWithProviders(<CategoriesPage />)
 
-    await user.click(await screen.findByRole('button', { name: /Add Group/ }))
+    await user.click(await screen.findByRole('button', { name: t('groups.add') }))
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getAllByRole('textbox')[0], 'Viagens')
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))
