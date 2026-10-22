@@ -1156,7 +1156,8 @@
     "invoiceBadgeTooltip": "Ця операція закриває рахунок. Відкрити.",
     "suggestionBadge": "Питання",
     "suggestionBadgeTooltip": "Платіж може закрити цей рахунок. Відкрийте чергу, щоб відповісти.",
-    "clearGroupFilter": "Скинути фільтр групи"
+    "clearGroupFilter": "Скинути фільтр групи",
+    "attachFile": "Прикріпити"
   },
   "accounts": {
     "title": "Рахунки",
