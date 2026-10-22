@@ -35,6 +35,7 @@ import {
 import { ICON_MAP } from '@/lib/category-icons'
 import { IconPicker } from '@/components/icon-picker'
 import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { PageHeader } from '@/components/page-header'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
@@ -277,7 +278,11 @@ export default function GoalsPage() {
 
               const GoalIcon = getGoalIcon(goal.icon)
               return (
-                <div key={goal.id} className="px-4 sm:px-5 py-4 hover:bg-muted/50 transition-colors">
+                <div
+                  key={goal.id}
+                  {...clickableRow(canWrite ? () => openEditDialog(goal) : undefined)}
+                  className={`px-4 sm:px-5 py-4 hover:bg-muted/50 transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''}`}
+                >
                   <div className="flex items-start gap-4">
                     {/* Icon */}
                     <div

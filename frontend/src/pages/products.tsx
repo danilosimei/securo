@@ -32,6 +32,7 @@ import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialo
 import { PageHeader } from '@/components/page-header'
 import { InvoiceTabs } from '@/components/invoice-tabs'
 import { SectionCard, Segmented, TH } from '@/components/invoice-ui'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { CurrencySelect } from '@/components/currency-select'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -190,7 +191,6 @@ export default function ProductsPage() {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
@@ -209,7 +209,12 @@ export default function ProductsPage() {
                 {visible.map((product) => {
                   const actions = productActions(product)
                   return (
-                    <tr key={product.id} data-testid="product-row" className="border-b border-border last:border-0">
+                    <tr
+                      key={product.id}
+                      data-testid="product-row"
+                      {...clickableRow(canWrite ? () => setEditing(product) : undefined, { inTable: true })}
+                      className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''}`}
+                    >
                       <td className="py-3 pl-4 sm:pl-5">
                         <div className="text-sm font-medium text-foreground truncate">{product.name}</div>
                         <div className="text-xs text-muted-foreground truncate">
@@ -258,7 +263,6 @@ export default function ProductsPage() {
                 })}
               </tbody>
             </table>
-          </div>
         )}
       </SectionCard>
       )}

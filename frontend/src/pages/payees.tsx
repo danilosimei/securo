@@ -48,6 +48,7 @@ import {
 import { cn } from '@/lib/utils'
 import { SearchBar } from '@/components/ui/search-bar'
 import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { PageHeader } from '@/components/page-header'
 import { calculateRangeSelection } from '@/lib/selection-utils'
 import { PayeeDetailDialog } from '@/components/payee-detail-dialog'
@@ -708,12 +709,10 @@ export default function PayeesPage() {
               {pageItems.map((payee) => (
                 <TableRow
                   key={payee.id}
-                  className={`cursor-pointer hover:bg-muted border-b border-border last:border-0 ${
+                  {...clickableRow(() => setSummaryPayee(summaryPayee === payee.id ? null : payee.id), { inTable: true })}
+                  className={`${CLICKABLE_ROW_CLASS} hover:bg-muted border-b border-border last:border-0 ${
                     summaryPayee === payee.id ? 'bg-muted/80 font-medium' : selectedIds.has(payee.id) ? 'bg-primary/5' : ''
                   }`}
-                  onClick={() => {
-                    setSummaryPayee(summaryPayee === payee.id ? null : payee.id)
-                  }}
                 >
                   {canWrite && (
                     <TableCell className="py-2.5 pl-4 pr-0 w-[40px]">

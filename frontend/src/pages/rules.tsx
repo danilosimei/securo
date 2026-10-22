@@ -27,6 +27,7 @@ import { SearchBar } from '@/components/ui/search-bar'
 import { useUrlTab } from '@/hooks/use-url-tab'
 import { useUrlSearch } from '@/hooks/use-url-search'
 import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { useWorkspace } from '@/contexts/workspace-context'
@@ -574,11 +575,8 @@ export default function RulesPage() {
             {sortedRules.map((rule) => (
               <div
                 key={rule.id}
-                className={cn(
-                  'px-4 sm:px-5 py-3 hover:bg-muted transition-colors',
-                  canWrite && 'cursor-pointer',
-                )}
-                onClick={() => { if (canWrite) openEdit(rule) }}
+                {...clickableRow(canWrite ? () => openEdit(rule) : undefined)}
+                className={cn('px-4 sm:px-5 py-3 hover:bg-muted transition-colors', canWrite && CLICKABLE_ROW_CLASS)}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">

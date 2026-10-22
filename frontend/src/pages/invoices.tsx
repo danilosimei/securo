@@ -41,6 +41,7 @@ import { useUrlTab } from '@/hooks/use-url-tab'
 import InvoiceSchedulesPage from '@/pages/invoice-schedules'
 import ProductsPage from '@/pages/products'
 import { SectionCard, Segmented, StateBadge, TH } from '@/components/invoice-ui'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { InvoiceLineEditor } from '@/components/invoice-line-editor'
 import { InvoiceInstallmentsEditor } from '@/components/invoice-installments-editor'
 import { displayDue, installmentsTotal } from '@/lib/installment-utils'
@@ -394,7 +395,6 @@ function InvoicesTab() {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
@@ -422,9 +422,9 @@ function InvoicesTab() {
                 {visible.map((invoice) => (
                   <tr
                     key={invoice.id}
-                    onClick={() => navigate(`/invoices/${invoice.id}`)}
+                    {...clickableRow(() => navigate(`/invoices/${invoice.id}`), { inTable: true })}
                     data-testid="invoice-row"
-                    className="border-b border-border last:border-0 hover:bg-muted transition-colors cursor-pointer"
+                    className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${CLICKABLE_ROW_CLASS}`}
                   >
                     <td className="py-3 pl-4 sm:pl-5">
                       <div className="flex items-center gap-1.5 text-sm font-medium text-foreground truncate">
@@ -491,7 +491,6 @@ function InvoicesTab() {
                 ))}
               </tbody>
             </table>
-          </div>
         )}
       </SectionCard>
       )}

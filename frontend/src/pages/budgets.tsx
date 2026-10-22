@@ -22,6 +22,7 @@ import {
 import type { Budget } from '@/types'
 import { PiggyBank, Plus, Repeat } from 'lucide-react'
 import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { PageHeader } from '@/components/page-header'
 import { useMonthParam } from '@/hooks/use-month-param'
 import { MonthPeriodSelector } from '@/components/reports/period-selector'
@@ -152,7 +153,11 @@ export default function BudgetsPage() {
             </thead>
             <tbody>
               {budgetsList.map((budget) => (
-                <tr key={budget.id} className="border-b border-border last:border-0 hover:bg-muted transition-colors">
+                <tr
+                  key={budget.id}
+                  {...clickableRow(canWrite ? () => { setEditing(budget); setDialogOpen(true) } : undefined, { inTable: true })}
+                  className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''}`}
+                >
                   <td className="py-3 pl-4 sm:pl-5 text-sm font-medium text-foreground">
                     <span className="flex items-center gap-1.5">
                       {getCategoryDisplay(budget.category_id)}

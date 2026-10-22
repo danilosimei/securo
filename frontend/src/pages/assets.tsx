@@ -5,6 +5,7 @@ import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { SectionCard } from '@/components/ui/section-card'
 import { PageActions } from '@/components/page-actions'
 import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { useUrlTab } from '@/hooks/use-url-tab'
 import { Segmented } from '@/components/invoice-ui'
@@ -751,9 +752,10 @@ export default function AssetsPage() {
     return (
       <div key={asset.id} className="border-b border-border last:border-b-0">
         <div
-          className="grid items-center gap-2 px-3 py-3 cursor-pointer hover:bg-muted/20 transition-colors text-sm"
+          {...clickableRow(() => setExpandedId(isExpanded ? null : asset.id))}
+          aria-expanded={isExpanded}
+          className={`grid items-center gap-2 px-3 py-3 hover:bg-muted/20 transition-colors text-sm ${CLICKABLE_ROW_CLASS}`}
           style={{ gridTemplateColumns: HOLDINGS_GRID }}
-          onClick={() => setExpandedId(isExpanded ? null : asset.id)}
         >
           {/* Ativo */}
           <div className="flex items-center gap-2.5 min-w-0">
@@ -892,12 +894,12 @@ export default function AssetsPage() {
   // columns stay aligned (and usable on narrow screens).
   function renderHoldingsTable(rows: Asset[]) {
     return (
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-x-auto">
+      <SectionCard className="overflow-x-auto">
         <div className="min-w-[720px]">
           {renderHoldingsHeader()}
           {rows.map(renderHoldingRow)}
         </div>
-      </div>
+      </SectionCard>
     )
   }
 

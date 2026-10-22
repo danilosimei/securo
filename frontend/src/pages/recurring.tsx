@@ -26,6 +26,7 @@ import type { Category, CategoryGroup, RecurringTransaction } from '@/types'
 import { Plus, RefreshCw, Repeat, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { CategorySelect } from '@/components/category-select'
@@ -180,7 +181,11 @@ export default function RecurringPage() {
             </thead>
             <tbody>
               {recurringList.map((rt) => (
-                <tr key={rt.id} className="border-b border-border last:border-0 hover:bg-muted transition-colors">
+                <tr
+                  key={rt.id}
+                  {...clickableRow(canWrite ? () => { setEditing(rt); setDialogOpen(true) } : undefined, { inTable: true })}
+                  className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''}`}
+                >
                   <td className="py-3 pl-4 sm:pl-5 text-sm font-medium text-foreground">{rt.description}</td>
                   <td className={`py-3 text-xs sm:text-sm font-bold tabular-nums ${rt.type === 'credit' ? 'text-emerald-600' : 'text-rose-500'}`}>
                     {mask(`${rt.type === 'credit' ? '+' : '−'}${formatCurrency(rt.amount, rt.currency, locale)}`)}

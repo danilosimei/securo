@@ -30,6 +30,7 @@ import {
 import { PageHeader } from '@/components/page-header'
 import { InvoiceTabs } from '@/components/invoice-tabs'
 import { SectionCard, Segmented, TH } from '@/components/invoice-ui'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { InvoiceLineEditor } from '@/components/invoice-line-editor'
 import { EndConditionFields, ScheduleBadge } from '@/components/invoice-schedule-ui'
 import { CurrencySelect } from '@/components/currency-select'
@@ -212,7 +213,6 @@ export default function InvoiceSchedulesPage() {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
@@ -236,9 +236,9 @@ export default function InvoiceSchedulesPage() {
                 {list.map((schedule) => (
                   <tr
                     key={schedule.id}
-                    onClick={() => navigate(`/invoices/schedules/${schedule.id}`)}
+                    {...clickableRow(() => navigate(`/invoices/schedules/${schedule.id}`), { inTable: true })}
                     data-testid="schedule-row"
-                    className="border-b border-border last:border-0 hover:bg-muted transition-colors cursor-pointer"
+                    className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${CLICKABLE_ROW_CLASS}`}
                   >
                     <td className="py-3 pl-4 sm:pl-5">
                       <div className="text-sm font-medium text-foreground truncate">{schedule.name}</div>
@@ -275,7 +275,6 @@ export default function InvoiceSchedulesPage() {
                 ))}
               </tbody>
             </table>
-          </div>
         )}
       </SectionCard>
       )}

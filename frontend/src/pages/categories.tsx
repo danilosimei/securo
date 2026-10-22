@@ -25,6 +25,7 @@ import {
 import type { Category, CategoryGroup, CategoryUsage, ReportKind } from '@/types'
 import { Tags, Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff, WandSparkles } from 'lucide-react'
 import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { invalidateCategoryQueries } from '@/lib/invalidate-queries'
@@ -255,7 +256,11 @@ export default function CategoriesPage() {
   )
 
   const renderCategoryItem = (cat: Category) => (
-    <div key={cat.id} className={`flex items-center gap-3 px-4 sm:px-5 pl-6 sm:pl-12 py-2.5 border-b border-border last:border-0 hover:bg-muted transition-colors ${cat.is_hidden ? 'opacity-60' : ''}`}>
+    <div
+      key={cat.id}
+      {...clickableRow(canWrite ? () => openCatDialog(cat) : undefined)}
+      className={`flex items-center gap-3 px-4 sm:px-5 pl-6 sm:pl-12 py-2.5 border-b border-border last:border-0 hover:bg-muted transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''} ${cat.is_hidden ? 'opacity-60' : ''}`}
+    >
       <CategoryIcon icon={cat.icon} color={cat.color} size="md" />
       <div className="flex-1 min-w-0 flex items-center gap-2">
         <span className="text-sm font-medium text-foreground truncate">{cat.name}</span>

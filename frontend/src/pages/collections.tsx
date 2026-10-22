@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { FolderOpen, Plus } from 'lucide-react'
 import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { SectionCard } from '@/components/ui/section-card'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import type { Collection } from '@/types'
@@ -104,9 +105,13 @@ export default function CollectionsPage() {
             }
           />
         ) : (
-          <div className="divide-y divide-border/40">
+          <div className="divide-y divide-border">
             {list.map((c) => (
-              <div key={c.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors">
+              <div
+                key={c.id}
+                {...clickableRow(() => { setEditing(c); setDialogOpen(true) })}
+                className={`flex items-center gap-4 px-4 sm:px-5 py-3.5 hover:bg-muted/50 transition-colors ${CLICKABLE_ROW_CLASS}`}
+              >
                 <span className="h-8 w-8 shrink-0 rounded-lg" style={{ backgroundColor: `${c.color}22` }}>
                   <span className="flex h-full w-full items-center justify-center">
                     <FolderOpen size={16} style={{ color: c.color }} />

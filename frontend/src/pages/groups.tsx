@@ -3,6 +3,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { SectionCard } from '@/components/ui/section-card'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { Segmented } from '@/components/invoice-ui'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -24,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { GroupForm } from '@/components/group-form'
 import { PageHeader } from '@/components/page-header'
+import { RowActions } from '@/components/ui/row-actions'
 import { Archive, ChevronRight, Plus, Trash2, Users } from 'lucide-react'
 import type { Group, GroupKind } from '@/types'
 
@@ -211,8 +213,8 @@ export default function GroupsPage() {
             {list.map((group) => (
               <li
                 key={group.id}
-                className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted cursor-pointer transition-colors"
-                onClick={() => navigate(`/groups/${group.id}`)}
+                {...clickableRow(() => navigate(`/groups/${group.id}`))}
+                className={`flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-muted transition-colors ${CLICKABLE_ROW_CLASS}`}
               >
                 {/* Avatar circle — colored using the group's `color` field */}
                 <div
@@ -244,18 +246,7 @@ export default function GroupsPage() {
                     {t('splitGroups.memberCount', { count: group.members.length })} · {group.default_currency}
                   </p>
                 </div>
-                {group.is_owner && canWrite && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openEdit(group)
-                    }}
-                  >
-                    {t('common.edit')}
-                  </Button>
-                )}
+                {group.is_owner && canWrite && <RowActions label={group.name} onEdit={() => openEdit(group)} />}
                 <ChevronRight size={16} className="text-muted-foreground shrink-0" />
               </li>
             ))}

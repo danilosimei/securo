@@ -3,6 +3,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { SectionCard } from '@/components/ui/section-card'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, Plug, Plus, Star, XCircle, Zap } from 'lucide-react'
@@ -92,7 +93,8 @@ export default function AgentConnectionsPage() {
               return (
                 <div
                   key={c.id}
-                  className="flex items-start gap-3 px-4 sm:px-5 py-4 hover:bg-muted/50 transition-colors"
+                  {...clickableRow(canWrite ? () => setEditing(c) : undefined)}
+                  className={`flex items-start gap-3 px-4 sm:px-5 py-4 hover:bg-muted/50 transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''}`}
                 >
                   <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center shrink-0">
                     <Plug className="h-5 w-5 text-muted-foreground" />
