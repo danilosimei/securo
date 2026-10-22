@@ -502,7 +502,7 @@ export function TransactionSplitsSection({
       )}
 
       <Dialog open={isCreatingGroup} onOpenChange={setIsCreatingGroup}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('splitGroups.add')}</DialogTitle>
           </DialogHeader>
@@ -539,7 +539,7 @@ export function TransactionSplitsSection({
       </Dialog>
 
       <Dialog open={isAddingMember} onOpenChange={setIsAddingMember}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('splitGroups.addMember')}</DialogTitle>
           </DialogHeader>

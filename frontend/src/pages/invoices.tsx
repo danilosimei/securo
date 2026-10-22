@@ -649,10 +649,8 @@ function CreateInvoiceDialog({
           document preset opens with a line row already showing, so it
           starts wide. */}
       <DialogContent
-        className={cn(
-          'flex flex-col max-h-[calc(100dvh-2rem)]',
-          lines.length || settings?.document_required ? 'sm:max-w-3xl' : 'sm:max-w-lg',
-        )}
+        size={lines.length || settings?.document_required ? 'lg' : 'md'}
+        className="flex flex-col"
       >
         <DialogHeader>
           <DialogTitle>
@@ -783,7 +781,7 @@ function CreateInvoiceDialog({
         </div>
 
         <DialogFooter className="sm:justify-between gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('common.cancel')}
           </Button>
           <div className="flex gap-2">
@@ -849,7 +847,7 @@ function InvoiceSettingsDialog({
           in the app is: a modal taller than the viewport pushes its own
           close button off screen, which is how someone ends up trapped
           in it. Header and footer stay put; only the body moves. */}
-      <DialogContent className="sm:max-w-3xl flex flex-col max-h-[calc(100dvh-2rem)]">
+      <DialogContent size="lg" className="flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('invoices.settings.title')}</DialogTitle>
           <DialogDescription>{t('invoices.settings.description')}</DialogDescription>

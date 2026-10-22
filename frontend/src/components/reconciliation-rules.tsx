@@ -541,7 +541,7 @@ function RuleEditor({ open, node, rule, onClose }: EditorProps) {
           A rule with every section open is taller than a laptop viewport,
           and a dialog whose Save button is below the fold with nothing to
           scroll is a dialog you cannot save from. */}
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className="flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {creating
@@ -1524,7 +1524,7 @@ export function ReconciliationRules({ canWrite }: { canWrite: boolean }) {
           is no correct way to interleave two orderings), so a policy
           somebody tuned is not something to overwrite on a mis-click. */}
       <Dialog open={pending !== null} onOpenChange={(open) => { if (!open) setPending(null) }}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('reconciliation.importConfirmTitle')}</DialogTitle>
           </DialogHeader>

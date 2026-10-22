@@ -114,7 +114,7 @@ export default function OAuthCallbackPage() {
             >
               {t('accounts.oauthCallback.retry')}
             </Button>
-            <Button variant="ghost" onClick={() => navigate('/accounts', { replace: true })}>
+            <Button variant="outline" onClick={() => navigate('/accounts', { replace: true })}>
               {t('common.cancel')}
             </Button>
           </div>

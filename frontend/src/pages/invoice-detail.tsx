@@ -995,7 +995,7 @@ function RecordDeductionDialog({
   })
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('invoices.deductions.title')}</DialogTitle>
           <DialogDescription>{t('invoices.deductions.description')}</DialogDescription>
@@ -1033,7 +1033,7 @@ function RecordDeductionDialog({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={!(Number(amount) > 0) || mutation.isPending} data-testid="deduction-submit">
             {t('invoices.deductions.action')}
           </Button>
@@ -1151,7 +1151,7 @@ export function LinkPaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('invoices.action.markPaid')}</DialogTitle>
           <DialogDescription>{t('invoices.linkDescription')}</DialogDescription>
@@ -1326,12 +1326,7 @@ function EditDraftDialog({
       {/* Same rule as the create dialog: the line-item table needs the
           room, and without it the row overflows and the remove button
           falls off the right edge. */}
-      <DialogContent
-        className={cn(
-          'flex flex-col max-h-[calc(100dvh-2rem)]',
-          lines.length ? 'sm:max-w-3xl' : 'sm:max-w-lg',
-        )}
-      >
+      <DialogContent size={lines.length ? 'lg' : 'md'} className="flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('invoices.editDraft')}</DialogTitle>
           <DialogDescription>{t('invoices.editDraftDescription')}</DialogDescription>
@@ -1475,7 +1470,7 @@ function MakeRecurringDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.action.makeRecurring')}</DialogTitle>
           <DialogDescription>
@@ -1537,7 +1532,7 @@ function MakeRecurringDialog({
           />
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('common.cancel')}
           </Button>
           <Button onClick={() => mutation.mutate()} disabled={!ready || mutation.isPending} data-testid="recurring-submit">

@@ -1146,7 +1146,7 @@ export default function AssetsPage() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingAsset ? t('assets.editAsset') : t('assets.addAsset')}</DialogTitle>
           </DialogHeader>
@@ -1655,7 +1655,7 @@ export default function AssetsPage() {
 
       {/* Move Asset to Wallet Picker */}
       <Dialog open={!!movingAsset} onOpenChange={() => setMovingAsset(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('assets.moveToWallet')}</DialogTitle>
           </DialogHeader>
@@ -2537,7 +2537,7 @@ function AssetTransactionsTab({
 
       {/* Add / Edit transaction dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{editingTx ? t('assets.editTransaction') : t('assets.addTransaction')}</DialogTitle>
           </DialogHeader>
@@ -2827,7 +2827,7 @@ function AddHoldingTransactionDialog({
 
   return (
     <Dialog open={!!assetId} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>
             {t('assets.addTransaction')}{holding ? ` · ${holding.ticker || holding.name}` : ''}

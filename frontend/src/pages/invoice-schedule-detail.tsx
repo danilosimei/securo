@@ -549,7 +549,7 @@ function EditScheduleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.editTitle')}</DialogTitle>
           <DialogDescription>
@@ -610,7 +610,7 @@ function EditScheduleDialog({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={!name.trim() || mutation.isPending} data-testid="edit-schedule-save">
             {t('common.save')}
           </Button>
@@ -648,7 +648,7 @@ function EndScheduleDialog({
   })
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.endTitle')}</DialogTitle>
           {/* Why it ended is the one fact no invoice can record, and the
@@ -673,7 +673,7 @@ function EndScheduleDialog({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button variant="destructive" onClick={() => mutation.mutate()} disabled={mutation.isPending} data-testid="end-schedule-confirm">
             {t('invoices.schedules.action.end')}
           </Button>
@@ -733,7 +733,7 @@ function TermDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col max-h-[calc(100dvh-2rem)] sm:max-w-3xl">
+      <DialogContent size="lg" className="flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {term ? t('invoices.schedules.terms.editTitle') : t('invoices.schedules.action.changePrice')}
@@ -777,7 +777,7 @@ function TermDialog({
           </p>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={perPeriod <= 0 || !effectiveFrom || mutation.isPending} data-testid="term-save">
             {t('common.save')}
           </Button>
@@ -845,7 +845,7 @@ function LinkInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.linkTitle')}</DialogTitle>
           <DialogDescription>{t('invoices.schedules.linkDescription')}</DialogDescription>
@@ -890,7 +890,7 @@ function LinkInvoiceDialog({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={!invoiceId || !periodStart || mutation.isPending} data-testid="link-invoice-submit">
             <Plus className="h-4 w-4 mr-1.5" />
             {t('invoices.schedules.action.link')}

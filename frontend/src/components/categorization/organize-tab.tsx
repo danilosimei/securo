@@ -495,7 +495,7 @@ export function OrganizeTab() {
       )}
       {body}
       <Dialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {confirm?.kind === 'regenerate'

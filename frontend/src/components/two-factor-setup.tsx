@@ -109,7 +109,7 @@ export function TwoFactorSetup({ open, onClose, localAuthEnabled = true }: TwoFa
     // Disable flow
     return (
       <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('auth.disable2fa')}</DialogTitle>
           </DialogHeader>
@@ -168,7 +168,7 @@ export function TwoFactorSetup({ open, onClose, localAuthEnabled = true }: TwoFa
   // Enable flow
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('auth.setup2fa')}</DialogTitle>
         </DialogHeader>

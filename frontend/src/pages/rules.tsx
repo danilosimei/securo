@@ -702,7 +702,7 @@ export default function RulesPage() {
       />
 
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('rules.importConfirmTitle')}</DialogTitle>
           </DialogHeader>
@@ -795,7 +795,7 @@ function RulePacksDialog({ open, onClose }: { open: boolean; onClose: () => void
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('rules.packs')}</DialogTitle>
         </DialogHeader>

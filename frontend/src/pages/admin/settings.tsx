@@ -629,7 +629,7 @@ export default function AdminSettingsPage() {
 
       {/* Create User Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('admin.users.add')}</DialogTitle>
             <DialogDescription>{t('admin.users.addDesc')}</DialogDescription>
@@ -694,10 +694,10 @@ export default function AdminSettingsPage() {
               </button>
             </div>
             <DialogFooter className="mt-4">
-              <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} className="rounded-lg">
+              <Button variant="outline" type="button" onClick={() => setCreateOpen(false)}>
                 {t('common.cancel')}
               </Button>
-              <Button type="submit" disabled={createMutation.isPending} className="rounded-lg">
+              <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending ? t('common.loading') : t('common.save')}
               </Button>
             </DialogFooter>
@@ -707,7 +707,7 @@ export default function AdminSettingsPage() {
 
       {/* Edit User Dialog */}
       <Dialog open={!!editUser} onOpenChange={(open) => !open && setEditUser(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('admin.users.edit')}</DialogTitle>
           </DialogHeader>
@@ -793,10 +793,10 @@ export default function AdminSettingsPage() {
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button variant="outline" type="button" onClick={() => setEditUser(null)} className="rounded-lg">
+                <Button variant="outline" type="button" onClick={() => setEditUser(null)}>
                   {t('common.cancel')}
                 </Button>
-                <Button type="submit" disabled={updateMutation.isPending} className="rounded-lg">
+                <Button type="submit" disabled={updateMutation.isPending}>
                   {updateMutation.isPending ? t('common.loading') : t('common.save')}
                 </Button>
               </DialogFooter>
@@ -807,7 +807,7 @@ export default function AdminSettingsPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('admin.users.confirmDeleteTitle')}</DialogTitle>
             <DialogDescription>
@@ -815,14 +815,13 @@ export default function AdminSettingsPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-2">
-            <Button variant="outline" onClick={() => setDeleteUser(null)} className="rounded-lg">
+            <Button variant="outline" onClick={() => setDeleteUser(null)}>
               {t('common.cancel')}
             </Button>
             <Button
               variant="destructive"
               disabled={deleteMutation.isPending}
               onClick={() => deleteUser && deleteMutation.mutate(deleteUser.id)}
-              className="rounded-lg"
             >
               {deleteMutation.isPending ? t('common.loading') : t('common.delete')}
             </Button>

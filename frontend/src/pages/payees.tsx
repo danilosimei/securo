@@ -895,7 +895,7 @@ export default function PayeesPage() {
             jurisdiction's worth of document fields this form is taller than a
             laptop viewport, and a Save button below the fold is a Save button
             nobody can reach. Mirrors transaction-dialog. */}
-        <DialogContent className="sm:max-w-md flex flex-col max-h-[calc(100dvh-2rem)]">
+        <DialogContent size="sm" className="flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingPayee ? t('payees.edit') : t('payees.add')}</DialogTitle>
           </DialogHeader>
@@ -1067,7 +1067,7 @@ export default function PayeesPage() {
 
       {/* Merge Dialog */}
       <Dialog open={mergeDialogOpen} onOpenChange={setMergeDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('payees.mergeTitle')}</DialogTitle>
           </DialogHeader>
@@ -1115,7 +1115,7 @@ export default function PayeesPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {payeesToDelete.length > 1 ? t('payees.deleteMultipleTitle') : t('payees.deleteTitle')}

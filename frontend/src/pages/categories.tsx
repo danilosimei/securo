@@ -422,7 +422,7 @@ export default function CategoriesPage() {
 
       {/* Category Dialog */}
       <Dialog open={catDialogOpen} onOpenChange={() => { setCatDialogOpen(false); setEditingCat(null) }}>
-        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden">
+        <DialogContent className="flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>{editingCat ? t('categories.editCategory') : t('categories.newCategory')}</DialogTitle>
           </DialogHeader>
@@ -626,7 +626,7 @@ export default function CategoriesPage() {
           if (!open && !deleteCatMutation.isPending) setTransferringCategory(null)
         }}
       >
-        <DialogContent className="sm:max-w-md" showCloseButton={!deleteCatMutation.isPending}>
+        <DialogContent size="sm" showCloseButton={!deleteCatMutation.isPending}>
           <DialogHeader>
             <DialogTitle>
               {t('categories.deleteInUseTitle', { name: transferringCategory?.category.name })}
@@ -689,7 +689,7 @@ export default function CategoriesPage() {
       </Dialog>
 
       <Dialog open={!!hidingCategory} onOpenChange={(open) => !open && setHidingCategory(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {t('categories.hideWithRulesTitle', { name: hidingCategory?.category.name })}
@@ -709,7 +709,7 @@ export default function CategoriesPage() {
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={() => setHidingCategory(null)}
               disabled={hideCatMutation.isPending}
             >

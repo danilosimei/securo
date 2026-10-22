@@ -130,7 +130,7 @@ function OAuthConnectSession({ open, onClose, provider, supportsAssetSync = fals
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && !redirecting && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {step === 'bank' && (

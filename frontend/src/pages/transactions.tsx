@@ -2168,7 +2168,7 @@ export default function TransactionsPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setBulkDeleteConfirmOpen(false)}>
+            <Button variant="outline" onClick={() => setBulkDeleteConfirmOpen(false)}>
               {t('common.cancel')}
             </Button>
             <Button

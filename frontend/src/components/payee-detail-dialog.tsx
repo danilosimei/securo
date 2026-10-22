@@ -78,8 +78,7 @@ export function PayeeDetailDialog({
       {/* The figures below are the description; Radix warns when neither a
           DialogDescription nor this opt-out is present. Same call as
           global-chat-panel and rule-dialog. */}
-      <DialogContent
-        className="sm:max-w-lg flex flex-col max-h-[calc(100dvh-2rem)]"
+      <DialogContent className="flex flex-col"
         aria-describedby={undefined}
       >
         <DialogHeader>

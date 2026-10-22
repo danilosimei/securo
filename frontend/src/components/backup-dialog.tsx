@@ -71,7 +71,7 @@ export function BackupDialog({ open, onClose }: BackupDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('backup.dialogTitle')}</DialogTitle>
           <DialogDescription>{t('backup.dialogDescription')}</DialogDescription>

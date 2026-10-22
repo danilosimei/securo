@@ -921,7 +921,7 @@ export default function GroupDetailPage() {
 
       {/* Member dialog */}
       <Dialog open={memberDialogOpen} onOpenChange={setMemberDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {editingMember ? t('splitGroups.editMember') : t('splitGroups.addMember')}
@@ -965,7 +965,7 @@ export default function GroupDetailPage() {
 
       {/* Settle dialog */}
       <Dialog open={settleOpen} onOpenChange={setSettleOpen}>
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent size="sm" className="overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('splitGroups.recordSettlement')}</DialogTitle>
           </DialogHeader>

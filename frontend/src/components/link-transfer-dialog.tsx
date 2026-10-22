@@ -164,7 +164,7 @@ export function LinkTransferDialog({
 
     return (
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-4 sm:max-w-xl sm:p-6">
+        <DialogContent size="lg" className="grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>{t('transactions.linkTransferPickerTitle')}</DialogTitle>
           </DialogHeader>
@@ -289,7 +289,7 @@ export function LinkTransferDialog({
             )}
           </div>
 
-          <DialogFooter className="shrink-0">
+          <DialogFooter className="static m-0 shrink-0 border-0 bg-transparent p-0">
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
               {t('common.cancel')}
             </Button>
@@ -311,7 +311,7 @@ export function LinkTransferDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-4 sm:max-w-lg sm:p-6">
+      <DialogContent className="grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{t('transactions.linkTransferTitle')}</DialogTitle>
         </DialogHeader>
@@ -362,7 +362,7 @@ export function LinkTransferDialog({
           </div>
         </div>
 
-        <DialogFooter className="shrink-0 gap-2 sm:gap-2">
+        <DialogFooter className="static m-0 shrink-0 gap-2 border-0 bg-transparent p-0 sm:gap-2">
           {isPickerMode && (
             <Button
               type="button"

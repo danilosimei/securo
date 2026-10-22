@@ -134,7 +134,7 @@ export function ConnectionFormDialog({ open, onOpenChange, connection }: Props) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? t('agents.connections.editTitle') : t('agents.connections.createTitle')}</DialogTitle>
         </DialogHeader>

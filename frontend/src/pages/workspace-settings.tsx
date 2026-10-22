@@ -703,14 +703,12 @@ export default function WorkspaceSettingsPage() {
             <Button
               variant="outline"
               onClick={() => setInviteOpen(false)}
-              className="rounded-lg"
             >
               {t('common.cancel')}
             </Button>
             <Button
               onClick={() => inviteMutation.mutate()}
               disabled={inviteMutation.isPending || !inviteEmail.trim()}
-              className="rounded-lg"
             >
               {inviteMutation.isPending ? t('common.loading') : t('common.save')}
             </Button>
@@ -734,7 +732,6 @@ export default function WorkspaceSettingsPage() {
             <Button
               variant="outline"
               onClick={() => setRemoveTarget(null)}
-              className="rounded-lg"
             >
               {t('common.cancel')}
             </Button>
@@ -742,7 +739,6 @@ export default function WorkspaceSettingsPage() {
               variant="destructive"
               onClick={() => removeTarget && removeMutation.mutate(removeTarget)}
               disabled={removeMutation.isPending}
-              className="rounded-lg"
             >
               {removeMutation.isPending ? t('common.loading') : t('workspace.remove')}
             </Button>
@@ -769,7 +765,6 @@ export default function WorkspaceSettingsPage() {
             <Button
               variant="outline"
               onClick={() => setArchiveOpen(false)}
-              className="rounded-lg"
             >
               {t('common.cancel')}
             </Button>
@@ -777,7 +772,6 @@ export default function WorkspaceSettingsPage() {
               variant="destructive"
               onClick={() => archiveMutation.mutate()}
               disabled={archiveMutation.isPending}
-              className="rounded-lg"
             >
               <Archive className="mr-2 h-4 w-4" />
               {archiveMutation.isPending ? t('common.loading') : t('workspace.archive', 'Arquivar')}

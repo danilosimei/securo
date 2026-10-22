@@ -39,7 +39,7 @@ export function DeleteConfirmationDialog({
         if (!nextOpen && !isPending) onClose()
       }}
     >
-      <DialogContent className="sm:max-w-md" showCloseButton={!isPending}>
+      <DialogContent size="sm" showCloseButton={!isPending}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

@@ -114,7 +114,7 @@ function PasskeyManagementSession({ open, onClose, localAuthEnabled = true }: Pa
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('auth.passkeysTitle')}</DialogTitle>
         </DialogHeader>

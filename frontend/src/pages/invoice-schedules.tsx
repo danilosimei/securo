@@ -392,7 +392,7 @@ function CreateScheduleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col max-h-[calc(100dvh-2rem)] sm:max-w-3xl">
+      <DialogContent size="lg" className="flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.new')}</DialogTitle>
           <DialogDescription>{t('invoices.schedules.newDescription')}</DialogDescription>
@@ -512,7 +512,7 @@ function CreateScheduleDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('common.cancel')}
           </Button>
           <Button

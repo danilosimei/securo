@@ -595,7 +595,7 @@ function TransactionImportPanel() {
 
       {/* Unparsed CSV rows dialog */}
       <Dialog open={isFailedRowsOpen} onOpenChange={setIsFailedRowsOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-6">
+        <DialogContent size="lg" className="flex flex-col p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold">{t('import.failedRowsTitle')}</DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-1">

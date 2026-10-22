@@ -50,7 +50,7 @@ function ConnectorSelectSession({ open, onClose, onSelect }: ConnectorSelectDial
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('accounts.selectConnector')}</DialogTitle>
           <p className="text-sm text-muted-foreground">{t('accounts.selectConnectorDesc')}</p>

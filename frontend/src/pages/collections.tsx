@@ -134,7 +134,7 @@ export default function CollectionsPage() {
       />
 
       <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('collections.confirmDeleteTitle')}</DialogTitle>
             <DialogDescription>{t('collections.confirmDeleteDesc', { name: deleting?.name })}</DialogDescription>
@@ -189,7 +189,7 @@ function CollectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{collection ? t('collections.edit') : t('collections.add')}</DialogTitle>
         </DialogHeader>

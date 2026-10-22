@@ -417,7 +417,7 @@ export function ProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col max-h-[calc(100dvh-2rem)] sm:max-w-2xl">
+      <DialogContent size="lg" className="flex flex-col">
         <DialogHeader>
           <DialogTitle>{product ? t('invoices.products.editTitle') : t('invoices.products.new')}</DialogTitle>
           <DialogDescription>{t('invoices.products.newDescription')}</DialogDescription>
@@ -621,7 +621,7 @@ export function ProductDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={!ready || mutation.isPending} data-testid="product-save">
             {product ? t('common.save') : t('common.create')}
           </Button>
