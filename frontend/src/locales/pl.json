@@ -1138,14 +1138,6 @@
       "reset": "Resetuj",
       "cancel": "Anuluj",
       "apply": "Zastosuj",
-      "datePresets": {
-        "today": "Dziś",
-        "last7": "Ostatnie 7 dni",
-        "last30": "Ostatnie 30 dni",
-        "thisMonth": "Bieżący miesiąc",
-        "last90": "Ostatnie 90 dni",
-        "thisYear": "Bieżący rok"
-      },
       "futureDateError": "Data końcowa nie może przypadać po dzisiejszej dacie",
       "rangeTooWideError": "Zakres jest zbyt szeroki (maks. {{years}} lat)"
     },

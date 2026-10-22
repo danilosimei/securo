@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 
 import { TransactionsFilterBar } from '@/components/transactions-filter-bar'
@@ -71,7 +71,7 @@ describe('desktop Between dates', () => {
     await openBetween()
     const items = (await screen.findAllByRole('menuitem')).map((el) => el.textContent ?? '')
     const all = items.findIndex((x) => x === t('transactions.all'))
-    const today = items.findIndex((x) => x === t('transactions.filtersBar.datePresets.today'))
+    const today = items.findIndex((x) => x === t('reports.explore.period.this_month'))
     const custom = items.findIndex((x) => x === t('transactions.filtersBar.customRange'))
     expect(t('transactions.filtersBar.customRange')).toBe('Between dates…')
     expect(custom).toBe(all + 1)
@@ -104,6 +104,57 @@ describe('desktop Between dates', () => {
     )
     await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
     expect(props.onDateRangeChange).toHaveBeenCalledWith('2026-02-01', '')
+  })
+})
+
+describe('date shortcuts, the same as Reports', () => {
+  afterEach(() => vi.useRealTimers())
+
+  async function openDateMenu(props = barProps()) {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 21, 12))
+    const view = renderWithProviders(<TransactionsFilterBar {...props} />)
+    await view.user.click(screen.getAllByRole('button', { name: new RegExp(t('transactions.filtersBar.filters')) })[0])
+    const triggers = await screen.findAllByRole('menuitem', { name: new RegExp(t('transactions.filtersBar.date')) })
+    await view.user.click(triggers.find((el) => el.getAttribute('aria-haspopup') === 'menu')!)
+    return { ...view, props }
+  }
+
+  it('lists This month, Last month, 3/6/12 months and Year to date after All and Between dates', async () => {
+    await openDateMenu()
+    const items = (await screen.findAllByRole('menuitem')).map((el) => el.textContent ?? '')
+    const start = items.indexOf(t('transactions.filtersBar.customRange'))
+    expect(items.slice(start - 1, start + 7)).toEqual([
+      t('transactions.all'),
+      t('transactions.filtersBar.customRange'),
+      t('reports.explore.period.this_month'),
+      t('reports.explore.period.last_month'),
+      t('reports.explore.period.last_3m'),
+      t('reports.explore.period.last_6m'),
+      t('reports.explore.period.last_12m'),
+      t('reports.explore.period.ytd'),
+    ])
+  })
+
+  it.each([
+    ['this_month', '2026-10-01', '2026-10-21'],
+    ['last_month', '2026-09-01', '2026-09-30'],
+    ['last_3m', '2026-07-01', '2026-09-30'],
+    ['last_6m', '2026-04-01', '2026-09-30'],
+    ['last_12m', '2025-10-01', '2026-09-30'],
+    ['ytd', '2026-01-01', '2026-10-21'],
+  ])('%s applies the same dates as in Reports', async (period, from, to) => {
+    const { user, props } = await openDateMenu()
+    const item = await screen.findByRole('menuitem', { name: t(`reports.explore.period.${period}`) })
+    item.focus()
+    await user.keyboard('{Enter}')
+    expect(props.onDateRangeChange).toHaveBeenCalledWith(from, to)
+  })
+
+  it('marks the shortcut that matches the active range', async () => {
+    await openDateMenu(barProps({ filterFrom: '2026-07-01', filterTo: '2026-09-30' }))
+    const item = await screen.findByRole('menuitem', { name: t('reports.explore.period.last_3m') })
+    expect(item).toHaveClass('bg-primary/5')
   })
 })
 

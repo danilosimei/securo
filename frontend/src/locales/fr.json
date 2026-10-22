@@ -1106,14 +1106,6 @@
       "reset": "Réinitialiser",
       "cancel": "Annuler",
       "apply": "Appliquer",
-      "datePresets": {
-        "today": "Aujourd'hui",
-        "last7": "7 derniers jours",
-        "last30": "30 derniers jours",
-        "thisMonth": "Ce mois-ci",
-        "last90": "90 derniers jours",
-        "thisYear": "Cette année"
-      },
       "futureDateError": "La date de fin ne peut pas être postérieure à aujourd'hui",
       "rangeTooWideError": "La période est trop large (max. {{years}} ans)"
     },

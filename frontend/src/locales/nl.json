@@ -1104,14 +1104,6 @@
       "reset": "Opnieuw instellen",
       "cancel": "Annuleer",
       "apply": "Toepassen",
-      "datePresets": {
-        "today": "Vandaag",
-        "last7": "Laatste 7 dagen",
-        "last30": "Laatste 30 dagen",
-        "thisMonth": "Deze maand",
-        "last90": "Laatste 90 dagen",
-        "thisYear": "Dit jaar"
-      },
       "futureDateError": "Einddatum mag niet na vandaag liggen",
       "rangeTooWideError": "Bereik is te breed (max. {{years}} jaar)"
     },

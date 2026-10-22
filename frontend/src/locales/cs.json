@@ -1168,14 +1168,6 @@
       "reset": "Resetovat",
       "cancel": "Zrušit",
       "apply": "Použít",
-      "datePresets": {
-        "today": "Dnes",
-        "last7": "Posledních 7 dní",
-        "last30": "Posledních 30 dní",
-        "thisMonth": "Tento měsíc",
-        "last90": "Posledních 90 dní",
-        "thisYear": "Tento rok"
-      },
       "futureDateError": "Datum konce nemůže být pozdější než dnes",
       "rangeTooWideError": "Rozsah je příliš široký (max. {{years}} let)"
     },

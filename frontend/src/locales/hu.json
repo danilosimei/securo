@@ -1104,14 +1104,6 @@
       "reset": "Visszaállítás",
       "cancel": "Mégse",
       "apply": "Alkalmazás",
-      "datePresets": {
-        "today": "Ma",
-        "last7": "Elmúlt 7 nap",
-        "last30": "Elmúlt 30 nap",
-        "thisMonth": "Ez a hónap",
-        "last90": "Elmúlt 90 nap",
-        "thisYear": "Ez az év"
-      },
       "futureDateError": "A záró dátum nem lehet a mai napnál későbbi",
       "rangeTooWideError": "Túl széles időszak (legfeljebb {{years}} év)"
     },

@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from 'react'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
-import { startOfMonth, startOfYear, subDays } from 'date-fns'
 import {
   ArrowUpDown,
   Calendar as CalendarIcon,
@@ -39,11 +38,11 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
+import { DateRangeCalendars } from '@/components/ui/date-range-picker'
+import { REPORT_PERIODS, reportPeriodRange } from '@/lib/report-period'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CATEGORY_SOURCE_OPTIONS } from '@/lib/category-source-options'
-import { localDateString } from '@/lib/date-utils'
 import { formatDateShort } from '@/lib/date-input'
 import { DateRangeFields } from '@/components/date-range-fields'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
@@ -303,46 +302,13 @@ export function TransactionsFilterBar({
     setAmountSubOpen(open)
   }
 
+  // The same shortcuts, labels and dates as the Reports period.
   const datePresets = useMemo(() => {
     const today = new Date()
-    return [
-      {
-        key: 'today',
-        label: t('transactions.filtersBar.datePresets.today'),
-        from: localDateString(today),
-        to: localDateString(today),
-      },
-      {
-        key: 'last7',
-        label: t('transactions.filtersBar.datePresets.last7'),
-        from: localDateString(subDays(today, 6)),
-        to: localDateString(today),
-      },
-      {
-        key: 'last30',
-        label: t('transactions.filtersBar.datePresets.last30'),
-        from: localDateString(subDays(today, 29)),
-        to: localDateString(today),
-      },
-      {
-        key: 'thisMonth',
-        label: t('transactions.filtersBar.datePresets.thisMonth'),
-        from: localDateString(startOfMonth(today)),
-        to: localDateString(today),
-      },
-      {
-        key: 'last90',
-        label: t('transactions.filtersBar.datePresets.last90'),
-        from: localDateString(subDays(today, 89)),
-        to: localDateString(today),
-      },
-      {
-        key: 'thisYear',
-        label: t('transactions.filtersBar.datePresets.thisYear'),
-        from: localDateString(startOfYear(today)),
-        to: localDateString(today),
-      },
-    ]
+    return REPORT_PERIODS.filter((p) => p !== 'custom').flatMap((p) => {
+      const range = reportPeriodRange(p, today)
+      return range ? [{ key: p, label: t(`reports.explore.period.${p}`), from: range.from, to: range.to }] : []
+    })
   }, [t])
 
   const openCustomRange = () => {
@@ -1213,40 +1179,14 @@ export function TransactionsFilterBar({
               onSubmit={applyDraftRange}
             />
           </div>
-          <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto p-3 sm:max-h-none sm:flex-row sm:gap-0 sm:overflow-visible">
-            <div className="sm:border-r sm:border-border/60 sm:pr-2">
-              <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-                {t('transactions.filtersBar.fromLabel')}
-              </p>
-              <Calendar
-                key={draftFrom}
-                selected={draftFrom ? new Date(draftFrom + 'T00:00:00') : undefined}
-                defaultMonth={
-                  draftFrom ? new Date(draftFrom + 'T00:00:00') : new Date()
-                }
-                locale={dateFnsLocale}
-                onSelect={(d) => setDraftFrom(d ? localDateString(d) : '')}
-              />
-            </div>
-            <div className="sm:pl-2">
-              <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-                {t('transactions.filtersBar.toLabel')}
-              </p>
-              <Calendar
-                key={draftTo}
-                selected={draftTo ? new Date(draftTo + 'T00:00:00') : undefined}
-                defaultMonth={
-                  draftTo
-                    ? new Date(draftTo + 'T00:00:00')
-                    : draftFrom
-                      ? new Date(draftFrom + 'T00:00:00')
-                      : new Date()
-                }
-                locale={dateFnsLocale}
-                onSelect={(d) => setDraftTo(d ? localDateString(d) : '')}
-              />
-            </div>
-          </div>
+          <DateRangeCalendars
+            from={draftFrom}
+            to={draftTo}
+            onFromChange={setDraftFrom}
+            onToChange={setDraftTo}
+            locale={dateFnsLocale}
+            className="max-h-[60vh] overflow-y-auto sm:max-h-none sm:overflow-visible"
+          />
           <div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2">
             <button
               type="button"

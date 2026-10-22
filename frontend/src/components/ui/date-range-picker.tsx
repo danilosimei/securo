@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import type { Locale } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { localDateString } from '@/lib/date-utils'
 import { formatDateRange } from '@/lib/date-range-format'
@@ -204,38 +205,13 @@ export function DateRangePicker({
               : emptyLabel}
           </p>
         </div>
-        <div className="flex flex-col gap-4 p-3 sm:flex-row sm:gap-0">
-          <div className="sm:border-r sm:border-border/60 sm:pr-2">
-            <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-              {t('transactions.filtersBar.fromLabel')}
-            </p>
-            <Calendar
-              selected={draftFrom ? new Date(draftFrom + 'T00:00:00') : undefined}
-              defaultMonth={
-                draftFrom ? new Date(draftFrom + 'T00:00:00') : new Date()
-              }
-              locale={dateFnsLocale}
-              onSelect={(d) => setDraftFrom(d ? localDateString(d) : '')}
-            />
-          </div>
-          <div className="sm:pl-2">
-            <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-              {t('transactions.filtersBar.toLabel')}
-            </p>
-            <Calendar
-              selected={draftTo ? new Date(draftTo + 'T00:00:00') : undefined}
-              defaultMonth={
-                draftTo
-                  ? new Date(draftTo + 'T00:00:00')
-                  : draftFrom
-                    ? new Date(draftFrom + 'T00:00:00')
-                    : new Date()
-              }
-              locale={dateFnsLocale}
-              onSelect={(d) => setDraftTo(d ? localDateString(d) : '')}
-            />
-          </div>
-        </div>
+        <DateRangeCalendars
+          from={draftFrom}
+          to={draftTo}
+          onFromChange={setDraftFrom}
+          onToChange={setDraftTo}
+          locale={dateFnsLocale}
+        />
         {draftError && (
           <div className="flex items-center gap-1.5 px-3 pb-2 text-[11px] text-rose-600 dark:text-rose-400">
             <AlertCircle size={12} className="shrink-0" />
@@ -281,5 +257,51 @@ export function DateRangePicker({
         </div>
       </PopoverContent>
     </Popover>
+  )
+}
+
+interface DateRangeCalendarsProps {
+  from: string
+  to: string
+  onFromChange: (value: string) => void
+  onToChange: (value: string) => void
+  locale: Locale
+  className?: string
+}
+
+/** The two calendars of a custom range ("From" and "To"), side by side on a
+ *  wide screen and stacked on a phone. Shared by this picker (Reports) and the
+ *  Transactions filter bar's "Between dates", so both pick dates the same way.
+ *  Each calendar jumps to its date when the date changes from outside (typed
+ *  in, or reset). */
+export function DateRangeCalendars({ from, to, onFromChange, onToChange, locale, className }: DateRangeCalendarsProps) {
+  const { t } = useTranslation()
+  return (
+    <div className={cn('flex flex-col gap-4 p-3 sm:flex-row sm:gap-0', className)}>
+      <div className="sm:border-r sm:border-border/60 sm:pr-2">
+        <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+          {t('transactions.filtersBar.fromLabel')}
+        </p>
+        <Calendar
+          key={from}
+          selected={from ? new Date(from + 'T00:00:00') : undefined}
+          defaultMonth={from ? new Date(from + 'T00:00:00') : new Date()}
+          locale={locale}
+          onSelect={(d) => onFromChange(d ? localDateString(d) : '')}
+        />
+      </div>
+      <div className="sm:pl-2">
+        <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
+          {t('transactions.filtersBar.toLabel')}
+        </p>
+        <Calendar
+          key={to}
+          selected={to ? new Date(to + 'T00:00:00') : undefined}
+          defaultMonth={to ? new Date(to + 'T00:00:00') : from ? new Date(from + 'T00:00:00') : new Date()}
+          locale={locale}
+          onSelect={(d) => onToChange(d ? localDateString(d) : '')}
+        />
+      </div>
+    </div>
   )
 }

@@ -1104,14 +1104,6 @@
       "reset": "Zurücksetzen",
       "cancel": "Abbrechen",
       "apply": "Anwenden",
-      "datePresets": {
-        "today": "Heute",
-        "last7": "Letzte 7 Tage",
-        "last30": "Letzte 30 Tage",
-        "thisMonth": "Diesen Monat",
-        "last90": "Letzte 90 Tage",
-        "thisYear": "Dieses Jahr"
-      },
       "futureDateError": "Enddatum darf nicht in der Zukunft liegen",
       "rangeTooWideError": "Zeitraum ist zu groß (max. {{years}} Jahre)"
     },

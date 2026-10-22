@@ -1104,14 +1104,6 @@
       "reset": "リセット",
       "cancel": "キャンセル",
       "apply": "適用",
-      "datePresets": {
-        "today": "今日",
-        "last7": "過去7日間",
-        "last30": "過去30日間",
-        "thisMonth": "今月",
-        "last90": "過去90日間",
-        "thisYear": "今年"
-      },
       "futureDateError": "終了日は今日より後の日付にできません",
       "rangeTooWideError": "範囲が広すぎます(最大{{years}}年)"
     },

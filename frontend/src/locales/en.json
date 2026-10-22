@@ -1104,14 +1104,6 @@
       "reset": "Reset",
       "cancel": "Cancel",
       "apply": "Apply",
-      "datePresets": {
-        "today": "Today",
-        "last7": "Last 7 days",
-        "last30": "Last 30 days",
-        "thisMonth": "This month",
-        "last90": "Last 90 days",
-        "thisYear": "This year"
-      },
       "futureDateError": "End date can't be after today",
       "rangeTooWideError": "Range is too wide (max {{years}} years)"
     },
