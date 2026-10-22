@@ -66,6 +66,9 @@ import { setThemeBasedOnSystem } from '@/lib/theme-utils'
 import { useLocalAuthEnabled } from '@/hooks/use-local-auth'
 import { formatCurrency } from '@/lib/format'
 
+/** Below this window height the menu starts with the account list closed. */
+const SHORT_SCREEN_HEIGHT = 1000
+
 const QuickAddTransaction = lazy(() => import('@/components/quick-add-transaction'))
 
 /** Placeholder rows shown while the workspace's module list is in flight. */
@@ -100,7 +103,9 @@ export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const { collapsed: desktopSidebarCollapsed, toggleCollapsed: toggleDesktopSidebar } = useSidebarState()
-  const [accountsExpanded, setAccountsExpanded] = useState(true)
+  // The account list is the part of the menu that can go: on a short screen
+  // it starts closed, so the navigation above it never gets cut.
+  const [accountsExpanded, setAccountsExpanded] = useState(() => window.innerHeight >= SHORT_SCREEN_HEIGHT)
   const [accountsShowAll, setAccountsShowAll] = useState(false)
   const { privacyMode, togglePrivacyMode, mask } = usePrivacyMode()
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
@@ -301,7 +306,7 @@ export function AppLayout() {
               so nothing the expanded header offers goes missing in the
               rail. */}
           <div className={cn(
-            'flex h-14 min-h-14 items-center justify-between px-5 border-b border-sidebar-border shrink-0',
+            'flex h-14 min-h-14 items-center justify-between px-5 [@media(max-height:999px)]:lg:h-12 [@media(max-height:999px)]:lg:min-h-12 border-b border-sidebar-border shrink-0',
             desktopSidebarCollapsed && 'lg:h-auto lg:min-h-0 lg:flex-col lg:justify-center lg:gap-2 lg:px-0 lg:py-3',
           )}>
             <Link
@@ -418,7 +423,7 @@ export function AppLayout() {
               if (item.type === 'separator') {
                 return (
                   <div key={`sep-${idx}`} className={cn(
-                    'pt-2.5 pb-0.5 px-3',
+                    'pt-2.5 pb-0.5 px-3 [@media(max-height:999px)]:lg:pt-1.5',
                     desktopSidebarCollapsed && 'lg:hidden',
                   )}>
                     <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-sidebar-muted/50">
@@ -468,7 +473,7 @@ export function AppLayout() {
 
           {/* Account list in sidebar */}
           {allAccounts.length > 0 && (
-            <div className={cn('px-3 pb-2 mt-2', desktopSidebarCollapsed && 'lg:hidden')}>
+            <div className={cn('px-3 pb-2 mt-2 [@media(max-height:999px)]:lg:mt-1', desktopSidebarCollapsed && 'lg:hidden')}>
               <button
                 onClick={() => setAccountsExpanded(!accountsExpanded)}
                 className="flex items-center justify-between w-full px-3 py-2 hover:text-sidebar-foreground transition-colors"

@@ -67,7 +67,7 @@ export function SidebarNavLink({
       title={name}
       aria-label={accessibleName}
       className={cn(
-        'relative flex h-8 items-center gap-3 text-[13px] font-medium transition-all rounded-lg px-3',
+        'relative flex h-8 items-center gap-3 text-[13px] [@media(max-height:999px)]:lg:h-7 font-medium transition-all rounded-lg px-3',
         isActive
           ? 'bg-primary/[0.08] text-primary border-l-[3px] border-primary pl-[9px]'
           : 'text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground',
