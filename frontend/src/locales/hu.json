@@ -1143,7 +1143,9 @@
     "suggestionBadge": "Kérdés",
     "suggestionBadgeTooltip": "Lehet, hogy egy befizetés kiegyenlíti ezt. Nyisd meg a sort a válaszhoz.",
     "clearGroupFilter": "Csoportszűrő törlése",
-    "attachFile": "Csatolás"
+    "attachFile": "Csatolás",
+    "moreOptions": "További beállítások",
+    "syncedBadge": "szinkronizált"
   },
   "accounts": {
     "title": "Számlák",

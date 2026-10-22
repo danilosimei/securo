@@ -1207,7 +1207,9 @@
     "suggestionBadge": "Otázka",
     "suggestionBadgeTooltip": "Platba může uhradit tuto fakturu. Otevřete frontu a odpovězte.",
     "clearGroupFilter": "Zrušit filtr skupiny",
-    "attachFile": "Přiložit"
+    "attachFile": "Přiložit",
+    "moreOptions": "Další možnosti",
+    "syncedBadge": "synchronizováno"
   },
   "accounts": {
     "title": "Účty",

@@ -1328,7 +1328,9 @@
     "suggestionBadge": "Ερώτηση",
     "suggestionBadgeTooltip": "Μια πληρωμή μπορεί να εξοφλεί ένα τιμολόγιο. Ανοίξτε την ουρά για να απαντήσετε.",
     "clearGroupFilter": "Κατάργηση φίλτρου ομάδας",
-    "attachFile": "Επισύναψη"
+    "attachFile": "Επισύναψη",
+    "moreOptions": "Περισσότερες επιλογές",
+    "syncedBadge": "συγχρονισμένη"
   },
   "budgets": {
     "title": "Προϋπολογισμοί",

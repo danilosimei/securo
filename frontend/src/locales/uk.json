@@ -1157,7 +1157,9 @@
     "suggestionBadge": "Питання",
     "suggestionBadgeTooltip": "Платіж може закрити цей рахунок. Відкрийте чергу, щоб відповісти.",
     "clearGroupFilter": "Скинути фільтр групи",
-    "attachFile": "Прикріпити"
+    "attachFile": "Прикріпити",
+    "moreOptions": "Інші параметри",
+    "syncedBadge": "синхронізована"
   },
   "accounts": {
     "title": "Рахунки",

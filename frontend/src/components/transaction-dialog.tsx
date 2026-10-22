@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useId, useMemo, useRef } from 'react'
 import { getAccountLabel, getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
@@ -28,7 +28,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { AlertTriangle, ChevronDown, ChevronLeft, Download, Eye, EyeClosed, Paperclip, Upload, X, FileText, Plus, Unlink, SlidersHorizontal, ListPlus, Check } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, ChevronDown, ChevronLeft, ChevronRight, Download, Eye, EyeClosed, Paperclip, X, FileText, Plus, RefreshCw, Repeat, Unlink, SlidersHorizontal, ListPlus, Check } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { CategorySelect } from '@/components/category-select'
 import { ProvenanceBlock } from '@/components/categorization/provenance-block'
+import { provenanceHasContent, useTransactionProvenance } from '@/components/categorization/use-transaction-provenance'
 import { PayeeSelect } from '@/components/payee-select'
 import { RuleDialog, type RuleDialogInitialData } from '@/components/rule-dialog'
 import { TransactionAttachments } from '@/components/transaction-attachments'
@@ -170,6 +171,17 @@ export function TransactionDialog({
   const isEditing = !!transaction
   const hasPreview = isEditing && !!preview
 
+  // The side column holds how the category got here and the files; with
+  // neither, the dialog is a single, narrower column. Same keys as the
+  // blocks themselves, so this reads the same requests.
+  const { data: provenance } = useTransactionProvenance(open ? transaction?.id : null)
+  const { data: attachmentList } = useQuery({
+    queryKey: ['attachments', transaction?.id],
+    queryFn: () => transactionsApi.attachments.list(transaction!.id),
+    enabled: open && !!transaction,
+  })
+  const hasSide = isEditing && (provenanceHasContent(provenance) || (attachmentList?.length ?? 0) > 0)
+
   const handleClose = () => {
     setPendingInstallmentEdit(null)
     onClose()
@@ -208,8 +220,13 @@ export function TransactionDialog({
         // chrome) and make it a flex column so the inner scroll region works
         // on small screens, not just at the sm: breakpoint (issue #286).
         'transition-[max-width] duration-300 flex flex-col max-h-[calc(100dvh-2rem)] overflow-hidden',
-        // From md up the form is two columns, so it is wide enough not to scroll.
-        hasPreview ? 'max-w-2xl md:max-w-6xl' : 'max-w-2xl md:max-w-4xl'
+        // From md up the form has a side column when there is something to
+        // put in it; a manual row also needs room for its row of facts.
+        hasPreview
+          ? 'max-w-2xl md:max-w-6xl'
+          : hasSide
+            ? 'max-w-2xl md:max-w-4xl'
+            : isSynced ? 'max-w-2xl md:max-w-2xl' : 'max-w-2xl md:max-w-3xl'
       )}>
         {/* The height follows the form; only an open preview needs a fixed one. */}
         <div className={isEditing
@@ -219,11 +236,6 @@ export function TransactionDialog({
           <div className={isEditing
             ? 'flex flex-col min-w-0 min-h-0 flex-1 overflow-hidden sm:pr-6'
             : 'flex flex-col min-h-0 flex-1'}>
-            <DialogHeader className="mb-4">
-              <DialogTitle>
-                {transaction ? t('common.edit') : t('transactions.addManual')}
-              </DialogTitle>
-            </DialogHeader>
             <TransactionForm
               key={transaction?.id ?? `new-${formResetKey}`}
               transaction={transaction}
@@ -246,6 +258,7 @@ export function TransactionDialog({
               onPreviewChange={handlePreviewChange}
               activePreviewId={preview?.attachmentId ?? null}
               hasPreview={hasPreview}
+              hasSide={hasSide}
             />
           </div>
 
@@ -409,6 +422,7 @@ function TransactionForm({
   onPreviewChange,
   activePreviewId,
   hasPreview,
+  hasSide,
 }: {
   transaction: Transaction | null
   duplicateDraft: TransactionEditPayload | null
@@ -430,11 +444,13 @@ function TransactionForm({
   onPreviewChange: (preview: AttachmentPreview | null) => void
   activePreviewId: string | null
   hasPreview: boolean
+  /** Something to show beside the form (origin of the category, files). */
+  hasSide: boolean
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { user } = useAuth()
-  const { privacyMode, MASK } = usePrivacyMode()
+  const { privacyMode, mask, MASK } = usePrivacyMode()
   const userCurrency = user?.preferences?.currency_display ?? 'USD'
   const dateLocale = useDateLocale()
   const displayLocale = useDisplayLocale()
@@ -518,6 +534,15 @@ function TransactionForm({
   })
   const isCreating = !transaction
   const showConversion = currency !== userCurrency && !isSynced
+  // "More options" starts open when one of its settings is already in use,
+  // so nothing that affects the row is hidden.
+  const [moreOpen, setMoreOpen] = useState(() =>
+    !!seed?.effective_bill_date ||
+    !!seed?.exclude_from_pnl ||
+    hadInitialSplits ||
+    (showConversion && (seed?.amount_primary != null || seed?.fx_rate_used != null || !!transaction?.fx_fallback))
+  )
+  const moreOptionsId = useId()
   // Privacy mode hides monetary values across the app, but the edit modal
   // surfaced the raw amount anyway (issue #323). Only existing transactions
   // carry a value worth hiding — when creating, the user must see what they
@@ -752,6 +777,66 @@ function TransactionForm({
     }
   }
 
+  const selectedAccount = accounts.find(a => a.id === accountId)
+  const isCreditCard = selectedAccount?.type === 'credit_card'
+  // A settlement-sourced transaction *is* the movement clearing a group
+  // debt; splitting it would create circular accounting (the share would
+  // settle a debt that this debit is already settling).
+  const canSplit = transaction?.source !== 'settlement'
+  const moreOptionLabels = [
+    isCreditCard ? t('transactions.effectiveBillDate') : null,
+    transaction ? t('transactions.excludeFromReports') : null,
+    canSplit ? t('splitGroups.splitTransaction') : null,
+    showConversion ? t('transactions.conversion') : null,
+  ].filter((label): label is string => !!label)
+
+  // What the bank sent, shown small under the title when the description
+  // was changed (rows that pre-date original_description only have the
+  // raw payee).
+  const rawDescription = transaction?.original_description && transaction.original_description !== transaction.description
+    ? transaction.original_description
+    : isSynced && transaction?.payee && transaction.payee !== transaction.description
+      ? transaction.payee
+      : null
+
+  const typeColor = (txType: 'debit' | 'credit') =>
+    txType === 'credit' ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'
+
+  const revealButton = canHideAmounts && (
+    <button
+      type="button"
+      onClick={() => setRevealAmounts((v) => !v)}
+      className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+      title={revealAmounts ? t('privacy.hide') : t('privacy.show')}
+      aria-label={revealAmounts ? t('privacy.hide') : t('privacy.show')}
+    >
+      {revealAmounts ? <EyeClosed size={14} /> : <Eye size={14} />}
+    </button>
+  )
+
+  const selectClass = 'w-full min-w-0 border border-border rounded-md px-2.5 py-2 text-sm bg-card h-9 focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]'
+
+  const attachmentsSection = transaction ? (
+    <TransactionAttachments
+      transactionId={transaction.id}
+      onPreviewChange={onPreviewChange}
+      activePreviewId={activePreviewId}
+    />
+  ) : (
+    <PendingAttachmentsSection
+      files={pendingFiles}
+      dragOver={pendingDragOver}
+      maxAttachments={maxAttachments}
+      allowedExtensions={allowedExtensions}
+      fileInputRef={pendingFileInputRef}
+      onDragOver={() => setPendingDragOver(true)}
+      onDragLeave={() => setPendingDragOver(false)}
+      onDrop={(e) => { e.preventDefault(); setPendingDragOver(false); if (e.dataTransfer.files?.length) addPendingFiles(e.dataTransfer.files) }}
+      onFileChange={(e) => { if (e.target.files?.length) { addPendingFiles(e.target.files); e.target.value = '' } }}
+      onRemove={removePendingFile}
+    />
+  )
+
   return (
     <form
       ref={formRef}
@@ -796,9 +881,7 @@ function TransactionForm({
         // (sent both for synced and manual edits since the user can hand-
         // correct the bucketing on either; null clears the override back to
         // auto bucketing).
-        const selectedAcc = accounts.find(a => a.id === accountId)
-        const isCcSelected = selectedAcc?.type === 'credit_card'
-        const overridePayload: Partial<Transaction> = isCcSelected
+        const overridePayload: Partial<Transaction> = isCreditCard
           ? { effective_bill_date: effectiveBillDate || null }
           : {}
         // Splits ride along on the same payload — the backend treats a
@@ -873,28 +956,77 @@ function TransactionForm({
         hasPreview && 'mt-4'
       )}
     >
-      <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pb-2 sm:pr-3">
+      {/* Header: the transaction's name and, for a synced one, its facts in
+          one read-only line (amount, date, account, status). */}
+      <DialogHeader className="shrink-0 gap-1 pb-3 pr-8 text-left">
+        <DialogTitle className="text-base leading-snug break-words">
+          {transaction ? (transaction.description || t('common.edit')) : t('transactions.addManual')}
+        </DialogTitle>
+        {rawDescription && (
+          <p className="text-xs text-muted-foreground break-words">{rawDescription}</p>
+        )}
+        {isSynced && transaction && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-sm text-muted-foreground">
+            <span
+              className={cn('text-2xl font-semibold tabular-nums tracking-tight', typeColor(transaction.type))}
+              title={transaction.type === 'credit' ? t('transactions.income') : t('transactions.expense')}
+            >
+              {hideAmounts
+                ? MASK
+                : `${transaction.type === 'credit' ? '+' : ''}${formatCurrency(Math.abs(Number(transaction.amount)), transaction.currency, displayLocale)}`}
+            </span>
+            {revealButton}
+            {transaction.currency !== userCurrency && transaction.amount_primary != null && (
+              <span className="tabular-nums">
+                ≈ {hideAmounts ? MASK : formatCurrency(Math.abs(Number(transaction.amount_primary)), userCurrency, displayLocale)}
+              </span>
+            )}
+            <span aria-hidden>·</span>
+            <span>
+              {new Date(transaction.date + 'T00:00:00').toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })}
+            </span>
+            {selectedAccount && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="truncate">{getAccountName(selectedAccount)}</span>
+              </>
+            )}
+            <span aria-hidden>·</span>
+            <span className={cn(transaction.status === 'pending' && 'text-amber-600 dark:text-amber-400')}>
+              {transaction.status === 'pending' ? t('transactions.statusPending') : t('transactions.statusPosted')}
+            </span>
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs"
+              title={t('transactions.syncedInfo')}
+            >
+              <RefreshCw size={11} aria-hidden />
+              {t('transactions.syncedBadge')}
+            </span>
+          </div>
+        )}
+      </DialogHeader>
+
+      <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pb-2 pt-1 sm:pr-3">
       {error && (
         <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
           {error}
         </div>
       )}
-      {isSynced && (
-        <div className="flex items-center gap-2 p-3 text-sm bg-amber-50 border border-amber-200 rounded-md text-amber-700">
-          {t('transactions.syncedInfo')}
-        </div>
-      )}
-      {!!transaction?.transfer_pair_id && (
-        <div className="p-3 text-sm bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md text-blue-700 dark:text-blue-300 space-y-2">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1 min-w-0">
-              <p>{t('transactions.transferInfo')}</p>
+
+      {/* Notes about where the row belongs (transfer, recurring), one
+          discreet line each. */}
+      {(!!transaction?.transfer_pair_id || recurringMatch || (recurringLinked && !isCreating)) && (
+        <div className="space-y-1.5 text-xs text-muted-foreground">
+          {!!transaction?.transfer_pair_id && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1" title={t('transactions.transferInfo')}>
+              <ArrowLeftRight size={13} className="shrink-0 text-blue-600 dark:text-blue-400" aria-hidden />
+              <span className="font-medium text-foreground">{t('transactions.transfer')}</span>
               {transferPair && (() => {
                 const pairAccount = accounts.find(a => a.id === transferPair.account_id)
                 const sign = transferPair.type === 'debit' ? '−' : '+'
                 return (
-                  <p className="text-xs text-blue-600 dark:text-blue-300 truncate">
-                    <span className="font-medium">{t('transactions.transferLinkedTo')}</span>{' '}
+                  <span className="min-w-0 truncate">
+                    {t('transactions.transferLinkedTo')}{' '}
                     {pairAccount ? (
                       <Link
                         to={`/accounts/${pairAccount.id}`}
@@ -904,7 +1036,7 @@ function TransactionForm({
                           onCancel()
                         }}
                         title={t('transactions.transferOpenAccount', { account: getAccountName(pairAccount) })}
-                        className="underline underline-offset-2 hover:text-blue-800 dark:hover:text-blue-100"
+                        className="underline underline-offset-2 hover:text-foreground"
                       >
                         {getAccountName(pairAccount)}
                       </Link>
@@ -913,69 +1045,196 @@ function TransactionForm({
                     {new Date(transferPair.date + 'T00:00:00').toLocaleDateString(dateLocale)}
                     {' · '}
                     {sign}
-                    {formatCurrency(
+                    {mask(formatCurrency(
                       Math.abs(Number(transferPair.amount)),
                       transferPair.currency ?? undefined,
                       displayLocale,
-                    )}
-                  </p>
+                    ))}
+                  </span>
                 )
               })()}
-              <p className="text-xs text-blue-500 dark:text-blue-400">{t('transactions.transferTooltip')}</p>
+              {onUnlinkTransfer && transaction?.transfer_pair_id && (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    if (transaction?.transfer_pair_id) {
+                      onUnlinkTransfer(transaction.transfer_pair_id)
+                    }
+                  }}
+                  className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  title={t('transactions.unlinkTransferConfirm')}
+                >
+                  <Unlink size={12} />
+                  {t('transactions.unlinkTransfer')}
+                </button>
+              )}
             </div>
-            {onUnlinkTransfer && transaction?.transfer_pair_id && (
+          )}
+          {recurringMatch && (
+            <div className="flex items-center gap-2">
+              <Repeat size={13} className="shrink-0" aria-hidden />
+              <span>{t('transactions.recurringInfo', {
+                frequency: t(`recurring.${recurringMatch.frequency}`),
+                next: new Date(recurringMatch.next_occurrence + 'T00:00:00').toLocaleDateString(dateLocale),
+              })}</span>
+            </div>
+          )}
+          {recurringLinked && !isCreating && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <Repeat size={13} className="shrink-0" aria-hidden />
+              <span>{t('transactions.recurringLinkedInfo')}</span>
               <button
                 type="button"
-                disabled={loading}
-                onClick={() => {
-                  if (transaction?.transfer_pair_id) {
-                    onUnlinkTransfer(transaction.transfer_pair_id)
-                  }
-                }}
-                className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-blue-200 dark:border-blue-800 bg-white/60 dark:bg-blue-900/40 px-2.5 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-200 hover:bg-white dark:hover:bg-blue-900/70 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                title={t('transactions.unlinkTransferConfirm')}
+                className="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground disabled:opacity-50 transition-colors cursor-pointer"
+                onClick={handleUnlinkRecurring}
+                disabled={unlinkingRecurring}
               >
                 <Unlink size={12} />
-                {t('transactions.unlinkTransfer')}
+                {t('transactions.recurringUnlinkAction')}
               </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* A manual row (or a new one): the same facts, editable, in one
+          compact row. */}
+      {!isSynced && (
+        <div className="grid grid-cols-6 gap-x-3 gap-y-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="col-span-3 space-y-1.5 md:col-span-1">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs text-muted-foreground">{t('transactions.amount')}</Label>
+              {revealButton}
+            </div>
+            {hideAmounts ? (
+              <Input
+                type="text"
+                value={MASK}
+                readOnly
+                tabIndex={-1}
+                className="bg-muted/40 text-muted-foreground cursor-default select-none"
+              />
+            ) : (
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => handleAmountChange(e.target.value)}
+                required
+                className={cn('bg-card tabular-nums font-medium', typeColor(type))}
+              />
             )}
+          </div>
+          <div className="col-span-3 space-y-1.5 md:col-span-1">
+            <Label className="text-xs text-muted-foreground">{t('transactions.currency')}</Label>
+            <select
+              className={selectClass}
+              value={currency}
+              onChange={(e) => handleCurrencyChange(e.target.value)}
+            >
+              {(supportedCurrencies ?? [{ code: userCurrency, symbol: userCurrency, name: userCurrency, flag: '' }]).map((c) => (
+                // Code first: the field is narrow and shows the start.
+                <option key={c.code} value={c.code}>{c.code} · {c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="col-span-2 space-y-1.5 md:col-span-1">
+            <Label className="text-xs text-muted-foreground">{t('transactions.date')}</Label>
+            <DatePickerInput
+              value={date}
+              onChange={setDate}
+              className="w-full min-w-0 justify-start h-9 rounded-md px-2.5"
+            />
+          </div>
+          <div className="col-span-2 space-y-1.5 md:col-span-1">
+            <Label className="text-xs text-muted-foreground">{t('transactions.colStatus')}</Label>
+            <select
+              className={selectClass}
+              value={status}
+              onChange={(e) => setStatus(e.target.value as 'posted' | 'pending')}
+            >
+              <option value="posted">{t('transactions.statusPosted')}</option>
+              <option value="pending">{t('transactions.statusPending')}</option>
+            </select>
+          </div>
+          <div className="col-span-2 space-y-1.5 md:col-span-1">
+            <Label className="text-xs text-muted-foreground">{t('transactions.type')}</Label>
+            <select
+              className={selectClass}
+              value={type}
+              onChange={(e) => setType(e.target.value as 'debit' | 'credit')}
+            >
+              <option value="debit">{t('transactions.expense')}</option>
+              <option value="credit">{t('transactions.income')}</option>
+            </select>
           </div>
         </div>
       )}
-      {recurringMatch && (
-        <div className="flex items-center gap-2 p-3 text-sm bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md">
-          <span>{t('transactions.recurringInfo', {
-            frequency: t(`recurring.${recurringMatch.frequency}`),
-            next: new Date(recurringMatch.next_occurrence + 'T00:00:00').toLocaleDateString(dateLocale),
-          })}</span>
-        </div>
-      )}
-      {recurringLinked && !isCreating && (
-        <div className="flex items-center justify-between gap-2 p-3 text-sm bg-muted/50 border border-border rounded-md">
-          <span className="text-muted-foreground">{t('transactions.recurringLinkedInfo')}</span>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5 shrink-0"
-            onClick={handleUnlinkRecurring}
-            disabled={unlinkingRecurring}
-          >
-            <Unlink size={14} />
-            {t('transactions.recurringUnlinkAction')}
-          </Button>
-        </div>
-      )}
-      {/* Two columns from md up: what the transaction is on the left, what
-          was added to it (provenance, notes, splits, files) on the right. */}
-      <div className="grid gap-4 md:grid-cols-2 md:items-start md:gap-6">
+
+      {/* What is edited on the left; how the category got here and the
+          files on the right. Nothing on the right: one column. */}
+      <div className={cn('grid gap-4', hasSide && 'md:grid-cols-[minmax(0,1fr)_18rem] md:items-start md:gap-6')}>
       <div className="min-w-0 space-y-4">
-      <div className="space-y-2">
-        <Label>{t('transactions.description')}</Label>
+      <div className="space-y-1.5">
+        <Label>{t('transactions.category')}</Label>
+        <CategorySelect
+          value={categoryId}
+          onChange={setCategoryId}
+          categories={displayCategories}
+          groups={displayCategoryGroups}
+          currentCategory={seed?.category}
+          allowNone={true}
+          creatable
+          showIcon
+          className="bg-card h-10"
+        />
+      </div>
+      <div className={cn('grid gap-4', !isSynced && 'sm:grid-cols-2')}>
+        <div className="min-w-0 space-y-1.5">
+          <Label>{t('payees.payee')}</Label>
+          <PayeeSelect
+            value={payeeId}
+            onChange={setPayeeId}
+            payees={payeesList ?? []}
+            creatable
+          />
+        </div>
+        {!isSynced && (
+          <div className="min-w-0 space-y-1.5">
+            <Label>{t('transactions.account')}</Label>
+            <select
+              className={selectClass}
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              required
+            >
+              {sortedAccounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>{getAccountLabel(acc)}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <Label>{t('transactions.description')}</Label>
+          {transaction?.original_description &&
+            transaction.original_description !== description && (
+              <button
+                type="button"
+                onClick={() => setDescription(transaction.original_description ?? '')}
+                title={`${t('transactions.originalDescription')}: ${transaction.original_description}`}
+                className="shrink-0 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors cursor-pointer"
+              >
+                {t('transactions.restoreOriginalDescription')}
+              </button>
+            )}
+        </div>
         {isSynced ? (
           <textarea
             ref={descriptionRef}
-            className="w-full border border-input rounded-md px-3 py-2 text-sm bg-card dark:bg-input/30 shadow-xs resize-none overflow-hidden outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+            className="block w-full border border-input rounded-md px-3 py-2 text-sm bg-card dark:bg-input/30 shadow-xs resize-none overflow-hidden outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/30 focus-visible:ring-[2px]"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             // Descriptions are single-line; Enter saves like the Input does.
@@ -1002,261 +1261,12 @@ function TransactionForm({
             className="bg-card"
           />
         )}
-        {transaction?.original_description &&
-          transaction.original_description !== description && (
-            <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
-              <p>
-                {t('transactions.originalDescription')}: {transaction.original_description}
-              </p>
-              <button
-                type="button"
-                onClick={() => setDescription(transaction.original_description ?? '')}
-                className="shrink-0 underline underline-offset-2 hover:text-foreground transition-colors cursor-pointer"
-              >
-                {t('transactions.restoreOriginalDescription')}
-              </button>
-            </div>
-          )}
-        {/* Rows that pre-date the original_description column have no
-            provenance to show, so the raw payee stays the only hint at what
-            the bank actually sent. */}
-        {isSynced && transaction?.payee && transaction.payee !== transaction.description && (
-          <p className="text-xs text-muted-foreground">{transaction.payee}</p>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <div className="space-y-2">
-          <div className="flex items-center justify-between min-h-5">
-            <Label>{t('transactions.amount')}</Label>
-            {canHideAmounts && (
-              <button
-                type="button"
-                onClick={() => setRevealAmounts((v) => !v)}
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                title={revealAmounts ? t('privacy.hide') : t('privacy.show')}
-                aria-label={revealAmounts ? t('privacy.hide') : t('privacy.show')}
-              >
-                {revealAmounts ? <EyeClosed size={14} /> : <Eye size={14} />}
-              </button>
-            )}
-          </div>
-          {hideAmounts ? (
-            <Input
-              type="text"
-              value={MASK}
-              readOnly
-              tabIndex={-1}
-              className="bg-muted/40 text-muted-foreground cursor-default select-none"
-            />
-          ) : (
-            <Input
-              type="text"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => handleAmountChange(e.target.value)}
-              required
-              disabled={isSynced}
-              className="bg-card"
-            />
-          )}
-        </div>
-        <div className="space-y-2">
-          <Label>{t('transactions.currency')}</Label>
-          <select
-            className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card h-9 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
-            value={currency}
-            onChange={(e) => handleCurrencyChange(e.target.value)}
-            disabled={isSynced}
-          >
-            {(supportedCurrencies ?? [{ code: userCurrency, symbol: userCurrency, name: userCurrency, flag: '' }]).map((c) => (
-              <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:gap-4">
-        <div className="space-y-2">
-          <Label>{t('transactions.date')}</Label>
-          <DatePickerInput
-            value={date}
-            onChange={setDate}
-            disabled={isSynced}
-            className="w-full justify-start"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>{t('transactions.colStatus')}</Label>
-          <select
-            className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card h-9 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as 'posted' | 'pending')}
-            disabled={isSynced}
-          >
-            <option value="posted">{t('transactions.statusPosted')}</option>
-            <option value="pending">{t('transactions.statusPending')}</option>
-          </select>
-        </div>
-      </div>
-      {showConversion && (
-        <div className="border border-border rounded-md p-3 space-y-2">
-          {transaction?.fx_fallback && (
-            <div className="flex items-start gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400">
-              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-              <span className="text-xs">{t('transactions.fxFallbackBanner')}</span>
-            </div>
-          )}
-          <div>
-            <span className="text-sm font-medium">{t('transactions.conversion')}</span>
-            <span className="text-xs text-muted-foreground ml-2">({t('transactions.conversionHint')})</span>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label className="text-xs">{t('transactions.convertedAmount', { currency: userCurrency })}</Label>
-              {hideAmounts ? (
-                <Input
-                  type="text"
-                  value={MASK}
-                  readOnly
-                  tabIndex={-1}
-                  className="bg-muted/40 text-muted-foreground cursor-default select-none"
-                />
-              ) : (
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={convertedAmount}
-                  onChange={(e) => handleConvertedAmountChange(e.target.value)}
-                  placeholder={t('transactions.autoCalculated')}
-                  className="bg-card"
-                />
-              )}
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">{t('transactions.exchangeRate')}</Label>
-              <Input
-                type="text"
-                inputMode="decimal"
-                value={fxRate}
-                onChange={(e) => handleFxRateChange(e.target.value)}
-                placeholder={t('transactions.autoCalculated')}
-                className="bg-card"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>{t('transactions.type')}</Label>
-          <select
-            className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
-            value={type}
-            onChange={(e) => setType(e.target.value as 'debit' | 'credit')}
-            disabled={isSynced}
-          >
-            <option value="debit">{t('transactions.expense')}</option>
-            <option value="credit">{t('transactions.income')}</option>
-          </select>
-        </div>
-        <div className="space-y-2">
-          <Label>{t('transactions.category')}</Label>
-          <CategorySelect
-            value={categoryId}
-            onChange={setCategoryId}
-            categories={displayCategories}
-            groups={displayCategoryGroups}
-            currentCategory={seed?.category}
-            allowNone={true}
-            creatable
-            className="bg-card"
-          />
-        </div>
-      </div>
-      <div className={cn("grid gap-4", isSynced ? "grid-cols-1" : "grid-cols-2")}>
-        <div className="space-y-2">
-          <Label>{t('payees.payee')}</Label>
-          <PayeeSelect
-            value={payeeId}
-            onChange={setPayeeId}
-            payees={payeesList ?? []}
-            creatable
-          />
-          {isSynced && transaction?.payee && (
-            <p className="text-xs text-muted-foreground">{t('payees.rawPayee')}: {transaction.payee}</p>
-          )}
-        </div>
-        {!isSynced && (
-          <div className="space-y-2">
-            <Label>{t('transactions.account')}</Label>
-            <select
-              className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              required
-            >
-              {sortedAccounts.map((acc) => (
-                <option key={acc.id} value={acc.id}>{getAccountLabel(acc)}</option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
-      {/* Manual bill-cycle override (issue #92). CC accounts only. Empty
-          input = use auto bucketing (Pluggy bill_id when available, cycle
-          math otherwise). Setting the date forces this tx into the bill
-          whose due_date matches. */}
-      {(() => {
-        const selectedAcc = accounts.find(a => a.id === accountId)
-        if (selectedAcc?.type !== 'credit_card') return null
-        return (
-          <div className="space-y-2">
-            <Label>
-              {t('transactions.effectiveBillDate', 'Effective bill date')}{' '}
-              <span className="text-muted-foreground font-normal text-xs">
-                ({t('transactions.effectiveBillDateHint', 'manual, overrides the automatic cycle')})
-              </span>
-            </Label>
-            <div className="inline-flex items-center gap-1">
-              <DatePickerInput
-                value={effectiveBillDate}
-                onChange={setEffectiveBillDate}
-                placeholder={t('transactions.effectiveBillDatePlaceholder', 'Bill due date (optional)')}
-              />
-              {effectiveBillDate && (
-                <button
-                  type="button"
-                  className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
-                  onClick={() => setEffectiveBillDate('')}
-                  title={t('transactions.clearOverride', 'Remover sobrescrição')}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
-        )
-      })()}
-      </div>
-
-      <div className="min-w-0 space-y-4">
-      {transaction && (
-        <ProvenanceBlock
-          transactionId={transaction.id}
-          categories={categories}
-          // The row went back server-side; follow it so a later save does
-          // not re-file it under the category just undone.
-          onUndone={(restored, source) => {
-            setCategoryId(restored ?? '')
-            onCategoryUndone?.(transaction.id, restored, source)
-          }}
-        />
-      )}
-
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <Label>{t('transactions.notes')} <span className="text-muted-foreground font-normal text-xs">({t('transactions.notesHint')})</span></Label>
         <textarea
-          className="w-full border border-input rounded-md px-3 py-2 text-sm bg-card resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
+          className="block w-full border border-input rounded-md px-3 py-2 text-sm bg-card resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
           rows={2}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -1264,66 +1274,12 @@ function TransactionForm({
         />
       </div>
 
-      {transaction && (
-        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3">
-          <input
-            type="checkbox"
-            className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
-            checked={excludeFromReports}
-            onChange={(event) => setExcludeFromReports(event.target.checked)}
-          />
-          <span>
-            <span className="block text-sm font-medium">
-              {t('transactions.excludeFromReports')}
-            </span>
-            <span className="block text-xs text-muted-foreground">
-              {t('transactions.excludeFromReportsHint')}
-            </span>
-          </span>
-        </label>
-      )}
-
-      {/* A settlement-sourced transaction *is* the movement clearing a
-          group debt; splitting it would create circular accounting
-          (the share would settle a debt that this debit is already
-          settling). Hide the section entirely in that case. */}
-      {transaction?.source !== 'settlement' && (
-        <TransactionSplitsSection
-          amount={parseAmountInput(amount, displayLocale) ?? 0}
-          currency={currency}
-          value={splits}
-          onChange={setSplits}
-          onValidityChange={setSplitsValid}
-        />
-      )}
-
-      {!isCreating && transaction ? (
-        <TransactionAttachments
-          transactionId={transaction.id}
-          onPreviewChange={onPreviewChange}
-          activePreviewId={activePreviewId}
-        />
-      ) : isCreating && (
-        <PendingAttachmentsSection
-          files={pendingFiles}
-          dragOver={pendingDragOver}
-          maxAttachments={maxAttachments}
-          allowedExtensions={allowedExtensions}
-          fileInputRef={pendingFileInputRef}
-          onDragOver={() => setPendingDragOver(true)}
-          onDragLeave={() => setPendingDragOver(false)}
-          onDrop={(e) => { e.preventDefault(); setPendingDragOver(false); if (e.dataTransfer.files?.length) addPendingFiles(e.dataTransfer.files) }}
-          onFileChange={(e) => { if (e.target.files?.length) { addPendingFiles(e.target.files); e.target.value = '' } }}
-          onRemove={removePendingFile}
-        />
-      )}
-
       {/* Create options — recurring and installment toggles share one row
           when creating non-synced transactions. "Repeat as installments"
           mirrors the transaction N times for debits and receivables. */}
       {isCreating && !isSynced && (
-        <div className="space-y-3 border rounded-md p-3">
-          <div className="flex items-center gap-6">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -1332,9 +1288,9 @@ function TransactionForm({
                   setIsRecurring(e.target.checked)
                   if (e.target.checked) setIsInstallment(false)
                 }}
-                className="rounded border-gray-300"
+                className="h-4 w-4 rounded border-border accent-primary"
               />
-              <span className="text-sm font-medium">{t('transactions.makeRecurring')}</span>
+              <span className="text-sm">{t('transactions.makeRecurring')}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -1344,17 +1300,17 @@ function TransactionForm({
                   setIsInstallment(e.target.checked)
                   if (e.target.checked) setIsRecurring(false)
                 }}
-                className="rounded border-gray-300"
+                className="h-4 w-4 rounded border-border accent-primary"
               />
-              <span className="text-sm font-medium">{t('transactions.makeInstallment')}</span>
+              <span className="text-sm">{t('transactions.makeInstallment')}</span>
             </label>
           </div>
           {isRecurring && (
-            <div className="grid grid-cols-2 gap-4 pt-1">
-              <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
                 <Label>{t('recurring.frequency')}</Label>
                 <select
-                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+                  className={selectClass}
                   value={frequency}
                   onChange={(e) => setFrequency(e.target.value as RecurringTransaction['frequency'])}
                 >
@@ -1366,23 +1322,23 @@ function TransactionForm({
                   <option value="yearly">{t('recurring.yearly')}</option>
                 </select>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>{t('recurring.endDate')}</Label>
                 <DatePickerInput
                   value={endDate}
                   onChange={setEndDate}
                   placeholder={t('recurring.endDate')}
-                  className="w-full justify-start"
+                  className="w-full justify-start h-9 rounded-md"
                 />
               </div>
             </div>
           )}
           {isInstallment && (
-            <div className="grid grid-cols-2 gap-4 pt-1">
-              <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
                 <Label>{t('transactions.installmentFrequency')}</Label>
                 <select
-                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+                  className={selectClass}
                   value={installmentFrequency}
                   onChange={(e) => setInstallmentFrequency(e.target.value as RecurringTransaction['frequency'])}
                 >
@@ -1394,13 +1350,13 @@ function TransactionForm({
                   <option value="yearly">{t('recurring.yearly')}</option>
                 </select>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>{t('transactions.installmentCount')}</Label>
                 <input
                   type="number"
                   min={2}
                   max={360}
-                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+                  className={selectClass}
                   value={installmentCount}
                   onChange={(e) => setInstallmentCount(e.target.value)}
                 />
@@ -1409,8 +1365,164 @@ function TransactionForm({
           )}
         </div>
       )}
+
+      {!hasSide && attachmentsSection}
       </div>
+
+      {/* Mounted even when empty so the origin is read once, with the host's
+          own check, and shows up without a second request. */}
+      {transaction && (
+        <aside className={cn('min-w-0 space-y-4 md:border-l md:pl-6', !hasSide && 'hidden')}>
+          <ProvenanceBlock
+            transactionId={transaction.id}
+            categories={categories}
+            // The row went back server-side; follow it so a later save does
+            // not re-file it under the category just undone.
+            onUndone={(restored, source) => {
+              setCategoryId(restored ?? '')
+              onCategoryUndone?.(transaction.id, restored, source)
+            }}
+          />
+          {hasSide && attachmentsSection}
+        </aside>
+      )}
       </div>
+
+      {/* Less used settings, folded away unless one of them is in use. */}
+      {moreOptionLabels.length > 0 && (
+        <div className="rounded-md border border-border">
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            aria-expanded={moreOpen}
+            aria-controls={moreOptionsId}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted/40 transition-colors cursor-pointer"
+          >
+            <ChevronRight
+              size={16}
+              className={cn('shrink-0 text-muted-foreground transition-transform', moreOpen && 'rotate-90')}
+              aria-hidden
+            />
+            <span className="shrink-0 font-medium">{t('transactions.moreOptions')}</span>
+            {!moreOpen && (
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                {moreOptionLabels.join(' · ')}
+              </span>
+            )}
+          </button>
+          <div id={moreOptionsId} hidden={!moreOpen} className="space-y-4 border-t border-border px-3 py-3">
+            {/* Manual bill-cycle override (issue #92). CC accounts only. Empty
+                input = use auto bucketing (Pluggy bill_id when available, cycle
+                math otherwise). Setting the date forces this tx into the bill
+                whose due_date matches. */}
+            {isCreditCard && (
+              <div className="space-y-1.5">
+                <Label>
+                  {t('transactions.effectiveBillDate', 'Effective bill date')}{' '}
+                  <span className="text-muted-foreground font-normal text-xs">
+                    ({t('transactions.effectiveBillDateHint', 'manual, overrides the automatic cycle')})
+                  </span>
+                </Label>
+                <div className="inline-flex items-center gap-1">
+                  <DatePickerInput
+                    value={effectiveBillDate}
+                    onChange={setEffectiveBillDate}
+                    placeholder={t('transactions.effectiveBillDatePlaceholder', 'Bill due date (optional)')}
+                  />
+                  {effectiveBillDate && (
+                    <button
+                      type="button"
+                      className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+                      onClick={() => setEffectiveBillDate('')}
+                      title={t('transactions.clearOverride', 'Remover sobrescrição')}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {transaction && (
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+                  checked={excludeFromReports}
+                  onChange={(event) => setExcludeFromReports(event.target.checked)}
+                />
+                <span>
+                  <span className="block text-sm font-medium">
+                    {t('transactions.excludeFromReports')}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {t('transactions.excludeFromReportsHint')}
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {canSplit && (
+              <TransactionSplitsSection
+                amount={parseAmountInput(amount, displayLocale) ?? 0}
+                currency={currency}
+                value={splits}
+                onChange={setSplits}
+                onValidityChange={setSplitsValid}
+              />
+            )}
+
+            {showConversion && (
+              <div className="space-y-2">
+                {transaction?.fx_fallback && (
+                  <div className="flex items-start gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                    <span className="text-xs">{t('transactions.fxFallbackBanner')}</span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-sm font-medium">{t('transactions.conversion')}</span>
+                  <span className="text-xs text-muted-foreground ml-2">({t('transactions.conversionHint')})</span>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs">{t('transactions.convertedAmount', { currency: userCurrency })}</Label>
+                    {hideAmounts ? (
+                      <Input
+                        type="text"
+                        value={MASK}
+                        readOnly
+                        tabIndex={-1}
+                        className="bg-muted/40 text-muted-foreground cursor-default select-none"
+                      />
+                    ) : (
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={convertedAmount}
+                        onChange={(e) => handleConvertedAmountChange(e.target.value)}
+                        placeholder={t('transactions.autoCalculated')}
+                        className="bg-card"
+                      />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">{t('transactions.exchangeRate')}</Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      value={fxRate}
+                      onChange={(e) => handleFxRateChange(e.target.value)}
+                      placeholder={t('transactions.autoCalculated')}
+                      className="bg-card"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       </div>
 
@@ -1739,113 +1851,71 @@ function PendingAttachmentsSection({
   const hasFiles = files.length > 0
   const atMax = files.length >= maxAttachments
 
+  // Same look as the saved attachments: a title line with the button, then
+  // one compact row per file. The whole block takes dropped files.
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Paperclip size={14} />
-        {t('transactions.attachments')}
-        {hasFiles && (
-          <span className="text-xs text-muted-foreground font-normal">({files.length})</span>
+    <div
+      className={cn('space-y-2 rounded-md transition-colors', dragOver && 'bg-primary/5 ring-2 ring-primary/40')}
+      onDragOver={(e) => { e.preventDefault(); onDragOver() }}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-sm font-medium">
+          <Paperclip size={14} />
+          {t('transactions.attachments')}
+          {hasFiles && (
+            <span className="text-xs text-muted-foreground font-normal">({files.length})</span>
+          )}
+        </div>
+        {!atMax && (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 h-7 text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 hover:bg-muted/40 cursor-pointer transition-colors"
+            onClick={() => fileInputRef.current?.click()}
+            title={t('transactions.attachmentsUpload')}
+          >
+            <Plus size={12} />
+            {t('transactions.attachFile')}
+          </button>
         )}
       </div>
 
-      {hasFiles ? (
-        <>
-          <div className="grid grid-cols-3 gap-2">
-            {files.map((file, index) => {
-              const isImg = file.type.startsWith('image/')
-              const isPdf = file.type === 'application/pdf'
-              const ext = file.name.includes('.') ? file.name.split('.').pop()!.toUpperCase() : 'FILE'
-
-              return (
-                <div
-                  key={`${file.name}-${index}`}
-                  className="group relative rounded-xl overflow-hidden ring-1 ring-border hover:ring-border/80 hover:shadow-md hover:shadow-black/5"
-                >
-                  <div className="aspect-square bg-muted/50 flex items-center justify-center overflow-hidden relative">
-                    {isImg ? (
-                      <img
-                        src={URL.createObjectURL(file)}
-                        alt={file.name}
-                        className="w-full h-full object-cover"
-                        onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center gap-2">
-                        <div className={`w-12 h-14 rounded-lg flex items-center justify-center ${
-                          isPdf ? 'bg-red-500/10' : 'bg-muted'
-                        }`}>
-                          <FileText size={24} className={isPdf ? 'text-red-500' : 'text-muted-foreground'} />
-                        </div>
-                        <span className="text-[10px] font-semibold tracking-widest text-muted-foreground/70 uppercase">
-                          {ext}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Remove button */}
-                  <div className="absolute left-0 right-0 bottom-[44px] flex items-center justify-center gap-1 px-2 py-1.5 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
-                    <div className="flex items-center gap-1 bg-background/90 dark:bg-card/90 backdrop-blur-sm rounded-lg ring-1 ring-border/50 shadow-lg shadow-black/10 px-1 py-0.5">
-                      <button
-                        type="button"
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
-                        onClick={() => onRemove(index)}
-                        title={t('common.delete')}
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="px-3 py-2.5 bg-card">
-                    <p className="text-[12px] font-medium truncate leading-tight" title={file.name}>
-                      {file.name}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground mt-1 leading-tight">
-                      {formatFileSize(file.size)}
-                    </p>
-                  </div>
+      {hasFiles && (
+        <ul className="space-y-1">
+          {files.map((file, index) => {
+            const isImg = file.type.startsWith('image/')
+            const isPdf = file.type === 'application/pdf'
+            return (
+              <li key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-md p-1 hover:bg-muted/50">
+                <div className="size-10 shrink-0 overflow-hidden rounded bg-muted/60 ring-1 ring-border flex items-center justify-center">
+                  {isImg ? (
+                    <img
+                      src={URL.createObjectURL(file)}
+                      alt={file.name}
+                      className="size-full object-cover"
+                      onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                    />
+                  ) : (
+                    <FileText size={18} className={isPdf ? 'text-red-500' : 'text-muted-foreground'} />
+                  )}
                 </div>
-              )
-            })}
-          </div>
-
-          {!atMax && (
-            <button
-              type="button"
-              className={`w-full mt-2 rounded-lg border-2 border-dashed py-3 flex items-center justify-center gap-2 cursor-pointer transition-all duration-200 ${
-                dragOver
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:border-muted-foreground/40 hover:bg-muted/30'
-              }`}
-              onDragOver={(e) => { e.preventDefault(); onDragOver() }}
-              onDragLeave={onDragLeave}
-              onDrop={onDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Plus size={14} className="text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">{t('transactions.attachmentsUpload')}</span>
-            </button>
-          )}
-        </>
-      ) : (
-        <div
-          className={`rounded-xl border-2 border-dashed py-3 px-4 text-center transition-all cursor-pointer ${
-            dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
-          }`}
-          onDragOver={(e) => { e.preventDefault(); onDragOver() }}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <div className="flex items-center justify-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
-              <Upload size={14} className="text-muted-foreground" />
-            </div>
-            <span className="text-xs text-muted-foreground">{t('transactions.attachmentsUpload')}</span>
-          </div>
-        </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium truncate leading-tight" title={file.name}>{file.name}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{formatFileSize(file.size)}</p>
+                </div>
+                <button
+                  type="button"
+                  className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
+                  onClick={() => onRemove(index)}
+                  title={t('common.delete')}
+                >
+                  <X size={14} />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
       )}
 
       <input

@@ -1145,7 +1145,9 @@
     "suggestionBadge": "Domanda",
     "suggestionBadgeTooltip": "Un pagamento potrebbe saldare questa fattura. Apri la coda per rispondere.",
     "clearGroupFilter": "Rimuovi filtro gruppo",
-    "attachFile": "Allega"
+    "attachFile": "Allega",
+    "moreOptions": "Altre opzioni",
+    "syncedBadge": "sincronizzata"
   },
   "accounts": {
     "title": "Conti",

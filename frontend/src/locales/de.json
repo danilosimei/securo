@@ -1143,7 +1143,9 @@
     "suggestionBadge": "Frage",
     "suggestionBadgeTooltip": "Eine Zahlung könnte diese Rechnung begleichen. Öffnen Sie die Warteschlange.",
     "clearGroupFilter": "Gruppenfilter entfernen",
-    "attachFile": "Anhängen"
+    "attachFile": "Anhängen",
+    "moreOptions": "Weitere Optionen",
+    "syncedBadge": "synchronisiert"
   },
   "accounts": {
     "title": "Konten",

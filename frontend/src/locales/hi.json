@@ -1143,7 +1143,9 @@
     "suggestionBadge": "सवाल",
     "suggestionBadgeTooltip": "एक भुगतान इसे चुका सकता है। जवाब देने के लिए कतार खोलें।",
     "clearGroupFilter": "समूह फ़िल्टर हटाएँ",
-    "attachFile": "संलग्न करें"
+    "attachFile": "संलग्न करें",
+    "moreOptions": "और विकल्प",
+    "syncedBadge": "सिंक की गई"
   },
   "accounts": {
     "title": "खाते",

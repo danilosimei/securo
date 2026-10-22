@@ -1191,7 +1191,9 @@
     "suggestionBadge": "Otázka",
     "suggestionBadgeTooltip": "Platba môže uhradiť túto faktúru. Otvorte front a odpovedzte.",
     "clearGroupFilter": "Zrušiť filter skupiny",
-    "attachFile": "Priložiť"
+    "attachFile": "Priložiť",
+    "moreOptions": "Ďalšie možnosti",
+    "syncedBadge": "synchronizované"
   },
   "accounts": {
     "title": "Účty",

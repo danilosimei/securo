@@ -1145,7 +1145,9 @@
     "suggestionBadge": "Question",
     "suggestionBadgeTooltip": "Un paiement peut solder cette facture. Ouvrez la file pour répondre.",
     "clearGroupFilter": "Effacer le filtre de groupe",
-    "attachFile": "Joindre"
+    "attachFile": "Joindre",
+    "moreOptions": "Plus d'options",
+    "syncedBadge": "synchronisée"
   },
   "accounts": {
     "title": "Comptes",

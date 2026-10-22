@@ -1143,7 +1143,9 @@
     "suggestionBadge": "Vraag",
     "suggestionBadgeTooltip": "Een betaling kan deze factuur voldoen. Open de wachtrij om te antwoorden.",
     "clearGroupFilter": "Groepsfilter wissen",
-    "attachFile": "Bijvoegen"
+    "attachFile": "Bijvoegen",
+    "moreOptions": "Meer opties",
+    "syncedBadge": "gesynchroniseerd"
   },
   "accounts": {
     "title": "Rekeningen",

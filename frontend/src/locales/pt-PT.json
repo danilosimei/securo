@@ -1145,7 +1145,9 @@
     "suggestionBadge": "Pergunta",
     "suggestionBadgeTooltip": "Um pagamento pode liquidar esta cobrança. Abra a fila para responder.",
     "clearGroupFilter": "Limpar filtro de grupo",
-    "attachFile": "Anexar"
+    "attachFile": "Anexar",
+    "moreOptions": "Mais opções",
+    "syncedBadge": "sincronizada"
   },
   "accounts": {
     "title": "Contas",

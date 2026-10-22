@@ -1143,7 +1143,9 @@
     "suggestionBadge": "Question",
     "suggestionBadgeTooltip": "A payment may settle this. Open the queue to answer.",
     "clearGroupFilter": "Clear group filter",
-    "attachFile": "Attach"
+    "attachFile": "Attach",
+    "moreOptions": "More options",
+    "syncedBadge": "synced"
   },
   "accounts": {
     "title": "Accounts",

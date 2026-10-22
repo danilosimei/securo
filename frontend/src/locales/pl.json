@@ -1181,7 +1181,9 @@
     "suggestionBadge": "Pytanie",
     "suggestionBadgeTooltip": "Płatność może opłacić tę fakturę. Otwórz kolejkę, aby odpowiedzieć.",
     "clearGroupFilter": "Wyczyść filtr grupy",
-    "attachFile": "Załącz"
+    "attachFile": "Załącz",
+    "moreOptions": "Więcej opcji",
+    "syncedBadge": "zsynchronizowana"
   },
   "accounts": {
     "title": "Konta",

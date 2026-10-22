@@ -1,5 +1,5 @@
-import { screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TransactionDialog } from '@/components/transaction-dialog'
 import { categorization, currencies, groups, payees, settings, transactions } from '@/lib/api'
@@ -121,6 +121,21 @@ describe('how the category got here', () => {
     expect(provenance).toHaveBeenCalledWith('tx-1')
   })
 
+  it('asks for the origin once, even though the layout also reads it', async () => {
+    stubLists()
+    const provenance = vi.spyOn(categorization, 'provenance').mockResolvedValue({
+      current_source: 'ai', original_description: null, store_note: null, events: [],
+    })
+    const tx = {
+      id: 'tx-1', description: 'iFood', amount: 30, currency: 'USD', date: '2026-10-18',
+      type: 'debit', status: 'posted', account_id: 'acc-1', category_id: null,
+      category_source: 'ai', source: 'manual',
+    } as unknown as Transaction
+    renderWithProviders(<TransactionDialog {...props} transaction={tx} />)
+    expect(await screen.findByText(t('categorization.provenance.by_ai'))).toBeInTheDocument()
+    expect(provenance).toHaveBeenCalledTimes(1)
+  })
+
   it('tells the page when the block undid the category', async () => {
     stubLists()
     vi.spyOn(categorization, 'provenance').mockResolvedValue({
@@ -147,5 +162,77 @@ describe('how the category got here', () => {
     )
     await user.click(await screen.findByRole('button', { name: t('categorization.provenance.undo') }))
     await vi.waitFor(() => expect(onCategoryUndone).toHaveBeenCalledWith('tx-1', 'c2', 'none'))
+  })
+})
+
+describe('how the dialog is laid out', () => {
+  const props = {
+    open: true,
+    onClose: vi.fn(),
+    categories: [],
+    categoryGroups: [],
+    accounts: [{ id: 'acc-1', name: 'Nubank', type: 'checking', currency: 'USD' }],
+    onSave: vi.fn(),
+    loading: false,
+    error: null,
+  }
+  const baseTx = {
+    id: 'tx-1', description: 'Rent', original_description: 'PIX RENT 0923', amount: 2880, currency: 'USD',
+    date: '2026-09-29', type: 'debit', status: 'posted', account_id: 'acc-1', category_id: null,
+    category_source: 'none', source: 'sync', exclude_from_pnl: false, splits: [],
+  } as unknown as Transaction
+
+  beforeEach(() => {
+    vi.spyOn(currencies, 'list').mockResolvedValue([])
+    vi.spyOn(payees, 'list').mockResolvedValue([])
+    vi.spyOn(groups, 'list').mockResolvedValue([])
+    vi.spyOn(settings, 'attachments').mockResolvedValue({ max_file_size_mb: 10, allowed_types: [] } as never)
+    vi.spyOn(transactions.attachments, 'list').mockResolvedValue([])
+    vi.spyOn(categorization, 'provenance').mockResolvedValue({
+      current_source: 'none', original_description: null, store_note: null, events: [],
+    })
+  })
+
+  it('shows a synced row as a read-only summary instead of locked fields', async () => {
+    renderWithProviders(<TransactionDialog {...props} transaction={baseTx} isSynced />)
+    const dialog = await screen.findByRole('dialog')
+
+    expect(within(dialog).getByRole('heading', { name: 'Rent' })).toBeInTheDocument()
+    expect(within(dialog).getByText('PIX RENT 0923')).toBeInTheDocument()
+    expect(within(dialog).getByText('$2,880.00')).toBeInTheDocument()
+    expect(within(dialog).getByText('Nubank')).toBeInTheDocument()
+    expect(within(dialog).getByText(t('transactions.syncedBadge'))).toBeInTheDocument()
+    expect(dialog.querySelector('input[inputmode="decimal"]')).toBeNull()
+    expect(dialog.querySelector('select:disabled, input:disabled')).toBeNull()
+  })
+
+  it('lets a manual row edit its amount, date, status and type', async () => {
+    renderWithProviders(
+      <TransactionDialog {...props} transaction={{ ...baseTx, source: 'manual' } as Transaction} />,
+    )
+    const dialog = await screen.findByRole('dialog')
+
+    expect(dialog.querySelector('input[inputmode="decimal"]')).toHaveValue('2880')
+    expect(within(dialog).getByRole('option', { name: t('transactions.statusPending') })).toBeInTheDocument()
+    expect(within(dialog).getByRole('option', { name: t('transactions.income') })).toBeInTheDocument()
+  })
+
+  it('keeps the less used settings folded until asked', async () => {
+    const { user } = renderWithProviders(<TransactionDialog {...props} transaction={baseTx} isSynced />)
+    const toggle = await screen.findByRole('button', { name: new RegExp(t('transactions.moreOptions')) })
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('checkbox', { name: new RegExp(t('transactions.excludeFromReports')) })).toBeNull()
+
+    await user.click(toggle)
+    expect(screen.getByRole('checkbox', { name: new RegExp(t('transactions.excludeFromReports')) })).not.toBeChecked()
+  })
+
+  it('opens the less used settings when one of them is in use', async () => {
+    renderWithProviders(
+      <TransactionDialog {...props} transaction={{ ...baseTx, exclude_from_pnl: true } as Transaction} isSynced />,
+    )
+
+    expect(await screen.findByRole('checkbox', { name: new RegExp(t('transactions.excludeFromReports')) })).toBeChecked()
   })
 })
