@@ -326,7 +326,17 @@ export default function CategoriesPage() {
 
   return (
     <div>
-      <PageHeader section={t('categories.title')} title={t('categories.title')} />
+      <PageHeader
+        section={t('categories.title')}
+        title={t('categories.title')}
+        action={
+          canWrite ? (
+            <Button onClick={() => openCatDialog(null)}>
+              <Plus /> {t('categories.addCategory')}
+            </Button>
+          ) : undefined
+        }
+      />
 
       <p className="mb-4 text-sm text-muted-foreground">
         {t('categories.hiddenScopeDescription')}
@@ -354,20 +364,15 @@ export default function CategoriesPage() {
           }
           action={
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" className="gap-1.5 h-8" asChild>
-                <Link to="/categorization?tab=organize" aria-label={t('categories.organizeWithAi')}>
-                  <WandSparkles size={13} /> <span className="hidden sm:inline">{t('categories.organizeWithAi')}</span>
+              <Button variant="ghost" asChild>
+                <Link to="/categorization?tab=organize" aria-label={t('categories.organizeWithAi')} title={t('categories.organizeWithAi')}>
+                  <WandSparkles /> <span className="hidden sm:inline">{t('categories.organizeWithAi')}</span>
                 </Link>
               </Button>
               {canWrite && (
-                <>
-                  <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => openGroupDialog(null)}>
-                    <Plus size={13} /> <span className="hidden sm:inline">{t('groups.add')}</span>
-                  </Button>
-                  <Button size="sm" className="gap-1.5 h-8" onClick={() => openCatDialog(null)}>
-                    <Plus size={13} /> <span className="hidden sm:inline">{t('categories.addCategory')}</span>
-                  </Button>
-                </>
+                <Button variant="outline" onClick={() => openGroupDialog(null)} aria-label={t('groups.add')} title={t('groups.add')}>
+                  <Plus /> <span className="hidden sm:inline">{t('groups.add')}</span>
+                </Button>
               )}
             </div>
           }

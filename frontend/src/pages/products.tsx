@@ -129,8 +129,8 @@ export default function ProductsPage() {
         title={t('invoices.products.title')}
         action={
           canWrite ? (
-            <Button size="sm" onClick={() => setEditing('new')} data-testid="product-new-button">
-              <Plus className="h-4 w-4 mr-1.5" />
+            <Button onClick={() => setEditing('new')} data-testid="product-new-button">
+              <Plus />
               {t('invoices.products.new')}
             </Button>
           ) : undefined

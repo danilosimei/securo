@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ArrowLeftRight, CalendarDays, Copy, Download, List, MoreHorizontal } from 'lucide-react'
+import { ArrowLeftRight, CalendarDays, Copy, Download, List, MoreHorizontal, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import { TransactionsViewSwitcher, type TransactionsViewSwitcherProps } from '@/components/transactions-view-switcher'
@@ -62,9 +62,9 @@ function PrimaryAddAction({ onAdd }: { onAdd?: () => void }) {
   const { t } = useTranslation()
   if (!onAdd) return null
   return (
-    <Button className="shrink-0 px-3" onClick={onAdd}>
-      + <span className="sm:hidden">{t('common.add')}</span>
-      <span className="hidden sm:inline">{t('transactions.addManual')}</span>
+    <Button className="shrink-0" onClick={onAdd}>
+      <Plus />
+      {t('transactions.addManual')}
     </Button>
   )
 }

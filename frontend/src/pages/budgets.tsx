@@ -143,20 +143,18 @@ export default function BudgetsPage() {
       <PageHeader
         section={t('budgets.title')}
         title={monthTitle}
+        action={
+          canWrite ? (
+            <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+              <Plus /> {t('budgets.add')}
+            </Button>
+          ) : undefined
+        }
         period={<MonthPeriodSelector value={selectedMonth} onChange={setSelectedMonth} locale={uiLocale} />}
       />
 
       <SectionCard>
-        <SectionHeader
-          title={t('budgets.title')}
-          action={
-            canWrite ? (
-              <Button size="sm" className="gap-1.5 h-8" onClick={() => { setEditing(null); setDialogOpen(true) }}>
-                <Plus size={13} /> {t('budgets.add')}
-              </Button>
-            ) : undefined
-          }
-        />
+        <SectionHeader title={t('budgets.title')} />
         {budgetsList && budgetsList.length > 0 ? (
           <table className="w-full">
             <thead>

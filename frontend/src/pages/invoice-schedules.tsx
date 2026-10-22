@@ -111,8 +111,8 @@ export default function InvoiceSchedulesPage() {
         title={t('invoices.schedules.title')}
         action={
           canWrite ? (
-            <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="schedule-new-button">
-              <Plus className="h-4 w-4 mr-1.5" />
+            <Button onClick={() => setCreateOpen(true)} data-testid="schedule-new-button">
+              <Plus />
               {t('invoices.schedules.new')}
             </Button>
           ) : undefined

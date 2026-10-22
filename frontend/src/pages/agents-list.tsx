@@ -44,12 +44,12 @@ export default function AgentsListPage() {
           canWrite ? (
             <div className="flex items-center gap-2">
               <Link to="/agents/connections">
-                <Button variant="outline" size="sm" className="gap-1.5 h-8">
-                  <Plug size={13} /> {t('agents.connections.manage')}
+                <Button variant="outline">
+                  <Plug /> {t('agents.connections.manage')}
                 </Button>
               </Link>
-              <Button size="sm" className="gap-1.5 h-8" onClick={() => setCreateOpen(true)}>
-                <Plus size={13} /> {t('agents.newAgent')}
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus /> {t('agents.newAgent')}
               </Button>
             </div>
           ) : undefined

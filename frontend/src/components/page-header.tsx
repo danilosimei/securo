@@ -7,7 +7,7 @@ interface PageHeaderProps {
   action?: React.ReactNode
   /** The page's period control. It sits where Reports puts its own: at the
    *  right of the title on a wide screen, under it (full width on a phone)
-   *  otherwise. Takes the place of `action`. */
+   *  otherwise. Can sit next to `action`. */
   period?: React.ReactNode
 }
 
@@ -21,10 +21,18 @@ export function PageHeader({ section, title, action, period }: PageHeaderProps) 
     </div>
   )
   if (period) {
+    const slot = <PeriodSlot testId="page-period">{period}</PeriodSlot>
     return (
       <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
         {heading}
-        <PeriodSlot testId="page-period">{period}</PeriodSlot>
+        {action ? (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-end lg:gap-4">
+            {action}
+            {slot}
+          </div>
+        ) : (
+          slot
+        )}
       </div>
     )
   }

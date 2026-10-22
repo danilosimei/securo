@@ -1052,8 +1052,8 @@ export default function AssetsPage() {
                 <Wallet size={16} />
                 {t('assets.newWallet')}
               </Button>
-              <Button onClick={openCreate} className="gap-1.5">
-                <Plus size={16} />
+              <Button onClick={openCreate}>
+                <Plus />
                 {t('assets.addAsset')}
               </Button>
             </div>

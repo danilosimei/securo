@@ -51,17 +51,6 @@ function SectionHeader({ title, action }: { title: string; action?: React.ReactN
 
 export default function RecurringPage() {
   const { t } = useTranslation()
-
-  return (
-    <div>
-      <PageHeader section={t('recurring.title')} title={t('recurring.title')} />
-      <RecurringTab />
-    </div>
-  )
-}
-
-function RecurringTab() {
-  const { t } = useTranslation()
   const locale = useDisplayLocale()
   const dateLocale = useDateLocale()
   const { mask } = usePrivacyMode()
@@ -159,27 +148,33 @@ function RecurringTab() {
   }
 
   return (
-    <>
+    <div>
+      <PageHeader
+        section={t('recurring.title')}
+        title={t('recurring.title')}
+        action={
+          canWrite ? (
+            <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+              <Plus /> {t('recurring.add')}
+            </Button>
+          ) : undefined
+        }
+      />
       <SectionCard>
         <SectionHeader
           title={t('recurring.title')}
           action={
             canWrite ? (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => generateMutation.mutate()}
-                  disabled={generateMutation.isPending}
-                >
-                  <RefreshCw size={12} />
-                  <span className="hidden sm:inline">{t('recurring.generatePending')}</span>
-                </Button>
-                <Button size="sm" className="gap-1.5 h-8" onClick={() => { setEditing(null); setDialogOpen(true) }}>
-                  <Plus size={13} /> <span className="hidden sm:inline">{t('recurring.add')}</span>
-                </Button>
-              </div>
+              <Button
+                variant="outline"
+                onClick={() => generateMutation.mutate()}
+                disabled={generateMutation.isPending}
+                aria-label={t('recurring.generatePending')}
+                title={t('recurring.generatePending')}
+              >
+                <RefreshCw />
+                <span className="hidden sm:inline">{t('recurring.generatePending')}</span>
+              </Button>
             ) : undefined
           }
         />
@@ -295,7 +290,7 @@ function RecurringTab() {
         onClose={() => setDeletingRecurring(null)}
         onConfirm={() => deletingRecurring && deleteMutation.mutate(deletingRecurring.id)}
       />
-    </>
+    </div>
   )
 }
 

@@ -239,6 +239,13 @@ export default function GoalsPage() {
       <PageHeader
         section={t('goals.title')}
         title={t('goals.title')}
+        action={
+          canWrite ? (
+            <Button onClick={openCreateDialog}>
+              <Plus /> {t('goals.add')}
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* Status filter */}
@@ -259,16 +266,7 @@ export default function GoalsPage() {
       </div>
 
       <SectionCard>
-        <SectionHeader
-          title={t('goals.title')}
-          action={
-            canWrite ? (
-              <Button size="sm" className="gap-1.5 h-8" onClick={openCreateDialog}>
-                <Plus size={13} /> {t('goals.add')}
-              </Button>
-            ) : undefined
-          }
-        />
+        <SectionHeader title={t('goals.title')} />
         {goalsList && goalsList.length > 0 ? (
           <div className="divide-y divide-border">
             {goalsList.map((goal) => {

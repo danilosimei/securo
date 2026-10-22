@@ -443,7 +443,17 @@ export default function RulesPage() {
 
   return (
     <div>
-      <PageHeader section={t('rules.section')} title={t('nav.rules')} />
+      <PageHeader
+        section={t('rules.section')}
+        title={t('nav.rules')}
+        action={
+          canWrite && tab === 'rules' ? (
+            <Button onClick={openCreate}>
+              <Plus /> {t('rules.add')}
+            </Button>
+          ) : undefined
+        }
+      />
 
       <div className="mb-4">
         <Segmented
@@ -545,9 +555,6 @@ export default function RulesPage() {
                 >
                   <RefreshCw size={12} />
                   <span className="hidden sm:inline">{t('rules.resetAndReapplyAll', 'Reset and reapply')}</span>
-                </Button>
-                <Button size="sm" className="gap-1.5 h-8" onClick={openCreate}>
-                  <Plus size={13} /> <span className="hidden sm:inline">{t('rules.add')}</span>
                 </Button>
               </div>
             ) : undefined

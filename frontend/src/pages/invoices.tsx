@@ -201,8 +201,8 @@ export default function InvoicesPage() {
               {t('invoices.settings.title')}
             </Button>
             {canWrite && (
-              <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="invoice-new-button">
-                <Plus className="h-4 w-4 mr-1.5" />
+              <Button onClick={() => setCreateOpen(true)} data-testid="invoice-new-button">
+                <Plus />
                 {direction === 'payable' ? t('invoices.newPayable') : t('invoices.new')}
               </Button>
             )}

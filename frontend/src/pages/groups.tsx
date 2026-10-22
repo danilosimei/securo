@@ -154,9 +154,9 @@ export default function GroupsPage() {
         action={
           canWrite ? (
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-              <Button size="sm" className="h-8 gap-1.5" onClick={openCreate}>
-                <Plus size={13} />
-                <span>{t('splitGroups.add')}</span>
+              <Button onClick={openCreate}>
+                <Plus />
+                {t('splitGroups.add')}
               </Button>
             </div>
           ) : undefined
