@@ -43,8 +43,11 @@ describe('Budgets month', () => {
 
     const slot = screen.getByTestId('page-period')
     expect(slot).toHaveClass('w-full', 'sm:ml-auto', 'sm:w-auto')
-    expect(slot.parentElement).toHaveClass('flex-col', 'lg:flex-row', 'lg:justify-between')
-    expect(slot.parentElement).toContainElement(screen.getByRole('heading', { level: 1 }))
+    // The period sits beside the page's primary action, both at the right of the title.
+    const header = slot.parentElement!.parentElement!
+    expect(header).toHaveClass('flex-col', 'lg:flex-row', 'lg:justify-between')
+    expect(header).toContainElement(screen.getByRole('heading', { level: 1 }))
+    expect(slot.parentElement).toContainElement(screen.getByRole('button', { name: t('budgets.add') }))
     const group = within(slot).getByRole('group', { name: t('reports.explore.periodGroup') })
 
     await user.click(within(group).getByRole('button', { name: t('common.previousMonth') }))
