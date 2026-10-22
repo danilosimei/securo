@@ -151,7 +151,6 @@
     "deleted": "Draft deleted",
     "linked": "Payment linked",
     "unlinked": "Payment unlinked",
-    "backToList": "Back to invoices",
     "payments": "Payments",
     "noPayments": "Rien n'est encore arrivé sur cette facture.",
     "linkedPayment": "Linked payment",
@@ -428,7 +427,9 @@
       "rendered": "Générée par Securo · {{date}}",
       "kindLabel": "Type de document",
       "fromSystem": "De {{source}} · {{date}}",
-      "fromUpload": "Importé · {{date}}"
+      "fromUpload": "Importé · {{date}}",
+      "confirmRemoveTitle": "Retirer le document ?",
+      "confirmRemoveDescription": "Le fichier « {{name}} » sera retiré de cette facture."
     },
     "draftSaved": "Brouillon enregistré",
     "suggestions": {
@@ -442,7 +443,6 @@
       "title": "Récurrentes",
       "new": "Nouvelle facture récurrente",
       "newDescription": "Un accord avec un client pour le facturer à chaque période. Les factures sont rédigées pour vous, le jour même.",
-      "backToList": "Retour aux récurrentes",
       "empty": "Aucune facture récurrente pour l'instant. Créez-en une, ou ouvrez une facture et choisissez \"Répéter cette facture\".",
       "emptyFiltered": "Rien ici avec ce statut.",
       "created": "Facture récurrente créée",
@@ -582,7 +582,11 @@
         "description": "Une par période, rédigée le jour même. Une facture rédigée à la main peut aussi être liée.",
         "empty": "Aucune facture sous cet accord pour l'instant.",
         "emptyNext": "Aucune facture pour l'instant. La première sera rédigée le {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Supprimer la facture récurrente ?",
+      "confirmDeleteDescription": "La facture récurrente sera supprimée et ne générera plus de factures. Cette action est irréversible.",
+      "confirmRemoveTermTitle": "Supprimer le changement de prix ?",
+      "confirmRemoveTermDescription": "Le changement de prix sera retiré de cette facture récurrente."
     },
     "products": {
       "title": "Produits",
@@ -699,7 +703,9 @@
       "differenceTitle": "Il manque {{difference}} au paiement",
       "differenceHint": "Enregistrez la différence pour que la facture soit soldée",
       "differenceNone": "Ne pas enregistrer",
-      "figure": "Déduit"
+      "figure": "Déduit",
+      "confirmDeleteTitle": "Supprimer la déduction ?",
+      "confirmDeleteDescription": "La déduction n'est plus comptée et le montant redevient dû."
     },
     "statement": {
       "asIssued": "Facture telle qu'émise",
@@ -707,7 +713,9 @@
       "hint": "Paiements et déductions depuis l'émission, et le solde",
       "banner": "Ce PDF est la facture telle qu'émise. Depuis, {{paid}} ont été reçus et {{deducted}} déduits : le relevé de compte détaille chacun et le solde.",
       "title": "Relevé de compte"
-    }
+    },
+    "confirmDeleteTitle": "Supprimer la facture ?",
+    "confirmDeleteDescription": "La facture sera supprimée. Cette action est irréversible."
   },
   "collections": {
     "title": "Collections",
@@ -1588,7 +1596,8 @@
       "rules": "Règles",
       "queue": "En attente de vous",
       "history": "Historique"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Réinitialiser et réappliquer tout ?"
   },
   "categories": {
     "title": "Catégories",
@@ -2653,7 +2662,11 @@
       "project": "Projet",
       "client": "Client",
       "other": "Autre"
-    }
+    },
+    "confirmDeleteMemberTitle": "Supprimer le membre ?",
+    "confirmDeleteMemberDescription": "{{name}} sera retiré du groupe. Cette action est irréversible.",
+    "confirmDeleteSettlementTitle": "Supprimer le règlement ?",
+    "confirmDeleteSettlementDescription": "Le règlement sera supprimé et les soldes du groupe changeront. Cette action est irréversible."
   },
   "privacy": {
     "hide": "Masquer les valeurs",

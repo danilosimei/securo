@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Trash2 } from 'lucide-react'
+import { Trash2, type LucideIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +19,9 @@ type DeleteConfirmationDialogProps = {
   onClose: () => void
   onCancel?: () => void
   onConfirm: () => void
+  /** The confirm button's text; "Delete" by default. */
+  confirmLabel?: string
+  confirmIcon?: LucideIcon
 }
 
 export function DeleteConfirmationDialog({
@@ -29,6 +32,8 @@ export function DeleteConfirmationDialog({
   onClose,
   onCancel = onClose,
   onConfirm,
+  confirmLabel,
+  confirmIcon: ConfirmIcon = Trash2,
 }: DeleteConfirmationDialogProps) {
   const { t } = useTranslation()
 
@@ -49,8 +54,8 @@ export function DeleteConfirmationDialog({
             {t('common.cancel')}
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
-            <Trash2 size={14} className="mr-1" />
-            {t('common.delete')}
+            <ConfirmIcon size={14} className="mr-1" />
+            {confirmLabel ?? t('common.delete')}
           </Button>
         </DialogFooter>
       </DialogContent>

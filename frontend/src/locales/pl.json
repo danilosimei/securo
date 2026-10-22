@@ -151,7 +151,6 @@
     "deleted": "Draft deleted",
     "linked": "Payment linked",
     "unlinked": "Payment unlinked",
-    "backToList": "Back to invoices",
     "payments": "Payments",
     "noPayments": "Na tę fakturę jeszcze nic nie wpłynęło.",
     "linkedPayment": "Linked payment",
@@ -428,7 +427,9 @@
       "rendered": "Wygenerowana przez Securo · {{date}}",
       "kindLabel": "Typ dokumentu",
       "fromSystem": "Z {{source}} · {{date}}",
-      "fromUpload": "Przesłano · {{date}}"
+      "fromUpload": "Przesłano · {{date}}",
+      "confirmRemoveTitle": "Usunąć dokument?",
+      "confirmRemoveDescription": "Plik „{{name}}” zostanie usunięty z tej faktury."
     },
     "draftSaved": "Szkic zapisany",
     "suggestions": {
@@ -446,7 +447,6 @@
       "title": "Cykliczne",
       "new": "Nowa faktura cykliczna",
       "newDescription": "Umowa z klientem na rozliczanie co okres. Faktury są wystawiane za Ciebie, w wyznaczonym dniu.",
-      "backToList": "Wróć do cyklicznych",
       "empty": "Nie ma jeszcze faktur cyklicznych. Utwórz jedną albo otwórz fakturę i wybierz \"Powtarzaj tę fakturę\".",
       "emptyFiltered": "Nic tu nie ma z tym statusem.",
       "created": "Faktura cykliczna utworzona",
@@ -586,7 +586,11 @@
         "description": "Jedna na okres, wystawiana w wyznaczonym dniu. Fakturę wystawioną ręcznie też można powiązać.",
         "empty": "W tej umowie nie ma jeszcze faktury.",
         "emptyNext": "Nie ma jeszcze faktury. Pierwsza zostanie wystawiona {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Usunąć fakturę cykliczną?",
+      "confirmDeleteDescription": "Faktura cykliczna zostanie usunięta i przestanie tworzyć faktury. Tej operacji nie można cofnąć.",
+      "confirmRemoveTermTitle": "Usunąć zmianę ceny?",
+      "confirmRemoveTermDescription": "Zmiana ceny zostanie usunięta z tej faktury cyklicznej."
     },
     "products": {
       "title": "Produkty",
@@ -703,7 +707,9 @@
       "differenceTitle": "Płatność jest niższa o {{difference}}",
       "differenceHint": "Zarejestruj różnicę, aby zamknąć fakturę",
       "differenceNone": "Nie rejestruj",
-      "figure": "Potrącono"
+      "figure": "Potrącono",
+      "confirmDeleteTitle": "Usunąć potrącenie?",
+      "confirmDeleteDescription": "Potrącenie przestaje się liczyć, a kwota znów jest do zapłaty."
     },
     "statement": {
       "asIssued": "Faktura w wystawionej postaci",
@@ -711,7 +717,9 @@
       "hint": "Płatności i potrącenia od wystawienia oraz saldo",
       "banner": "Ten PDF to faktura w wystawionej postaci. Od tego czasu otrzymano {{paid}} i potrącono {{deducted}}: wyciąg pokazuje każdą pozycję i saldo.",
       "title": "Wyciąg z konta"
-    }
+    },
+    "confirmDeleteTitle": "Usunąć fakturę?",
+    "confirmDeleteDescription": "Faktura zostanie usunięta. Tej operacji nie można cofnąć."
   },
   "collections": {
     "title": "Kolekcje",
@@ -1652,7 +1660,8 @@
       "rules": "Reguły",
       "queue": "Czeka na Ciebie",
       "history": "Historia"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Zresetować i zastosować wszystko ponownie?"
   },
   "categories": {
     "title": "Kategorie",
@@ -2758,7 +2767,11 @@
       "project": "Projekt",
       "client": "Klient",
       "other": "Inne"
-    }
+    },
+    "confirmDeleteMemberTitle": "Usunąć członka?",
+    "confirmDeleteMemberDescription": "{{name}} zostanie usunięty z grupy. Tej operacji nie można cofnąć.",
+    "confirmDeleteSettlementTitle": "Usunąć rozliczenie?",
+    "confirmDeleteSettlementDescription": "Rozliczenie zostanie usunięte, a salda grupy się zmienią. Tej operacji nie można cofnąć."
   },
   "privacy": {
     "hide": "Ukryj wartości",

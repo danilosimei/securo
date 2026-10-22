@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 
 import InvoiceScheduleDetailPage from '@/pages/invoice-schedule-detail'
 import { renderWithProviders, t } from '@/test/utils'
@@ -194,6 +194,19 @@ describe('InvoiceScheduleDetailPage', () => {
     // Only the upcoming term may be touched; the current one is history.
     expect(within(rows[0]).queryByLabelText(t('common.edit'))).not.toBeInTheDocument()
     expect(within(rows[1]).getByLabelText(t('common.edit'))).toBeInTheDocument()
+  })
+
+  it('asks before removing a price change', async () => {
+    api.invoiceSchedules.removeTerm.mockResolvedValue(undefined)
+    const { user } = render()
+    await screen.findByText('Plano Pro')
+    const rows = within(screen.getByTestId('schedule-terms')).getAllByTestId('schedule-term-row')
+    await user.click(within(rows[1]).getByLabelText(t('common.delete')))
+    expect(api.invoiceSchedules.removeTerm).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent(t('invoices.schedules.confirmRemoveTermTitle'))
+    await user.click(within(dialog).getByRole('button', { name: t('common.delete') }))
+    await waitFor(() => expect(api.invoiceSchedules.removeTerm).toHaveBeenCalled())
   })
 
   it('lists every invoice by its period, newest first', async () => {

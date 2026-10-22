@@ -145,6 +145,7 @@ export default function RulesPage() {
   const { canWrite } = useWorkspace()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [packsDialogOpen, setPacksDialogOpen] = useState(false)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [pendingImport, setPendingImport] = useState<RuleExportPayload | null>(null)
   const [pendingImportName, setPendingImportName] = useState('')
@@ -428,9 +429,7 @@ export default function RulesPage() {
                 {
                   label: t('rules.resetAndReapplyAll'),
                   icon: RefreshCw,
-                  onSelect: () => {
-                    if (window.confirm(t('rules.confirmResetAndReapplyAll'))) applyAllMutation.mutate()
-                  },
+                  onSelect: () => setResetConfirmOpen(true),
                   disabled: applyAllMutation.isPending,
                 },
               ]}
@@ -648,6 +647,17 @@ export default function RulesPage() {
         <ReconciliationRules canWrite={canWrite} />
       </div>
       </div>
+
+      <DeleteConfirmationDialog
+        open={resetConfirmOpen}
+        title={t('rules.confirmResetAndReapplyTitle')}
+        description={t('rules.confirmResetAndReapplyAll')}
+        confirmLabel={t('rules.resetAndReapplyAll')}
+        confirmIcon={RefreshCw}
+        isPending={applyAllMutation.isPending}
+        onClose={() => setResetConfirmOpen(false)}
+        onConfirm={() => applyAllMutation.mutate(undefined, { onSettled: () => setResetConfirmOpen(false) })}
+      />
 
       <DeleteConfirmationDialog
         open={!!deletingRule}

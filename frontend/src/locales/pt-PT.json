@@ -151,7 +151,6 @@
     "deleted": "Rascunho excluído",
     "linked": "Pagamento vinculado",
     "unlinked": "Vínculo desfeito",
-    "backToList": "Voltar para cobranças",
     "payments": "Recebimentos",
     "noPayments": "Nada recebido nesta cobrança ainda.",
     "linkedPayment": "Pagamento vinculado",
@@ -428,7 +427,9 @@
       "rendered": "Gerada pelo Securo · {{date}}",
       "kindLabel": "Tipo de documento",
       "fromSystem": "De {{source}} · {{date}}",
-      "fromUpload": "Carregado · {{date}}"
+      "fromUpload": "Carregado · {{date}}",
+      "confirmRemoveTitle": "Remover documento?",
+      "confirmRemoveDescription": "O ficheiro \"{{name}}\" será removido desta cobrança."
     },
     "draftSaved": "Rascunho guardado",
     "suggestions": {
@@ -442,7 +443,6 @@
       "title": "Cobranças recorrentes",
       "new": "Nova cobrança recorrente",
       "newDescription": "Um acordo com um cliente para cobrar a cada período. As cobranças são geradas por si, no dia.",
-      "backToList": "Voltar às cobranças recorrentes",
       "empty": "Ainda não há cobranças recorrentes. Crie uma, ou abra uma cobrança e escolha \"Repetir esta cobrança\".",
       "emptyFiltered": "Nada aqui com este estado.",
       "created": "Cobrança recorrente criada",
@@ -582,7 +582,11 @@
         "description": "Uma por período, gerada no dia. Uma cobrança emitida à mão também pode ser associada.",
         "empty": "Ainda não há cobranças neste acordo.",
         "emptyNext": "Ainda não há cobranças. A primeira será gerada a {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Eliminar cobrança recorrente?",
+      "confirmDeleteDescription": "A cobrança recorrente será eliminada e deixa de gerar cobranças. Esta ação não pode ser anulada.",
+      "confirmRemoveTermTitle": "Eliminar mudança de preço?",
+      "confirmRemoveTermDescription": "A mudança de preço sai desta cobrança recorrente."
     },
     "products": {
       "title": "Produtos",
@@ -699,7 +703,9 @@
       "differenceTitle": "O pagamento veio {{difference}} abaixo",
       "differenceHint": "Registe a diferença para a cobrança fechar",
       "differenceNone": "Não registar",
-      "figure": "Deduzido"
+      "figure": "Deduzido",
+      "confirmDeleteTitle": "Eliminar dedução?",
+      "confirmDeleteDescription": "A dedução deixa de contar e o valor volta a ficar em aberto na cobrança."
     },
     "statement": {
       "asIssued": "Cobrança como emitida",
@@ -707,7 +713,9 @@
       "hint": "Pagamentos e deduções desde a emissão, e o saldo",
       "banner": "Este PDF é a cobrança como foi emitida. Desde então foram recebidos {{paid}} e deduzidos {{deducted}}: o extrato mostra cada um e o saldo.",
       "title": "Extrato da cobrança"
-    }
+    },
+    "confirmDeleteTitle": "Eliminar cobrança?",
+    "confirmDeleteDescription": "A cobrança será eliminada. Esta ação não pode ser anulada."
   },
   "collections": {
     "title": "Coleções",
@@ -1588,7 +1596,8 @@
       "rules": "Regras",
       "queue": "À sua espera",
       "history": "Histórico"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Repor e reaplicar tudo?"
   },
   "categories": {
     "title": "Categorias",
@@ -2653,7 +2662,11 @@
       "project": "Projeto",
       "client": "Cliente",
       "other": "Outro"
-    }
+    },
+    "confirmDeleteMemberTitle": "Eliminar membro?",
+    "confirmDeleteMemberDescription": "{{name}} sai do grupo. Esta ação não pode ser anulada.",
+    "confirmDeleteSettlementTitle": "Eliminar acerto?",
+    "confirmDeleteSettlementDescription": "O acerto será eliminado e os saldos do grupo mudam. Esta ação não pode ser anulada."
   },
   "privacy": {
     "hide": "Ocultar valores",

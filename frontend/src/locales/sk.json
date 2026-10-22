@@ -151,7 +151,6 @@
     "deleted": "Koncept zmazaný",
     "linked": "Platba priradená",
     "unlinked": "Priradenie zrušené",
-    "backToList": "Späť na faktúry",
     "payments": "Platby",
     "noPayments": "Na túto faktúru zatiaľ nič neprišlo.",
     "linkedPayment": "Priradená platba",
@@ -428,7 +427,9 @@
       "rendered": "Vygenerované Securom · {{date}}",
       "kindLabel": "Typ dokumentu",
       "fromSystem": "Z {{source}} · {{date}}",
-      "fromUpload": "Nahrané · {{date}}"
+      "fromUpload": "Nahrané · {{date}}",
+      "confirmRemoveTitle": "Odstrániť dokument?",
+      "confirmRemoveDescription": "Súbor „{{name}}“ bude z tejto faktúry odstránený."
     },
     "draftSaved": "Koncept uložený",
     "suggestions": {
@@ -446,7 +447,6 @@
       "title": "Opakované",
       "new": "Nová opakovaná faktúra",
       "newDescription": "Dohoda s klientom o fakturácii každé obdobie. Faktúry sa vystavia za vás, v daný deň.",
-      "backToList": "Späť na opakované",
       "empty": "Zatiaľ žiadne opakované faktúry. Vytvorte jednu, alebo otvorte faktúru a zvoľte \"Opakovať túto faktúru\".",
       "emptyFiltered": "Nič s týmto stavom.",
       "created": "Opakovaná faktúra vytvorená",
@@ -586,7 +586,11 @@
         "description": "Jedna za obdobie, vystavená v daný deň. Ručne vystavenú faktúru možno tiež priradiť.",
         "empty": "V tejto dohode zatiaľ nie je žiadna faktúra.",
         "emptyNext": "Zatiaľ žiadna faktúra. Prvá sa vystaví {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Zmazať opakovanú faktúru?",
+      "confirmDeleteDescription": "Opakovaná faktúra bude zmazaná a prestane vytvárať faktúry. Túto akciu nie je možné vrátiť späť.",
+      "confirmRemoveTermTitle": "Zmazať zmenu ceny?",
+      "confirmRemoveTermDescription": "Zmena ceny bude z tejto opakovanej faktúry odstránená."
     },
     "products": {
       "title": "Produkty",
@@ -703,7 +707,9 @@
       "differenceTitle": "Platba je o {{difference}} nižšia",
       "differenceHint": "Zaznamenajte rozdiel, aby sa faktúra uzavrela",
       "differenceNone": "Nezaznamenať",
-      "figure": "Zrazené"
+      "figure": "Zrazené",
+      "confirmDeleteTitle": "Zmazať zrážku?",
+      "confirmDeleteDescription": "Zrážka sa prestane počítať a suma je opäť nezaplatená."
     },
     "statement": {
       "asIssued": "Faktúra v vystavenej podobe",
@@ -711,7 +717,9 @@
       "hint": "Platby a zrážky od vystavenia a zostatok",
       "banner": "Toto PDF je faktúra vo vystavenej podobe. Odvtedy bolo prijatých {{paid}} a zrazených {{deducted}}: výpis ukazuje každú položku a zostatok.",
       "title": "Výpis z účtu"
-    }
+    },
+    "confirmDeleteTitle": "Zmazať faktúru?",
+    "confirmDeleteDescription": "Faktúra bude zmazaná. Túto akciu nie je možné vrátiť späť."
   },
   "collections": {
     "title": "Zbierky",
@@ -1672,7 +1680,8 @@
       "rules": "Pravidlá",
       "queue": "Čaká na vás",
       "history": "História"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Resetovať a znovu použiť všetko?"
   },
   "categories": {
     "title": "Kategórie",
@@ -2789,7 +2798,11 @@
       "project": "Projekt",
       "client": "Klient",
       "other": "Iné"
-    }
+    },
+    "confirmDeleteMemberTitle": "Zmazať člena?",
+    "confirmDeleteMemberDescription": "{{name}} bude zo skupiny odstránený. Túto akciu nie je možné vrátiť späť.",
+    "confirmDeleteSettlementTitle": "Zmazať vyrovnanie?",
+    "confirmDeleteSettlementDescription": "Vyrovnanie bude zmazané a zostatky skupiny sa zmenia. Túto akciu nie je možné vrátiť späť."
   },
   "privacy": {
     "hide": "Skryť hodnoty",

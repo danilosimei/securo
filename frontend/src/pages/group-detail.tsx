@@ -35,6 +35,7 @@ import { localDateString } from '@/lib/date-utils'
 import { MemberForm } from '@/components/member-form'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -201,6 +202,8 @@ export default function GroupDetailPage() {
     },
   })
 
+  // What waits for a yes before it is deleted.
+  const [confirmDelete, setConfirmDelete] = useState<{ kind: 'settlement'; id: string } | { kind: 'member'; id: string; name: string } | null>(null)
   const deleteMemberMutation = useMutation({
     mutationFn: (memberId: string) => groupsApi.members.delete(groupId, memberId),
     onSuccess: () => {
@@ -894,7 +897,7 @@ export default function GroupDetailPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => deleteSettlementMutation.mutate(s.id)}
+                      onClick={() => setConfirmDelete({ kind: 'settlement', id: s.id })}
                       title={t('common.delete')}
                       aria-label={t('common.delete')}
                     >
@@ -935,7 +938,7 @@ export default function GroupDetailPage() {
             {editingMember && (
               <Button
                 variant="destructive"
-                onClick={() => deleteMemberMutation.mutate(editingMember.id)}
+                onClick={() => setConfirmDelete({ kind: 'member', id: editingMember.id, name: editingMember.name })}
                 disabled={deleteMemberMutation.isPending}
               >
                 <Trash2 size={14} className="mr-1" />
@@ -1165,6 +1168,25 @@ export default function GroupDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DeleteConfirmationDialog
+        open={confirmDelete !== null}
+        title={confirmDelete?.kind === 'member' ? t('splitGroups.confirmDeleteMemberTitle') : t('splitGroups.confirmDeleteSettlementTitle')}
+        description={
+          confirmDelete?.kind === 'member'
+            ? t('splitGroups.confirmDeleteMemberDescription', { name: confirmDelete.name })
+            : t('splitGroups.confirmDeleteSettlementDescription')
+        }
+        isPending={deleteMemberMutation.isPending || deleteSettlementMutation.isPending}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (confirmDelete?.kind === 'member') {
+            deleteMemberMutation.mutate(confirmDelete.id, { onSettled: () => setConfirmDelete(null) })
+          } else if (confirmDelete) {
+            deleteSettlementMutation.mutate(confirmDelete.id, { onSettled: () => setConfirmDelete(null) })
+          }
+        }}
+      />
     </div>
   )
 }

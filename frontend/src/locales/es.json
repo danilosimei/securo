@@ -151,7 +151,6 @@
     "deleted": "Draft deleted",
     "linked": "Payment linked",
     "unlinked": "Payment unlinked",
-    "backToList": "Back to invoices",
     "payments": "Payments",
     "noPayments": "Todavía no ha entrado nada contra esta factura.",
     "linkedPayment": "Linked payment",
@@ -428,7 +427,9 @@
       "rendered": "Generada por Securo · {{date}}",
       "kindLabel": "Tipo de documento",
       "fromSystem": "De {{source}} · {{date}}",
-      "fromUpload": "Subido · {{date}}"
+      "fromUpload": "Subido · {{date}}",
+      "confirmRemoveTitle": "¿Quitar documento?",
+      "confirmRemoveDescription": "El archivo \"{{name}}\" se quitará de este cobro."
     },
     "draftSaved": "Borrador guardado",
     "suggestions": {
@@ -442,7 +443,6 @@
       "title": "Recurrentes",
       "new": "Nueva factura recurrente",
       "newDescription": "Un acuerdo con un cliente para facturarle cada período. Las facturas se generan por ti, el mismo día.",
-      "backToList": "Volver a recurrentes",
       "empty": "Aún no hay facturas recurrentes. Crea una, o abre una factura y elige \"Repetir esta factura\".",
       "emptyFiltered": "Nada aquí con este estado.",
       "created": "Factura recurrente creada",
@@ -582,7 +582,11 @@
         "description": "Una por período, generada el mismo día. Una factura hecha a mano también se puede vincular.",
         "empty": "Aún no hay facturas bajo este acuerdo.",
         "emptyNext": "Aún no hay facturas. La primera se generará el {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "¿Eliminar cobro recurrente?",
+      "confirmDeleteDescription": "El cobro recurrente se eliminará y deja de generar cobros. Esta acción no se puede deshacer.",
+      "confirmRemoveTermTitle": "¿Eliminar cambio de precio?",
+      "confirmRemoveTermDescription": "El cambio de precio se quitará de este cobro recurrente."
     },
     "products": {
       "title": "Productos",
@@ -699,7 +703,9 @@
       "differenceTitle": "El pago llegó {{difference}} por debajo",
       "differenceHint": "Registre la diferencia para cerrar la factura",
       "differenceNone": "No registrar",
-      "figure": "Deducido"
+      "figure": "Deducido",
+      "confirmDeleteTitle": "¿Eliminar deducción?",
+      "confirmDeleteDescription": "La deducción deja de contar y el importe vuelve a quedar pendiente."
     },
     "statement": {
       "asIssued": "Factura tal como se emitió",
@@ -707,7 +713,9 @@
       "hint": "Pagos y deducciones desde la emisión, y el saldo",
       "banner": "Este PDF es la factura tal como se emitió. Desde entonces se recibieron {{paid}} y se dedujeron {{deducted}}: el estado de cuenta muestra cada uno y el saldo.",
       "title": "Estado de cuenta"
-    }
+    },
+    "confirmDeleteTitle": "¿Eliminar cobro?",
+    "confirmDeleteDescription": "El cobro se eliminará. Esta acción no se puede deshacer."
   },
   "collections": {
     "title": "Colecciones",
@@ -1588,7 +1596,8 @@
       "rules": "Reglas",
       "queue": "Esperándote",
       "history": "Historial"
-    }
+    },
+    "confirmResetAndReapplyTitle": "¿Restablecer y reaplicar todo?"
   },
   "categories": {
     "title": "Categorías",
@@ -2653,7 +2662,11 @@
       "project": "Proyecto",
       "client": "Cliente",
       "other": "Otro"
-    }
+    },
+    "confirmDeleteMemberTitle": "¿Eliminar miembro?",
+    "confirmDeleteMemberDescription": "{{name}} saldrá del grupo. Esta acción no se puede deshacer.",
+    "confirmDeleteSettlementTitle": "¿Eliminar liquidación?",
+    "confirmDeleteSettlementDescription": "La liquidación se eliminará y los saldos del grupo cambian. Esta acción no se puede deshacer."
   },
   "privacy": {
     "hide": "Ocultar valores",

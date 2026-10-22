@@ -151,7 +151,6 @@
     "deleted": "Draft deleted",
     "linked": "Payment linked",
     "unlinked": "Payment unlinked",
-    "backToList": "Back to invoices",
     "payments": "Payments",
     "noPayments": "За цим рахунком поки нічого не надійшло.",
     "linkedPayment": "Linked payment",
@@ -428,7 +427,9 @@
       "rendered": "Сформована в Securo · {{date}}",
       "kindLabel": "Тип документа",
       "fromSystem": "Із {{source}} · {{date}}",
-      "fromUpload": "Завантажено · {{date}}"
+      "fromUpload": "Завантажено · {{date}}",
+      "confirmRemoveTitle": "Видалити документ?",
+      "confirmRemoveDescription": "Файл «{{name}}» буде видалено з цього рахунку."
     },
     "draftSaved": "Чернетку збережено",
     "suggestions": {
@@ -446,7 +447,6 @@
       "title": "Регулярні",
       "new": "Новий регулярний рахунок",
       "newDescription": "Домовленість із клієнтом виставляти рахунок щоперіоду. Рахунки виставляються за вас, у призначений день.",
-      "backToList": "Назад до регулярних",
       "empty": "Регулярних рахунків поки немає. Створіть один, або відкрийте рахунок і виберіть \"Повторювати цей рахунок\".",
       "emptyFiltered": "З таким статусом тут нічого немає.",
       "created": "Регулярний рахунок створено",
@@ -586,7 +586,11 @@
         "description": "Один за період, виставляється в призначений день. Рахунок, виставлений вручну, теж можна прив'язати.",
         "empty": "За цією домовленістю поки немає рахунків.",
         "emptyNext": "Рахунків поки немає. Перший буде виставлено {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Видалити регулярний рахунок?",
+      "confirmDeleteDescription": "Регулярний рахунок буде видалено, і він перестане створювати рахунки. Цю дію не можна скасувати.",
+      "confirmRemoveTermTitle": "Видалити зміну ціни?",
+      "confirmRemoveTermDescription": "Зміну ціни буде видалено з цього регулярного рахунку."
     },
     "products": {
       "title": "Товари",
@@ -703,7 +707,9 @@
       "differenceTitle": "Платіж менший на {{difference}}",
       "differenceHint": "Запишіть різницю, щоб закрити рахунок",
       "differenceNone": "Не записувати",
-      "figure": "Утримано"
+      "figure": "Утримано",
+      "confirmDeleteTitle": "Видалити утримання?",
+      "confirmDeleteDescription": "Утримання перестане враховуватися, і сума знову буде до сплати."
     },
     "statement": {
       "asIssued": "Рахунок у виставленому вигляді",
@@ -711,7 +717,9 @@
       "hint": "Платежі та утримання з моменту виставлення і залишок",
       "banner": "Цей PDF є рахунком у виставленому вигляді. Відтоді отримано {{paid}} і утримано {{deducted}}: виписка показує кожну операцію і залишок.",
       "title": "Виписка по рахунку"
-    }
+    },
+    "confirmDeleteTitle": "Видалити рахунок?",
+    "confirmDeleteDescription": "Рахунок буде видалено. Цю дію не можна скасувати."
   },
   "collections": {
     "title": "Колекції",
@@ -1601,7 +1609,8 @@
       "rules": "Правила",
       "queue": "Чекає на вас",
       "history": "Історія"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Скинути й застосувати все заново?"
   },
   "categories": {
     "title": "Категорії",
@@ -2674,7 +2683,11 @@
       "project": "Проєкт",
       "client": "Клієнт",
       "other": "Інше"
-    }
+    },
+    "confirmDeleteMemberTitle": "Видалити учасника?",
+    "confirmDeleteMemberDescription": "{{name}} буде видалено з групи. Цю дію не можна скасувати.",
+    "confirmDeleteSettlementTitle": "Видалити розрахунок?",
+    "confirmDeleteSettlementDescription": "Розрахунок буде видалено, і баланси групи зміняться. Цю дію не можна скасувати."
   },
   "privacy": {
     "hide": "Сховати суми",

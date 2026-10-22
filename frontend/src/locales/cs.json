@@ -151,7 +151,6 @@
     "deleted": "Koncept smazán",
     "linked": "Platba přiřazena",
     "unlinked": "Přiřazení zrušeno",
-    "backToList": "Zpět na faktury",
     "payments": "Platby",
     "noPayments": "Na tuto fakturu zatím nic nepřišlo.",
     "linkedPayment": "Přiřazená platba",
@@ -432,7 +431,9 @@
       "rendered": "Vygenerováno v Securu · {{date}}",
       "kindLabel": "Typ dokladu",
       "fromSystem": "Z {{source}} · {{date}}",
-      "fromUpload": "Nahráno · {{date}}"
+      "fromUpload": "Nahráno · {{date}}",
+      "confirmRemoveTitle": "Odebrat dokument?",
+      "confirmRemoveDescription": "Soubor „{{name}}“ bude z této faktury odebrán."
     },
     "draftSaved": "Koncept uložen",
     "suggestions": {
@@ -450,7 +451,6 @@
       "title": "Opakované",
       "new": "Nová opakovaná faktura",
       "newDescription": "Dohoda s klientem o fakturaci každé období. Faktury se vystaví za vás, v daný den.",
-      "backToList": "Zpět na opakované",
       "empty": "Zatím žádné opakované faktury. Vytvořte jednu, nebo otevřete fakturu a zvolte \"Opakovat tuto fakturu\".",
       "emptyFiltered": "Nic s tímto stavem.",
       "created": "Opakovaná faktura vytvořena",
@@ -600,7 +600,11 @@
         "description": "Jedna za období, vystavená v daný den. Ručně vystavenou fakturu lze také přiřadit.",
         "empty": "V této dohodě zatím není žádná faktura.",
         "emptyNext": "Zatím žádná faktura. První se vystaví {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Smazat opakovanou fakturu?",
+      "confirmDeleteDescription": "Opakovaná faktura bude smazána a přestane vytvářet faktury. Tuto akci nelze vrátit zpět.",
+      "confirmRemoveTermTitle": "Smazat změnu ceny?",
+      "confirmRemoveTermDescription": "Změna ceny bude z této opakované faktury odebrána."
     },
     "products": {
       "title": "Produkty",
@@ -719,7 +723,9 @@
       "differenceTitle": "Platba je o {{difference}} nižší",
       "differenceHint": "Zaznamenejte rozdíl, aby se faktura uzavřela",
       "differenceNone": "Nezaznamenávat",
-      "figure": "Sraženo"
+      "figure": "Sraženo",
+      "confirmDeleteTitle": "Smazat srážku?",
+      "confirmDeleteDescription": "Srážka se přestane počítat a částka je opět nezaplacená."
     },
     "statement": {
       "asIssued": "Faktura ve vystavené podobě",
@@ -727,7 +733,9 @@
       "hint": "Platby a srážky od vystavení a zůstatek",
       "banner": "Toto PDF je faktura ve vystavené podobě. Od té doby bylo přijato {{paid}} a sraženo {{deducted}}: výpis ukazuje každou položku a zůstatek.",
       "title": "Výpis z účtu"
-    }
+    },
+    "confirmDeleteTitle": "Smazat fakturu?",
+    "confirmDeleteDescription": "Faktura bude smazána. Tuto akci nelze vrátit zpět."
   },
   "collections": {
     "title": "Sbírky",
@@ -1688,7 +1696,8 @@
       "rules": "Pravidla",
       "queue": "Čeká na vás",
       "history": "Historie"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Resetovat a znovu použít vše?"
   },
   "categories": {
     "title": "Kategorie",
@@ -2805,7 +2814,11 @@
     "splitWays_one": "rozděleno mezi {{count}} člena",
     "splitWays_few": "rozděleno mezi {{count}} členy",
     "splitWays_many": "rozděleno mezi {{count}} člena",
-    "splitWays_other": "rozděleno mezi {{count}} členů"
+    "splitWays_other": "rozděleno mezi {{count}} členů",
+    "confirmDeleteMemberTitle": "Smazat člena?",
+    "confirmDeleteMemberDescription": "{{name}} bude ze skupiny odebrán. Tuto akci nelze vrátit zpět.",
+    "confirmDeleteSettlementTitle": "Smazat vyrovnání?",
+    "confirmDeleteSettlementDescription": "Vyrovnání bude smazáno a zůstatky skupiny se změní. Tuto akci nelze vrátit zpět."
   },
   "privacy": {
     "hide": "Skrýt hodnoty",

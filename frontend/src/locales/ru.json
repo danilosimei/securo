@@ -151,7 +151,6 @@
     "deleted": "Draft deleted",
     "linked": "Payment linked",
     "unlinked": "Payment unlinked",
-    "backToList": "Back to invoices",
     "payments": "Payments",
     "noPayments": "По этому счёту пока ничего не поступило.",
     "linkedPayment": "Linked payment",
@@ -428,7 +427,9 @@
       "rendered": "Сформирована в Securo · {{date}}",
       "kindLabel": "Тип документа",
       "fromSystem": "Из {{source}} · {{date}}",
-      "fromUpload": "Загружено · {{date}}"
+      "fromUpload": "Загружено · {{date}}",
+      "confirmRemoveTitle": "Удалить документ?",
+      "confirmRemoveDescription": "Файл «{{name}}» будет удалён из этого счёта."
     },
     "draftSaved": "Черновик сохранён",
     "suggestions": {
@@ -446,7 +447,6 @@
       "title": "Регулярные",
       "new": "Новый регулярный счёт",
       "newDescription": "Договорённость с клиентом выставлять счёт каждый период. Счета выставляются за вас, в назначенный день.",
-      "backToList": "Назад к регулярным",
       "empty": "Регулярных счетов пока нет. Создайте один, или откройте счёт и выберите \"Повторять этот счёт\".",
       "emptyFiltered": "С таким статусом здесь ничего нет.",
       "created": "Регулярный счёт создан",
@@ -586,7 +586,11 @@
         "description": "Один за период, выставляется в назначенный день. Счёт, выставленный вручную, тоже можно привязать.",
         "empty": "По этой договорённости пока нет счетов.",
         "emptyNext": "Счетов пока нет. Первый будет выставлен {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Удалить регулярный счёт?",
+      "confirmDeleteDescription": "Регулярный счёт будет удалён и перестанет создавать счета. Это действие нельзя отменить.",
+      "confirmRemoveTermTitle": "Удалить изменение цены?",
+      "confirmRemoveTermDescription": "Изменение цены будет удалено из этого регулярного счёта."
     },
     "products": {
       "title": "Товары",
@@ -703,7 +707,9 @@
       "differenceTitle": "Платёж меньше на {{difference}}",
       "differenceHint": "Запишите разницу, чтобы закрыть счёт",
       "differenceNone": "Не записывать",
-      "figure": "Удержано"
+      "figure": "Удержано",
+      "confirmDeleteTitle": "Удалить вычет?",
+      "confirmDeleteDescription": "Вычет перестанет учитываться, и сумма снова станет к оплате."
     },
     "statement": {
       "asIssued": "Счёт в выставленном виде",
@@ -711,7 +717,9 @@
       "hint": "Платежи и удержания с момента выставления и остаток",
       "banner": "Этот PDF является счётом в выставленном виде. С тех пор получено {{paid}} и удержано {{deducted}}: выписка показывает каждую операцию и остаток.",
       "title": "Выписка по счёту"
-    }
+    },
+    "confirmDeleteTitle": "Удалить счёт?",
+    "confirmDeleteDescription": "Счёт будет удалён. Это действие нельзя отменить."
   },
   "collections": {
     "title": "Коллекции",
@@ -1601,7 +1609,8 @@
       "rules": "Правила",
       "queue": "Ждёт вас",
       "history": "История"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Сбросить и применить всё заново?"
   },
   "categories": {
     "title": "Категории",
@@ -2674,7 +2683,11 @@
       "project": "Проект",
       "client": "Клиент",
       "other": "Другое"
-    }
+    },
+    "confirmDeleteMemberTitle": "Удалить участника?",
+    "confirmDeleteMemberDescription": "{{name}} будет удалён из группы. Это действие нельзя отменить.",
+    "confirmDeleteSettlementTitle": "Удалить расчёт?",
+    "confirmDeleteSettlementDescription": "Расчёт будет удалён, и балансы группы изменятся. Это действие нельзя отменить."
   },
   "privacy": {
     "hide": "Скрыть суммы",

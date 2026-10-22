@@ -151,7 +151,6 @@
     "deleted": "ड्राफ़्ट हटाया गया",
     "linked": "भुगतान जोड़ा गया",
     "unlinked": "भुगतान हटाया गया",
-    "backToList": "इनवॉइस पर वापस",
     "payments": "भुगतान",
     "noPayments": "इस इनवॉइस के लिए अभी तक कुछ नहीं मिला।",
     "linkedPayment": "जुड़ा हुआ भुगतान",
@@ -428,7 +427,9 @@
       "rendered": "Securo द्वारा तैयार · {{date}}",
       "kindLabel": "दस्तावेज़ प्रकार",
       "fromSystem": "{{source}} से · {{date}}",
-      "fromUpload": "अपलोड किया गया · {{date}}"
+      "fromUpload": "अपलोड किया गया · {{date}}",
+      "confirmRemoveTitle": "दस्तावेज़ हटाएं?",
+      "confirmRemoveDescription": "फ़ाइल \"{{name}}\" इस चालान से हटा दी जाएगी।"
     },
     "draftSaved": "ड्राफ़्ट सहेजा गया",
     "suggestions": {
@@ -442,7 +443,6 @@
       "title": "आवर्ती",
       "new": "नया आवर्ती इनवॉइस",
       "newDescription": "किसी क्लाइंट के साथ हर अवधि में बिल भेजने का समझौता। इनवॉइस तय दिन पर आपके लिए अपने आप बनते हैं।",
-      "backToList": "आवर्ती पर वापस जाएँ",
       "empty": "अभी कोई आवर्ती इनवॉइस नहीं है। एक बनाएँ, या कोई इनवॉइस खोलकर \"इस इनवॉइस को दोहराएँ\" चुनें।",
       "emptyFiltered": "इस स्थिति में यहाँ कुछ नहीं है।",
       "created": "आवर्ती इनवॉइस बनाया गया",
@@ -582,7 +582,11 @@
         "description": "हर अवधि में एक, तय दिन पर बनता है। हाथ से बनाया इनवॉइस भी जोड़ा जा सकता है।",
         "empty": "इस समझौते के तहत अभी कोई इनवॉइस नहीं है।",
         "emptyNext": "अभी कोई इनवॉइस नहीं है। पहला {{date}} को बनेगा।"
-      }
+      },
+      "confirmDeleteTitle": "आवर्ती चालान हटाएं?",
+      "confirmDeleteDescription": "आवर्ती चालान हटा दिया जाएगा और नए चालान नहीं बनाएगा। इसे वापस नहीं किया जा सकता।",
+      "confirmRemoveTermTitle": "मूल्य परिवर्तन हटाएं?",
+      "confirmRemoveTermDescription": "मूल्य परिवर्तन इस आवर्ती चालान से हटा दिया जाएगा।"
     },
     "products": {
       "title": "उत्पाद",
@@ -699,7 +703,9 @@
       "differenceTitle": "भुगतान {{difference}} कम है",
       "differenceHint": "इनवॉइस बंद करने के लिए अंतर दर्ज करें",
       "differenceNone": "दर्ज न करें",
-      "figure": "कटौती"
+      "figure": "कटौती",
+      "confirmDeleteTitle": "कटौती हटाएं?",
+      "confirmDeleteDescription": "कटौती गिनी नहीं जाएगी और राशि फिर से बकाया हो जाएगी।"
     },
     "statement": {
       "asIssued": "जारी किया गया इनवॉइस",
@@ -707,7 +713,9 @@
       "hint": "जारी होने के बाद के भुगतान और कटौतियाँ, और शेष राशि",
       "banner": "यह PDF जारी किया गया इनवॉइस है। तब से {{paid}} प्राप्त हुए और {{deducted}} काटे गए: विवरण हर प्रविष्टि और शेष राशि दिखाता है।",
       "title": "खाता विवरण"
-    }
+    },
+    "confirmDeleteTitle": "चालान हटाएं?",
+    "confirmDeleteDescription": "चालान हटा दिया जाएगा। इसे वापस नहीं किया जा सकता।"
   },
   "collections": {
     "title": "संग्रह",
@@ -1584,7 +1592,8 @@
       "rules": "नियम",
       "queue": "आपकी प्रतीक्षा में",
       "history": "इतिहास"
-    }
+    },
+    "confirmResetAndReapplyTitle": "सब रीसेट करके दोबारा लागू करें?"
   },
   "categories": {
     "title": "श्रेणियाँ",
@@ -2649,7 +2658,11 @@
       "project": "प्रोजेक्ट",
       "client": "क्लाइंट",
       "other": "अन्य"
-    }
+    },
+    "confirmDeleteMemberTitle": "सदस्य हटाएं?",
+    "confirmDeleteMemberDescription": "{{name}} को समूह से हटा दिया जाएगा। इसे वापस नहीं किया जा सकता।",
+    "confirmDeleteSettlementTitle": "निपटान हटाएं?",
+    "confirmDeleteSettlementDescription": "निपटान हटा दिया जाएगा और समूह के शेष बदल जाएंगे। इसे वापस नहीं किया जा सकता।"
   },
   "privacy": {
     "hide": "मान छिपाएँ",

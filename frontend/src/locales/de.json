@@ -151,7 +151,6 @@
     "deleted": "Draft deleted",
     "linked": "Payment linked",
     "unlinked": "Payment unlinked",
-    "backToList": "Back to invoices",
     "payments": "Payments",
     "noPayments": "Auf diese Rechnung ist noch nichts eingegangen.",
     "linkedPayment": "Linked payment",
@@ -428,7 +427,9 @@
       "rendered": "Von Securo erzeugt · {{date}}",
       "kindLabel": "Dokumenttyp",
       "fromSystem": "Von {{source}} · {{date}}",
-      "fromUpload": "Hochgeladen · {{date}}"
+      "fromUpload": "Hochgeladen · {{date}}",
+      "confirmRemoveTitle": "Dokument entfernen?",
+      "confirmRemoveDescription": "Die Datei „{{name}}“ wird von dieser Rechnung entfernt."
     },
     "draftSaved": "Entwurf gespeichert",
     "suggestions": {
@@ -442,7 +443,6 @@
       "title": "Wiederkehrend",
       "new": "Neue wiederkehrende Rechnung",
       "newDescription": "Eine Vereinbarung mit einem Kunden, ihm jede Periode eine Rechnung zu stellen. Die Rechnungen werden am Stichtag für Sie erstellt.",
-      "backToList": "Zurück zu Wiederkehrend",
       "empty": "Noch keine wiederkehrenden Rechnungen. Richten Sie eine ein, oder öffnen Sie eine Rechnung und wählen Sie \"Diese Rechnung wiederholen\".",
       "emptyFiltered": "Nichts mit diesem Status.",
       "created": "Wiederkehrende Rechnung erstellt",
@@ -582,7 +582,11 @@
         "description": "Eine pro Periode, am Stichtag erstellt. Eine von Hand erstellte Rechnung kann ebenfalls verknüpft werden.",
         "empty": "Noch keine Rechnung unter dieser Vereinbarung.",
         "emptyNext": "Noch keine Rechnung. Die erste wird am {{date}} erstellt."
-      }
+      },
+      "confirmDeleteTitle": "Wiederkehrende Rechnung löschen?",
+      "confirmDeleteDescription": "Die wiederkehrende Rechnung wird gelöscht und erzeugt keine Rechnungen mehr. Das kann nicht rückgängig gemacht werden.",
+      "confirmRemoveTermTitle": "Preisänderung löschen?",
+      "confirmRemoveTermDescription": "Die Preisänderung wird aus dieser wiederkehrenden Rechnung entfernt."
     },
     "products": {
       "title": "Produkte",
@@ -699,7 +703,9 @@
       "differenceTitle": "Die Zahlung ist {{difference}} zu niedrig",
       "differenceHint": "Erfassen Sie die Differenz, damit die Rechnung geschlossen wird",
       "differenceNone": "Nicht erfassen",
-      "figure": "Abgezogen"
+      "figure": "Abgezogen",
+      "confirmDeleteTitle": "Abzug löschen?",
+      "confirmDeleteDescription": "Der Abzug zählt nicht mehr und der Betrag ist wieder offen."
     },
     "statement": {
       "asIssued": "Rechnung wie ausgestellt",
@@ -707,7 +713,9 @@
       "hint": "Zahlungen und Abzüge seit Ausstellung, und der Saldo",
       "banner": "Dieses PDF ist die Rechnung wie ausgestellt. Seitdem wurden {{paid}} erhalten und {{deducted}} abgezogen: der Kontoauszug zeigt jeden Posten und den Saldo.",
       "title": "Kontoauszug"
-    }
+    },
+    "confirmDeleteTitle": "Rechnung löschen?",
+    "confirmDeleteDescription": "Die Rechnung wird gelöscht. Das kann nicht rückgängig gemacht werden."
   },
   "collections": {
     "title": "Sammlungen",
@@ -1585,7 +1593,8 @@
       "rules": "Regeln",
       "queue": "Wartet auf Sie",
       "history": "Verlauf"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Alles zurücksetzen und neu anwenden?"
   },
   "categories": {
     "title": "Kategorien",
@@ -2650,7 +2659,11 @@
       "project": "Projekt",
       "client": "Kunde",
       "other": "Sonstiges"
-    }
+    },
+    "confirmDeleteMemberTitle": "Mitglied löschen?",
+    "confirmDeleteMemberDescription": "{{name}} wird aus der Gruppe entfernt. Das kann nicht rückgängig gemacht werden.",
+    "confirmDeleteSettlementTitle": "Ausgleich löschen?",
+    "confirmDeleteSettlementDescription": "Der Ausgleich wird gelöscht und die Salden der Gruppe ändern sich. Das kann nicht rückgängig gemacht werden."
   },
   "privacy": {
     "hide": "Werte ausblenden",

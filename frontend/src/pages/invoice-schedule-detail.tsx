@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -83,6 +84,7 @@ export default function InvoiceScheduleDetailPage() {
   const { canWrite } = useWorkspace()
 
   const [editOpen, setEditOpen] = useState(false)
+  const [confirming, setConfirming] = useState<{ kind: 'schedule' } | { kind: 'term'; id: string } | null>(null)
   const [endOpen, setEndOpen] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [termTarget, setTermTarget] = useState<InvoiceScheduleTerm | 'new' | null>(null)
@@ -249,7 +251,7 @@ export default function InvoiceScheduleDetailPage() {
                     </DropdownMenuItem>
                   )}
                   {actions.canDelete && (
-                    <DropdownMenuItem onClick={() => deleteMutation.mutate()} data-testid="schedule-delete" className="gap-2 text-sm text-destructive focus:text-destructive">
+                    <DropdownMenuItem onClick={() => setConfirming({ kind: 'schedule' })} data-testid="schedule-delete" className="gap-2 text-sm text-destructive focus:text-destructive">
                       <Trash2 className="h-4 w-4" />
                       {t('common.delete')}
                     </DropdownMenuItem>
@@ -367,7 +369,7 @@ export default function InvoiceScheduleDetailPage() {
                         <Pencil className="h-3.5 w-3.5" />
                       </IconAction>
                       {sortedTerms.length > 1 && (
-                        <IconAction onClick={() => removeTermMutation.mutate(term.id)} label={t('common.delete')}>
+                        <IconAction onClick={() => setConfirming({ kind: 'term', id: term.id })} label={t('common.delete')}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </IconAction>
                       )}
@@ -475,6 +477,17 @@ export default function InvoiceScheduleDetailPage() {
         onOpenChange={setLinkOpen}
         schedule={schedule}
         onLinked={refresh}
+      />
+      <DeleteConfirmationDialog
+        open={confirming !== null}
+        title={confirming?.kind === 'term' ? t('invoices.schedules.confirmRemoveTermTitle') : t('invoices.schedules.confirmDeleteTitle')}
+        description={confirming?.kind === 'term' ? t('invoices.schedules.confirmRemoveTermDescription') : t('invoices.schedules.confirmDeleteDescription')}
+        isPending={deleteMutation.isPending || removeTermMutation.isPending}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => {
+          if (confirming?.kind === 'schedule') deleteMutation.mutate()
+          else if (confirming) removeTermMutation.mutate(confirming.id, { onSettled: () => setConfirming(null) })
+        }}
       />
     </div>
   )

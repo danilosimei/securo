@@ -151,7 +151,6 @@
     "deleted": "Piszkozat törölve",
     "linked": "Befizetés összekapcsolva",
     "unlinked": "Befizetés leválasztva",
-    "backToList": "Vissza a számlákhoz",
     "payments": "Befizetések",
     "noPayments": "Erre a számlára még nem érkezett befizetés.",
     "linkedPayment": "Kapcsolt befizetés",
@@ -428,7 +427,9 @@
       "rendered": "Készítette: Securo · {{date}}",
       "kindLabel": "Dokumentum típusa",
       "fromSystem": "Forrás: {{source}} · {{date}}",
-      "fromUpload": "Feltöltve · {{date}}"
+      "fromUpload": "Feltöltve · {{date}}",
+      "confirmRemoveTitle": "Eltávolítod a dokumentumot?",
+      "confirmRemoveDescription": "A(z) „{{name}}” fájl törlődik erről a számláról."
     },
     "draftSaved": "Piszkozat mentve",
     "suggestions": {
@@ -442,7 +443,6 @@
       "title": "Ismétlődő",
       "new": "Új ismétlődő számla",
       "newDescription": "Megállapodás egy ügyféllel, hogy minden időszakban számlázol neki. A számlák a megfelelő napon automatikusan elkészülnek.",
-      "backToList": "Vissza az ismétlődőkhöz",
       "empty": "Még nincs ismétlődő számlád. Állíts be egyet, vagy nyiss meg egy számlát, és válaszd a „Számla ismétlése” lehetőséget.",
       "emptyFiltered": "Nincs semmi ezzel az állapottal.",
       "created": "Ismétlődő számla létrehozva",
@@ -582,7 +582,11 @@
         "description": "Időszakonként egy, a megfelelő napon elkészítve. Kézzel írt számlát is összekapcsolhatsz.",
         "empty": "Ehhez a megállapodáshoz még nincs számla.",
         "emptyNext": "Még nincs számla. Az első elkészülésének dátuma: {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Törlöd az ismétlődő számlát?",
+      "confirmDeleteDescription": "Az ismétlődő számla törlődik, és többé nem hoz létre számlákat. Ez nem vonható vissza.",
+      "confirmRemoveTermTitle": "Törlöd az árváltozást?",
+      "confirmRemoveTermDescription": "Az árváltozás törlődik erről az ismétlődő számláról."
     },
     "products": {
       "title": "Termékek",
@@ -699,7 +703,9 @@
       "differenceTitle": "A befizetésből {{difference}} hiányzik",
       "differenceHint": "Rögzítsd a különbözetet, hogy a számla lezáruljon",
       "differenceNone": "Ne rögzítsd",
-      "figure": "Levonva"
+      "figure": "Levonva",
+      "confirmDeleteTitle": "Törlöd a levonást?",
+      "confirmDeleteDescription": "A levonás nem számít többé, az összeg újra nyitott."
     },
     "statement": {
       "asIssued": "Számla kiállított formában",
@@ -707,7 +713,9 @@
       "hint": "Befizetések és levonások a kiállítás óta, valamint az egyenleg",
       "banner": "Ez a PDF a számla kiállításkori állapotát mutatja. Azóta {{paid}} érkezett be és {{deducted}} lett levonva: az egyenlegközlő mindegyiket és az egyenleget is mutatja.",
       "title": "Egyenlegközlő"
-    }
+    },
+    "confirmDeleteTitle": "Törlöd a számlát?",
+    "confirmDeleteDescription": "A számla törlődik. Ez nem vonható vissza."
   },
   "collections": {
     "title": "Gyűjtemények",
@@ -1584,7 +1592,8 @@
       "rules": "Szabályok",
       "queue": "Rád vár",
       "history": "Előzmények"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Visszaállítod és újraalkalmazod az összeset?"
   },
   "categories": {
     "title": "Kategóriák",
@@ -2649,7 +2658,11 @@
       "project": "Projekt",
       "client": "Ügyfél",
       "other": "Egyéb"
-    }
+    },
+    "confirmDeleteMemberTitle": "Törlöd a tagot?",
+    "confirmDeleteMemberDescription": "{{name}} kikerül a csoportból. Ez nem vonható vissza.",
+    "confirmDeleteSettlementTitle": "Törlöd az elszámolást?",
+    "confirmDeleteSettlementDescription": "Az elszámolás törlődik, és a csoport egyenlegei megváltoznak. Ez nem vonható vissza."
   },
   "privacy": {
     "hide": "Értékek elrejtése",

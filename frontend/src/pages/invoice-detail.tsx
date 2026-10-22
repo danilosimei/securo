@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { useUrlTab } from '@/hooks/use-url-tab'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -171,6 +172,8 @@ export default function InvoiceDetailPage() {
     decision(() => invoicesApi.writeOff(id), 'invoices.writtenOff'),
   )
   const reopenMutation = useMutation(decision(() => invoicesApi.reopen(id), 'invoices.reopened'))
+  // What waits for a yes before it is deleted.
+  const [confirming, setConfirming] = useState<{ kind: 'invoice' } | { kind: 'deduction'; id: string } | null>(null)
   const deleteMutation = useMutation({
     mutationFn: () => invoicesApi.remove(id),
     onSuccess: () => {
@@ -494,7 +497,7 @@ export default function InvoiceDetailPage() {
                     )}
                     {actions.canDelete && (
                       <DropdownMenuItem
-                        onClick={() => deleteMutation.mutate()}
+                        onClick={() => setConfirming({ kind: 'invoice' })}
                         data-testid="invoice-delete"
                         className="gap-2 text-sm text-destructive focus:text-destructive"
                       >
@@ -804,7 +807,7 @@ export default function InvoiceDetailPage() {
                       <td className="py-3 pr-4 sm:pr-5 text-right w-16">
                         {canWrite && invoice.status === 'open' && (
                           <IconAction
-                            onClick={() => undeductMutation.mutate(deduction.id)}
+                            onClick={() => setConfirming({ kind: 'deduction', id: deduction.id })}
                             label={t('common.delete')}
                             destructive
                           >
@@ -933,6 +936,17 @@ export default function InvoiceDetailPage() {
         balance={invoice.balance}
         currency={currency}
         onRecorded={refresh}
+      />
+      <DeleteConfirmationDialog
+        open={confirming !== null}
+        title={confirming?.kind === 'deduction' ? t('invoices.deductions.confirmDeleteTitle') : t('invoices.confirmDeleteTitle')}
+        description={confirming?.kind === 'deduction' ? t('invoices.deductions.confirmDeleteDescription') : t('invoices.confirmDeleteDescription')}
+        isPending={deleteMutation.isPending || undeductMutation.isPending}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => {
+          if (confirming?.kind === 'invoice') deleteMutation.mutate()
+          else if (confirming) undeductMutation.mutate(confirming.id, { onSettled: () => setConfirming(null) })
+        }}
       />
     </div>
   )

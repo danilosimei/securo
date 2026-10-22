@@ -151,7 +151,6 @@
     "deleted": "Draft deleted",
     "linked": "Payment linked",
     "unlinked": "Payment unlinked",
-    "backToList": "Back to invoices",
     "payments": "Payments",
     "noPayments": "Su questa fattura non è ancora arrivato nulla.",
     "linkedPayment": "Linked payment",
@@ -428,7 +427,9 @@
       "rendered": "Generata da Securo · {{date}}",
       "kindLabel": "Tipo di documento",
       "fromSystem": "Da {{source}} · {{date}}",
-      "fromUpload": "Caricato · {{date}}"
+      "fromUpload": "Caricato · {{date}}",
+      "confirmRemoveTitle": "Rimuovere il documento?",
+      "confirmRemoveDescription": "Il file \"{{name}}\" verrà rimosso da questo addebito."
     },
     "draftSaved": "Bozza salvata",
     "suggestions": {
@@ -442,7 +443,6 @@
       "title": "Ricorrenti",
       "new": "Nuova fattura ricorrente",
       "newDescription": "Un accordo con un cliente per fatturargli ogni periodo. Le fatture vengono scritte per te, nel giorno previsto.",
-      "backToList": "Torna alle ricorrenti",
       "empty": "Nessuna fattura ricorrente ancora. Creane una, oppure apri una fattura e scegli \"Ripeti questa fattura\".",
       "emptyFiltered": "Niente qui con questo stato.",
       "created": "Fattura ricorrente creata",
@@ -582,7 +582,11 @@
         "description": "Una per periodo, scritta nel giorno previsto. Anche una fattura scritta a mano può essere collegata.",
         "empty": "Nessuna fattura in questo accordo ancora.",
         "emptyNext": "Nessuna fattura ancora. La prima verrà scritta il {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Eliminare l'addebito ricorrente?",
+      "confirmDeleteDescription": "L'addebito ricorrente verrà eliminato e non genererà più addebiti. L'azione non può essere annullata.",
+      "confirmRemoveTermTitle": "Eliminare la variazione di prezzo?",
+      "confirmRemoveTermDescription": "La variazione di prezzo verrà rimossa da questo addebito ricorrente."
     },
     "products": {
       "title": "Prodotti",
@@ -699,7 +703,9 @@
       "differenceTitle": "Il pagamento è inferiore di {{difference}}",
       "differenceHint": "Registra la differenza per chiudere la fattura",
       "differenceNone": "Non registrare",
-      "figure": "Trattenuto"
+      "figure": "Trattenuto",
+      "confirmDeleteTitle": "Eliminare la deduzione?",
+      "confirmDeleteDescription": "La deduzione non conta più e l'importo torna in sospeso."
     },
     "statement": {
       "asIssued": "Fattura come emessa",
@@ -707,7 +713,9 @@
       "hint": "Pagamenti e trattenute dall'emissione, e il saldo",
       "banner": "Questo PDF è la fattura come emessa. Da allora sono stati ricevuti {{paid}} e trattenuti {{deducted}}: l'estratto conto mostra ogni voce e il saldo.",
       "title": "Estratto conto"
-    }
+    },
+    "confirmDeleteTitle": "Eliminare l'addebito?",
+    "confirmDeleteDescription": "L'addebito verrà eliminato. L'azione non può essere annullata."
   },
   "collections": {
     "title": "Collezioni",
@@ -1588,7 +1596,8 @@
       "rules": "Regole",
       "queue": "In attesa di te",
       "history": "Cronologia"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Reimpostare e riapplicare tutto?"
   },
   "categories": {
     "title": "Categorie",
@@ -2653,7 +2662,11 @@
       "project": "Progetto",
       "client": "Cliente",
       "other": "Altro"
-    }
+    },
+    "confirmDeleteMemberTitle": "Eliminare il membro?",
+    "confirmDeleteMemberDescription": "{{name}} verrà rimosso dal gruppo. L'azione non può essere annullata.",
+    "confirmDeleteSettlementTitle": "Eliminare il saldo?",
+    "confirmDeleteSettlementDescription": "Il saldo verrà eliminato e i saldi del gruppo cambieranno. L'azione non può essere annullata."
   },
   "privacy": {
     "hide": "Nascondi valori",

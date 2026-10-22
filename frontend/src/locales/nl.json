@@ -151,7 +151,6 @@
     "deleted": "Draft deleted",
     "linked": "Payment linked",
     "unlinked": "Payment unlinked",
-    "backToList": "Back to invoices",
     "payments": "Payments",
     "noPayments": "Er is nog niets op deze factuur binnengekomen.",
     "linkedPayment": "Linked payment",
@@ -428,7 +427,9 @@
       "rendered": "Gegenereerd door Securo · {{date}}",
       "kindLabel": "Documenttype",
       "fromSystem": "Van {{source}} · {{date}}",
-      "fromUpload": "Geüpload · {{date}}"
+      "fromUpload": "Geüpload · {{date}}",
+      "confirmRemoveTitle": "Document verwijderen?",
+      "confirmRemoveDescription": "Het bestand \"{{name}}\" wordt van deze factuur verwijderd."
     },
     "draftSaved": "Concept opgeslagen",
     "suggestions": {
@@ -442,7 +443,6 @@
       "title": "Terugkerend",
       "new": "Nieuwe terugkerende factuur",
       "newDescription": "Een afspraak met een klant om elke periode te factureren. De facturen worden op de dag zelf voor je opgesteld.",
-      "backToList": "Terug naar terugkerend",
       "empty": "Nog geen terugkerende facturen. Maak er een aan, of open een factuur en kies \"Deze factuur herhalen\".",
       "emptyFiltered": "Niets hier met deze status.",
       "created": "Terugkerende factuur aangemaakt",
@@ -582,7 +582,11 @@
         "description": "Eén per periode, op de dag zelf opgesteld. Een met de hand opgestelde factuur kan ook worden gekoppeld.",
         "empty": "Nog geen factuur onder deze afspraak.",
         "emptyNext": "Nog geen factuur. De eerste wordt opgesteld op {{date}}."
-      }
+      },
+      "confirmDeleteTitle": "Terugkerende factuur verwijderen?",
+      "confirmDeleteDescription": "De terugkerende factuur wordt verwijderd en maakt geen facturen meer aan. Dit kan niet ongedaan worden gemaakt.",
+      "confirmRemoveTermTitle": "Prijswijziging verwijderen?",
+      "confirmRemoveTermDescription": "De prijswijziging wordt uit deze terugkerende factuur verwijderd."
     },
     "products": {
       "title": "Producten",
@@ -699,7 +703,9 @@
       "differenceTitle": "De betaling is {{difference}} te laag",
       "differenceHint": "Leg het verschil vast zodat de factuur wordt afgesloten",
       "differenceNone": "Niet vastleggen",
-      "figure": "Ingehouden"
+      "figure": "Ingehouden",
+      "confirmDeleteTitle": "Aftrek verwijderen?",
+      "confirmDeleteDescription": "De aftrek telt niet meer mee en het bedrag staat weer open."
     },
     "statement": {
       "asIssued": "Factuur zoals uitgegeven",
@@ -707,7 +713,9 @@
       "hint": "Betalingen en inhoudingen sinds uitgifte, en het saldo",
       "banner": "Deze PDF is de factuur zoals uitgegeven. Sindsdien is {{paid}} ontvangen en {{deducted}} ingehouden: het rekeningoverzicht toont elke post en het saldo.",
       "title": "Rekeningoverzicht"
-    }
+    },
+    "confirmDeleteTitle": "Factuur verwijderen?",
+    "confirmDeleteDescription": "De factuur wordt verwijderd. Dit kan niet ongedaan worden gemaakt."
   },
   "collections": {
     "title": "Collecties",
@@ -1586,7 +1594,8 @@
       "rules": "Regels",
       "queue": "Wacht op jou",
       "history": "Geschiedenis"
-    }
+    },
+    "confirmResetAndReapplyTitle": "Alles resetten en opnieuw toepassen?"
   },
   "categories": {
     "title": "Categorieën",
@@ -2651,7 +2660,11 @@
       "other": "Anders"
     },
     "confirmDeleteTitle": "Groep verwijderen?",
-    "confirmDeleteDescription": "De groep \"{{name}}\" en de leden ervan worden permanent verwijderd. Groepen waarnaar wordt verwezen door transactiesplitsingen of afrekeningen kunnen pas worden verwijderd als die verwijzingen zijn weggehaald. Deze actie kan niet ongedaan worden gemaakt."
+    "confirmDeleteDescription": "De groep \"{{name}}\" en de leden ervan worden permanent verwijderd. Groepen waarnaar wordt verwezen door transactiesplitsingen of afrekeningen kunnen pas worden verwijderd als die verwijzingen zijn weggehaald. Deze actie kan niet ongedaan worden gemaakt.",
+    "confirmDeleteMemberTitle": "Lid verwijderen?",
+    "confirmDeleteMemberDescription": "{{name}} wordt uit de groep verwijderd. Dit kan niet ongedaan worden gemaakt.",
+    "confirmDeleteSettlementTitle": "Verrekening verwijderen?",
+    "confirmDeleteSettlementDescription": "De verrekening wordt verwijderd en de saldi van de groep veranderen. Dit kan niet ongedaan worden gemaakt."
   },
   "privacy": {
     "hide": "Waarden verbergen",

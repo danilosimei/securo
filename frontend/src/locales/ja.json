@@ -151,7 +151,6 @@
     "deleted": "下書きを削除しました",
     "linked": "入金を紐付けました",
     "unlinked": "入金の紐付けを解除しました",
-    "backToList": "請求書一覧に戻る",
     "payments": "入金",
     "noPayments": "この請求書への入金はまだありません。",
     "linkedPayment": "紐付け済みの入金",
@@ -428,7 +427,9 @@
       "rendered": "Securoが生成 · {{date}}",
       "kindLabel": "書類の種類",
       "fromSystem": "{{source}}から · {{date}}",
-      "fromUpload": "アップロード · {{date}}"
+      "fromUpload": "アップロード · {{date}}",
+      "confirmRemoveTitle": "書類を削除しますか？",
+      "confirmRemoveDescription": "ファイル「{{name}}」はこの請求から削除されます。"
     },
     "draftSaved": "下書きを保存しました",
     "suggestions": {
@@ -442,7 +443,6 @@
       "title": "定期請求",
       "new": "新しい定期請求書",
       "newDescription": "クライアントに期間ごとに請求する契約です。請求書は当日に自動で作成されます。",
-      "backToList": "定期請求に戻る",
       "empty": "定期請求書はまだありません。新しく作成するか、請求書を開いて「この請求書を繰り返す」を選んでください。",
       "emptyFiltered": "このステータスのものはありません。",
       "created": "定期請求書を作成しました",
@@ -582,7 +582,11 @@
         "description": "期間ごとに1件、当日に作成されます。手動で作成した請求書も紐付けできます。",
         "empty": "この契約の請求書はまだありません。",
         "emptyNext": "請求書はまだありません。最初の請求書は{{date}}に作成されます。"
-      }
+      },
+      "confirmDeleteTitle": "定期請求を削除しますか？",
+      "confirmDeleteDescription": "定期請求が削除され、新しい請求は作成されなくなります。この操作は元に戻せません。",
+      "confirmRemoveTermTitle": "価格変更を削除しますか？",
+      "confirmRemoveTermDescription": "価格変更はこの定期請求から削除されます。"
     },
     "products": {
       "title": "商品",
@@ -699,7 +703,9 @@
       "differenceTitle": "入金が {{difference}} 不足しています",
       "differenceHint": "差額を記録すると請求書が完了します",
       "differenceNone": "記録しない",
-      "figure": "控除額"
+      "figure": "控除額",
+      "confirmDeleteTitle": "控除を削除しますか？",
+      "confirmDeleteDescription": "控除は計上されなくなり、金額は再び未払いになります。"
     },
     "statement": {
       "asIssued": "発行時の請求書",
@@ -707,7 +713,9 @@
       "hint": "発行後の入金と控除、および残高",
       "banner": "このPDFは発行時の請求書です。その後 {{paid}} が入金され、{{deducted}} が控除されました。明細書で各項目と残高を確認できます。",
       "title": "取引明細書"
-    }
+    },
+    "confirmDeleteTitle": "請求を削除しますか？",
+    "confirmDeleteDescription": "請求が削除されます。この操作は元に戻せません。"
   },
   "collections": {
     "title": "コレクション",
@@ -1584,7 +1592,8 @@
       "rules": "ルール",
       "queue": "要対応",
       "history": "履歴"
-    }
+    },
+    "confirmResetAndReapplyTitle": "すべてリセットして再適用しますか？"
   },
   "categories": {
     "title": "カテゴリ",
@@ -2649,7 +2658,11 @@
       "project": "プロジェクト",
       "client": "クライアント",
       "other": "その他"
-    }
+    },
+    "confirmDeleteMemberTitle": "メンバーを削除しますか？",
+    "confirmDeleteMemberDescription": "{{name}}はグループから削除されます。この操作は元に戻せません。",
+    "confirmDeleteSettlementTitle": "精算を削除しますか？",
+    "confirmDeleteSettlementDescription": "精算が削除され、グループの残高が変わります。この操作は元に戻せません。"
   },
   "privacy": {
     "hide": "金額を隠す",
