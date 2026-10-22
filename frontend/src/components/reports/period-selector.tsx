@@ -220,3 +220,28 @@ export function MonthPeriodSelector({ value, onChange, locale, compactOnPhone = 
     </div>
   )
 }
+
+interface YearPeriodSelectorProps {
+  /** Selected year, or `null` for every year. */
+  value: number | null
+  /** Years worth offering (those that have something); the selected one is always listed. */
+  years: number[]
+  onChange: (year: number | null) => void
+  /** Text of one year ("Fiscal year 2026"). */
+  yearLabel: (year: number) => string
+  allLabel: string
+}
+
+/** One year at a time, or every year: the same frame and menu as the Reports
+ *  period. A menu rather than arrows, because only years that have something
+ *  are worth stepping to. */
+export function YearPeriodSelector({ value, years, onChange, yearLabel, allLabel }: YearPeriodSelectorProps) {
+  const list = Array.from(new Set(value ? [...years, value] : years)).sort((a, b) => b - a)
+  return (
+    <PeriodSegments
+      options={[{ key: 'all', label: allLabel }, ...list.map((y) => ({ key: String(y), label: yearLabel(y) }))]}
+      value={value ? String(value) : 'all'}
+      onSelect={(key) => onChange(key === 'all' ? null : Number(key))}
+    />
+  )
+}

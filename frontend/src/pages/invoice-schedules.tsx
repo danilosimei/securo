@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PageHeader } from '@/components/page-header'
+import { InvoiceTabs } from '@/components/invoice-tabs'
 import { SectionCard, Segmented, TH } from '@/components/invoice-ui'
 import { InvoiceLineEditor } from '@/components/invoice-line-editor'
 import { EndConditionFields, ScheduleBadge } from '@/components/invoice-schedule-ui'
@@ -101,9 +102,8 @@ export default function InvoiceSchedulesPage() {
   return (
     <div>
       <PageHeader
-        back={{ to: '/invoices', label: t('nav.invoices'), testId: 'schedules-back' }}
         section={t('nav.groupDaily')}
-        title={t('invoices.schedules.title')}
+        title={t('invoices.title')}
         action={
           canWrite ? (
             <Button onClick={() => setCreateOpen(true)} data-testid="schedule-new-button">
@@ -113,6 +113,8 @@ export default function InvoiceSchedulesPage() {
           ) : undefined
         }
       />
+
+      <InvoiceTabs tab="schedules" />
 
       {/* One row per currency, in the invoices page's shape: the headline
           figure with what supports it beside it. An agreement in euros and

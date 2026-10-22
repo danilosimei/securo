@@ -141,7 +141,7 @@ export default function InvoiceScheduleDetailPage() {
     onSuccess: () => {
       toast.success(t('invoices.schedules.deleted'))
       refresh()
-      navigate('/invoices/schedules')
+      navigate('/invoices?tab=schedules')
     },
     onError,
   })
@@ -188,7 +188,7 @@ export default function InvoiceScheduleDetailPage() {
   return (
     <div>
       <PageHeader
-        back={{ to: '/invoices/schedules', label: t('invoices.schedules.title'), testId: 'schedule-back' }}
+        back={{ to: '/invoices?tab=schedules', label: t('invoices.schedules.title'), testId: 'schedule-back' }}
         section={schedule.payee?.name ?? t('invoices.noClient')}
         title={schedule.name}
         action={

@@ -3,12 +3,10 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Calendar as CalendarIcon,
   ChevronDown,
-  Package,
   Plus,
   Receipt,
   Repeat,
@@ -35,14 +33,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
+import { YearPeriodSelector } from '@/components/reports/period-selector'
+import { InvoiceTabs, INVOICE_TABS } from '@/components/invoice-tabs'
+import { useUrlTab } from '@/hooks/use-url-tab'
+import InvoiceSchedulesPage from '@/pages/invoice-schedules'
+import ProductsPage from '@/pages/products'
 import { SectionCard, Segmented, StateBadge, TH } from '@/components/invoice-ui'
 import { InvoiceLineEditor } from '@/components/invoice-line-editor'
 import { InvoiceInstallmentsEditor } from '@/components/invoice-installments-editor'
@@ -80,7 +77,9 @@ import type {
  * there.
  */
 
-type Filter = 'all' | 'open' | 'overdue' | 'paid' | 'draft'
+const FILTERS = ['all', 'open', 'overdue', 'paid', 'draft'] as const
+type Filter = (typeof FILTERS)[number]
+const DIRECTIONS = ['receivable', 'payable'] as const
 
 /** The three derived states where money is still expected. `open` in the
  *  filter bar means all of them, which is why it is not a server query. */
@@ -96,7 +95,16 @@ const BUCKETS = [
   { key: 'd90_plus', tone: 'bg-rose-700/80' },
 ] as const
 
+/** `/invoices` is three tabs (`?tab=`): the invoices, the recurring ones and
+ *  the products. Each is its own page; this picks the one to show. */
 export default function InvoicesPage() {
+  const [tab] = useUrlTab(INVOICE_TABS)
+  if (tab === 'schedules') return <InvoiceSchedulesPage />
+  if (tab === 'products') return <ProductsPage />
+  return <InvoicesTab />
+}
+
+function InvoicesTab() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const locale = useDisplayLocale()
@@ -111,9 +119,23 @@ export default function InvoicesPage() {
   // Which ledger is on screen. A bigger axis than the state filter — the
   // totals above the list change with it — so it sits above the summary
   // rather than among the filters.
-  const [direction, setDirection] = useState<InvoiceDirection>('receivable')
-  const [year, setYear] = useState<number | null>(() => new Date().getFullYear())
-  const [filter, setFilter] = useState<Filter>('all')
+  // Direction, state and year live in the URL (`?dir=`, `?state=`, `?year=`),
+  // so a link or a reload lands on the same list.
+  const [direction, setDirection] = useUrlTab(DIRECTIONS, 'dir')
+  const [filter, setFilter] = useUrlTab(FILTERS, 'state')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const yearParam = searchParams.get('year')
+  const year = yearParam === 'all' ? null : /^\d{4}$/.test(yearParam ?? '') ? Number(yearParam) : new Date().getFullYear()
+  const setYear = (next: number | null) =>
+    setSearchParams(
+      (previous) => {
+        const params = new URLSearchParams(previous)
+        if (next === new Date().getFullYear()) params.delete('year')
+        else params.set('year', next ? String(next) : 'all')
+        return params
+      },
+      { replace: true },
+    )
   const [createOpen, setCreateOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
@@ -169,6 +191,15 @@ export default function InvoicesPage() {
       <PageHeader
         section={t('nav.groupDaily')}
         title={t('invoices.title')}
+        period={
+          <YearPeriodSelector
+            value={year}
+            years={facets?.years ?? []}
+            onChange={setYear}
+            yearLabel={(y) => t('invoices.fiscalYear', { year: y })}
+            allLabel={t('invoices.allYears')}
+          />
+        }
         action={
           <PageActions
             primary={
@@ -179,32 +210,27 @@ export default function InvoicesPage() {
                 </Button>
               ) : undefined
             }
-            items={[
-              // Only on the receivable side: an agreement is something we
-              // bill, and the payable ledger has nothing to emit.
-              ...(direction === 'receivable'
-                ? [
-                    { label: t('invoices.products.title'), icon: Package, onSelect: () => navigate('/invoices/products') },
-                    { label: t('invoices.schedules.title'), icon: Repeat, onSelect: () => navigate('/invoices/schedules') },
-                  ]
-                : []),
-              { label: t('invoices.settings.title'), icon: Settings2, onSelect: () => setSettingsOpen(true) },
-            ]}
+            items={[{ label: t('invoices.settings.title'), icon: Settings2, onSelect: () => setSettingsOpen(true) }]}
           />
         }
       />
 
-      <div className="mb-4">
-        <Segmented<InvoiceDirection>
-          value={direction}
-          onChange={setDirection}
-          testIdPrefix="invoice-direction"
-          options={[
-            { value: 'receivable', label: t('invoices.direction.receivable') },
-            { value: 'payable', label: t('invoices.direction.payable') },
-          ]}
-        />
-      </div>
+      {/* Which ledger is on screen. A bigger axis than the state filter —
+          the totals below change with it — so it sits with the tabs. */}
+      <InvoiceTabs
+        tab="invoices"
+        trailing={
+          <Segmented<InvoiceDirection>
+            value={direction}
+            onChange={setDirection}
+            testIdPrefix="invoice-direction"
+            options={[
+              { value: 'receivable', label: t('invoices.direction.receivable') },
+              { value: 'payable', label: t('invoices.direction.payable') },
+            ]}
+          />
+        }
+      />
 
       {/* One block, in the dashboard's shape: a headline figure with its
           supporting numbers beside it, and the accountant's view of the
@@ -315,7 +341,7 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4">
         <Segmented<Filter>
           value={filter}
           onChange={setFilter}
@@ -326,52 +352,6 @@ export default function InvoicesPage() {
             count: facets?.counts[value],
           }))}
         />
-
-        {/* The year sits with the list's own controls, not with the
-            summary: it scopes what is listed, and the summary above
-            deliberately has no year — an unpaid 2024 invoice is still
-            owed today. */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            {/* Same trigger the dashboard uses for its period: a
-                dropdown rather than the dashboard's arrows because only
-                years that have a document are worth stepping to, and
-                arrows would walk into empty ones. */}
-            <button
-              type="button"
-              data-testid="invoice-year-trigger"
-              className="inline-flex items-center justify-center gap-2 border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground hover:bg-muted/50 transition-all cursor-pointer min-w-[180px]"
-            >
-              <CalendarIcon className="size-3.5 text-muted-foreground" />
-              {year ? t('invoices.fiscalYear', { year }) : t('invoices.allYears')}
-              <ChevronDown className="size-3.5 text-muted-foreground ml-auto" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-[180px] p-1 bg-card border border-border rounded-xl shadow-md"
-          >
-            <DropdownMenuItem
-              onClick={() => setYear(null)}
-              data-testid="invoice-year-all"
-              className="text-sm"
-            >
-              {t('invoices.allYears')}
-            </DropdownMenuItem>
-            {/* Only years that actually have an invoice. Offering an
-                empty year is offering a dead end. */}
-            {(facets?.years ?? []).map((option) => (
-              <DropdownMenuItem
-                key={option}
-                onClick={() => setYear(option)}
-                data-testid={`invoice-year-${option}`}
-                className="text-sm tabular-nums"
-              >
-                {t('invoices.fiscalYear', { year: option })}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
       {/* Switching the filter or direction keeps this list up, dimmed, until the new one

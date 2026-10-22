@@ -30,6 +30,7 @@ import { useUrlSearch } from '@/hooks/use-url-search'
 import { RowActions } from '@/components/ui/row-actions'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { PageHeader } from '@/components/page-header'
+import { InvoiceTabs } from '@/components/invoice-tabs'
 import { SectionCard, Segmented, TH } from '@/components/invoice-ui'
 import { CurrencySelect } from '@/components/currency-select'
 import { cn } from '@/lib/utils'
@@ -122,9 +123,8 @@ export default function ProductsPage() {
   return (
     <div>
       <PageHeader
-        back={{ to: '/invoices', label: t('nav.invoices'), testId: 'products-back' }}
         section={t('nav.groupDaily')}
-        title={t('invoices.products.title')}
+        title={t('invoices.title')}
         action={
           canWrite ? (
             <Button onClick={() => setEditing('new')} data-testid="product-new-button">
@@ -134,6 +134,8 @@ export default function ProductsPage() {
           ) : undefined
         }
       />
+
+      <InvoiceTabs tab="products" />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Segmented<Filter>
