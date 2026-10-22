@@ -1151,7 +1151,15 @@
     "clearGroupFilter": "グループフィルターを解除",
     "attachFile": "添付",
     "moreOptions": "その他のオプション",
-    "syncedBadge": "同期済み"
+    "syncedBadge": "同期済み",
+    "filterFromScreen": "{{origin}}からのフィルター: {{summary}}",
+    "filterFromScreenClear": "フィルターを解除",
+    "filterOrigin": {
+      "reports": "レポート",
+      "dashboard": "ダッシュボード",
+      "group": "グループ",
+      "payee": "相手先"
+    }
   },
   "accounts": {
     "title": "口座",

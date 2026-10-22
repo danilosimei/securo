@@ -1151,7 +1151,15 @@
     "clearGroupFilter": "समूह फ़िल्टर हटाएँ",
     "attachFile": "संलग्न करें",
     "moreOptions": "और विकल्प",
-    "syncedBadge": "सिंक की गई"
+    "syncedBadge": "सिंक की गई",
+    "filterFromScreen": "{{origin}} से फ़िल्टर: {{summary}}",
+    "filterFromScreenClear": "फ़िल्टर हटाएं",
+    "filterOrigin": {
+      "reports": "रिपोर्ट",
+      "dashboard": "डैशबोर्ड",
+      "group": "समूह",
+      "payee": "व्यक्ति"
+    }
   },
   "accounts": {
     "title": "खाते",

@@ -798,7 +798,7 @@ export default function GroupDetailPage() {
                 variant="ghost"
                 size="sm"
                 className="gap-1 h-8 text-xs"
-                onClick={() => navigate(`/transactions?group_id=${groupId}`)}
+                onClick={() => navigate(`/transactions?group_id=${groupId}&from_screen=group`)}
               >
                 {t('splitGroups.viewAllTransactions')}
                 <ArrowRight size={12} />
@@ -822,7 +822,7 @@ export default function GroupDetailPage() {
               <li
                 key={tx.id}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-muted cursor-pointer transition-colors"
-                onClick={() => navigate(`/transactions?group_id=${groupId}&highlight=${tx.id}`)}
+                onClick={() => navigate(`/transactions?group_id=${groupId}&highlight=${tx.id}&from_screen=group`)}
               >
                 <CategoryIcon
                   icon={tx.category?.icon}

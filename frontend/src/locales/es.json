@@ -1153,7 +1153,15 @@
     "clearGroupFilter": "Quitar filtro de grupo",
     "attachFile": "Adjuntar",
     "moreOptions": "Más opciones",
-    "syncedBadge": "sincronizada"
+    "syncedBadge": "sincronizada",
+    "filterFromScreen": "Filtro de {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Borrar filtro",
+    "filterOrigin": {
+      "reports": "Informes",
+      "dashboard": "Panel",
+      "group": "Grupo",
+      "payee": "Persona"
+    }
   },
   "accounts": {
     "title": "Cuentas",

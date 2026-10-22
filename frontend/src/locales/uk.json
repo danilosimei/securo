@@ -1165,7 +1165,15 @@
     "clearGroupFilter": "Скинути фільтр групи",
     "attachFile": "Прикріпити",
     "moreOptions": "Інші параметри",
-    "syncedBadge": "синхронізована"
+    "syncedBadge": "синхронізована",
+    "filterFromScreen": "Фільтр із розділу {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Скинути фільтр",
+    "filterOrigin": {
+      "reports": "Звіти",
+      "dashboard": "Панель",
+      "group": "Група",
+      "payee": "Контакт"
+    }
   },
   "accounts": {
     "title": "Рахунки",

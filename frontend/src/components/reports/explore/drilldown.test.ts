@@ -26,7 +26,7 @@ describe('drilldownTransactionParams', () => {
 describe('transactionsPageLink', () => {
   it('keeps the period, category and store', () => {
     expect(transactionsPageLink({ range, categoryId: 'c1', merchantKey: 'a b' })).toBe(
-      '/transactions?from=2025-10-01&to=2026-09-30&category_id=c1&merchant_key=a+b',
+      '/transactions?from=2025-10-01&to=2026-09-30&category_id=c1&merchant_key=a+b&from_screen=reports',
     )
     expect(transactionsPageLink({ range, categoryId: 'none', merchantKey: 'k' })).toContain('uncategorized=1')
   })

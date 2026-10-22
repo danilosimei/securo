@@ -38,6 +38,8 @@ import { RuleDialog } from '@/components/rule-dialog'
 import { readRememberedMonth, rememberMonth } from '@/hooks/use-month-param'
 import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import { PageHeader } from '@/components/page-header'
+import { FilterOriginBanner } from '@/components/filter-origin-banner'
+import { parseFilterOrigin, type FilterOrigin } from '@/lib/filter-origin'
 import { calculateRangeSelection } from '@/lib/selection-utils'
 import { isManualInstallmentSeriesRow } from '@/lib/installment-series'
 import { CategoryIcon } from '@/components/category-icon'
@@ -155,6 +157,8 @@ export default function TransactionsPage() {
     setFilterTo(to)
     setPage(1)
   }
+  // Set when another screen (Reports, Dashboard, a group, a person) opened the page with filters.
+  const [filterOrigin, setFilterOrigin] = useState<FilterOrigin | null>(() => parseFilterOrigin(searchParams.get('from_screen')))
   const [searchInput, setSearchInput] = useState(() => searchParams.get('q') ?? '')
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') ?? '')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -252,6 +256,7 @@ export default function TransactionsPage() {
     prevSearchRef.current = search
 
     const nextQ = searchParams.get('q') ?? ''
+    setFilterOrigin(parseFilterOrigin(searchParams.get('from_screen')))
     setViewMode(searchParams.get('view') === 'calendar' ? 'calendar' : 'list')
     setCalendarSelectedDate(searchParams.get('day') ?? '')
     setSearchInput(nextQ)
@@ -311,6 +316,7 @@ export default function TransactionsPage() {
         ['min_amount', filterMinAmount],
         ['max_amount', filterMaxAmount],
         ['hide_ignored', hideIgnored ? 'true' : ''],
+        ['from_screen', filterOrigin ?? ''],
       ].filter(([, v]) => v.length),
     );
 
@@ -338,6 +344,7 @@ export default function TransactionsPage() {
     filterMinAmount,
     filterMaxAmount,
     hideIgnored,
+    filterOrigin,
   ]);
 
   useEffect(() => {
@@ -1341,6 +1348,47 @@ export default function TransactionsPage() {
     }
   }
 
+  const clearAllFilters = () => {
+    setFilterFrom('')
+    setFilterMerchantKey('')
+    setFilterTo('')
+    setFilterAccountIds([])
+    setFilterCategoryIds([])
+    setFilterUncategorized(false)
+    setFilterPayee('')
+    setFilterGroupId('')
+    setFilterType('')
+    setFilterStatus('')
+    setFilterCategorySource([])
+    setFilterMinAmount('')
+    setFilterMaxAmount('')
+    handleHideIgnoredChange(false)
+    setSearchInput('')
+    setSearchQuery('')
+    clearTagFilters()
+    setPage(1)
+    setFilterOrigin(null)
+  }
+
+  // What the filters from another screen add up to, in a line for the banner.
+  const originSummary = (() => {
+    const names = <T extends { id: string; name: string }>(list: T[] | undefined, ids: string[]) =>
+      ids.map((id) => list?.find((item) => item.id === id)?.name).filter((name): name is string => !!name)
+    const day = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString(locale)
+    const parts: string[] = []
+    if (filterFrom || filterTo) parts.push(filterFrom && filterTo ? `${day(filterFrom)} - ${day(filterTo)}` : day(filterFrom || filterTo))
+    if (filterUncategorized) parts.push(t('transactions.uncategorized'))
+    parts.push(...names(allCategoriesList, filterCategoryIds))
+    parts.push(...names(accountsList, filterAccountIds))
+    if (filterPayee) parts.push(...names(payeesList, [filterPayee]))
+    if (filterGroupId && filterGroup?.name) parts.push(filterGroup.name)
+    if (filterMerchantKey) parts.push(filterMerchantKey)
+    if (filterType) parts.push(filterType === 'credit' ? t('transactions.typeIncome') : t('transactions.typeExpense'))
+    if (filterStatus) parts.push(filterStatus === 'pending' ? t('transactions.statusPending') : t('transactions.statusPosted'))
+    if (searchQuery) parts.push(`"${searchQuery}"`)
+    return parts.join(', ')
+  })()
+
   // A single non-shared, non-transfer row selected can be duplicated; shared
   // and transfer rows can't (issue #158). Computed once for both the desktop
   // button and the mobile overflow menu.
@@ -1384,6 +1432,10 @@ export default function TransactionsPage() {
         }
       />
 
+      {filterOrigin && (
+        <FilterOriginBanner origin={filterOrigin} summary={originSummary} onClear={clearAllFilters} />
+      )}
+
       {/* Filters */}
       <TransactionsFilterBar
         searchInput={searchInput}
@@ -1426,25 +1478,7 @@ export default function TransactionsPage() {
         filterMinAmount={filterMinAmount}
         filterMaxAmount={filterMaxAmount}
         onAmountRangeChange={(min, max) => { setFilterMinAmount(min); setFilterMaxAmount(max); setPage(1) }}
-        onClearAll={() => {
-          setFilterFrom('')
-          setFilterTo('')
-          setFilterAccountIds([])
-          setFilterCategoryIds([])
-          setFilterUncategorized(false)
-          setFilterPayee('')
-          setFilterGroupId('')
-          setFilterType('')
-          setFilterStatus('')
-          setFilterCategorySource([])
-          setFilterMinAmount('')
-          setFilterMaxAmount('')
-          handleHideIgnoredChange(false)
-          setSearchInput('')
-          setSearchQuery('')
-          clearTagFilters()
-          setPage(1)
-        }}
+        onClearAll={clearAllFilters}
         accounts={accountsList ?? []}
         categories={categoriesList ?? []}
         referenceCategories={allCategoriesList}

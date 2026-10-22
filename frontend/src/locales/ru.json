@@ -1165,7 +1165,15 @@
     "clearGroupFilter": "Сбросить фильтр группы",
     "attachFile": "Прикрепить",
     "moreOptions": "Другие параметры",
-    "syncedBadge": "синхронизирована"
+    "syncedBadge": "синхронизирована",
+    "filterFromScreen": "Фильтр из раздела {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Сбросить фильтр",
+    "filterOrigin": {
+      "reports": "Отчёты",
+      "dashboard": "Панель",
+      "group": "Группа",
+      "payee": "Контакт"
+    }
   },
   "accounts": {
     "title": "Счета",

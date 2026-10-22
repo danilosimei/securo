@@ -1215,7 +1215,15 @@
     "clearGroupFilter": "Zrušit filtr skupiny",
     "attachFile": "Přiložit",
     "moreOptions": "Další možnosti",
-    "syncedBadge": "synchronizováno"
+    "syncedBadge": "synchronizováno",
+    "filterFromScreen": "Filtr z {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Zrušit filtr",
+    "filterOrigin": {
+      "reports": "Přehledy",
+      "dashboard": "Přehled",
+      "group": "Skupina",
+      "payee": "Osoba"
+    }
   },
   "accounts": {
     "title": "Účty",

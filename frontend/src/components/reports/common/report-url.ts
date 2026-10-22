@@ -50,6 +50,7 @@ export function exploreLink(
       params.set('to', range.to)
     }
     params.set('merchant_key', target.merchant)
+    params.set('from_screen', 'reports')
     return { to: `/transactions?${params}` }
   }
   const params = new URLSearchParams({ tab: 'explore' })

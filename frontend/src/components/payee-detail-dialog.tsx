@@ -158,7 +158,7 @@ export function PayeeDetailDialog({
                         // Close first: navigating out from inside the dialog
                         // leaves the scroll lock mounted over the next route.
                         onOpenChange(false)
-                        navigate(`/transactions?payee_id=${summaryData.payee.id}`)
+                        navigate(`/transactions?payee_id=${summaryData.payee.id}&from_screen=payee`)
                       }}
                     >
                       {t('payees.viewAllTransactions', { count: summaryData.transaction_count })}

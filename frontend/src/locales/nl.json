@@ -1151,7 +1151,15 @@
     "clearGroupFilter": "Groepsfilter wissen",
     "attachFile": "Bijvoegen",
     "moreOptions": "Meer opties",
-    "syncedBadge": "gesynchroniseerd"
+    "syncedBadge": "gesynchroniseerd",
+    "filterFromScreen": "Filter vanuit {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Filter wissen",
+    "filterOrigin": {
+      "reports": "Rapporten",
+      "dashboard": "Dashboard",
+      "group": "Groep",
+      "payee": "Persoon"
+    }
   },
   "accounts": {
     "title": "Rekeningen",

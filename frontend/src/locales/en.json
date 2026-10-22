@@ -1151,7 +1151,15 @@
     "clearGroupFilter": "Clear group filter",
     "attachFile": "Attach",
     "moreOptions": "More options",
-    "syncedBadge": "synced"
+    "syncedBadge": "synced",
+    "filterFromScreen": "Filter from {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Clear filter",
+    "filterOrigin": {
+      "reports": "Reports",
+      "dashboard": "Dashboard",
+      "group": "Group",
+      "payee": "Person"
+    }
   },
   "accounts": {
     "title": "Accounts",

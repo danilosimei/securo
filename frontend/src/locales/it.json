@@ -1153,7 +1153,15 @@
     "clearGroupFilter": "Rimuovi filtro gruppo",
     "attachFile": "Allega",
     "moreOptions": "Altre opzioni",
-    "syncedBadge": "sincronizzata"
+    "syncedBadge": "sincronizzata",
+    "filterFromScreen": "Filtro da {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Rimuovi filtro",
+    "filterOrigin": {
+      "reports": "Report",
+      "dashboard": "Dashboard",
+      "group": "Gruppo",
+      "payee": "Persona"
+    }
   },
   "accounts": {
     "title": "Conti",

@@ -1151,7 +1151,15 @@
     "clearGroupFilter": "Csoportszűrő törlése",
     "attachFile": "Csatolás",
     "moreOptions": "További beállítások",
-    "syncedBadge": "szinkronizált"
+    "syncedBadge": "szinkronizált",
+    "filterFromScreen": "Szűrő innen: {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Szűrő törlése",
+    "filterOrigin": {
+      "reports": "Jelentések",
+      "dashboard": "Irányítópult",
+      "group": "Csoport",
+      "payee": "Személy"
+    }
   },
   "accounts": {
     "title": "Számlák",

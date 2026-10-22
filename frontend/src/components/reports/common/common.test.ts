@@ -43,7 +43,7 @@ describe('report links', () => {
 
   it('sends a store without category to its transactions', () => {
     expect(exploreLink({ period: 'last_12m', merchant: 'SON PET' }, {}, { from: '2025-10-01', to: '2026-09-30' }).to).toBe(
-      '/transactions?from=2025-10-01&to=2026-09-30&merchant_key=SON+PET',
+      '/transactions?from=2025-10-01&to=2026-09-30&merchant_key=SON+PET&from_screen=reports',
     )
   })
 

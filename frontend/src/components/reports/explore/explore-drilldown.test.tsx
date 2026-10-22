@@ -259,7 +259,7 @@ describe('Explore store transactions', () => {
     const link = await screen.findByRole('link', { name: new RegExp(t('reports.explore.openInTransactions')) })
     expect(link).toHaveAttribute(
       'href',
-      '/transactions?from=2025-10-01&to=2026-09-30&category_id=c1&merchant_key=stellantis',
+      '/transactions?from=2025-10-01&to=2026-09-30&category_id=c1&merchant_key=stellantis&from_screen=reports',
     )
   })
 

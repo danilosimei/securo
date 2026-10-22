@@ -1336,7 +1336,15 @@
     "clearGroupFilter": "Κατάργηση φίλτρου ομάδας",
     "attachFile": "Επισύναψη",
     "moreOptions": "Περισσότερες επιλογές",
-    "syncedBadge": "συγχρονισμένη"
+    "syncedBadge": "συγχρονισμένη",
+    "filterFromScreen": "Φίλτρο από {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Εκκαθάριση φίλτρου",
+    "filterOrigin": {
+      "reports": "Αναφορές",
+      "dashboard": "Πίνακας",
+      "group": "Ομάδα",
+      "payee": "Πρόσωπο"
+    }
   },
   "budgets": {
     "title": "Προϋπολογισμοί",

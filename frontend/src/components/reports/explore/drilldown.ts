@@ -61,5 +61,6 @@ export function transactionsPageLink({ range, categoryId, merchantKey, accountId
   else if (categoryId !== 'all') params.set('category_id', categoryId)
   if (accountId) params.set('account_id', accountId)
   params.set('merchant_key', merchantKey)
+  params.set('from_screen', 'reports')
   return `/transactions?${params}`
 }

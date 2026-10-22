@@ -1151,7 +1151,15 @@
     "clearGroupFilter": "Gruppenfilter entfernen",
     "attachFile": "Anhängen",
     "moreOptions": "Weitere Optionen",
-    "syncedBadge": "synchronisiert"
+    "syncedBadge": "synchronisiert",
+    "filterFromScreen": "Filter aus {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Filter löschen",
+    "filterOrigin": {
+      "reports": "Berichte",
+      "dashboard": "Übersicht",
+      "group": "Gruppe",
+      "payee": "Person"
+    }
   },
   "accounts": {
     "title": "Konten",

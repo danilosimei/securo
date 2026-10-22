@@ -1,10 +1,10 @@
 /** A link from Reports > Explore filters the list by store (`merchant_key`). */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 
 import TransactionsPage from '@/pages/transactions'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { renderWithProviders } from '@/test/utils'
+import { renderWithProviders, t } from '@/test/utils'
 
 const api = vi.hoisted(() => {
   const fn = () => vi.fn().mockResolvedValue([])
@@ -77,5 +77,27 @@ describe('transactions page: merchant_key', () => {
 
     await waitFor(() => expect(api.transactions.list).toHaveBeenCalled())
     expect(api.transactions.list).toHaveBeenCalledWith(expect.objectContaining({ merchant_key: undefined }))
+  })
+
+  it('says where the filter came from and clears it with the X', async () => {
+    const { user } = renderWithProviders(
+      <TooltipProvider>
+        <TransactionsPage />
+      </TooltipProvider>,
+      { route: '/transactions?from=2026-10-01&to=2026-10-31&merchant_key=stellantis&from_screen=reports' },
+    )
+    const banner = await screen.findByTestId('filter-origin-banner')
+    expect(banner).toHaveTextContent(t('transactions.filterOrigin.reports'))
+    expect(banner).toHaveTextContent('stellantis')
+
+    await user.click(screen.getByRole('button', { name: t('transactions.filterFromScreenClear') }))
+    expect(screen.queryByTestId('filter-origin-banner')).not.toBeInTheDocument()
+    await waitFor(() => expect(api.transactions.list).toHaveBeenLastCalledWith(expect.objectContaining({ merchant_key: undefined, from: undefined })))
+  })
+
+  it('shows no banner when the page was opened on its own', async () => {
+    renderWithProviders(<TooltipProvider><TransactionsPage /></TooltipProvider>, { route: '/transactions?merchant_key=x' })
+    await waitFor(() => expect(api.transactions.list).toHaveBeenCalled())
+    expect(screen.queryByTestId('filter-origin-banner')).not.toBeInTheDocument()
   })
 })

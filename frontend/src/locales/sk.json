@@ -1199,7 +1199,15 @@
     "clearGroupFilter": "Zrušiť filter skupiny",
     "attachFile": "Priložiť",
     "moreOptions": "Ďalšie možnosti",
-    "syncedBadge": "synchronizované"
+    "syncedBadge": "synchronizované",
+    "filterFromScreen": "Filter z {{origin}}: {{summary}}",
+    "filterFromScreenClear": "Zrušiť filter",
+    "filterOrigin": {
+      "reports": "Prehľady",
+      "dashboard": "Prehľad",
+      "group": "Skupina",
+      "payee": "Osoba"
+    }
   },
   "accounts": {
     "title": "Účty",

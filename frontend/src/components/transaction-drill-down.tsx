@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery } from '@tanstack/react-query'
 import { transactions as transactionsApi, dashboard, admin } from '@/lib/api'
-import { AlertTriangle, ChevronLeft, ChevronRight, Info, Paperclip, X } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, Info, Paperclip, X } from 'lucide-react'
 import { CategoryIcon } from '@/components/category-icon'
 import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
 import { ProjectedTransactionBadge } from '@/components/projected-transaction-badge'
@@ -13,6 +14,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import type { Transaction } from '@/types'
 import { formatCurrency } from '@/lib/format'
+import { drillDownTransactionsLink } from '@/lib/drill-down-link'
 
 export const DRILL_DOWN_PAGE_SIZE = 50
 
@@ -273,6 +275,15 @@ export function TransactionDrillDown({
           <h2 className="text-sm font-semibold text-foreground truncate pr-4">
             {filter?.title}
           </h2>
+          {filter && (
+            <Link
+              to={drillDownTransactionsLink(filter)}
+              className="mr-2 inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              {t('reports.explore.openInTransactions')}
+              <ExternalLink size={12} aria-hidden="true" />
+            </Link>
+          )}
           <button
             onClick={onClose}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
