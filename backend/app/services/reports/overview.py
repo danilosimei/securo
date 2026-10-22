@@ -4,10 +4,13 @@ Every number comes from the shared account rules (`rules.py`), so the tab,
 the Explorar tab and the dashboard agree. Highlights are a closed list of
 rules, each with a limit (constants below) and each firing at most once.
 """
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from functools import lru_cache
+from pathlib import Path
 from statistics import median
 from typing import Any, Optional
 
@@ -43,6 +46,17 @@ RULES = (
     "heavy_group",
     "to_review",
 )
+
+_TAXONOMY = Path(__file__).resolve().parents[2] / "data" / "default_categories.json"
+
+
+@lru_cache(maxsize=1)
+def _generic_group_names() -> frozenset[str]:
+    """Seeded "Other" group names in every language: too vague to be a highlight."""
+    group = json.loads(_TAXONOMY.read_text(encoding="utf-8"))["groups"]["other"]
+    names = set(group["names"].values()) | set(group.get("aliases", ()))
+    return frozenset(n.lower() for n in names)
+
 
 MAX_HIGHLIGHTS = 6
 MAX_CHANGES = 5
@@ -305,13 +319,12 @@ async def _money_map(
         entry["categories"].append((cid, item.label, item.value))
     group_rows = sorted(groups.values(), key=lambda g: (-g["value"], g["label"]))
 
-    # Income is shown by the group its categories sit in ("Salário & Renda").
+    # Income is shown by category (Salário, Dividendos, Freela...), never folded
+    # into its group; income without a category stays "A conferir".
     income: dict[Any, list] = {}
     for item in income_items:
         if item.key == UNCATEGORIZED_KEY:
             slot, rid, label = "none", None, INCOME_TO_CHECK_LABEL
-        elif item.group_id in group_names:
-            slot, rid, label = item.group_id, str(item.group_id), group_names[item.group_id]
         else:
             slot, rid, label = item.key, item.key, item.label
         entry = income.setdefault(slot, [rid, label, ZERO])
@@ -490,6 +503,7 @@ async def _highlights(
         for ref, value in by_group.items()
         if ref.kind == "group"
         and ref.id is not None
+        and ref.label.lower() not in _generic_group_names()
         and total_spending > 0
         and value / total_spending > HEAVY_GROUP_MIN_SHARE
     ]

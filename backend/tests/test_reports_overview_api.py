@@ -323,3 +323,50 @@ async def test_custom_period_keeps_its_dates_in_the_links(client, auth_headers, 
     assert _rules(body)["spike"]["link"] == {
         "tab": "explore", "period": "custom", "from": "2026-09-01", "to": "2026-09-30",
     }
+
+
+@pytest.mark.asyncio
+async def test_money_map_income_is_listed_by_category_not_by_group(client, auth_headers, world):
+    session, ws_id, user_id = world["session"], world["ws_id"], world["user_id"]
+    renda = CategoryGroup(id=uuid.uuid4(), user_id=user_id, workspace_id=ws_id, name="Salário & Renda")
+    session.add(renda)
+    await session.flush()
+    freela = Category(
+        id=uuid.uuid4(), user_id=user_id, workspace_id=ws_id, name="Freela",
+        group_id=renda.id, report_kind="income",
+    )
+    dividendos = Category(
+        id=uuid.uuid4(), user_id=user_id, workspace_id=ws_id, name="Dividendos",
+        group_id=renda.id, report_kind="income",
+    )
+    session.add_all([freela, dividendos])
+    await session.flush()
+    world["cats"].update({"freela": freela, "dividendos": dividendos})
+    world["add"]("Cliente", "freela", 700, date(2026, 8, 9), "credit")
+    world["add"]("Bolsa", "dividendos", 900, date(2026, 8, 10), "credit")
+    await session.commit()
+    income = (await _get(client, auth_headers))["money_map"]["income"]
+    assert [(r["label"], r["id"], r["value"]) for r in income] == [
+        ("Salário", str(world["cats"]["salario"].id), "30000.00"),
+        ("Dividendos", str(dividendos.id), "900.00"),
+        ("Freela", str(freela.id), "700.00"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_heavy_group_skips_the_generic_other_group(client, auth_headers, world):
+    session, ws_id, user_id = world["session"], world["ws_id"], world["user_id"]
+    outros = CategoryGroup(id=uuid.uuid4(), user_id=user_id, workspace_id=ws_id, name="Outros")
+    session.add(outros)
+    await session.flush()
+    misc = Category(
+        id=uuid.uuid4(), user_id=user_id, workspace_id=ws_id, name="Diversos", group_id=outros.id
+    )
+    session.add(misc)
+    await session.flush()
+    world["cats"]["misc"] = misc
+    world["add"]("Coisas", "misc", 50000, date(2026, 9, 20))  # bigger than every other group
+    await session.commit()
+    card = _rules(await _get(client, auth_headers))["heavy_group"]
+    assert card["title"].startswith("Casa custa")
+    assert card["link"]["group_id"] == str(world["groups"][0].id)
