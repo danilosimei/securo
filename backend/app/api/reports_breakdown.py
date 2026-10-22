@@ -11,6 +11,7 @@ from app.core.app_clock import app_today
 from app.core.database import get_async_session
 from app.core.workspace_context import WorkspaceContext, current_workspace
 from app.services.reports import breakdown as breakdown_service
+from app.services.reports import habits as habits_service
 from app.services.reports import overview as overview_service
 from app.services.reports import recurring as recurring_service
 from app.services.reports.periods import resolve_period
@@ -212,6 +213,69 @@ async def get_overview(
         period=resolved,
         period_name=period,
         today=today,
+    )
+
+
+class HabitMerchant(BaseModel):
+    id: str
+    label: str
+    count: int
+    per_month: float
+    avg_ticket: str
+    total: str
+    category: str
+
+
+class HabitWeekday(BaseModel):
+    weekday: int
+    label: str
+    total: str
+    count: int
+
+
+class HabitBand(BaseModel):
+    label: str
+    min: str
+    max: Optional[str]
+    count: int
+    total: str
+
+
+class HabitDay(BaseModel):
+    date: date
+    total: str
+
+
+class HabitsResponse(BaseModel):
+    period: BreakdownPeriod
+    merchants: list[HabitMerchant]
+    weekdays: list[HabitWeekday]
+    bands: list[HabitBand]
+    days: list[HabitDay]
+
+
+@router.get("/habits", response_model=HabitsResponse)
+async def get_habits(
+    period: Literal[
+        "this_month", "last_month", "last_3m", "last_6m", "last_12m", "ytd", "custom"
+    ] = Query("last_12m"),
+    from_: date | None = Query(None, alias="from"),
+    to: date | None = Query(None),
+    ctx: WorkspaceContext = Depends(current_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    resolved = resolve_period(
+        period,
+        app_today(),
+        from_=from_,
+        to=to,
+        fy_start_month=_financial_year_start_month(ctx.workspace.tax_jurisdiction),
+    )
+    return await habits_service.habits(
+        session,
+        workspace_id=ctx.workspace.id,
+        primary_currency=ctx.user.primary_currency,
+        period=resolved,
     )
 
 
