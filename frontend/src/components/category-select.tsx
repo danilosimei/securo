@@ -30,6 +30,7 @@ import {
   type GroupedCreateOption,
 } from '@/lib/inline-create'
 import type { Category, CategoryGroup } from '@/types'
+import { CategoryIcon } from '@/components/category-icon'
 import { cn, normalizeText } from '@/lib/utils'
 import {
   isCategoryHiddenFromSelection,
@@ -83,6 +84,8 @@ interface CategorySelectProps {
   contentProps?: React.ComponentProps<typeof PopoverContent>
   /** The trigger's tab stop, for a host that manages focus (roving tabindex). */
   tabIndex?: number
+  /** Show the chosen category's icon in the trigger instead of its color dot. */
+  showIcon?: boolean
 }
 
 
@@ -102,6 +105,7 @@ export function CategorySelect({
   footerAction,
   contentProps,
   tabIndex,
+  showIcon = false,
 }: CategorySelectProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -312,7 +316,9 @@ export function CategorySelect({
           <span className="flex items-center gap-2 min-w-0 truncate">
             {selectedCategory ? (
               <>
-                {selectedCategory.color ? (
+                {showIcon ? (
+                  <CategoryIcon icon={selectedCategory.icon} color={selectedCategory.color} size="sm" />
+                ) : selectedCategory.color ? (
                   <span
                     className="size-2.5 shrink-0 rounded-full border border-black/5"
                     style={{ backgroundColor: selectedCategory.color }}

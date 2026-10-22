@@ -3,7 +3,7 @@
  *  and why, what the row was originally, and a one-click undo. */
 import { useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ChevronDown, CircleDot, Loader2, Undo2, UserRound } from 'lucide-react'
 
@@ -17,10 +17,9 @@ import { WorkspaceContext } from '@/contexts/workspace-context'
 import { useDateLocale } from '@/hooks/use-display-locale'
 import { StoreNote } from '@/components/categorization/store-note'
 import { Button } from '@/components/ui/button'
+import { provenanceHasContent, useTransactionProvenance } from '@/components/categorization/use-transaction-provenance'
 import type { Category, CategorySource, ProvenanceEvent } from '@/types'
 
-/** Origins worth explaining even when no event was recorded. */
-const EXPLAINED: CategorySource[] = ['ai', 'memory', 'rule', 'provider']
 /** Origins that open in one line: there is little to tell. */
 const COLLAPSED: CategorySource[] = ['rule', 'provider']
 /** Undoing these puts the row back in Review. */
@@ -44,17 +43,10 @@ export function ProvenanceBlock({ transactionId, categories, onUndone }: Provena
   const [expanded, setExpanded] = useState<boolean | null>(null)
   const [undoing, setUndoing] = useState(false)
 
-  const { data } = useQuery({
-    queryKey: ['categorization', 'provenance', transactionId],
-    queryFn: () => categorizationApi.provenance(transactionId),
-    // Saving the row elsewhere does not invalidate this key: refetch on
-    // every open rather than show an origin the last edit replaced.
-    staleTime: 0,
-  })
+  const { data } = useTransactionProvenance(transactionId)
 
-  if (!data) return null
+  if (!data || !provenanceHasContent(data)) return null
   const source = data.current_source
-  if (!EXPLAINED.includes(source) && data.events.length === 0) return null
 
   // Newest first: the latest change still in effect is what undo reverts.
   const latest: ProvenanceEvent | undefined = data.events.find((e) => !e.undone_at)
@@ -121,7 +113,7 @@ export function ProvenanceBlock({ transactionId, categories, onUndone }: Provena
         />
       </button>
       {open && (
-        <div className="flex items-end justify-between gap-3 pl-6">
+        <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 pl-6">
           <div className="min-w-0 space-y-0.5">
             {latest?.reason && <p className="text-muted-foreground">{latest.reason}</p>}
             {original.length > 0 && (

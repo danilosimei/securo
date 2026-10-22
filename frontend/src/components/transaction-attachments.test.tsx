@@ -51,7 +51,7 @@ describe('TransactionAttachments on HTTP', () => {
     const { container, user } = renderWithProviders(
       <TransactionAttachments transactionId="transaction-1" />,
     )
-    await screen.findByText(t('transactions.attachmentsUpload'))
+    await screen.findByRole('button', { name: t('transactions.attachFile') })
     const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
     const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
 

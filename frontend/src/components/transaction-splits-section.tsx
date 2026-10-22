@@ -280,7 +280,7 @@ export function TransactionSplitsSection({
   }
 
   return (
-    <div className="space-y-3 pt-2 border-t border-border">
+    <div className="space-y-3">
       <label className="text-sm font-medium inline-flex items-center gap-2 cursor-pointer">
         <input
           type="checkbox"

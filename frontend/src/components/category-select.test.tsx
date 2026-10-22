@@ -537,3 +537,16 @@ describe('CategorySelect: creation is visible before typing', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith('cat-new'))
   })
 })
+
+describe('CategorySelect trigger', () => {
+  it('shows the chosen category with its icon in the category color when asked', () => {
+    renderWithProviders(
+      <CategorySelect value="cat-1" onChange={vi.fn()} categories={[groceries]} groups={[]} showIcon />,
+    )
+
+    const trigger = screen.getByRole('button', { name: /Groceries/ })
+    const badge = trigger.querySelector<HTMLElement>('[style*="background-color"]')
+    expect(badge).toHaveStyle({ backgroundColor: '#10b981' })
+    expect(badge?.querySelector('svg')).not.toBeNull()
+  })
+})

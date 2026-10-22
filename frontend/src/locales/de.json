@@ -1142,7 +1142,10 @@
     "invoiceBadgeTooltip": "Diese Transaktion begleicht eine Rechnung. Öffnen.",
     "suggestionBadge": "Frage",
     "suggestionBadgeTooltip": "Eine Zahlung könnte diese Rechnung begleichen. Öffnen Sie die Warteschlange.",
-    "clearGroupFilter": "Gruppenfilter entfernen"
+    "clearGroupFilter": "Gruppenfilter entfernen",
+    "attachFile": "Anhängen",
+    "moreOptions": "Weitere Optionen",
+    "syncedBadge": "synchronisiert"
   },
   "accounts": {
     "title": "Konten",
