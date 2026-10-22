@@ -40,6 +40,9 @@ import {
 // from a picker is indistinguishable from one made there.
 const NEW_CATEGORY_ICON = 'circle-help'
 const NEW_CATEGORY_COLOR = '#6366f1'
+// Tall enough to scan many categories at once, but never past the screen
+// edge: the popover's available height minus the search box.
+const LIST_HEIGHT = 'max-h-[min(560px,calc(var(--radix-popover-content-available-height,560px)-3.5rem))]'
 
 /** The last row of the list, shown whatever the search. */
 export interface CategorySelectFooterAction {
@@ -405,7 +408,7 @@ export function CategorySelect({
             }}
           />
           {pickingFor !== null ? (
-            <CommandList>
+            <CommandList className={LIST_HEIGHT}>
               <CommandEmpty>{t('categorization.create.noGroup')}</CommandEmpty>
               <CommandGroup>
                 {pickableGroups.map((group) => (
@@ -443,7 +446,7 @@ export function CategorySelect({
               </CommandGroup>
             </CommandList>
           ) : naming ? (
-            <CommandList>
+            <CommandList className={LIST_HEIGHT}>
               <CommandEmpty>
                 {search.trim() !== ''
                   ? t('categorization.create.exists')
@@ -452,7 +455,7 @@ export function CategorySelect({
               {createItems}
             </CommandList>
           ) : (
-            <CommandList>
+            <CommandList className={LIST_HEIGHT}>
               <CommandEmpty>{t('transactions.noCategoryFound')}</CommandEmpty>
               {offersCreate && search.trim() === '' && (
                 <CommandGroup>
