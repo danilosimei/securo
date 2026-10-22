@@ -31,9 +31,11 @@ interface MoneyMapViewProps {
   palette: GroupPalette
   /** Toggles between the chart and the table. */
   view: 'chart' | 'table'
+  /** The answer sentence above the chart (off when the block title says it). */
+  showAnswer?: boolean
 }
 
-export function MoneyMapView({ map, query, currency, locale, palette, view }: MoneyMapViewProps) {
+export function MoneyMapView({ map, query, currency, locale, palette, view, showAnswer = true }: MoneyMapViewProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { mask } = usePrivacyMode()
@@ -66,7 +68,7 @@ export function MoneyMapView({ map, query, currency, locale, palette, view }: Mo
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground" data-testid="money-map-answer">{answer}</p>
+      {showAnswer && <p className="text-sm text-muted-foreground" data-testid="money-map-answer">{answer}</p>}
       {view === 'table' ? (
         <MoneyMapTable model={buildMapModel(map, true)} currency={currency} locale={locale} />
       ) : narrow ? (

@@ -9,9 +9,12 @@ import { reports, type BreakdownParams } from '@/lib/api'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useReportedRange } from '@/components/reports/common/report-range'
-import { Headline, ReportBlock } from '@/components/reports/common/report-block'
+import { TrendingUp } from 'lucide-react'
+import { ReportBlock } from '@/components/reports/common/report-block'
+import { AnswerLine } from '@/components/reports/common/answer-line'
+import { answerParts } from '@/components/reports/common/answer-parts'
 import { blockState } from '@/components/reports/common/block-state'
-import { formatMoneyShort, formatPercent, monthName, sparklineMonths } from '@/components/reports/common/chart-utils'
+import { formatMoneyShort, monthName, sparklineMonths } from '@/components/reports/common/chart-utils'
 import { NEUTRAL_COLOR, useGroupPalette } from '@/components/reports/common/group-colors'
 import { exploreLink, useReportPeriod } from '@/components/reports/common/report-url'
 import { StackedArea } from './stacked-area'
@@ -47,17 +50,32 @@ export function TrendsTab() {
   const trends = useMemo(() => (categories.data ? categoryTrends(categories.data.rows) : []), [categories.data])
   const { up, down } = trendExtremes(trends)
 
+  const categoryLink = (tr: CategoryTrend) => {
+    const group = tr.row.id ? palette.groupOfCategory(tr.row.id) : null
+    return exploreLink(
+      { ...query, group, category: tr.row.id ?? 'none' },
+      { group: tr.row.group_label ?? undefined, category: tr.row.label },
+    )
+  }
+  const nameToken = (tr: CategoryTrend) => {
+    const link = categoryLink(tr)
+    return { kind: 'link' as const, text: tr.row.label, to: link.to, state: link.state }
+  }
   const headline = !categories.data
     ? null
     : up
-      ? t('reports.trends.headlineUp', {
-          name: up.row.label,
-          change: formatPercent(up.change ?? 0, locale, true),
-          value: money(up.perMonth),
+      ? answerParts(t, 'reports.trends.headlineUp', {
+          name: nameToken(up),
+          // Spending going up is the bad direction.
+          change: { kind: 'delta', change: up.change ?? 0, good: false, locale },
+          value: { kind: 'value', text: money(up.perMonth) },
         })
       : down
-        ? t('reports.trends.headlineDown', { name: down.row.label, change: formatPercent(down.change ?? 0, locale, true) })
-        : t('reports.trends.headlineFlat')
+        ? answerParts(t, 'reports.trends.headlineDown', {
+            name: nameToken(down),
+            change: { kind: 'delta', change: down.change ?? 0, good: true, locale },
+          })
+        : answerParts(t, 'reports.trends.headlineFlat', {})
 
   const lastMonth = months.length - 1
   const lastTotal = layers.reduce((s, l) => s + (l.values[lastMonth] ?? 0), 0)
@@ -75,11 +93,7 @@ export function TrendsTab() {
     return own === NEUTRAL_COLOR ? palette.group(null, tr.row.group_label ?? undefined) : own
   }
   const openCategory = (tr: CategoryTrend) => {
-    const group = tr.row.id ? palette.groupOfCategory(tr.row.id) : null
-    const link = exploreLink(
-      { ...query, group, category: tr.row.id ?? 'none' },
-      { group: tr.row.group_label ?? undefined, category: tr.row.label },
-    )
+    const link = categoryLink(tr)
     navigate(link.to, { state: link.state })
   }
 
@@ -87,11 +101,17 @@ export function TrendsTab() {
 
   return (
     <div className="space-y-5" data-testid="trends-tab">
-      <Headline text={headline} loading={!categories.data && !categories.isError} stale={categories.isPlaceholderData} />
+      <AnswerLine
+        parts={headline}
+        icon={TrendingUp}
+        loading={!categories.data && !categories.isError}
+        stale={categories.isPlaceholderData}
+      />
 
       <ReportBlock
-        title={t('reports.trends.areaTitle')}
-        description={areaAnswer}
+        question={t('reports.trends.areaQuestion')}
+        title={areaAnswer || t('reports.trends.areaTitle')}
+        description={months.length ? t('reports.trends.window', { from: monthName(months[0], locale, 'short'), to: monthName(months[lastMonth], locale, 'short') }) : undefined}
         state={blockState(groups, layers.length === 0)}
         stale={groups.isPlaceholderData}
         onRetry={() => groups.refetch()}
@@ -100,17 +120,13 @@ export function TrendsTab() {
         testId="block-trends-area"
       >
         {data && (
-          <>
-            <p className="mb-2 text-[11px] text-muted-foreground">
-              {t('reports.trends.window', { from: monthName(months[0], locale, 'short'), to: monthName(months[lastMonth], locale, 'short') })}
-            </p>
-            <StackedArea layers={layers} months={months} colorOf={layerColor} currency={currency} locale={locale} ariaLabel={areaAnswer} />
-          </>
+          <StackedArea layers={layers} months={months} colorOf={layerColor} currency={currency} locale={locale} ariaLabel={areaAnswer} />
         )}
       </ReportBlock>
 
       <ReportBlock
-        title={t('reports.trends.gridTitle')}
+        question={t('reports.trends.gridQuestion')}
+        title={up ? t('reports.trends.gridAnswer', { name: up.row.label }) : t('reports.trends.gridTitle')}
         description={t('reports.trends.gridDescription')}
         state={blockState(categories, trends.length === 0)}
         stale={categories.isPlaceholderData}

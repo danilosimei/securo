@@ -1952,7 +1952,7 @@
     "projectedExpenses": "予測支出",
     "cashFlow": "キャッシュフロー",
     "comingSoon": "(近日提供)",
-    "composition": "構成",
+    "composition": "内訳",
     "asOf": "{{date}}時点",
     "evolution": "推移",
     "income": "収入",
@@ -2004,7 +2004,9 @@
       "answerShort": "{{left}}不足しました。",
       "viewChart": "グラフ",
       "viewTable": "表",
-      "colItem": "項目"
+      "colItem": "項目",
+      "question": "お金はどこへ行った？",
+      "titleAnswer": "いちばん多いのは{{group}}：支出の{{share}}"
     },
     "customRange": "期間を指定",
     "pickCustomRange": "開始日と終了日を選択",
@@ -2023,7 +2025,6 @@
       "rangeClosed": "{{from}} – {{to}}、締め済みの月",
       "rangePartial": "{{from}} – {{to}}、途中経過",
       "spending": "支出",
-      "vsPrevious": "前期比 {{change}}",
       "col": {
         "group": "グループ",
         "category": "カテゴリ",
@@ -2032,7 +2033,8 @@
         "share": "%",
         "change": "増減",
         "count": "取引数",
-        "trend": "12か月"
+        "trend": "12か月",
+        "account": "口座"
       },
       "offsets": "相殺",
       "empty": "{{from}} から {{to}} までの支出はありません。",
@@ -2055,9 +2057,76 @@
         "of": {
           "group": "支出に対して",
           "category": "グループに対して",
-          "merchant": "カテゴリに対して"
+          "merchant": "カテゴリに対して",
+          "account": "支出のうち"
         },
         "openHint": "クリックして1階層下へ"
+      },
+      "viewBy": "表示の単位",
+      "showAs": "表示方法",
+      "view": {
+        "group": "カテゴリ",
+        "merchant": "店舗",
+        "month": "月",
+        "account": "口座",
+        "compare": "比べる"
+      },
+      "chart": {
+        "bars": "棒グラフ",
+        "treemap": "ブロック",
+        "trend": "推移"
+      },
+      "vsBefore": "前の期間と比べて",
+      "concentration": {
+        "group": "{{m}}グループ中{{n}}グループで支出の80%を占めます。",
+        "category": "{{m}}カテゴリ中{{n}}カテゴリでこのグループの80%を占めます。",
+        "merchant": "{{m}}店舗中{{n}}店舗で支出の80%を占めます。",
+        "account": "{{m}}口座中{{n}}口座で支出の80%を占めます。"
+      },
+      "bars": {
+        "all": "すべて表示（{{n}}）",
+        "fewer": "表示を減らす",
+        "aria": "項目ごとの支出、多い順。いちばん多いのは{{name}}です。"
+      },
+      "trend": {
+        "legend": "グラフの線",
+        "rest": "その他",
+        "aria": "支出の多い項目の月ごとの支出。いちばん多いのは{{name}}です。"
+      },
+      "accountFilter": "口座：{{name}}",
+      "clearAccount": "口座の絞り込みを解除",
+      "backToStores": "すべての店舗",
+      "backToCategory": "{{category}}の店舗",
+      "storeCount_one": "{{count}}件の取引",
+      "storeCount_other": "{{count}}件の取引",
+      "month": {
+        "less": "少ない",
+        "more": "多い",
+        "legend": "色が濃い = 支出が多い",
+        "mode": "表示",
+        "groups": "グループ",
+        "categories": "カテゴリ",
+        "aria": "月ごとの支出。いちばん多いのは{{name}}です。",
+        "legendDark": "明るいほど多く支出"
+      },
+      "compare": {
+        "with": "比べる相手",
+        "previous": "前の期間",
+        "yearAgo": "前年の同じ期間",
+        "custom": "日付を選ぶ",
+        "pick": "日付を選ぶ",
+        "pickHint": "比べる日付を選んでください。",
+        "allGroups": "すべてのグループ",
+        "a": "A · {{range}}",
+        "b": "B · {{range}}",
+        "difference": "差",
+        "more": "{{value}}多い",
+        "less": "{{value}}少ない",
+        "same": "同じ",
+        "empty": "どちらの期間にも支出はありません。",
+        "answerMore": "{{b}}より{{value}}多く使いました {{change}}",
+        "answerLess": "{{b}}より{{value}}少なく使いました {{change}}",
+        "answerSame": "{{b}}と同じだけ使いました"
       }
     },
     "common": {
@@ -2075,8 +2144,8 @@
         "monthDown": "{{month}}の支出は{{spending}}で、{{previous}}より{{change}}少なくなりました",
         "monthPartial": "{{month}}のこれまでの支出は{{spending}}です",
         "average": "{{from}}〜{{to}}の支出は月{{spending}}でした",
-        "averageUp": "{{from}}〜{{to}}の支出は月{{spending}}で、前の{{months}}か月より{{change}}多くなりました",
-        "averageDown": "{{from}}〜{{to}}の支出は月{{spending}}で、前の{{months}}か月より{{change}}少なくなりました",
+        "averageUp": "{{from}}〜{{to}}の支出は月{{spending}}で、その前の{{months}}か月より{{change}}多くなりました",
+        "averageDown": "{{from}}〜{{to}}の支出は月{{spending}}で、その前の{{months}}か月より{{change}}少なくなりました",
         "end": "。",
         "left": "。{{left}}残りました。",
         "leftMonthly": "。毎月{{left}}残りました。",
@@ -2100,42 +2169,76 @@
         "vsPrevious": "前期比 {{change}}"
       },
       "highlights": {
-        "title": "ハイライト",
-        "description": "期間中にいつもと違ったこと。カードをタップすると詳細が見られます。",
-        "none": "この期間に特別なことはありません。",
-        "see": "見る",
+        "title": "気になるポイント",
+        "none": "この期間に変わったことはありません。",
         "rule": {
-          "spike": "急増",
-          "what_changed": "変化",
-          "recurring_new_or_up": "新しい・値上がりした固定費",
+          "spike": "高かった月",
+          "what_changed": "増えたもの",
           "recurring_expensive": "高い固定費",
           "small_purchases": "少額の買い物",
-          "heavy_group": "大きなグループ",
-          "to_review": "要確認"
+          "heavy_group": "いちばんお金がかかるところ",
+          "to_review": "要確認",
+          "month_pace": "今月の様子",
+          "recurring_changed": "固定費",
+          "frequent_spot": "よく行くところ"
+        },
+        "tone": {
+          "alert": "注意",
+          "opportunity": "節約のヒント",
+          "info": "参考"
+        },
+        "drivers": {
+          "default": "主な理由",
+          "heavy_group": "いちばんお金がかかるところ",
+          "small_purchases": "多いところ",
+          "frequent_spot": "よく行く場所",
+          "recurring_changed": "変わったもの"
         }
       },
       "changes": {
         "title": "変化",
-        "description": "直近の締め月と、その前3か月の平均との比較。",
+        "description": "その前3か月の平均と比べています。",
         "row": "{{name}}: {{value}}（{{change}}）",
-        "answerUp": "最も増えたのは{{name}}：{{value}}増。",
-        "answerDown": "最も減ったのは{{name}}：{{value}}減。",
-        "empty": "目立った変化はありません。"
+        "answerUp": "いちばん増えたのは{{name}}：{{value}}増",
+        "answerDown": "いちばん減ったのは{{name}}：{{value}}減",
+        "empty": "目立った変化はありません。",
+        "question": "先月は何が変わりましたか？"
       },
       "monthly": {
         "title": "月ごと",
         "spending": "支出",
         "income": "収入",
-        "median": "支出の中央値",
-        "spike": "中央値の1.5倍以上",
-        "aria": "最も支出が多かった月は{{month}}：{{value}}（中央値{{median}}に近い）。",
-        "ariaSpike": "{{month}}が最も支出の多い月でした：{{value}}、中央値{{median}}の{{multiple}}倍。",
+        "median": "いつもの月",
+        "spike": "いつもよりかなり多い",
+        "aria": "いちばん支出が多かった月は{{month}}：{{value}}",
+        "ariaSpike": "{{month}}がいちばん支出の多い月でした：{{value}}、いつもの月の{{multiple}}倍",
         "barAria": "{{month}}：支出 {{spending}}、収入 {{income}}。探索で開く。",
         "left": "残り",
         "short": "不足",
-        "vsMedian": "中央値の{{multiple}}倍",
+        "vsMedian": "いつもの{{multiple}}倍",
         "clickHint": "クリックしてその月を見る",
-        "tooShort": "月を比較するには1か月より長い期間を選んでください。"
+        "tooShort": "月を比較するには1か月より長い期間を選んでください。",
+        "question": "各月はどうでしたか？"
+      },
+      "pace": {
+        "title": "今月の様子",
+        "spent": "今日までの支出",
+        "normal": "今日までのいつもの額",
+        "projection": "このペースだと月末は",
+        "aria": "今日までの支出：{{spent}}。今日までのいつもの額：{{normal}}。このペースだと月末は{{projection}}です。"
+      },
+      "repeats": {
+        "question": "くり返している支出は？",
+        "title": "よく行くところ",
+        "sum": "これらの買い物は合わせて月{{value}}です。",
+        "times": "{{months}}か月で{{times}}×",
+        "perMonth": "~{{n}}×/月",
+        "monthly": "~{{value}}/月",
+        "inPeriod": "期間中{{value}}",
+        "categoryLine": "~{{n}}×/月 · ~{{value}}/月",
+        "seeAll": "すべての店舗を見る",
+        "aria": "{{name}}：{{months}}か月で{{times}}回の買い物、月約{{month}}。探索で開く。",
+        "categories": "よく繰り返されるカテゴリ"
       }
     },
     "trends": {
@@ -2143,35 +2246,37 @@
       "legend": "グループ（タップで表示を切り替え）",
       "monthTotal": "月の合計",
       "restGroups": "その他のグループ",
-      "headlineUp": "最も増えたのは{{name}}：直近3か月で{{change}}、現在は月{{value}}。",
-      "headlineDown": "直近3か月で増えたものはありません。最も減ったのは{{name}}：{{change}}。",
+      "headlineUp": "いちばん増えたのは{{name}}：直近3か月で{{change}}、今は月{{value}}です。",
+      "headlineDown": "直近3か月で増えたものはありません。いちばん減ったのは{{name}}：{{change}}。",
       "headlineFlat": "直近3か月の支出は横ばいです。",
       "areaTitle": "グループ別の支出（月ごと）",
       "areaAnswer": "{{month}}の支出は{{total}}。最大のグループは{{group}}です。",
       "window": "{{from}}〜{{to}}",
       "gridTitle": "カテゴリ",
-      "gridDescription": "増加率の大きい順：直近3か月（網掛け）と、その前の3か月の比較。",
+      "gridDescription": "直近3か月をその前の3か月と比べています。いちばん増えたものが先頭です。",
       "empty": "この12か月に支出はありません。",
       "new": "新規",
       "perMonth": "月{{value}}",
       "cardAria": "{{name}}：{{value}}、{{change}}。探索で開く。",
       "showAll": "すべてのカテゴリを見る（{{n}}）",
-      "showFewer": "表示を減らす"
+      "showFewer": "表示を減らす",
+      "areaQuestion": "支出はどう変わりましたか？",
+      "gridQuestion": "増えているものは？",
+      "gridAnswer": "いちばん増えたのは{{name}}"
     },
     "recurring": {
       "tab": "固定費",
-      "headline": "固定費は月{{month}} ＝ 年{{year}}。",
-      "headlineShare": "固定費は月{{month}} ＝ 年{{year}}、支出の{{share}}。",
+      "headline": "固定費は月{{month}}、年{{year}}です。",
+      "headlineShare": "固定費は月{{month}}、年{{year}}：支出の{{share}}です。",
       "counts": "有効: {{active}} · 新規: {{new}} · 値上がり: {{up}} · 停止: {{stopped}}",
-      "title": "繰り返しの支出",
-      "description": "履歴から自動で検出。行をタップすると請求を表示します。",
+      "description": "履歴から見つけました。タップすると支払いの一覧が見られます。",
       "empty": "履歴に繰り返しの支出は見つかりませんでした。",
       "noneInFilter": "この条件に合うものはありません。",
       "window": "検出は常に直近12か月の締め月と当月を対象にします。",
       "status": {
         "new": "新規",
         "up": "値上がり",
-        "stopped": "停止",
+        "stopped": "終了",
         "steady": "安定"
       },
       "filter": {
@@ -2192,52 +2297,55 @@
       "perMonth": "月{{value}}",
       "perYear": "年{{value}}",
       "rowAria": "{{name}}、{{status}}：月{{month}}、年{{year}}。探索で開く。",
-      "fixedWindow": "直近12か月"
+      "fixedWindow": "直近12か月",
+      "question": "毎月何を払っていますか？",
+      "title_one": "継続中の固定費 {{count}}件",
+      "title_other": "継続中の固定費 {{count}}件",
+      "menu": "{{name}}のその他の操作",
+      "end": "もう終わった",
+      "endedToast": "終了にしました。",
+      "undo": "元に戻す",
+      "endError": "保存できませんでした。もう一度お試しください。",
+      "endedTitle_one": "終了（{{count}}）",
+      "endedTitle_other": "終了（{{count}}）",
+      "lastCharge": "最後の支払い：{{date}}"
     },
     "habits": {
       "tab": "習慣",
-      "headline": "期間中の購入は{{n}}回、月{{perMonth}}回。最も頻繁なのは{{name}}：月{{freq}}回。",
+      "headline": "この期間の買い物は{{n}}回、月に約{{perMonth}}回です。いちばんよく行くのは{{name}}で、月{{freq}}回。",
       "headlineCount": "期間中の購入は{{n}}回。",
       "empty": "この期間に購入はありません。",
       "openHint": "クリックして探索で開く",
-      "bubbles": {
-        "title": "頻度 × 単価",
-        "answer": "最もお金のかかる習慣は{{name}}：月{{perMonth}}回、平均{{ticket}}、期間中{{total}}。",
-        "xAxis": "月あたりの購入回数",
-        "yAxis": "平均単価",
-        "costlyHabit": "高い習慣",
-        "bigRare": "大きくてまれ",
-        "small": "細かい出費",
-        "aria": "{{name}}：月{{perMonth}}回、平均単価{{ticket}}、合計{{total}}。探索で開く。",
-        "total": "期間中",
-        "ticket": "平均単価",
-        "perMonthLabel": "月あたりの購入回数",
-        "legend": "グループ別の色"
-      },
       "weekdays": {
-        "title": "曜日",
-        "answer": "最も支出が多いのは{{day}}：{{n}}回の購入で{{total}}。",
-        "aria": "{{day}}：{{n}}回で{{total}}"
+        "answer": "いちばん使うのは{{day}}",
+        "aria": "{{day}}：{{n}}回で{{total}}",
+        "question": "何曜日にいちばん使いますか？",
+        "detail": "{{n}}回の買い物で{{total}}。"
       },
       "bands": {
-        "title": "金額帯",
-        "answer": "{{limit}}未満の購入{{n}}回で合計{{total}}。",
+        "answer": "いちばん多い金額帯：{{band}}",
         "upTo": "{{max}}まで",
         "above": "{{min}}超",
         "between": "{{min}}〜{{max}}",
         "band": "金額帯",
         "count": "購入数",
         "total": "合計",
-        "aria": "{{band}}：{{n}}回、{{total}}"
+        "aria": "{{band}}：{{n}}回、{{total}}",
+        "question": "買い物はいくらくらい？",
+        "detail": "{{limit}}未満の買い物{{n}}回で合計{{total}}。"
       },
-      "calendar": {
-        "title": "日ごと",
-        "answer": "最も支出が多かった日は{{day}}：{{total}}。",
-        "dayAria": "{{day}}：{{total}}。その日の取引を開く。",
-        "spent": "その日の支出",
-        "openHint": "クリックしてその日の取引を見る",
-        "less": "少",
-        "more": "多"
+      "timesPerMonth_one": "月{{n}}回",
+      "timesPerMonth_other": "月{{n}}回",
+      "perPurchase": "1回あたり{{value}}",
+      "often": {
+        "question": "よく買い物をするのはどこ？",
+        "answer": "{{name}}：月{{n}}回",
+        "description": "よく行く店舗（月あたり）。"
+      },
+      "pricey": {
+        "question": "1回の買い物が高いのはどこ？",
+        "answer": "{{name}}：1回あたり{{value}}",
+        "description": "2回以上買った店舗での、1回あたりの平均額。"
       }
     },
     "periodRange": "{{from}} – {{to}}",

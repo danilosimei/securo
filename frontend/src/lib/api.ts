@@ -1509,7 +1509,10 @@ export const collections = {
 }
 
 // Reports breakdown (Explore tab)
-export type BreakdownLevel = 'group' | 'category' | 'merchant'
+export type BreakdownLevel = 'group' | 'category' | 'merchant' | 'account'
+/** What a period is compared with: the stretch right before it, the same
+ *  dates a year earlier, or a range of choice (`compare_from`/`compare_to`). */
+export type BreakdownCompare = 'previous' | 'year_ago' | 'custom'
 export type ReportPeriod =
   | 'this_month'
   | 'last_month'
@@ -1526,7 +1529,13 @@ export interface BreakdownParams {
   from?: string
   to?: string
   group_id?: string
+  /** A category uuid, 'none', or 'all' (store level: every store at once). */
   category_id?: string
+  /** Only the movements of this account, at any level. */
+  account_id?: string
+  compare?: BreakdownCompare
+  compare_from?: string
+  compare_to?: string
 }
 
 export interface BreakdownRow {
@@ -1544,6 +1553,10 @@ export interface BreakdownRow {
   sparkline: string[]
   /** Only on `level=category&group_id=all`: the group the category sits in. */
   group_label?: string | null
+  /** Only on `level=merchant&category_id=all`: the category where the store
+   *  weighs most (null = no category). */
+  category_id?: string | null
+  category_label?: string | null
 }
 
 export interface BreakdownResponse {
@@ -1571,13 +1584,34 @@ export interface ReportPeriodParams {
 export type ReportPeriodInfo = BreakdownResponse['period']
 
 export type HighlightRule =
+  | 'month_pace'
   | 'spike'
   | 'what_changed'
-  | 'recurring_new_or_up'
+  | 'recurring_changed'
   | 'recurring_expensive'
   | 'small_purchases'
   | 'heavy_group'
+  | 'frequent_spot'
   | 'to_review'
+
+export type HighlightTone = 'alert' | 'opportunity' | 'info'
+
+/** `tab`, `period` and the filters that apply, or `path` for a page
+ *  outside Reports. */
+export type HighlightLink = Record<string, string>
+
+export interface HighlightDriver {
+  label: string
+  /** Money as a decimal string (signed where it is a change). */
+  value: string
+  link: HighlightLink | null
+}
+
+export interface HighlightAction {
+  kind: 'explore' | 'review' | 'recurring' | 'month'
+  label: string
+  link: HighlightLink
+}
 
 /** Monthly averages over the period; shares are 0..1, null without a base. */
 export interface OverviewKpis {
@@ -1602,9 +1636,16 @@ export interface OverviewHighlight {
   /** Money as a decimal string; a plain count on `to_review`. */
   value: string
   compare: string
-  /** `tab`, `period` and only the filters that apply (`from`/`to`,
-   *  `group_id`, `category_id`, `merchant`). */
-  link: Record<string, string>
+  /** The main action's link. */
+  link: HighlightLink
+  tone: HighlightTone
+  /** 12 decimal strings, oldest month first; null when it does not apply. */
+  sparkline: string[] | null
+  /** Up to 3. On `month_pace`, always: normal by today, the projection, a
+   *  whole normal month. */
+  drivers: HighlightDriver[]
+  /** The first one is the main one. */
+  actions: HighlightAction[]
 }
 
 export interface OverviewMonth {
@@ -1633,12 +1674,44 @@ export interface MoneyMap {
   left: string
 }
 
+/** A store bought from several times a month ("O que se repete"). */
+export interface OverviewRepeat {
+  merchant: string
+  label: string
+  category_id: string | null
+  category: string
+  group_id: string | null
+  /** Purchases in the period, and in how many different months. */
+  times: number
+  months: number
+  /** Purchases per month of the period. */
+  per_month: number
+  month_total: string
+  year_total: string
+  avg_purchase: string
+  /** 12 decimal strings, oldest month first. */
+  sparkline: string[]
+}
+
+export interface OverviewRepeatCategory {
+  category_id: string
+  category: string
+  group_id: string | null
+  times: number
+  per_month: number
+  month_total: string
+}
+
 export interface OverviewResponse {
   period: ReportPeriodInfo
   currency?: string
   kpis: OverviewKpis
   changes: OverviewChange[]
   highlights: OverviewHighlight[]
+  /** Up to 8 stores, biggest spending per month first. */
+  repeats?: OverviewRepeat[]
+  /** Up to 3 categories, bought from most often first. */
+  repeat_categories?: OverviewRepeatCategory[]
   monthly: OverviewMonth[]
   money_map: MoneyMap
 }
@@ -1657,6 +1730,8 @@ export interface RecurringRow {
   status: RecurringStatus
   last_date: string
   months_seen: number
+  /** The day the person marked it as over ("Já acabou"); null otherwise. */
+  ended_on?: string | null
 }
 
 export interface HabitsMerchant {
@@ -1740,6 +1815,15 @@ export const reports = {
   },
   habits: async (params: ReportPeriodParams): Promise<HabitsResponse> => {
     const { data } = await api.get('/reports/habits', { params })
+    return data
+  },
+  /** Mark a fixed cost as over today (or undo it). */
+  endRecurring: async (merchantKey: string): Promise<{ merchant_key: string; ended_on: string | null }> => {
+    const { data } = await api.post(`/reports/recurring/${encodeURIComponent(merchantKey)}/end`)
+    return data
+  },
+  undoEndRecurring: async (merchantKey: string): Promise<{ merchant_key: string; ended_on: string | null }> => {
+    const { data } = await api.delete(`/reports/recurring/${encodeURIComponent(merchantKey)}/end`)
     return data
   },
 }

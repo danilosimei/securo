@@ -1,6 +1,7 @@
-/** The shell of every Reports block: a card with a title, a one-line answer
- *  under it, and the loading / empty / error states, so each chart only
- *  draws its data. A refetch keeps the previous render, dimmed. */
+/** The shell of every Reports block: a card with the question it answers,
+ *  the answer as its title, at most one line under it, and the loading /
+ *  empty / error states, so each chart only draws its data. A refetch keeps
+ *  the previous render, dimmed. */
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle } from 'lucide-react'
@@ -21,6 +22,9 @@ function sentence<T>(value: T): T {
 }
 
 interface ReportBlockProps {
+  /** The question the block answers, small, above the title. */
+  question?: string
+  /** The answer, in plain words (or a plain name when there is no data). */
   title: string
   /** One line under the title: what the chart answers, or how to read it. */
   description?: ReactNode
@@ -38,6 +42,7 @@ interface ReportBlockProps {
 }
 
 export function ReportBlock({
+  question,
   title,
   description,
   action,
@@ -54,10 +59,11 @@ export function ReportBlock({
   const { t } = useTranslation()
   return (
     <SectionCard className={cn('min-w-0 overflow-visible', className)}>
-      <section aria-label={title} data-testid={testId}>
+      <section aria-label={question ? `${question} ${title}` : title} data-testid={testId}>
         <div className="flex flex-wrap items-start justify-between gap-2 px-4 pt-4 sm:px-5">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+            {question && <p className="mb-0.5 text-xs font-medium text-muted-foreground">{question}</p>}
+            <h2 className="text-sm font-semibold text-foreground text-pretty sm:text-base">{sentence(title)}</h2>
             {description && state === 'ready' && (
               <p className="mt-0.5 text-xs text-muted-foreground">{sentence(description)}</p>
             )}
@@ -102,31 +108,6 @@ export function BlockError({ onRetry, message }: { onRetry?: () => void; message
         </Button>
       )}
     </div>
-  )
-}
-
-/** The sentence a tab opens with: the answer before any chart. */
-export function Headline({ text, loading, stale }: { text: string | null; loading?: boolean; stale?: boolean }) {
-  if (loading) {
-    return (
-      <div aria-busy="true" className="space-y-2">
-        <Skeleton className="h-6 w-full max-w-xl" />
-        <Skeleton className="h-6 w-2/3 max-w-md" />
-      </div>
-    )
-  }
-  if (!text) return null
-  return (
-    <p
-      data-testid="report-headline"
-      aria-live="polite"
-      className={cn(
-        'max-w-3xl text-lg font-semibold leading-snug text-foreground text-balance transition-opacity duration-200 sm:text-xl',
-        stale && 'opacity-60',
-      )}
-    >
-      {sentence(text)}
-    </p>
   )
 }
 

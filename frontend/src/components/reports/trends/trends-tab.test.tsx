@@ -94,9 +94,11 @@ describe('TrendsTab', () => {
   it('names the category that grew most and asks for both breakdowns', async () => {
     renderWithProviders(<TrendsTab />, { route: '/reports?tab=trends&period=last_12m' })
 
-    expect(await screen.findByTestId('report-headline')).toHaveTextContent(
-      'Pets grew the most: +42% in the last 3 months, now R$1,420 a month.',
-    )
+    const headline = await screen.findByTestId('report-headline')
+    expect(headline).toHaveTextContent('Pets went up the most: ▲42% in the last 3 months, now R$1,420 a month.')
+    // The name opens the category in Explore; going up is the bad direction.
+    expect(within(headline).getByRole('link', { name: 'Pets' })).toHaveAttribute('href', expect.stringContaining('category='))
+    expect(within(headline).getByTestId('delta-pill')).toHaveAttribute('data-tone', 'bad')
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'last_12m' })
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'category', group_id: 'all', period: 'last_12m' })
   })

@@ -1922,7 +1922,7 @@
     "section": "Analysen",
     "netWorth": "Nettovermögen",
     "trend": "Im Zeitverlauf",
-    "breakdown": "Verteilung",
+    "breakdown": "Aufteilung",
     "noData": "Keine Daten für diesen Zeitraum verfügbar",
     "range3m": "3M",
     "range6m": "6M",
@@ -1953,7 +1953,7 @@
     "projectedExpenses": "Prognostizierte Ausgaben",
     "cashFlow": "Geldfluss",
     "comingSoon": "(in Kürze)",
-    "composition": "Zusammensetzung",
+    "composition": "Aufteilung",
     "asOf": "Stand vom {{date}}",
     "evolution": "Entwicklung",
     "income": "Einnahmen",
@@ -2005,7 +2005,9 @@
       "answerShort": "Es fehlten {{left}}.",
       "viewChart": "Diagramm",
       "viewTable": "Tabelle",
-      "colItem": "Posten"
+      "colItem": "Posten",
+      "question": "Wohin ist das Geld gegangen?",
+      "titleAnswer": "{{group}} hatte den größten Anteil: {{share}} der Ausgaben"
     },
     "customRange": "Benutzerdefinierter Zeitraum",
     "pickCustomRange": "Start- und Enddatum wählen",
@@ -2024,7 +2026,6 @@
       "rangeClosed": "{{from}} – {{to}}, abgeschlossene Monate",
       "rangePartial": "{{from}} – {{to}}, teilweise",
       "spending": "Ausgaben",
-      "vsPrevious": "{{change}} ggü. Vorperiode",
       "col": {
         "group": "Gruppe",
         "category": "Kategorie",
@@ -2033,7 +2034,8 @@
         "share": "%",
         "change": "Änderung",
         "count": "Buchungen",
-        "trend": "12 Monate"
+        "trend": "12 Monate",
+        "account": "Konto"
       },
       "offsets": "mindert",
       "empty": "Keine Ausgaben zwischen {{from}} und {{to}}.",
@@ -2056,9 +2058,76 @@
         "of": {
           "group": "der Ausgaben",
           "category": "der Gruppe",
-          "merchant": "der Kategorie"
+          "merchant": "der Kategorie",
+          "account": "der Ausgaben"
         },
         "openHint": "Klicke, um eine Ebene tiefer zu gehen"
+      },
+      "viewBy": "Ansehen nach",
+      "showAs": "Anzeigen als",
+      "view": {
+        "group": "Kategorie",
+        "merchant": "Geschäft",
+        "month": "Monat",
+        "account": "Konto",
+        "compare": "Vergleichen"
+      },
+      "chart": {
+        "bars": "Balken",
+        "treemap": "Blöcke",
+        "trend": "Im Zeitverlauf"
+      },
+      "vsBefore": "gegenüber dem Zeitraum davor",
+      "concentration": {
+        "group": "{{n}} von {{m}} Gruppen machen 80% deiner Ausgaben aus.",
+        "category": "{{n}} von {{m}} Kategorien machen 80% dieser Gruppe aus.",
+        "merchant": "{{n}} von {{m}} Geschäften machen 80% der Ausgaben aus.",
+        "account": "{{n}} von {{m}} Konten machen 80% deiner Ausgaben aus."
+      },
+      "bars": {
+        "all": "Alle anzeigen ({{n}})",
+        "fewer": "Weniger anzeigen",
+        "aria": "Ausgaben je Eintrag, die größten zuerst; {{name}} ist am größten."
+      },
+      "trend": {
+        "legend": "Linien im Diagramm",
+        "rest": "Sonstige",
+        "aria": "Ausgaben der größten Einträge Monat für Monat; {{name}} ist am größten."
+      },
+      "accountFilter": "Konto: {{name}}",
+      "clearAccount": "Kontofilter entfernen",
+      "backToStores": "Alle Geschäfte",
+      "backToCategory": "Geschäfte in {{category}}",
+      "storeCount_one": "in {{count}} Buchung",
+      "storeCount_other": "in {{count}} Buchungen",
+      "month": {
+        "less": "Weniger",
+        "more": "Mehr",
+        "legend": "Dunkler = mehr ausgegeben",
+        "mode": "Anzeigen",
+        "groups": "Gruppen",
+        "categories": "Kategorien",
+        "aria": "Ausgaben je Monat; {{name}} ist am größten.",
+        "legendDark": "Heller = mehr ausgegeben"
+      },
+      "compare": {
+        "with": "Vergleichen mit",
+        "previous": "Zeitraum davor",
+        "yearAgo": "Gleicher Zeitraum im Vorjahr",
+        "custom": "Daten wählen",
+        "pick": "Daten wählen",
+        "pickHint": "Wähle die Daten für den Vergleich.",
+        "allGroups": "Alle Gruppen",
+        "a": "A · {{range}}",
+        "b": "B · {{range}}",
+        "difference": "Unterschied",
+        "more": "{{value}} mehr",
+        "less": "{{value}} weniger",
+        "same": "Gleich",
+        "empty": "In keinem der beiden Zeiträume Ausgaben.",
+        "answerMore": "Du hast {{value}} mehr ausgegeben als in {{b}} {{change}}",
+        "answerLess": "Du hast {{value}} weniger ausgegeben als in {{b}} {{change}}",
+        "answerSame": "Du hast gleich viel ausgegeben wie in {{b}}"
       }
     },
     "common": {
@@ -2101,42 +2170,76 @@
         "vsPrevious": "{{change}} ggü. vorher"
       },
       "highlights": {
-        "title": "Auffälliges",
-        "description": "Was im Zeitraum aus dem Rahmen fiel. Tippe auf eine Karte für Details.",
+        "title": "Was auffällt",
         "none": "Nichts Ungewöhnliches in diesem Zeitraum.",
-        "see": "Ansehen",
         "rule": {
-          "spike": "Spitze",
-          "what_changed": "Was sich geändert hat",
-          "recurring_new_or_up": "Neue oder teurere Fixkosten",
+          "spike": "Teurer Monat",
+          "what_changed": "Was gestiegen ist",
           "recurring_expensive": "Teure Fixkosten",
           "small_purchases": "Kleine Käufe",
-          "heavy_group": "Schwere Gruppe",
-          "to_review": "Zu prüfen"
+          "heavy_group": "Wo es am meisten kostet",
+          "to_review": "Zu prüfen",
+          "month_pace": "Wie der Monat läuft",
+          "recurring_changed": "Fixkosten",
+          "frequent_spot": "Wo du am häufigsten bist"
+        },
+        "tone": {
+          "alert": "Achtung",
+          "opportunity": "Chance",
+          "info": "Gut zu wissen"
+        },
+        "drivers": {
+          "default": "Vor allem durch",
+          "heavy_group": "Wo es am meisten kostet",
+          "small_purchases": "Wo am meisten",
+          "frequent_spot": "Orte, zu denen du oft zurückkehrst",
+          "recurring_changed": "Was sich geändert hat"
         }
       },
       "changes": {
         "title": "Was sich geändert hat",
-        "description": "Letzter abgeschlossener Monat gegen den Schnitt der 3 Monate davor.",
+        "description": "Verglichen mit dem Schnitt der 3 Monate davor.",
         "row": "{{name}}: {{value}} ({{change}})",
-        "answerUp": "{{name}} ist am stärksten gestiegen: {{value}} mehr.",
-        "answerDown": "{{name}} ist am stärksten gesunken: {{value}} weniger.",
-        "empty": "Keine nennenswerte Änderung."
+        "answerUp": "{{name}} ist am stärksten gestiegen: {{value}} mehr",
+        "answerDown": "{{name}} ist am stärksten gesunken: {{value}} weniger",
+        "empty": "Keine nennenswerte Änderung.",
+        "question": "Was hat sich im letzten Monat geändert?"
       },
       "monthly": {
         "title": "Monat für Monat",
         "spending": "Ausgaben",
         "income": "Einnahmen",
-        "median": "Median der Ausgaben",
-        "spike": "1,5× Median oder mehr",
-        "aria": "Der teuerste Monat war {{month}}: {{value}}, nahe am Median von {{median}}.",
-        "ariaSpike": "{{month}} war der teuerste Monat: {{value}}, {{multiple}}× der Median von {{median}}.",
+        "median": "Normaler Monat",
+        "spike": "Weit über normal",
+        "aria": "Der teuerste Monat war {{month}}: {{value}}",
+        "ariaSpike": "{{month}} war der teuerste Monat: {{value}}, {{multiple}}-mal so viel wie ein normaler Monat",
         "barAria": "{{month}}: Ausgaben {{spending}}, Einnahmen {{income}}. In Erkunden öffnen.",
         "left": "Übrig",
         "short": "Fehlbetrag",
-        "vsMedian": "{{multiple}}× Median",
+        "vsMedian": "{{multiple}}-mal so viel wie normal",
         "clickHint": "Klicke, um den Monat zu sehen",
-        "tooShort": "Wähle einen Zeitraum über einen Monat, um Monate zu vergleichen."
+        "tooShort": "Wähle einen Zeitraum über einen Monat, um Monate zu vergleichen.",
+        "question": "Wie liefen die Monate?"
+      },
+      "pace": {
+        "title": "Wie der Monat läuft",
+        "spent": "Bisher ausgegeben",
+        "normal": "Normal bis heute",
+        "projection": "In diesem Tempo am Ende",
+        "aria": "Bisher ausgegeben: {{spent}}. Normal bis heute: {{normal}}. In diesem Tempo endet der Monat bei {{projection}}."
+      },
+      "repeats": {
+        "question": "Was wiederholt sich?",
+        "title": "Wo du am häufigsten hingehst",
+        "sum": "Zusammen ergeben diese Käufe {{value}} pro Monat.",
+        "times": "{{times}}× in {{months}} Monaten",
+        "perMonth": "~{{n}}×/Monat",
+        "monthly": "~{{value}}/Monat",
+        "inPeriod": "{{value}} im Zeitraum",
+        "categoryLine": "~{{n}}×/Monat · ~{{value}}/Monat",
+        "seeAll": "Alle Geschäfte ansehen",
+        "aria": "{{name}}: {{times}} Käufe in {{months}} Monaten, etwa {{month}} pro Monat. In Erkunden öffnen.",
+        "categories": "Kategorien, die sich am meisten wiederholen"
       }
     },
     "trends": {
@@ -2144,28 +2247,30 @@
       "legend": "Gruppen (tippen zum Ein- oder Ausblenden)",
       "monthTotal": "Monatssumme",
       "restGroups": "Weitere Gruppen",
-      "headlineUp": "{{name}} ist am stärksten gewachsen: {{change}} in den letzten 3 Monaten, jetzt {{value}} pro Monat.",
-      "headlineDown": "Nichts ist in den letzten 3 Monaten gestiegen; {{name}} ist am stärksten gesunken: {{change}}.",
+      "headlineUp": "{{name}} ist am stärksten gestiegen: {{change}} in den letzten 3 Monaten, jetzt {{value}} pro Monat.",
+      "headlineDown": "In den letzten 3 Monaten ist nichts gestiegen; {{name}} ist am stärksten gesunken: {{change}}.",
       "headlineFlat": "Die Ausgaben blieben in den letzten 3 Monaten stabil.",
       "areaTitle": "Ausgaben nach Gruppe, Monat für Monat",
       "areaAnswer": "Im {{month}} betrugen die Ausgaben {{total}}; {{group}} ist die größte Gruppe.",
       "window": "{{from}} bis {{to}}",
       "gridTitle": "Kategorien",
-      "gridDescription": "Nach stärkstem Anstieg sortiert: letzte 3 Monate (schattiert) gegen die 3 davor.",
+      "gridDescription": "Die letzten 3 Monate gegenüber den 3 davor; was am stärksten gestiegen ist, steht oben.",
       "empty": "Keine Ausgaben in diesen 12 Monaten.",
       "new": "neu",
       "perMonth": "{{value}}/Monat",
       "cardAria": "{{name}}: {{value}}, {{change}}. In Erkunden öffnen.",
       "showAll": "Alle Kategorien ansehen ({{n}})",
-      "showFewer": "Weniger anzeigen"
+      "showFewer": "Weniger anzeigen",
+      "areaQuestion": "Wie haben sich deine Ausgaben verändert?",
+      "gridQuestion": "Was steigt?",
+      "gridAnswer": "{{name}} ist am stärksten gestiegen"
     },
     "recurring": {
       "tab": "Fixkosten",
-      "headline": "{{month}}/Monat Fixkosten = {{year}}/Jahr.",
-      "headlineShare": "{{month}}/Monat Fixkosten = {{year}}/Jahr, {{share}} der Ausgaben.",
+      "headline": "Du zahlst {{month}} pro Monat an Fixkosten, {{year}} pro Jahr.",
+      "headlineShare": "Du zahlst {{month}} pro Monat an Fixkosten, {{year}} pro Jahr: {{share}} deiner Ausgaben.",
       "counts": "Aktiv: {{active}} · Neu: {{new}} · Gestiegen: {{up}} · Beendet: {{stopped}}",
-      "title": "Wiederkehrende Ausgaben",
-      "description": "Aus dem Verlauf erkannt, ohne Erfassung. Tippe auf eine Zeile für die Buchungen.",
+      "description": "Aus deinem Verlauf erkannt. Tippe auf einen Eintrag, um die Buchungen zu sehen.",
       "empty": "Keine wiederkehrenden Ausgaben im Verlauf gefunden.",
       "noneInFilter": "Nichts passt zu diesem Filter.",
       "window": "Die Erkennung liest immer die letzten 12 abgeschlossenen Monate und den aktuellen.",
@@ -2193,52 +2298,55 @@
       "perMonth": "{{value}}/Monat",
       "perYear": "{{value}}/Jahr",
       "rowAria": "{{name}}, {{status}}: {{month}} pro Monat, {{year}} pro Jahr. In Erkunden öffnen.",
-      "fixedWindow": "Letzte 12 Monate"
+      "fixedWindow": "Letzte 12 Monate",
+      "question": "Was zahlst du jeden Monat?",
+      "title_one": "{{count}} aktive Fixkosten",
+      "title_other": "{{count}} aktive Fixkosten",
+      "menu": "Weitere Optionen für {{name}}",
+      "end": "Ist beendet",
+      "endedToast": "Als beendet markiert.",
+      "undo": "Rückgängig",
+      "endError": "Speichern fehlgeschlagen. Versuch es noch mal.",
+      "endedTitle_one": "Beendet ({{count}})",
+      "endedTitle_other": "Beendet ({{count}})",
+      "lastCharge": "Letzte Buchung am {{date}}"
     },
     "habits": {
       "tab": "Gewohnheiten",
-      "headline": "Du hast im Zeitraum {{n}} Einkäufe gemacht, {{perMonth}} pro Monat; bei {{name}} bist du am häufigsten: {{freq}}-mal pro Monat.",
+      "headline": "Du hast im Zeitraum {{n}} Käufe gemacht, etwa {{perMonth}} pro Monat. Wo du am häufigsten bist: {{name}}, {{freq}}-mal im Monat.",
       "headlineCount": "Du hast im Zeitraum {{n}} Einkäufe gemacht.",
       "empty": "Keine Einkäufe in diesem Zeitraum.",
       "openHint": "Klicke, um in Erkunden zu öffnen",
-      "bubbles": {
-        "title": "Häufigkeit × Bon",
-        "answer": "{{name}} ist deine teuerste Gewohnheit: {{perMonth}} Einkäufe pro Monat, durchschnittlich {{ticket}}, {{total}} im Zeitraum.",
-        "xAxis": "Einkäufe pro Monat",
-        "yAxis": "Durchschnittsbon",
-        "costlyHabit": "Teure Gewohnheit",
-        "bigRare": "Groß und selten",
-        "small": "Kleinkram",
-        "aria": "{{name}}: {{perMonth}} Einkäufe pro Monat, Durchschnitt {{ticket}}, gesamt {{total}}. In Erkunden öffnen.",
-        "total": "im Zeitraum",
-        "ticket": "Durchschnittsbon",
-        "perMonthLabel": "Einkäufe pro Monat",
-        "legend": "Farben nach Gruppe"
-      },
       "weekdays": {
-        "title": "Wochentag",
-        "answer": "Am {{day}} gibst du am meisten aus: {{total}} in {{n}} Einkäufen.",
-        "aria": "{{day}}: {{total}} in {{n}} Einkäufen"
+        "answer": "Am meisten gibst du am {{day}} aus",
+        "aria": "{{day}}: {{total}} in {{n}} Einkäufen",
+        "question": "An welchem Tag gibst du am meisten aus?",
+        "detail": "{{total}} bei {{n}} Käufen."
       },
       "bands": {
-        "title": "Betragsstufen",
-        "answer": "{{n}} Einkäufe unter {{limit}} ergeben zusammen {{total}}.",
+        "answer": "Am häufigsten: {{band}}",
         "upTo": "bis {{max}}",
         "above": "über {{min}}",
         "between": "{{min}} bis {{max}}",
         "band": "Stufe",
         "count": "Einkäufe",
         "total": "Summe",
-        "aria": "{{band}}: {{n}} Einkäufe, {{total}}"
+        "aria": "{{band}}: {{n}} Einkäufe, {{total}}",
+        "question": "Wie viel kosten deine Käufe?",
+        "detail": "{{n}} Käufe unter {{limit}} ergeben zusammen {{total}}."
       },
-      "calendar": {
-        "title": "Tag für Tag",
-        "answer": "Der teuerste Tag war der {{day}}: {{total}}.",
-        "dayAria": "{{day}}: {{total}}. Buchungen des Tages öffnen.",
-        "spent": "an dem Tag ausgegeben",
-        "openHint": "Klicke für die Buchungen des Tages",
-        "less": "Weniger",
-        "more": "Mehr"
+      "timesPerMonth_one": "{{n}}-mal im Monat",
+      "timesPerMonth_other": "{{n}}-mal im Monat",
+      "perPurchase": "{{value}} pro Kauf",
+      "often": {
+        "question": "Wo kaufst du ständig ein?",
+        "answer": "{{name}}: {{n}}-mal im Monat",
+        "description": "Die Geschäfte, zu denen du am häufigsten gehst, pro Monat."
+      },
+      "pricey": {
+        "question": "Wo kostet ein Kauf am meisten?",
+        "answer": "{{name}}: {{value}} pro Kauf",
+        "description": "Was ein Kauf im Schnitt kostet, wo du mehr als einmal gekauft hast."
       }
     },
     "periodRange": "{{from}} – {{to}}",

@@ -2,7 +2,8 @@
  *  was spent, against what came before, and what was left or missing. */
 import type { TFunction } from 'i18next'
 import type { OverviewResponse } from '@/lib/api'
-import { formatMoneyShort, formatPercent, monthName, monthsBetween } from '@/components/reports/common/chart-utils'
+import { formatMoneyShort, monthName, monthsBetween } from '@/components/reports/common/chart-utils'
+import { answerParts, type AnswerPart } from '@/components/reports/common/answer-parts'
 
 interface HeadlineInput {
   data: OverviewResponse
@@ -24,7 +25,7 @@ export function spendingChange(data: OverviewResponse, previous?: OverviewRespon
   return (now - before) / before
 }
 
-export function overviewHeadline({ data, previous, currency, locale, t, mask }: HeadlineInput): string | null {
+export function overviewHeadline({ data, previous, currency, locale, t, mask }: HeadlineInput): AnswerPart[] | null {
   const spending = Number(data.kpis.spending)
   const income = Number(data.kpis.income)
   const left = Number(data.kpis.left)
@@ -32,18 +33,19 @@ export function overviewHeadline({ data, previous, currency, locale, t, mask }: 
 
   const months = monthsBetween(data.period.from, data.period.to)
   const single = months.length === 1
-  const money = (v: number) => mask(formatMoneyShort(v, currency, locale))
+  const value = (v: number) => ({ kind: 'value' as const, text: mask(formatMoneyShort(v, currency, locale)) })
   const change = spendingChange(data, previous)
   // Under half a percent reads as "the same" and is not worth a clause.
   const direction = change === null || Math.abs(change) < 0.005 ? '' : change > 0 ? 'Up' : 'Down'
 
   const base = single ? (data.period.partial ? 'monthPartial' : 'month') : 'average'
-  const main = t(`reports.overview.headline.${base}${data.period.partial ? '' : direction}`, {
+  const main = answerParts(t, `reports.overview.headline.${base}${data.period.partial ? '' : direction}`, {
     month: monthName(data.period.from, locale),
     from: monthName(data.period.from, locale, 'short'),
     to: monthName(data.period.to, locale, 'short'),
-    spending: money(spending),
-    change: change === null ? '' : formatPercent(Math.abs(change), locale),
+    spending: value(spending),
+    // Spending going down is the good direction.
+    change: { kind: 'delta', change: change ?? 0, good: (change ?? 0) < 0, locale },
     previous: monthName(data.period.previous_from, locale),
     months: months.length,
   })
@@ -51,9 +53,9 @@ export function overviewHeadline({ data, previous, currency, locale, t, mask }: 
   const per = single ? '' : 'Monthly'
   const tail =
     income <= 0
-      ? t('reports.overview.headline.end')
+      ? answerParts(t, 'reports.overview.headline.end', {})
       : left >= 0
-        ? t(`reports.overview.headline.left${per}`, { left: money(left) })
-        : t(`reports.overview.headline.short${per}`, { left: money(-left) })
-  return `${main}${tail}`
+        ? answerParts(t, `reports.overview.headline.left${per}`, { left: value(left) })
+        : answerParts(t, `reports.overview.headline.short${per}`, { left: value(-left) })
+  return [...main, ...tail]
 }
