@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { cleanup, screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 
 import ReportsPage from '@/pages/reports'
 import { renderWithProviders, t } from '@/test/utils'
+import { expectPeriod, pickPeriod } from '@/test/report-period-actions'
 import type { ReportResponse } from '@/types'
 import { overviewFixture } from '@/test/reports-fixtures'
 
@@ -16,6 +17,8 @@ const api = vi.hoisted(() => ({
     cashFlow: vi.fn(),
     overview: vi.fn(),
     breakdown: vi.fn(),
+    recurring: vi.fn(),
+    habits: vi.fn(),
   },
   categoryGroups: { list: vi.fn() },
   // The page reads the workspace timezone to tell a balance that is already
@@ -66,6 +69,11 @@ beforeEach(() => {
     currency: 'BRL', total: '0.00', previous_total: null, rows: [], unconverted_count: 0,
   })
   api.categoryGroups.list.mockResolvedValue([])
+  api.reports.recurring.mockResolvedValue([])
+  api.reports.habits.mockResolvedValue({
+    period: { from: '2025-09-01', to: '2026-08-31', partial: false, previous_from: '2024-09-01', previous_to: '2025-08-31' },
+    merchants: [], weekdays: [], bands: [], days: [],
+  })
 })
 
 afterEach(() => vi.useRealTimers())
@@ -87,7 +95,7 @@ describe('Reports page — Custom range segment', () => {
     await user.click(screen.getByRole('button', { name: t('reports.customRange') }))
 
     expect(api.reports.netWorth).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: t('reports.range1y') })).toHaveClass('bg-primary')
+    expectPeriod(t('reports.range1y'))
     await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
     const year = 2026
     await waitFor(() => {
@@ -125,8 +133,7 @@ it.each(['Cancel', 'Escape', 'outside'] as const)(
   '6M → Custom → %s leaves the preset and query unchanged', async (dismiss) => {
     const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalledTimes(1))
-    const preset = screen.getByRole('button', { name: t('reports.range6m') })
-    await user.click(preset)
+    await pickPeriod(user, t('reports.range6m'))
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalledTimes(2))
     await user.click(screen.getByRole('button', { name: t('reports.customRange') }))
     if (dismiss === 'Cancel') {
@@ -136,7 +143,7 @@ it.each(['Cancel', 'Escape', 'outside'] as const)(
     } else {
       await user.click(document.body)
     }
-    expect(preset).toHaveClass('bg-primary')
+    expectPeriod(t('reports.range6m'))
     expect(api.reports.netWorth).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: t('reports.customRange') }))
@@ -158,14 +165,13 @@ it('Reset then Apply restores the fallback for Net Worth', async () => {
   await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.reset') }))
   await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: t('reports.range1y') })).toHaveClass('bg-primary')
+    expectPeriod(t('reports.range1y'))
     expect(api.reports.netWorth.mock.calls.at(-1)?.[0]).toBe(12)
     expect(api.reports.netWorth.mock.calls.at(-1)?.slice(-2)).toEqual([undefined, undefined])
   })
   expect(custom).toHaveTextContent(t('reports.customRange'))
 })
 
-const periodButton = (key: string) => screen.getByRole('button', { name: t(`reports.explore.period.${key}`) })
 const tabButtons = () => screen.getAllByRole('button').filter((b) => b.className.includes('px-4 py-2.5'))
 
 describe('Reports page, tabs', () => {
@@ -203,7 +209,7 @@ describe('Reports page, tabs', () => {
     await user.click(screen.getByRole('button', { name: t('reports.explore.tab') }))
 
     await waitFor(() => expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'last_3m' }))
-    expect(periodButton('last_3m')).toHaveAttribute('aria-pressed', 'true')
+    expectPeriod(t('reports.explore.period.last_3m'))
   })
 
   it('a chart click that changes the URL switches the tab', async () => {
@@ -215,6 +221,28 @@ describe('Reports page, tabs', () => {
       expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'category', group_id: 'g-car', period: 'last_month' }),
     )
     expect(tabButtons()[1]).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('shows the period in one place, the same for every tab', async () => {
+    const { user } = renderWithProviders(<ReportsPage />, { route: '/reports' })
+    await screen.findByTestId('overview-tab')
+    const groupName = t('reports.explore.periodGroup')
+
+    for (const tab of ['overview', 'explore', 'trends', 'recurring', 'habits', 'cashFlow', 'netWorth']) {
+      const label = tab === 'cashFlow' || tab === 'netWorth' ? t(`reports.${tab}`) : t(`reports.${tab}.tab`)
+      await user.click(screen.getByRole('button', { name: label }))
+      const slots = screen.getAllByTestId('reports-period')
+      expect(slots).toHaveLength(1)
+      if (tab === 'recurring') {
+        expect(within(slots[0]).getByText(t('reports.recurring.fixedWindow'))).toBeInTheDocument()
+        expect(screen.queryByRole('group', { name: groupName })).not.toBeInTheDocument()
+      } else {
+        // One picker, and it is the one in the slot.
+        const pickers = screen.getAllByRole('group', { name: groupName })
+        expect(pickers).toHaveLength(1)
+        expect(slots[0]).toContainElement(pickers[0])
+      }
+    }
   })
 
   it('keeps custom dates on Net Worth; Cash Flow has none', async () => {
@@ -250,7 +278,7 @@ describe('Reports page — query failure', () => {
     // The prior successful report must not linger under the error.
     expect(screen.queryByText(t('reports.trend'), { exact: false })).not.toBeInTheDocument()
     // Tabs and range controls stay usable so the user can correct the request.
-    expect(screen.getByRole('button', { name: t('reports.range1y') })).toBeInTheDocument()
+    expect(screen.getByTestId('period-menu')).toBeInTheDocument()
   })
 
   it('shows a generic fallback for a network failure and recovers via Retry', async () => {
@@ -258,7 +286,7 @@ describe('Reports page — query failure', () => {
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalledTimes(1))
 
     api.reports.netWorth.mockRejectedValueOnce(new Error('network error'))
-    await user.click(screen.getByRole('button', { name: t('reports.range6m') }))
+    await pickPeriod(user, t('reports.range6m'))
 
     expect(await screen.findByText(t('reports.loadError'))).toBeInTheDocument()
 
@@ -277,9 +305,9 @@ describe('Reports page — query failure', () => {
     await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
     expect(await screen.findByText('end_date must be on or before today')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: t('reports.range6m') }))
+    await pickPeriod(user, t('reports.range6m'))
     await waitFor(() => expect(screen.queryByText('end_date must be on or before today')).not.toBeInTheDocument())
-    expect(screen.getByRole('button', { name: t('reports.range6m') })).toHaveClass('bg-primary')
+    expectPeriod(t('reports.range6m'))
   })
 })
 

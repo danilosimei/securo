@@ -9,7 +9,7 @@ import { formatCurrency } from '@/lib/format'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
-import { ReportPeriodSelector } from '@/components/reports/period-selector'
+import { useReportedRange } from '@/components/reports/common/report-range'
 import { Headline, ReportBlock } from '@/components/reports/common/report-block'
 import { blockState } from '@/components/reports/common/block-state'
 import { formatMoneyShort } from '@/components/reports/common/chart-utils'
@@ -28,7 +28,7 @@ export function HabitsTab() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const palette = useGroupPalette()
-  const { period, from, to, query, update } = useReportPeriod()
+  const { query } = useReportPeriod()
 
   const habits = useQuery({
     queryKey: ['reports', 'habits', query],
@@ -121,11 +121,10 @@ export function HabitsTab() {
     : []
 
   const common = { stale, onRetry: () => habits.refetch() }
-  const range = data ? { from: data.period.from, to: data.period.to, partial: data.period.partial } : null
+  useReportedRange(data?.period)
 
   return (
     <div className="space-y-5" data-testid="habits-tab">
-      <ReportPeriodSelector period={period} from={from} to={to} onChange={update} locale={locale} range={range} />
       <Headline text={headline} loading={!data && !habits.isError} stale={stale} />
 
       <ReportBlock

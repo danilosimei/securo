@@ -1,7 +1,7 @@
 /** URL state shared by the Reports tabs: the period every tab reads from
  *  `?period=` (plus `from`/`to` for a custom range) and the links that send a
  *  click on a chart to Explore, Fixos or Transactions. */
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import type { ReportPeriod, ReportPeriodParams } from '@/lib/api'
 import { DEFAULT_REPORT_PERIOD, isReportPeriod } from '@/lib/report-period'
 
@@ -88,6 +88,7 @@ export function dayTransactionsLink(day: string): ReportLink {
  *  custom period without both dates falls back to the default. */
 export function useReportPeriod() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const requested = searchParams.get('period')
   const from = searchParams.get('from') ?? ''
   const to = searchParams.get('to') ?? ''
@@ -109,7 +110,8 @@ export function useReportPeriod() {
         }
         return params
       },
-      { replace: true },
+      // Keep what the view carries (Explore's breadcrumb names).
+      { replace: true, state: location.state },
     )
 
   return { period, from, to, query, update }

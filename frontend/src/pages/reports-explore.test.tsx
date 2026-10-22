@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 
 import ReportsPage from '@/pages/reports'
 import { renderWithProviders, t } from '@/test/utils'
+import { expectPeriod } from '@/test/report-period-actions'
 
 const api = vi.hoisted(() => ({
   reports: {
@@ -55,7 +56,7 @@ describe('Reports page: Explore tab', () => {
 
     expect(await screen.findByText('Compras')).toBeInTheDocument()
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'last_6m' })
-    expect(screen.getByRole('button', { name: t('reports.explore.period.last_6m') })).toHaveAttribute('aria-pressed', 'true')
+    expectPeriod(t('reports.explore.period.last_6m'))
     expect(api.reports.netWorth).not.toHaveBeenCalled()
   })
 

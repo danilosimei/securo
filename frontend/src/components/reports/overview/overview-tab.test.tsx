@@ -4,6 +4,8 @@ import { useLocation } from 'react-router-dom'
 
 import { OverviewTab } from '@/components/reports/overview/overview-tab'
 import { renderWithProviders, t } from '@/test/utils'
+import { pickPeriod } from '@/test/report-period-actions'
+import { WithPeriodBar } from '@/test/report-period'
 import { GROUPS, overviewFixture, previousOverview } from '@/test/reports-fixtures'
 import type { ReportPeriodParams } from '@/lib/api'
 
@@ -31,10 +33,10 @@ function Probe() {
 
 function renderTab(route = '/reports?tab=overview&period=last_month') {
   return renderWithProviders(
-    <>
+    <WithPeriodBar>
       <OverviewTab />
       <Probe />
-    </>,
+    </WithPeriodBar>,
     { route },
   )
 }
@@ -147,7 +149,7 @@ describe('OverviewTab', () => {
     let release: (v: unknown) => void = () => {}
     api.reports.overview.mockImplementationOnce(() => new Promise((resolve) => { release = resolve }))
 
-    await user.click(screen.getByRole('button', { name: t('reports.explore.period.last_3m') }))
+    await pickPeriod(user, t('reports.explore.period.last_3m'))
 
     expect(screen.getByTestId('kpi-spending').closest('[aria-busy="true"]')).not.toBeNull()
     expect(where()).toBe('/reports?tab=overview&period=last_3m')

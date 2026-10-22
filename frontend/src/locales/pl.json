@@ -2291,7 +2291,8 @@
       },
       "perMonth": "{{value}}/mies.",
       "perYear": "{{value}}/rok",
-      "rowAria": "{{name}}, {{status}}: {{month}} miesięcznie, {{year}} rocznie. Otwórz w Eksploruj."
+      "rowAria": "{{name}}, {{status}}: {{month}} miesięcznie, {{year}} rocznie. Otwórz w Eksploruj.",
+      "fixedWindow": "Ostatnie 12 miesięcy"
     },
     "habits": {
       "tab": "Nawyki",
@@ -2338,7 +2339,10 @@
         "less": "Mniej",
         "more": "Więcej"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Okres: {{period}}",
+    "periodPresets": "Okres"
   },
   "payees": {
     "noPayeeFound": "Nie znaleziono odbiorcy.",

@@ -2207,7 +2207,8 @@
       },
       "perMonth": "{{value}}/maand",
       "perYear": "{{value}}/jaar",
-      "rowAria": "{{name}}, {{status}}: {{month}} per maand, {{year}} per jaar. Openen in Verkennen."
+      "rowAria": "{{name}}, {{status}}: {{month}} per maand, {{year}} per jaar. Openen in Verkennen.",
+      "fixedWindow": "Laatste 12 maanden"
     },
     "habits": {
       "tab": "Gewoontes",
@@ -2254,7 +2255,10 @@
         "less": "Minder",
         "more": "Meer"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Periode: {{period}}",
+    "periodPresets": "Periode"
   },
   "payees": {
     "noPayeeFound": "Geen begunstigde gevonden.",

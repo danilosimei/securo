@@ -2317,7 +2317,8 @@
       },
       "perMonth": "{{value}}/mes.",
       "perYear": "{{value}}/rok",
-      "rowAria": "{{name}}, {{status}}: {{month}} mesačne, {{year}} ročne. Otvoriť v Preskúmať."
+      "rowAria": "{{name}}, {{status}}: {{month}} mesačne, {{year}} ročne. Otvoriť v Preskúmať.",
+      "fixedWindow": "Posledných 12 mesiacov"
     },
     "habits": {
       "tab": "Návyky",
@@ -2364,7 +2365,10 @@
         "less": "Menej",
         "more": "Viac"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Obdobie: {{period}}",
+    "periodPresets": "Obdobie"
   },
   "payees": {
     "noPayeeFound": "Príjemca sa nenašiel.",

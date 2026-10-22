@@ -2333,7 +2333,8 @@
       },
       "perMonth": "{{value}}/měs.",
       "perYear": "{{value}}/rok",
-      "rowAria": "{{name}}, {{status}}: {{month}} měsíčně, {{year}} ročně. Otevřít v Prozkoumat."
+      "rowAria": "{{name}}, {{status}}: {{month}} měsíčně, {{year}} ročně. Otevřít v Prozkoumat.",
+      "fixedWindow": "Posledních 12 měsíců"
     },
     "habits": {
       "tab": "Návyky",
@@ -2380,7 +2381,10 @@
         "less": "Méně",
         "more": "Více"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Období: {{period}}",
+    "periodPresets": "Období"
   },
   "payees": {
     "noPayeeFound": "Příjemce nebyl nalezen.",

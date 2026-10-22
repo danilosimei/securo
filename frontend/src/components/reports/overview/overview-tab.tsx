@@ -10,7 +10,7 @@ import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { Segmented } from '@/components/invoice-ui'
-import { ReportPeriodSelector } from '@/components/reports/period-selector'
+import { useReportedRange } from '@/components/reports/common/report-range'
 import { BlockError, Headline, ReportBlock } from '@/components/reports/common/report-block'
 import { blockState } from '@/components/reports/common/block-state'
 import { formatMoneyShort, monthName } from '@/components/reports/common/chart-utils'
@@ -30,7 +30,7 @@ export function OverviewTab() {
   const { mask } = usePrivacyMode()
   const { user } = useAuth()
   const palette = useGroupPalette()
-  const { period, from, to, query, update } = useReportPeriod()
+  const { query } = useReportPeriod()
   const [mapView, setMapView] = useState<'chart' | 'table'>('chart')
 
   const overview = useQuery({
@@ -50,6 +50,7 @@ export function OverviewTab() {
     enabled: previousQuery !== null && !stale,
     placeholderData: keepPreviousData,
   })
+  useReportedRange(data?.period)
   const prev: OverviewResponse | null = previousQuery && !stale ? (previous.data ?? null) : null
 
   const currency = data?.currency ?? user?.preferences?.currency_display ?? 'BRL'
@@ -75,15 +76,6 @@ export function OverviewTab() {
 
   return (
     <div className="space-y-5" data-testid="overview-tab">
-      <ReportPeriodSelector
-        period={period}
-        from={from}
-        to={to}
-        onChange={update}
-        locale={locale}
-        range={data ? { from: data.period.from, to: data.period.to, partial: data.period.partial } : null}
-      />
-
       {overview.isError && !data ? (
         <BlockError onRetry={() => overview.refetch()} message={t('reports.overview.error')} />
       ) : isEmpty && !stale ? (

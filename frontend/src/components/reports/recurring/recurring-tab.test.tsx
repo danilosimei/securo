@@ -111,7 +111,7 @@ describe('RecurringTab', () => {
 
     await user.click(screen.getByRole('button', { name: /^Son Pet Vida/ }))
     expect(screen.getByTestId('location')).toHaveTextContent(
-      '/reports?tab=explore&period=last_6m&group=g-life&category=c-pets&merchant=SON+PET+VIDA',
+      '/reports?tab=explore&period=last_12m&group=g-life&category=c-pets&merchant=SON+PET+VIDA',
     )
   })
 

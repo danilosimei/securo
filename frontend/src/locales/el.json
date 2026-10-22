@@ -2261,7 +2261,8 @@
       },
       "perMonth": "{{value}}/μήνα",
       "perYear": "{{value}}/έτος",
-      "rowAria": "{{name}}, {{status}}: {{month}} τον μήνα, {{year}} τον χρόνο. Άνοιγμα στην Εξερεύνηση."
+      "rowAria": "{{name}}, {{status}}: {{month}} τον μήνα, {{year}} τον χρόνο. Άνοιγμα στην Εξερεύνηση.",
+      "fixedWindow": "Τελευταίοι 12 μήνες"
     },
     "habits": {
       "tab": "Συνήθειες",
@@ -2308,7 +2309,10 @@
         "less": "Λιγότερα",
         "more": "Περισσότερα"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Περίοδος: {{period}}",
+    "periodPresets": "Περίοδος"
   },
   "fiscal": {
     "kind": {

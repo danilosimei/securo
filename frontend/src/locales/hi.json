@@ -2205,7 +2205,8 @@
       },
       "perMonth": "{{value}}/माह",
       "perYear": "{{value}}/वर्ष",
-      "rowAria": "{{name}}, {{status}}: {{month}} प्रति माह, {{year}} प्रति वर्ष। एक्सप्लोर में खोलें।"
+      "rowAria": "{{name}}, {{status}}: {{month}} प्रति माह, {{year}} प्रति वर्ष। एक्सप्लोर में खोलें।",
+      "fixedWindow": "पिछले 12 महीने"
     },
     "habits": {
       "tab": "आदतें",
@@ -2252,7 +2253,10 @@
         "less": "कम",
         "more": "ज़्यादा"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "अवधि: {{period}}",
+    "periodPresets": "अवधि"
   },
   "payees": {
     "noPayeeFound": "कोई प्राप्तकर्ता नहीं मिला।",

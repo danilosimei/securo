@@ -2205,7 +2205,8 @@
       },
       "perMonth": "月{{value}}",
       "perYear": "年{{value}}",
-      "rowAria": "{{name}}、{{status}}：月{{month}}、年{{year}}。探索で開く。"
+      "rowAria": "{{name}}、{{status}}：月{{month}}、年{{year}}。探索で開く。",
+      "fixedWindow": "直近12か月"
     },
     "habits": {
       "tab": "習慣",
@@ -2252,7 +2253,10 @@
         "less": "少",
         "more": "多"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "期間: {{period}}",
+    "periodPresets": "期間"
   },
   "payees": {
     "noPayeeFound": "取引相手が見つかりません。",

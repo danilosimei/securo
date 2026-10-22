@@ -11,17 +11,15 @@ import { ArrowUpRight, CircleCheck, CirclePause, Sparkles, type LucideIcon } fro
 import { reports, type RecurringRow, type RecurringStatus } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
-import { reportPeriodRange } from '@/lib/report-period'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { Segmented } from '@/components/invoice-ui'
-import { ReportPeriodSelector } from '@/components/reports/period-selector'
 import { Headline, ReportBlock } from '@/components/reports/common/report-block'
 import { blockState } from '@/components/reports/common/block-state'
 import { formatMoneyShort, formatPercent } from '@/components/reports/common/chart-utils'
 import { useGroupPalette } from '@/components/reports/common/group-colors'
-import { exploreLink, useReportPeriod } from '@/components/reports/common/report-url'
+import { exploreLink } from '@/components/reports/common/report-url'
 import { NO_CATEGORY_LABEL } from '@/components/reports/explore/drilldown'
 import { fixedSummary, sortRecurring, type RecurringSort } from './recurring-model'
 
@@ -55,7 +53,7 @@ export function RecurringTab() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const palette = useGroupPalette()
-  const { period, from, to, query, update } = useReportPeriod()
+  const query = { period: 'last_12m' as const }
   const [sort, setSort] = useState<RecurringSort>('year')
   const [filter, setFilter] = useState<Filter>('all')
 
@@ -93,11 +91,11 @@ export function RecurringTab() {
 
   const open = (row: RecurringRow) => {
     const match = row.category === NO_CATEGORY_LABEL ? { id: 'none', groupId: null } : palette.categoryByName(row.category)
-    const range = overview.data?.period ?? reportPeriodRange(period, new Date(), { from, to })
+    const range = overview.data?.period
     const link = exploreLink(
       { ...query, group: match?.groupId ?? null, category: match?.id ?? null, merchant: row.merchant_key },
       { group: match && 'groupName' in match ? match.groupName : undefined, category: row.category, merchant: row.label },
-      range ?? undefined,
+      range,
     )
     navigate(link.to, { state: link.state })
   }
@@ -108,14 +106,6 @@ export function RecurringTab() {
 
   return (
     <div className="space-y-5" data-testid="recurring-tab">
-      <ReportPeriodSelector
-        period={period}
-        from={from}
-        to={to}
-        onChange={update}
-        locale={locale}
-        range={overview.data ? { from: overview.data.period.from, to: overview.data.period.to, partial: overview.data.period.partial } : null}
-      />
       <Headline text={headline} loading={!recurring.data && !recurring.isError} />
       {recurring.data && rows.length > 0 && (
         <p className="-mt-3 text-sm text-muted-foreground" data-testid="recurring-counts">

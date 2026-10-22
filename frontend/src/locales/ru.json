@@ -2222,7 +2222,8 @@
       },
       "perMonth": "{{value}}/мес.",
       "perYear": "{{value}}/год",
-      "rowAria": "{{name}}, {{status}}: {{month}} в месяц, {{year}} в год. Открыть в Обзоре расходов."
+      "rowAria": "{{name}}, {{status}}: {{month}} в месяц, {{year}} в год. Открыть в Обзоре расходов.",
+      "fixedWindow": "Последние 12 месяцев"
     },
     "habits": {
       "tab": "Привычки",
@@ -2269,7 +2270,10 @@
         "less": "Меньше",
         "more": "Больше"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Период: {{period}}",
+    "periodPresets": "Период"
   },
   "payees": {
     "noPayeeFound": "Получатель не найден.",

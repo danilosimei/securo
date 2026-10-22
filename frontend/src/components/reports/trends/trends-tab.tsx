@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { reports, type BreakdownParams } from '@/lib/api'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
-import { ReportPeriodSelector } from '@/components/reports/period-selector'
+import { useReportedRange } from '@/components/reports/common/report-range'
 import { Headline, ReportBlock } from '@/components/reports/common/report-block'
 import { blockState } from '@/components/reports/common/block-state'
 import { formatMoneyShort, formatPercent, monthName, sparklineMonths } from '@/components/reports/common/chart-utils'
@@ -24,7 +24,7 @@ export function TrendsTab() {
   const { mask } = usePrivacyMode()
   const navigate = useNavigate()
   const palette = useGroupPalette()
-  const { period, from, to, query, update } = useReportPeriod()
+  const { query } = useReportPeriod()
 
   const groupParams: BreakdownParams = { level: 'group', ...query }
   const categoryParams: BreakdownParams = { level: 'category', group_id: 'all', ...query }
@@ -83,11 +83,10 @@ export function TrendsTab() {
     navigate(link.to, { state: link.state })
   }
 
-  const range = data ? { from: data.period.from, to: data.period.to, partial: data.period.partial } : null
+  useReportedRange(data?.period)
 
   return (
     <div className="space-y-5" data-testid="trends-tab">
-      <ReportPeriodSelector period={period} from={from} to={to} onChange={update} locale={locale} range={range} />
       <Headline text={headline} loading={!categories.data && !categories.isError} stale={categories.isPlaceholderData} />
 
       <ReportBlock

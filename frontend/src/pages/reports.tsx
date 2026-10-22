@@ -25,8 +25,8 @@ import { reports } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { ReportPeriodSelector } from '@/components/reports/period-selector'
-import { reportPeriodRange, type ReportPeriodKey } from '@/lib/report-period'
+import { PeriodSegments } from '@/components/reports/period-selector'
+import { ClosedPeriodBar, FixedWindowNote, ReportRangeProvider } from '@/components/reports/period-bar'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { PageHeader } from '@/components/page-header'
 import { ExploreTab } from '@/components/reports/explore/explore-tab'
@@ -299,9 +299,6 @@ export default function ReportsPage() {
   // send its dates.
   const period = isCustomRange ? (currentTab.closedPeriods ? 'custom' : undefined) : selectedRange.period
   const days = isCustomRange ? undefined : selectedRange.days
-  const closedRange = currentTab.closedPeriods
-    ? reportPeriodRange(rangeKey as ReportPeriodKey, new Date(), { from: customFrom, to: customTo })
-    : null
   const apiStart = hasCustomRange ? customFrom : undefined
   const apiEnd = hasCustomRange ? customTo : undefined
 
@@ -625,7 +622,44 @@ export default function ReportsPage() {
     return result
   })()
 
+  const trendFirst = trend[0]?.date
+  const trendLast = trend[trend.length - 1]?.date
+  const shortDay = (iso: string) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: '2-digit' })
+  const periodControl = isSelfManaged ? (
+    activeTab === 'recurring' ? <FixedWindowNote /> : <ClosedPeriodBar />
+  ) : (
+    <PeriodSegments
+      options={rangeOptions.map((opt) => ({ key: opt.key, label: t(`reports.${RANGE_LABELS[opt.key]}`) }))}
+      value={isCustomRange ? null : rangeKey}
+      onSelect={(key) => { setRangeKey(key); setSelectedDate(null) }}
+      rangeText={trendFirst && trendLast ? t('reports.periodRange', { from: shortDay(trendFirst), to: shortDay(trendLast) }) : null}
+      custom={supportsCustomRange ? (
+        <DateRangePicker
+          variant="segment"
+          className="rounded-md"
+          active={isCustomRange}
+          from={customFrom}
+          to={customTo}
+          defaultFrom={customDefaults.from}
+          defaultTo={customDefaults.to}
+          disallowFuture
+          maxRangeYears={CUSTOM_RANGE_MAX_YEARS}
+          onChange={(f, to) => {
+            setCustomFrom(f)
+            setCustomTo(to)
+            setRangeKey(f && to ? CUSTOM_RANGE_KEY : currentTab.fallbackRangeKey)
+            setSelectedDate(null)
+          }}
+          label={t('reports.customRange')}
+          placeholder={t('reports.pickCustomRange')}
+        />
+      ) : undefined}
+    />
+  )
+
   return (
+    <ReportRangeProvider>
     <div>
       <PageHeader
         section={t('reports.section')}
@@ -668,60 +702,6 @@ export default function ReportsPage() {
                 </span>
               </div>
             )}
-            {currentTab.closedPeriods ? (
-              <ReportPeriodSelector
-                period={rangeKey as ReportPeriodKey}
-                from={customFrom}
-                to={customTo}
-                locale={locale}
-                range={closedRange}
-                resetPeriod={currentTab.fallbackRangeKey as ReportPeriodKey}
-                onChange={(next, custom) => {
-                  if (custom) {
-                    setCustomFrom(custom.from)
-                    setCustomTo(custom.to)
-                  }
-                  setRangeKey(next)
-                  setSelectedDate(null)
-                }}
-              />
-            ) : (
-            <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
-              {rangeOptions.map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => { setRangeKey(opt.key); setSelectedDate(null) }}
-                  className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    rangeKey === opt.key
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  {t(`reports.${RANGE_LABELS[opt.key]}`)}
-                </button>
-              ))}
-              {supportsCustomRange && (
-                <DateRangePicker
-                  variant="segment"
-                  active={isCustomRange}
-                  from={customFrom}
-                  to={customTo}
-                  defaultFrom={customDefaults.from}
-                  defaultTo={customDefaults.to}
-                  disallowFuture
-                  maxRangeYears={CUSTOM_RANGE_MAX_YEARS}
-                  onChange={(f, to) => {
-                    setCustomFrom(f)
-                    setCustomTo(to)
-                    setRangeKey(f && to ? CUSTOM_RANGE_KEY : currentTab.fallbackRangeKey)
-                    setSelectedDate(null)
-                  }}
-                  label={t('reports.customRange')}
-                  placeholder={t('reports.pickCustomRange')}
-                />
-              )}
-            </div>
-            )}
             <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
               {intervalOptions.map((opt) => (
                 <button
@@ -741,8 +721,12 @@ export default function ReportsPage() {
         }
       />
 
+      {/* Tabs and the period share one row on a desktop, the period at the
+          right; on smaller screens it sits right under the tabs (full width
+          on a phone). Rendered once, in the same place, for every tab. */}
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
       {/* Tab Bar: scrolls on its own on a phone, never the page. */}
-      <div className="flex items-center gap-1 mb-5 border-b border-border overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex min-w-0 items-center gap-1 border-b border-border overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-1">
         {REPORT_TABS.map((tab) => (
           <button
             key={tab.key}
@@ -768,6 +752,10 @@ export default function ReportsPage() {
             )}
           </button>
         ))}
+      </div>
+      <div data-testid="reports-period" className="w-full shrink-0 sm:ml-auto sm:w-auto">
+        {periodControl}
+      </div>
       </div>
 
       {isSelfManaged && (
@@ -1696,5 +1684,6 @@ export default function ReportsPage() {
       </>
       )}
     </div>
+    </ReportRangeProvider>
   )
 }

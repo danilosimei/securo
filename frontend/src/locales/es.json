@@ -2209,7 +2209,8 @@
       },
       "perMonth": "{{value}}/mes",
       "perYear": "{{value}}/año",
-      "rowAria": "{{name}}, {{status}}: {{month}} al mes, {{year}} al año. Abrir en Explorar."
+      "rowAria": "{{name}}, {{status}}: {{month}} al mes, {{year}} al año. Abrir en Explorar.",
+      "fixedWindow": "Últimos 12 meses"
     },
     "habits": {
       "tab": "Hábitos",
@@ -2256,7 +2257,10 @@
         "less": "Menos",
         "more": "Más"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Período: {{period}}",
+    "periodPresets": "Período"
   },
   "payees": {
     "noPayeeFound": "No se encontró ningún beneficiario.",

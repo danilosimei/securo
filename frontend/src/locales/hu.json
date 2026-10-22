@@ -2205,7 +2205,8 @@
       },
       "perMonth": "havi {{value}}",
       "perYear": "évi {{value}}",
-      "rowAria": "{{name}}, {{status}}: havi {{month}}, évi {{year}}. Megnyitás a Felfedezésben."
+      "rowAria": "{{name}}, {{status}}: havi {{month}}, évi {{year}}. Megnyitás a Felfedezésben.",
+      "fixedWindow": "Utolsó 12 hónap"
     },
     "habits": {
       "tab": "Szokások",
@@ -2252,7 +2253,10 @@
         "less": "Kevesebb",
         "more": "Több"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Időszak: {{period}}",
+    "periodPresets": "Időszak"
   },
   "payees": {
     "noPayeeFound": "Nincs ilyen partner.",

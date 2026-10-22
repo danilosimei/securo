@@ -2222,7 +2222,8 @@
       },
       "perMonth": "{{value}}/міс.",
       "perYear": "{{value}}/рік",
-      "rowAria": "{{name}}, {{status}}: {{month}} на місяць, {{year}} на рік. Відкрити в Огляді витрат."
+      "rowAria": "{{name}}, {{status}}: {{month}} на місяць, {{year}} на рік. Відкрити в Огляді витрат.",
+      "fixedWindow": "Останні 12 місяців"
     },
     "habits": {
       "tab": "Звички",
@@ -2269,7 +2270,10 @@
         "less": "Менше",
         "more": "Більше"
       }
-    }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Період: {{period}}",
+    "periodPresets": "Період"
   },
   "payees": {
     "noPayeeFound": "Отримувача не знайдено.",
