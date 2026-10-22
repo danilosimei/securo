@@ -150,22 +150,47 @@ class OverviewChange(BaseModel):
     delta: str
 
 
+class HighlightDriver(BaseModel):
+    label: str
+    value: str
+    #: Same shape as a highlight's link; null when the driver opens nothing.
+    link: Optional[dict[str, str]] = None
+
+
+class HighlightAction(BaseModel):
+    kind: Literal["explore", "review", "recurring", "month"]
+    label: str
+    #: `tab`, `period` and filters, or `path` for a page outside Reports.
+    link: dict[str, str]
+
+
 class OverviewHighlight(BaseModel):
     rule: Literal[
+        "month_pace",
         "spike",
         "what_changed",
-        "recurring_new_or_up",
+        "recurring_changed",
         "recurring_expensive",
         "small_purchases",
         "heavy_group",
+        "frequent_spot",
         "to_review",
     ]
     title: str
     value: str
     compare: str
-    #: `tab`, `period` and only the filters that apply (`from`/`to` for a
-    #: custom period, `group_id`, `category_id`, `merchant`).
+    #: The main action's link: `tab`, `period` and only the filters that
+    #: apply (`from`/`to` for a custom period, `group_id`, `category_id`,
+    #: `merchant`, `view`), or `path`.
     link: dict[str, str]
+    tone: Literal["alert", "opportunity", "info"]
+    #: 12 decimal strings, oldest month first; null when it does not apply.
+    sparkline: Optional[list[str]]
+    #: Up to 3. On `month_pace`, always: normal by today, the projection, a
+    #: whole normal month.
+    drivers: list[HighlightDriver]
+    #: The first one is the main one.
+    actions: list[HighlightAction]
 
 
 class OverviewMonth(BaseModel):

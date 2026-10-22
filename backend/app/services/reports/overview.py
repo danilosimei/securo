@@ -1,26 +1,30 @@
 """The Visão geral tab: monthly KPIs, what changed, highlights and the money map.
 
 Every number comes from the shared account rules (`rules.py`), so the tab,
-the Explorar tab and the dashboard agree. Highlights are a closed list of
-rules, each with a limit (constants below) and each firing at most once.
+the Explorar tab and the dashboard agree. The highlights are a closed list
+of rules, in `highlights.py`.
 """
-import json
 import uuid
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from functools import lru_cache
-from pathlib import Path
 from statistics import median
-from typing import Any, Optional
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.categorization import CategorizationSuggestion
 from app.models.category_group import CategoryGroup
+from app.services.reports import highlights as highlights_service
 from app.services.reports import recurring as recurring_service
-from app.services.reports.breakdown import NO_CATEGORY_LABEL, NO_GROUP_LABEL, RowRef, _group_level, _spend_by_row
+from app.services.reports.breakdown import (
+    NO_CATEGORY_LABEL,
+    NO_GROUP_LABEL,
+    RowRef,
+    _group_level,
+    _spend_by_row,
+)
+from app.services.reports.highlights import CHANGE_BASELINE_MONTHS, RULES, Change
 from app.services.reports.income_expenses import (
     UNCATEGORIZED_KEY,
     _bucket_items,
@@ -36,94 +40,26 @@ from app.services.reports.rules import (
     totals_from,
 )
 
-#: The closed list of highlight rules.
-RULES = (
-    "spike",
-    "what_changed",
-    "recurring_new_or_up",
-    "recurring_expensive",
-    "small_purchases",
-    "heavy_group",
-    "to_review",
-)
+__all__ = ["RULES", "overview"]
 
-_TAXONOMY = Path(__file__).resolve().parents[2] / "data" / "default_categories.json"
-
-
-@lru_cache(maxsize=1)
-def _generic_group_names() -> frozenset[str]:
-    """Seeded "Other" group names in every language: too vague to be a highlight."""
-    group = json.loads(_TAXONOMY.read_text(encoding="utf-8"))["groups"]["other"]
-    names = set(group["names"].values()) | set(group.get("aliases", ()))
-    return frozenset(n.lower() for n in names)
-
-
-MAX_HIGHLIGHTS = 6
 MAX_CHANGES = 5
-CHANGE_BASELINE_MONTHS = 3
-
-#: spike: a closed month with spending at least this many times the median.
-SPIKE_MULTIPLE = Decimal("1.5")
-#: spike needs a few closed months for a median to mean something.
-SPIKE_MIN_CLOSED_MONTHS = 3
-SPIKE_TOP_GROUPS = 3
-#: what_changed: a group's rise over the 3-month average, in money and in share.
-WHAT_CHANGED_MIN_DELTA = Decimal("500")
-WHAT_CHANGED_MIN_SHARE = Decimal("0.30")
-#: recurring_new_or_up: at most this many stores in the card.
-RECURRING_CARD_MAX_ITEMS = 3
-#: recurring_expensive: a fixed cost worth this much per year.
-RECURRING_EXPENSIVE_MIN_YEAR = Decimal("3000")
-#: small_purchases: purchases below this value, adding up to this much per month.
-SMALL_PURCHASE_LIMIT = Decimal("50")
-SMALL_PURCHASES_MIN_MONTH = Decimal("1000")
-#: heavy_group: a group above this share of the period's spending.
-HEAVY_GROUP_MIN_SHARE = Decimal("0.05")
+SPARKLINE_MONTHS = highlights_service.SPARKLINE_MONTHS
 
 INCOME_TO_CHECK_LABEL = "A conferir"
-_MONTHS_PT = ("Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez")
 
 
 def _money(value: Decimal) -> str:
     return f"{value.quantize(CENT):.2f}"
 
 
-def _month_name(month: date) -> str:
-    return f"{_MONTHS_PT[month.month - 1]}/{month.year % 100:02d}"
-
-
-def _number_pt(value: Decimal, places: int) -> str:
-    return f"{value:.{places}f}".replace(".", ",")
-
-
-def _brl(value: Decimal) -> str:
-    """Short money for titles: R$ 786, R$ 4,2 mil, R$ 54 mil, R$ 1,3 mi."""
-    amount = abs(value)
-    if amount < 1000:
-        return f"R$ {int(amount.quantize(Decimal('1')))}"
-    if amount < 10_000:
-        return f"R$ {_number_pt(amount / 1000, 1)} mil"
-    if amount < 1_000_000:
-        return f"R$ {int((amount / 1000).quantize(Decimal('1')))} mil"
-    return f"R$ {_number_pt(amount / 1_000_000, 1)} mi"
-
-
-@dataclass
-class _Change:
-    ref: RowRef
-    target: date
-    delta: Decimal
-    change: Optional[float]
-    average: Decimal
-
-    def api(self) -> dict:
-        return {
-            "kind": self.ref.kind,
-            "id": self.ref.id,
-            "label": self.ref.label,
-            "change": self.change,
-            "delta": _money(self.delta),
-        }
+def _change_api(change: Change) -> dict:
+    return {
+        "kind": change.ref.kind,
+        "id": change.ref.id,
+        "label": change.ref.label,
+        "change": change.change,
+        "delta": _money(change.delta),
+    }
 
 
 @dataclass
@@ -143,25 +79,6 @@ def _months_of(period: Period, today: date) -> list[_Month]:
         out.append(_Month(cursor, segment, closed))
         cursor = _shift_months(cursor, 1)
     return out
-
-
-def _link(period_name: str, from_: Optional[date], to: Optional[date], **extra: Optional[str]) -> dict:
-    link: dict[str, Any] = {"tab": "explore", "period": period_name}
-    if period_name == "custom" and from_ and to:
-        link["from"] = from_.isoformat()
-        link["to"] = to.isoformat()
-    link.update({k: v for k, v in extra.items() if v is not None})
-    return link
-
-
-def _card(rule: str, title: str, value: Decimal | int, compare: str, link: dict) -> dict:
-    return {
-        "rule": rule,
-        "title": title,
-        "value": _money(value) if isinstance(value, Decimal) else str(value),
-        "compare": compare,
-        "link": link,
-    }
 
 
 async def overview(
@@ -227,12 +144,13 @@ async def overview(
         period=period,
         period_name=period_name,
         today=today,
-        months=months,
-        month_totals=month_totals,
+        closed=[(m.start, t) for m, t in zip(months, month_totals) if m.closed],
         totals=totals,
         row_of=row_of,
         changes=changes,
         recurring=recurring,
+        kinds=kinds,
+        flow_kwargs=flow_kwargs,
     )
 
     return {
@@ -245,7 +163,7 @@ async def overview(
         },
         "currency": primary_currency,
         "kpis": kpis,
-        "changes": [c.api() for c in changes],
+        "changes": [_change_api(c) for c in changes],
         "highlights": highlights,
         "monthly": monthly,
         "money_map": await _money_map(session, workspace_id, flows, kinds),
@@ -259,7 +177,7 @@ async def _changes(
     today: date,
     kinds: dict,
     flow_kwargs: dict[str, Any],
-) -> list[_Change]:
+) -> list[Change]:
     """Group rises and falls of the last closed month against the average of
     the 3 months before it, biggest absolute delta first."""
     end_month = period.to.replace(day=1)
@@ -277,7 +195,7 @@ async def _changes(
         average = sum((m.get(ref, ZERO) for m in baseline_months), ZERO) / CHANGE_BASELINE_MONTHS
         delta = (target_spend.get(ref, ZERO) - average).quantize(CENT)
         change = round(float(delta / average), 3) if average > 0 else None
-        rows.append(_Change(ref, target, delta, change, average))
+        rows.append(Change(ref, target, delta, change, average))
     rows = [r for r in rows if r.delta != 0]
     rows.sort(key=lambda r: (-abs(r.delta), r.ref.label))
     return rows[:MAX_CHANGES]
@@ -360,211 +278,46 @@ async def _highlights(
     period: Period,
     period_name: str,
     today: date,
-    months: list[_Month],
-    month_totals: list,
+    closed: list,
     totals,
     row_of,
-    changes: list[_Change],
+    changes: list[Change],
     recurring: list,
+    kinds: dict,
+    flow_kwargs: dict[str, Any],
 ) -> list[dict]:
-    def link(**extra: Optional[str]) -> dict:
-        return _link(period_name, period.from_, period.to, **extra)
-
-    cards: list[dict] = []
-
-    # 1. spike: a closed month well above the median month.
-    closed = [(m, t) for m, t in zip(months, month_totals) if m.closed]
-    if len(closed) >= SPIKE_MIN_CLOSED_MONTHS:
-        center = median([t.spending for _, t in closed])
-        if center > 0:
-            month, top = max(closed, key=lambda mt: mt[1].spending)
-            if top.spending >= SPIKE_MULTIPLE * center:
-                per_group = [_spend_by_row(t, row_of) for _, t in closed]
-                this_month = _spend_by_row(top, row_of)
-                diffs = []
-                for ref, value in this_month.items():
-                    usual = median([g.get(ref, ZERO) for g in per_group])
-                    if value - usual > 0:
-                        diffs.append((value - usual, ref.label))
-                diffs.sort(key=lambda d: (-d[0], d[1]))
-                explain = ", ".join(
-                    f"{label} +{_brl(diff)}" for diff, label in diffs[:SPIKE_TOP_GROUPS]
-                )
-                ratio = top.spending / center
-                cards.append(
-                    _card(
-                        "spike",
-                        f"{_month_name(month.start)} foi {_number_pt(ratio, 1)}× a mediana",
-                        top.spending,
-                        explain,
-                        # Opens the month that spiked, not the whole period.
-                        _link("custom", *month.segment),
-                    )
-                )
-
-    # 2. what_changed: the group with the biggest rise in the last closed month.
-    rises = [
-        c
-        for c in changes
-        if c.ref.kind == "group"
-        and c.ref.id is not None
-        and c.delta >= WHAT_CHANGED_MIN_DELTA
-        and c.average > 0
-        and c.change is not None
-        and Decimal(str(c.change)) >= WHAT_CHANGED_MIN_SHARE
-    ]
-    if rises:
-        top_change = max(rises, key=lambda c: c.delta)
-        ref = top_change.ref
-        cards.append(
-            _card(
-                "what_changed",
-                f"{ref.label} subiu {_brl(top_change.delta)} em {_month_name(top_change.target)}",
-                top_change.delta,
-                f"+{round((top_change.change or 0) * 100)}% sobre a média dos 3 meses anteriores",
-                link(group_id=ref.id),
-            )
-        )
-
-    # 3. recurring_new_or_up: stores that are new or got more expensive.
-    moving = [r for r in recurring if r.status in ("new", "up")][:RECURRING_CARD_MAX_ITEMS]
-    if moving:
-        names = await _labels(session, workspace_id, [r.merchant_key for r in moving])
-        parts = []
-        for r in moving:
-            note = "novo" if r.status == "new" else f"+{round(float(r.up_share or 0) * 100)}%"
-            parts.append(f"{names[r.merchant_key]} ({note})")
-        year = sum((r.amount_year for r in moving), ZERO)
-        extra = {}
-        if len(moving) == 1:
-            extra = {
-                "merchant": moving[0].merchant_key,
-                "category_id": str(moving[0].category_id) if moving[0].category_id else None,
-            }
-        cards.append(
-            _card(
-                "recurring_new_or_up",
-                f"{len(moving)} gasto{'s' if len(moving) > 1 else ''} fixo{'s' if len(moving) > 1 else ''} "
-                f"novo{'s' if len(moving) > 1 else ''} ou mais caro{'s' if len(moving) > 1 else ''}: "
-                f"{_brl(year)} por ano",
-                year,
-                ", ".join(parts),
-                link(**extra),
-            )
-        )
-
-    # 4. recurring_expensive: the fixed cost that weighs most in a year.
-    active = [r for r in recurring if r.status != "stopped"]
-    if active and active[0].amount_year >= RECURRING_EXPENSIVE_MIN_YEAR:
-        top_fixed = active[0]
-        names = await _labels(session, workspace_id, [top_fixed.merchant_key])
-        cards.append(
-            _card(
-                "recurring_expensive",
-                f"{names[top_fixed.merchant_key]} custa {_brl(top_fixed.amount_year)} por ano",
-                top_fixed.amount_year,
-                f"{_brl(top_fixed.amount_month)} por mês",
-                link(
-                    merchant=top_fixed.merchant_key,
-                    category_id=str(top_fixed.category_id) if top_fixed.category_id else None,
-                ),
-            )
-        )
-
-    # 5. small_purchases: many small debits that add up.
-    small = [
-        value
-        for _, _, day, value, _ in await recurring_service.load_debits(
-            session,
-            workspace_id=workspace_id,
-            primary_currency=primary_currency,
-            start=period.from_,
-            end=period.to,
-        )
-        if value < SMALL_PURCHASE_LIMIT
-    ]
-    small_month = sum(small, ZERO) / period.months
-    if small_month >= SMALL_PURCHASES_MIN_MONTH:
-        cards.append(
-            _card(
-                "small_purchases",
-                f"{len(small)} compras abaixo de {_brl(SMALL_PURCHASE_LIMIT)} somam {_brl(small_month)} por mês",
-                small_month,
-                f"{_brl(small_month * 12)} por ano",
-                link(),
-            )
-        )
-
-    # 6. heavy_group: the group that costs most per year, among those above the share.
-    total_spending = totals.spending
-    by_group = _spend_by_row(totals, row_of)
-    heavy = [
-        (value, ref)
-        for ref, value in by_group.items()
-        if ref.kind == "group"
-        and ref.id is not None
-        and ref.label.lower() not in _generic_group_names()
-        and total_spending > 0
-        and value / total_spending > HEAVY_GROUP_MIN_SHARE
-    ]
-    if heavy:
-        value, ref = max(heavy, key=lambda h: (h[0], h[1].label))
-        yearly = value / period.months * 12
-        cards.append(
-            _card(
-                "heavy_group",
-                f"{ref.label} custa {_brl(yearly)} por ano",
-                yearly,
-                f"{round(float(value / total_spending) * 100)}% do gasto",
-                link(group_id=ref.id),
-            )
-        )
-
-    # 7. to_review: things waiting for a look, in a single card.
-    pending = (
-        await session.execute(
-            select(func.count(CategorizationSuggestion.id)).where(
-                CategorizationSuggestion.workspace_id == workspace_id,
-                CategorizationSuggestion.status == "pending",
-            )
-        )
-    ).scalar_one()
-    parts = []
-    count = 0
-    if pending:
-        count += pending
-        parts.append(f"{pending} sugest{'ões' if pending > 1 else 'ão'} na Revisar")
-    if totals.uncategorized_income > 0:
-        count += 1
-        parts.append(f"{_brl(totals.uncategorized_income)} de renda sem categoria")
-    odd = [r for r in recurring if r.atypical_amount is not None]
-    if odd:
-        names = await _labels(session, workspace_id, [r.merchant_key for r in odd])
-        for r in odd:
-            count += 1
-            parts.append(f"{names[r.merchant_key]} cobrou {_brl(r.atypical_amount or ZERO)}, fora do normal")
-    to_review = None
-    if parts:
-        to_review = _card(
-            "to_review",
-            f"{count} {'item' if count == 1 else 'itens'} para revisar",
-            count,
-            " · ".join(parts),
-            link(),
-        )
-
-    # Biggest value first; the review card is never the one cut.
-    cards.sort(key=lambda c: (-Decimal(c["value"]), c["rule"]))
-    if to_review is not None:
-        return cards[: MAX_HIGHLIGHTS - 1] + [to_review]
-    return cards[:MAX_HIGHLIGHTS]
-
-
-async def _labels(
-    session: AsyncSession, workspace_id: uuid.UUID, keys: list[str]
-) -> dict[str, str]:
-    from app.services.reports.breakdown import _store_names
-    from app.services.reports.merchant_labels import readable_label
-
-    names = await _store_names(session, workspace_id, set(keys))
-    return {key: names.get(key) or readable_label(key) for key in keys}
+    """The reads the highlight rules share, then the rules."""
+    last = period.to.replace(day=1)
+    spark_starts = [_shift_months(last, -back) for back in range(SPARKLINE_MONTHS - 1, -1, -1)]
+    current = today.replace(day=1)
+    segments = [(s, min(_month_end(s), period.to)) for s in spark_starts]
+    flows = await collect_flows(session, segments=segments, **flow_kwargs)
+    spark = [(s, totals_from([seg], kinds)) for s, seg in zip(spark_starts, flows)]
+    # The current month so far, whatever the period.
+    (so_far,) = await collect_flows(session, segments=[(current, today)], **flow_kwargs)
+    month_so_far = totals_from([so_far], kinds).spending
+    first_debit = min(spark_starts[0], period.from_, _shift_months(current, -SPARKLINE_MONTHS))
+    debits = await recurring_service.load_debits(
+        session,
+        workspace_id=workspace_id,
+        primary_currency=primary_currency,
+        start=first_debit,
+        end=max(today, period.to),
+    )
+    ctx = highlights_service.Context(
+        session=session,
+        workspace_id=workspace_id,
+        primary_currency=primary_currency,
+        period=period,
+        period_name=period_name,
+        today=today,
+        closed=closed,
+        totals=totals,
+        row_of=row_of,
+        changes=changes,
+        recurring=recurring,
+        spark_months=spark,
+        debits=debits,
+        month_so_far=month_so_far,
+    )
+    return await highlights_service.build(ctx)

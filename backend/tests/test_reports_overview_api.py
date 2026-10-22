@@ -148,13 +148,23 @@ async def test_spike_fires_above_one_and_a_half_times_the_median(client, auth_he
     world["add"]("Oficina", "combustivel", 1500, date(2026, 9, 10))
     await world["session"].commit()
     spike = _rules(await _get(client, auth_headers))["spike"]
-    assert spike["title"] == "Set/26 foi 2,5× a mediana"
+    assert spike["title"] == "Set/26 custou 2,5 vezes um mês normal"
     assert spike["value"] == "2500.00"
-    assert spike["compare"] == "Carro +R$ 1,5 mil"
+    assert spike["compare"] == "Um mês normal: R$ 1,0 mil"
+    assert spike["tone"] == "alert"
+    # What pulled the month up, each opening its group in that month.
+    carro = str(world["groups"][1].id)
+    assert spike["drivers"] == [{
+        "label": "Carro", "value": "1500.00",
+        "link": {"tab": "explore", "period": "custom", "from": "2026-09-01",
+                 "to": "2026-09-30", "group_id": carro},
+    }]
+    # The whole spending, 12 months up to the period's end.
+    assert len(spike["sparkline"]) == 12 and spike["sparkline"][-1] == "2500.00"
     # The link opens the month that spiked, not the whole period.
-    assert spike["link"] == {
-        "tab": "explore", "period": "custom", "from": "2026-09-01", "to": "2026-09-30",
-    }
+    month = {"tab": "explore", "period": "custom", "from": "2026-09-01", "to": "2026-09-30"}
+    assert spike["link"] == month
+    assert spike["actions"] == [{"kind": "month", "label": "Ver Set/26", "link": month}]
 
 
 @pytest.mark.asyncio
@@ -173,6 +183,11 @@ async def test_what_changed_fires_on_a_big_rise(client, auth_headers, world):
     card = _rules(body)["what_changed"]
     assert card["title"] == "Pets subiu R$ 600 em Set/26"
     assert card["link"]["group_id"] == str(world["groups"][2].id)
+    assert card["tone"] == "alert"
+    assert [(d["label"], d["value"]) for d in card["drivers"]] == [("Veterinário", "600.00")]
+    assert card["drivers"][0]["link"]["category_id"] == str(world["cats"]["vet"].id)
+    assert card["sparkline"][-5:] == ["0.00", "100.00", "100.00", "100.00", "700.00"]
+    assert [a["kind"] for a in card["actions"]] == ["explore", "month"]
     assert body["changes"][0]["label"] == "Pets"
     assert body["changes"][0]["delta"] == "600.00"
 
@@ -191,9 +206,15 @@ async def test_recurring_new_and_up_share_one_card(client, auth_headers, world):
     world["monthly"]("Disney", "streaming", ["34.90", "34.90"], first_month=9)
     await world["session"].commit()
     body = await _get(client, auth_headers)
-    card = _rules(body)["recurring_new_or_up"]
-    assert card["title"].startswith("2 gastos fixos novos ou mais caros")
-    assert "Spotify (+50%)" in card["compare"] and "Disney (novo)" in card["compare"]
+    card = _rules(body)["recurring_changed"]
+    assert card["title"] == "2 gastos fixos começaram ou subiram: R$ 45 a mais por mês"
+    assert card["tone"] == "alert"
+    assert card["compare"] == "1 começou, 1 subiu"
+    assert [(d["label"], d["value"]) for d in card["drivers"]] == [
+        ("Disney (começou)", "34.90"), ("Spotify (subiu)", "10.00"),
+    ]
+    assert card["actions"][0]["kind"] == "recurring"
+    assert card["actions"][0]["link"]["tab"] == "recurring"
     assert body["kpis"]["fixed_share"] > 0
 
 
@@ -201,7 +222,7 @@ async def test_recurring_new_and_up_share_one_card(client, auth_headers, world):
 async def test_recurring_new_or_up_stays_quiet_when_steady(client, auth_headers, world):
     world["monthly"]("Spotify", "streaming", [20] * 6)
     await world["session"].commit()
-    assert "recurring_new_or_up" not in _rules(await _get(client, auth_headers))
+    assert "recurring_changed" not in _rules(await _get(client, auth_headers))
 
 
 @pytest.mark.asyncio
@@ -212,6 +233,10 @@ async def test_recurring_expensive_needs_three_thousand_a_year(client, auth_head
     card = _rules(await _get(client, auth_headers))["recurring_expensive"]
     assert card["title"] == "Plano Saude custa R$ 3,6 mil por ano"
     assert card["link"]["merchant"] == "PLANO SAUDE"
+    assert card["tone"] == "opportunity"
+    # The store's charges, 12 closed months up to September.
+    assert card["sparkline"][-6:] == ["300.00"] * 6
+    assert [a["kind"] for a in card["actions"]] == ["explore", "recurring"]
 
 
 @pytest.mark.asyncio
@@ -228,8 +253,14 @@ async def test_small_purchases_fire_at_a_thousand_a_month(client, auth_headers, 
     await world["session"].commit()
     body = await _get(client, auth_headers, period="this_month")
     card = _rules(body)["small_purchases"]
-    assert card["title"] == "26 compras abaixo de R$ 50 somam R$ 1,0 mil por mês"
+    assert card["title"] == "Compras abaixo de R$ 50 somam R$ 1,0 mil por mês"
+    assert card["compare"] == "26 compras, R$ 12 mil por ano"
     assert card["value"] == "1040.00"
+    assert card["tone"] == "opportunity"
+    # "Padaria 1".."Padaria 25" are one store: the numbers are not its name.
+    assert [(d["label"], d["value"]) for d in card["drivers"]] == [("Padaria (26×)", "1040.00")]
+    assert card["sparkline"][-1] == "1040.00"
+    assert card["actions"][0]["link"]["view"] == "merchant"
 
 
 @pytest.mark.asyncio
@@ -250,7 +281,9 @@ async def test_heavy_group_fires_above_five_percent_and_skips_uncategorized(
     await world["session"].commit()
     card = _rules(await _get(client, auth_headers))["heavy_group"]
     assert card["title"] == "Casa custa R$ 12 mil por ano"
-    assert card["compare"] == "45% do gasto"
+    assert card["compare"] == "45% de tudo que você gastou"
+    assert card["tone"] == "info"
+    assert [(d["label"], d["value"]) for d in card["drivers"]] == [("Mercado", "6000.00")]
     assert card["link"]["group_id"] == str(world["groups"][0].id)
 
 
@@ -272,6 +305,8 @@ async def test_to_review_lists_pending_suggestions_and_unclassified_income(
     await world["session"].commit()
     card = _rules(await _get(client, auth_headers))["to_review"]
     assert card["title"] == "2 itens para revisar"
+    assert card["tone"] == "info" and card["sparkline"] is None
+    assert card["actions"] == [{"kind": "review", "label": "Revisar", "link": {"path": "/categorization"}}]
     assert "1 sugestão na Revisar" in card["compare"]
     assert "R$ 120 de renda sem categoria" in card["compare"]
 
@@ -290,7 +325,7 @@ async def test_to_review_stays_quiet_with_nothing_to_look_at(client, auth_header
 
 
 @pytest.mark.asyncio
-async def test_at_most_six_cards_and_the_review_card_is_kept(client, auth_headers, world):
+async def test_at_most_four_cards_and_the_review_card_is_kept(client, auth_headers, world):
     # spike (Sep), what_changed (Pets), new+up, expensive, small, heavy, review.
     world["add"]("Oficina", "combustivel", 1500, date(2026, 9, 10))
     world["monthly"]("Clinica Pet", "vet", [100, 100, 100], first_month=6)
@@ -305,10 +340,13 @@ async def test_at_most_six_cards_and_the_review_card_is_kept(client, auth_header
     _suggest(world["session"], tx, "LOJA ESTRANHA", category_id=world["cats"]["mercado"].id)
     await world["session"].commit()
     body = await _get(client, auth_headers)
-    rules = [h["rule"] for h in body["highlights"]]
-    assert len(rules) == 6
+    # Disney's October charge also starts the month's pace, which comes
+    # first and does not take one of the four places.
+    assert body["highlights"][0]["rule"] == "month_pace"
+    rules = [h["rule"] for h in body["highlights"][1:]]
+    assert len(rules) == 4
     assert rules[-1] == "to_review"
-    values = [Decimal(h["value"]) for h in body["highlights"][:-1]]
+    values = [Decimal(h["value"]) for h in body["highlights"][1:-1]]
     assert values == sorted(values, reverse=True)
 
 
