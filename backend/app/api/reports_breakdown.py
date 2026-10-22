@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.reports import _financial_year_start_month
 from app.core.app_clock import app_today
 from app.core.database import get_async_session
-from app.core.workspace_context import WorkspaceContext, current_workspace
+from app.core.workspace_context import (
+    WorkspaceContext,
+    current_workspace,
+    current_writable_workspace,
+)
 from app.services.reports import breakdown as breakdown_service
 from app.services.reports import habits as habits_service
 from app.services.reports import overview as overview_service
@@ -311,6 +315,8 @@ class RecurringRow(BaseModel):
     status: Literal["new", "up", "stopped", "steady"]
     last_date: date
     months_seen: int
+    #: The day the person marked it as over ("Já acabou"); null otherwise.
+    ended_on: Optional[date] = None
 
 
 @router.get("/recurring", response_model=list[RecurringRow])
@@ -329,3 +335,34 @@ async def get_recurring(
         primary_currency=ctx.user.primary_currency,
         today=app_today(),
     )
+
+
+class RecurringEnd(BaseModel):
+    merchant_key: str
+    ended_on: Optional[date]
+
+
+@router.post("/recurring/{merchant_key}/end", response_model=RecurringEnd)
+async def end_recurring(
+    merchant_key: str,
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """The person says this fixed cost is over: it shows as stopped today,
+    until a new charge comes."""
+    today = app_today()
+    row = await recurring_service.mark_ended(session, ctx.workspace.id, merchant_key, today)
+    await session.commit()
+    return RecurringEnd(merchant_key=row.merchant_key if row else merchant_key, ended_on=today)
+
+
+@router.delete("/recurring/{merchant_key}/end", response_model=RecurringEnd)
+async def undo_end_recurring(
+    merchant_key: str,
+    ctx: WorkspaceContext = Depends(current_writable_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Undo "Já acabou": the history decides again."""
+    row = await recurring_service.mark_ended(session, ctx.workspace.id, merchant_key, None)
+    await session.commit()
+    return RecurringEnd(merchant_key=row.merchant_key if row else merchant_key, ended_on=None)

@@ -13,13 +13,14 @@ and users are SET NULL, so tidying the taxonomy or removing a person never
 takes the audit trail with it.
 """
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -255,6 +256,9 @@ class MerchantMemory(Base):
     note_updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    #: The day the person said the store's fixed cost is over (Reports >
+    #: Fixos). Ignored once a charge comes after it.
+    recurring_ended_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

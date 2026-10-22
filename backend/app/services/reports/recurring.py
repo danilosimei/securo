@@ -18,6 +18,9 @@ Rules (simple on purpose, all limits are constants below):
 - A store with 2 consecutive recent months of similar charges and no earlier
   history is also listed, as `new`.
 - `PIX:#` (hashed person) and `UNKNOWN` keys are never recurring.
+- The person can say a fixed cost is over (`merchant_memory.recurring_ended_on`):
+  with no charge after that day the store is `stopped` right away; a later
+  charge makes the mark moot and the history decides again.
 """
 import uuid
 from collections import Counter
@@ -30,6 +33,7 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.categorization import MerchantMemory
 from app.models.category import Category
 from app.models.transaction import Transaction
 from app.services._query_filters import counts_as_user_pnl, reporting_date_col
@@ -76,6 +80,11 @@ class Recurring:
     up_share: Optional[Decimal] = None
     #: A recent charge far above the usual one, if any.
     atypical_amount: Optional[Decimal] = None
+    #: The day the person marked it as over, while no charge came after it.
+    ended_on: Optional[date] = None
+    #: The usual charge before the last one and the last one (status `up`).
+    previous_amount: Optional[Decimal] = None
+    last_amount: Optional[Decimal] = None
 
     @property
     def amount_year(self) -> Decimal:
@@ -153,7 +162,9 @@ def _stable(amounts: list[Decimal]) -> tuple[bool, Optional[int]]:
     return False, None
 
 
-def _classify(key: str, charges: list[Charge], today: date) -> Optional[Recurring]:
+def _classify(
+    key: str, charges: list[Charge], today: date, ended_on: Optional[date] = None
+) -> Optional[Recurring]:
     current = _month_index(today)
     by_month: dict[int, list[Charge]] = {}
     for charge in charges:
@@ -168,6 +179,7 @@ def _classify(key: str, charges: list[Charge], today: date) -> Optional[Recurrin
     series = [amount for _, amount in hits]
     atypical: Optional[Decimal] = None
     up_share: Optional[Decimal] = None
+    previous_amount: Optional[Decimal] = None
 
     if len(hits) >= MIN_MONTHS_SEEN:
         ok, outlier = _stable(series)
@@ -203,28 +215,42 @@ def _classify(key: str, charges: list[Charge], today: date) -> Optional[Recurrin
             if earlier > 0 and series[-1] >= earlier * (1 + UP_THRESHOLD):
                 status = "up"
                 up_share = ((series[-1] - earlier) / earlier).quantize(Decimal("0.001"))
+                previous_amount = earlier.quantize(CENT)
 
+    last_date = max(c.day for c in charges)
+    marked = ended_on is not None and last_date <= ended_on
+    if marked:
+        status = "stopped"
     category = Counter(c.category_id for c in charges).most_common(1)[0][0]
     return Recurring(
         merchant_key=key,
         category_id=category,
         amount_month=median(series[-3:]).quantize(CENT),
         status=status,
-        last_date=max(c.day for c in charges),
+        last_date=last_date,
         months_seen=len(by_month),
-        up_share=up_share,
+        up_share=up_share if status == "up" else None,
         atypical_amount=atypical.quantize(CENT) if atypical is not None else None,
+        ended_on=ended_on if marked else None,
+        previous_amount=previous_amount if status == "up" else None,
+        last_amount=series[-1].quantize(CENT),
     )
 
 
-def detect(charges: list[Charge], today: date) -> list[Recurring]:
-    """The recurring stores in a list of debits, biggest per year first."""
+def detect(
+    charges: list[Charge], today: date, ended: Optional[dict[str, date]] = None
+) -> list[Recurring]:
+    """The recurring stores in a list of debits, biggest per year first.
+    `ended`: store key -> the day the person marked its fixed cost as over."""
+    ended = ended or {}
     per_key: dict[str, list[Charge]] = {}
     for charge in charges:
         if is_candidate_key(charge.key) and charge.amount > ZERO:
             per_key.setdefault(charge.key, []).append(charge)
     found = [
-        item for key, items in per_key.items() if (item := _classify(key, items, today)) is not None
+        item
+        for key, items in per_key.items()
+        if (item := _classify(key, items, today, ended.get(key))) is not None
     ]
     found.sort(key=lambda item: (-item.amount_year, item.merchant_key))
     return found
@@ -249,7 +275,44 @@ async def detect_recurring(
         for key, category_id, day, value, installments in rows
         if installments is None and key is not None
     ]
-    return detect(charges, today)
+    return detect(charges, today, await ended_marks(session, workspace_id))
+
+
+async def ended_marks(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, date]:
+    """Store key -> the day the person marked its fixed cost as over."""
+    rows = await session.execute(
+        select(MerchantMemory.merchant_key, MerchantMemory.recurring_ended_on).where(
+            MerchantMemory.workspace_id == workspace_id,
+            MerchantMemory.recurring_ended_on.is_not(None),
+        )
+    )
+    return {key: day for key, day in rows.all() if day is not None}
+
+
+async def mark_ended(
+    session: AsyncSession, workspace_id: uuid.UUID, key: str, day: Optional[date]
+) -> MerchantMemory | None:
+    """Mark (a day) or unmark (None) a store's fixed cost as over. Unmarking a
+    store the memory never saw creates nothing and returns None."""
+    from app.services.categorization.memory import _get_or_create, stored_key
+
+    key = stored_key(key)
+    if day is None:
+        row = (
+            await session.execute(
+                select(MerchantMemory).where(
+                    MerchantMemory.workspace_id == workspace_id,
+                    MerchantMemory.merchant_key == key,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+    else:
+        row = await _get_or_create(session, workspace_id, key)
+    row.recurring_ended_on = day
+    await session.flush()
+    return row
 
 
 async def recurring_report(
@@ -286,6 +349,7 @@ async def to_api(
             "status": item.status,
             "last_date": item.last_date.isoformat(),
             "months_seen": item.months_seen,
+            "ended_on": item.ended_on.isoformat() if item.ended_on else None,
         }
         for item in items
     ]
