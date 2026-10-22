@@ -2151,6 +2151,26 @@
         "clickHint": "クリックしてその月を見る",
         "tooShort": "月を比較するには1か月より長い期間を選んでください。"
       }
+    },
+    "trends": {
+      "tab": "トレンド",
+      "legend": "グループ（タップで表示を切り替え）",
+      "monthTotal": "月の合計",
+      "restGroups": "その他のグループ",
+      "headlineUp": "最も増えたのは{{name}}：直近3か月で{{change}}、現在は月{{value}}。",
+      "headlineDown": "直近3か月で増えたものはありません。最も減ったのは{{name}}：{{change}}。",
+      "headlineFlat": "直近3か月の支出は横ばいです。",
+      "areaTitle": "グループ別の支出（月ごと）",
+      "areaAnswer": "{{month}}の支出は{{total}}。最大のグループは{{group}}です。",
+      "window": "{{from}}〜{{to}}",
+      "gridTitle": "カテゴリ",
+      "gridDescription": "増加率の大きい順：直近3か月（網掛け）と、その前の3か月の比較。",
+      "empty": "この12か月に支出はありません。",
+      "new": "新規",
+      "perMonth": "月{{value}}",
+      "cardAria": "{{name}}：{{value}}、{{change}}。探索で開く。",
+      "showAll": "すべてのカテゴリを見る（{{n}}）",
+      "showFewer": "表示を減らす"
     }
   },
   "payees": {

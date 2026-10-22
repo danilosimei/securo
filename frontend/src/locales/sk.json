@@ -2263,6 +2263,26 @@
         "clickHint": "Kliknite pre zobrazenie mesiaca",
         "tooShort": "Na porovnanie mesiacov vyberte dlhšie obdobie ako mesiac."
       }
+    },
+    "trends": {
+      "tab": "Trendy",
+      "legend": "Skupiny (ťuknutím zapnete či vypnete)",
+      "monthTotal": "súčet mesiaca",
+      "restGroups": "Ostatné skupiny",
+      "headlineUp": "Najviac rástlo {{name}}: {{change}} za posledné 3 mesiace, teraz {{value}} mesačne.",
+      "headlineDown": "Za posledné 3 mesiace nič nestúplo; najviac kleslo {{name}}: {{change}}.",
+      "headlineFlat": "Výdavky boli za posledné 3 mesiace stabilné.",
+      "areaTitle": "Výdavky podľa skupín, mesiac po mesiaci",
+      "areaAnswer": "V {{month}} boli výdavky {{total}}; najväčšia skupina je {{group}}.",
+      "window": "{{from}} – {{to}}",
+      "gridTitle": "Kategórie",
+      "gridDescription": "Podľa najväčšieho rastu: posledné 3 mesiace (tieňované) oproti 3 predchádzajúcim.",
+      "empty": "Za týchto 12 mesiacov žiadne výdavky.",
+      "new": "nová",
+      "perMonth": "{{value}}/mes.",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Otvoriť v Preskúmať.",
+      "showAll": "Zobraziť všetky kategórie ({{n}})",
+      "showFewer": "Zobraziť menej"
     }
   },
   "payees": {

@@ -179,6 +179,7 @@ describe('Reports page, tabs', () => {
     expect(tabButtons().map((b) => b.textContent)).toEqual([
       t('reports.overview.tab'),
       t('reports.explore.tab'),
+      t('reports.trends.tab'),
       t('reports.cashFlow'),
       t('reports.netWorth'),
     ])

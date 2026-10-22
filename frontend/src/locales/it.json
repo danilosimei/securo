@@ -2155,6 +2155,26 @@
         "clickHint": "Fai clic per vedere il mese",
         "tooShort": "Scegli un periodo di più di un mese per confrontare i mesi."
       }
+    },
+    "trends": {
+      "tab": "Tendenze",
+      "legend": "Gruppi (tocca per attivare o disattivare)",
+      "monthTotal": "totale del mese",
+      "restGroups": "Altri gruppi",
+      "headlineUp": "{{name}} è cresciuto di più: {{change}} negli ultimi 3 mesi, ora {{value}} al mese.",
+      "headlineDown": "Niente è salito negli ultimi 3 mesi; {{name}} è sceso di più: {{change}}.",
+      "headlineFlat": "La spesa è rimasta stabile negli ultimi 3 mesi.",
+      "areaTitle": "Spesa per gruppo, mese per mese",
+      "areaAnswer": "A {{month}} la spesa è stata {{total}}; {{group}} è il gruppo più grande.",
+      "window": "da {{from}} a {{to}}",
+      "gridTitle": "Categorie",
+      "gridDescription": "Ordinate per aumento maggiore: ultimi 3 mesi (in ombra) rispetto ai 3 precedenti.",
+      "empty": "Nessuna spesa in questi 12 mesi.",
+      "new": "nuova",
+      "perMonth": "{{value}}/mese",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Apri in Esplora.",
+      "showAll": "Vedi tutte le categorie ({{n}})",
+      "showFewer": "Vedi meno"
     }
   },
   "payees": {

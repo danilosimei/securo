@@ -2237,6 +2237,26 @@
         "clickHint": "Kliknij, aby zobaczyć miesiąc",
         "tooShort": "Wybierz okres dłuższy niż miesiąc, aby porównać miesiące."
       }
+    },
+    "trends": {
+      "tab": "Trendy",
+      "legend": "Grupy (dotknij, aby włączyć lub wyłączyć)",
+      "monthTotal": "suma miesiąca",
+      "restGroups": "Pozostałe grupy",
+      "headlineUp": "Najbardziej wzrosło {{name}}: {{change}} w ostatnich 3 miesiącach, teraz {{value}} miesięcznie.",
+      "headlineDown": "Nic nie wzrosło w ostatnich 3 miesiącach; najbardziej spadło {{name}}: {{change}}.",
+      "headlineFlat": "Wydatki były stabilne w ostatnich 3 miesiącach.",
+      "areaTitle": "Wydatki według grup, miesiąc po miesiącu",
+      "areaAnswer": "W {{month}} wydatki wyniosły {{total}}; największa grupa to {{group}}.",
+      "window": "{{from}} – {{to}}",
+      "gridTitle": "Kategorie",
+      "gridDescription": "Według największego wzrostu: ostatnie 3 miesiące (zacienione) wobec 3 poprzednich.",
+      "empty": "Brak wydatków w tych 12 miesiącach.",
+      "new": "nowa",
+      "perMonth": "{{value}}/mies.",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Otwórz w Eksploruj.",
+      "showAll": "Zobacz wszystkie kategorie ({{n}})",
+      "showFewer": "Pokaż mniej"
     }
   },
   "payees": {

@@ -2152,6 +2152,26 @@
         "clickHint": "Klicke, um den Monat zu sehen",
         "tooShort": "Wähle einen Zeitraum über einen Monat, um Monate zu vergleichen."
       }
+    },
+    "trends": {
+      "tab": "Trends",
+      "legend": "Gruppen (tippen zum Ein- oder Ausblenden)",
+      "monthTotal": "Monatssumme",
+      "restGroups": "Weitere Gruppen",
+      "headlineUp": "{{name}} ist am stärksten gewachsen: {{change}} in den letzten 3 Monaten, jetzt {{value}} pro Monat.",
+      "headlineDown": "Nichts ist in den letzten 3 Monaten gestiegen; {{name}} ist am stärksten gesunken: {{change}}.",
+      "headlineFlat": "Die Ausgaben blieben in den letzten 3 Monaten stabil.",
+      "areaTitle": "Ausgaben nach Gruppe, Monat für Monat",
+      "areaAnswer": "Im {{month}} betrugen die Ausgaben {{total}}; {{group}} ist die größte Gruppe.",
+      "window": "{{from}} bis {{to}}",
+      "gridTitle": "Kategorien",
+      "gridDescription": "Nach stärkstem Anstieg sortiert: letzte 3 Monate (schattiert) gegen die 3 davor.",
+      "empty": "Keine Ausgaben in diesen 12 Monaten.",
+      "new": "neu",
+      "perMonth": "{{value}}/Monat",
+      "cardAria": "{{name}}: {{value}}, {{change}}. In Erkunden öffnen.",
+      "showAll": "Alle Kategorien ansehen ({{n}})",
+      "showFewer": "Weniger anzeigen"
     }
   },
   "payees": {

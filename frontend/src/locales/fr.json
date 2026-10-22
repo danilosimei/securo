@@ -2155,6 +2155,26 @@
         "clickHint": "Cliquez pour voir le mois",
         "tooShort": "Choisissez une période de plus d’un mois pour comparer les mois."
       }
+    },
+    "trends": {
+      "tab": "Tendances",
+      "legend": "Groupes (touchez pour activer ou désactiver)",
+      "monthTotal": "total du mois",
+      "restGroups": "Autres groupes",
+      "headlineUp": "{{name}} a le plus augmenté : {{change}} sur les 3 derniers mois, désormais {{value}} par mois.",
+      "headlineDown": "Rien n’a augmenté sur les 3 derniers mois ; {{name}} a le plus baissé : {{change}}.",
+      "headlineFlat": "Les dépenses sont restées stables sur les 3 derniers mois.",
+      "areaTitle": "Dépenses par groupe, mois par mois",
+      "areaAnswer": "En {{month}}, les dépenses ont été de {{total}} ; {{group}} est le premier groupe.",
+      "window": "{{from}} à {{to}}",
+      "gridTitle": "Catégories",
+      "gridDescription": "Triées par plus forte hausse : 3 derniers mois (zone ombrée) face aux 3 précédents.",
+      "empty": "Aucune dépense sur ces 12 mois.",
+      "new": "nouvelle",
+      "perMonth": "{{value}}/mois",
+      "cardAria": "{{name}} : {{value}}, {{change}}. Ouvrir dans Explorer.",
+      "showAll": "Voir toutes les catégories ({{n}})",
+      "showFewer": "Voir moins"
     }
   },
   "payees": {

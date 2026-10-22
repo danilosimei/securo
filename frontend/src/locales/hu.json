@@ -2151,6 +2151,26 @@
         "clickHint": "Kattints a hónap megtekintéséhez",
         "tooShort": "Hónapok összevetéséhez válassz egy hónapnál hosszabb időszakot."
       }
+    },
+    "trends": {
+      "tab": "Trendek",
+      "legend": "Csoportok (koppints a be- vagy kikapcsoláshoz)",
+      "monthTotal": "havi összesen",
+      "restGroups": "További csoportok",
+      "headlineUp": "A legjobban {{name}} nőtt: {{change}} az utolsó 3 hónapban, most havi {{value}}.",
+      "headlineDown": "Az utolsó 3 hónapban semmi sem nőtt; a legjobban {{name}} csökkent: {{change}}.",
+      "headlineFlat": "A kiadások stabilak voltak az utolsó 3 hónapban.",
+      "areaTitle": "Kiadás csoportonként, hónapról hónapra",
+      "areaAnswer": "{{month}} hónapban a kiadás {{total}} volt; a legnagyobb csoport {{group}}.",
+      "window": "{{from}} – {{to}}",
+      "gridTitle": "Kategóriák",
+      "gridDescription": "A legnagyobb növekedés szerint: utolsó 3 hónap (árnyékolt) az előző 3-hoz képest.",
+      "empty": "Nincs kiadás ebben a 12 hónapban.",
+      "new": "új",
+      "perMonth": "havi {{value}}",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Megnyitás a Felfedezésben.",
+      "showAll": "Összes kategória ({{n}})",
+      "showFewer": "Kevesebb"
     }
   },
   "payees": {

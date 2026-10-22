@@ -2151,6 +2151,26 @@
         "clickHint": "Click to see the month",
         "tooShort": "Pick a period longer than one month to compare months."
       }
+    },
+    "trends": {
+      "tab": "Trends",
+      "legend": "Groups (tap to turn on or off)",
+      "monthTotal": "month total",
+      "restGroups": "Other groups",
+      "headlineUp": "{{name}} grew the most: {{change}} in the last 3 months, now {{value}} a month.",
+      "headlineDown": "Nothing rose in the last 3 months; {{name}} fell the most: {{change}}.",
+      "headlineFlat": "Spending held steady over the last 3 months.",
+      "areaTitle": "Spending by group, month by month",
+      "areaAnswer": "In {{month}} spending was {{total}}; {{group}} is the biggest group.",
+      "window": "{{from}} to {{to}}",
+      "gridTitle": "Categories",
+      "gridDescription": "Sorted by the biggest rise: last 3 months (shaded) against the 3 before.",
+      "empty": "No spending in these 12 months.",
+      "new": "new",
+      "perMonth": "{{value}}/month",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Open in Explore.",
+      "showAll": "See all categories ({{n}})",
+      "showFewer": "See fewer"
     }
   },
   "payees": {

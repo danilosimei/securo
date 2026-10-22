@@ -2153,6 +2153,26 @@
         "clickHint": "Klik om de maand te zien",
         "tooShort": "Kies een periode langer dan een maand om maanden te vergelijken."
       }
+    },
+    "trends": {
+      "tab": "Trends",
+      "legend": "Groepen (tik om aan of uit te zetten)",
+      "monthTotal": "maandtotaal",
+      "restGroups": "Overige groepen",
+      "headlineUp": "{{name}} groeide het meest: {{change}} in de laatste 3 maanden, nu {{value}} per maand.",
+      "headlineDown": "Niets steeg in de laatste 3 maanden; {{name}} daalde het meest: {{change}}.",
+      "headlineFlat": "De uitgaven bleven de laatste 3 maanden stabiel.",
+      "areaTitle": "Uitgaven per groep, maand per maand",
+      "areaAnswer": "In {{month}} waren de uitgaven {{total}}; {{group}} is de grootste groep.",
+      "window": "{{from}} tot {{to}}",
+      "gridTitle": "Categorieën",
+      "gridDescription": "Gesorteerd op grootste stijging: laatste 3 maanden (gearceerd) tegen de 3 ervoor.",
+      "empty": "Geen uitgaven in deze 12 maanden.",
+      "new": "nieuw",
+      "perMonth": "{{value}}/maand",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Openen in Verkennen.",
+      "showAll": "Alle categorieën bekijken ({{n}})",
+      "showFewer": "Minder tonen"
     }
   },
   "payees": {
