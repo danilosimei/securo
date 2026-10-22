@@ -2523,7 +2523,8 @@
     "remove": "Entfernen",
     "undo": "Undo",
     "clearSearch": "Suche löschen",
-    "loadError": "Laden fehlgeschlagen. Bitte erneut versuchen."
+    "loadError": "Laden fehlgeschlagen. Bitte erneut versuchen.",
+    "backTo": "Zurück zu {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Gruppen suchen...",

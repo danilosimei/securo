@@ -2654,7 +2654,8 @@
     "remove": "Odstrániť",
     "undo": "Undo",
     "clearSearch": "Vymazať hľadanie",
-    "loadError": "Načítanie zlyhalo. Skúste to znova."
+    "loadError": "Načítanie zlyhalo. Skúste to znova.",
+    "backTo": "Späť na {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Hľadať skupiny...",

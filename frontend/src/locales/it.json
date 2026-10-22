@@ -2526,7 +2526,8 @@
     "remove": "Rimuovi",
     "undo": "Undo",
     "clearSearch": "Cancella ricerca",
-    "loadError": "Impossibile caricare. Riprova."
+    "loadError": "Impossibile caricare. Riprova.",
+    "backTo": "Torna a {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Cerca gruppi...",

@@ -2522,7 +2522,8 @@
     "remove": "हटाएँ",
     "undo": "Undo",
     "clearSearch": "खोज साफ़ करें",
-    "loadError": "लोड नहीं हो सका। फिर से कोशिश करें।"
+    "loadError": "लोड नहीं हो सका। फिर से कोशिश करें।",
+    "backTo": "{{name}} पर वापस जाएं"
   },
   "splitGroups": {
     "searchPlaceholder": "समूह खोजें...",

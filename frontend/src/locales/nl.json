@@ -2524,7 +2524,8 @@
     "remove": "Verwijderen",
     "undo": "Undo",
     "clearSearch": "Zoekopdracht wissen",
-    "loadError": "Laden is mislukt. Probeer het opnieuw."
+    "loadError": "Laden is mislukt. Probeer het opnieuw.",
+    "backTo": "Terug naar {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Groepen zoeken...",

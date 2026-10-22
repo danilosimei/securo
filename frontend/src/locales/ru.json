@@ -2547,7 +2547,8 @@
     "remove": "Удалить",
     "undo": "Undo",
     "clearSearch": "Очистить поиск",
-    "loadError": "Не удалось загрузить. Попробуйте ещё раз."
+    "loadError": "Не удалось загрузить. Попробуйте ещё раз.",
+    "backTo": "Назад: {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Поиск групп...",

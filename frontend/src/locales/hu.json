@@ -2522,7 +2522,8 @@
     "remove": "Eltávolítás",
     "undo": "Undo",
     "clearSearch": "Keresés törlése",
-    "loadError": "Nem sikerült betölteni. Próbáld újra."
+    "loadError": "Nem sikerült betölteni. Próbáld újra.",
+    "backTo": "Vissza: {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Csoportok keresése...",

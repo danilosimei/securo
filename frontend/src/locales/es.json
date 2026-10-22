@@ -2526,7 +2526,8 @@
     "remove": "Quitar",
     "undo": "Undo",
     "clearSearch": "Borrar búsqueda",
-    "loadError": "No se pudo cargar. Inténtalo de nuevo."
+    "loadError": "No se pudo cargar. Inténtalo de nuevo.",
+    "backTo": "Volver a {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Buscar grupos...",

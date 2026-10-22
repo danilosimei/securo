@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Ban, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Receipt,
+  Ban, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Receipt,
   Repeat, Trash2, Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -187,16 +187,8 @@ export default function InvoiceScheduleDetailPage() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/invoices/schedules')}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-        data-testid="schedule-back"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        {t('invoices.schedules.backToList')}
-      </button>
-
       <PageHeader
+        back={{ to: '/invoices/schedules', label: t('invoices.schedules.title'), testId: 'schedule-back' }}
         section={schedule.payee?.name ?? t('invoices.noClient')}
         title={schedule.name}
         action={

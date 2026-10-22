@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { PageHeader } from '@/components/page-header'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useDateLocale } from '@/hooks/use-display-locale'
@@ -277,7 +278,7 @@ export default function WorkspaceSettingsPage() {
 
   if (!current) {
     return (
-      <div className="container max-w-5xl py-8 space-y-4">
+      <div className="space-y-4">
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -291,8 +292,10 @@ export default function WorkspaceSettingsPage() {
   const kindLabelKey = WORKSPACE_KIND_LABEL_KEY[current.kind as WorkspaceKind]
 
   return (
-    <div className="container max-w-5xl py-8 space-y-6">
-      {/* Header card — identity + role + stats strip */}
+    <div className="space-y-6">
+      <PageHeader title={t('workspace.settingsMenu')} />
+
+      {/* Identity card — name + role + stats strip */}
       <section className="rounded-xl border bg-card overflow-hidden">
         <div className="p-6 flex items-center gap-5 border-b">
           <CategoryIcon
@@ -303,7 +306,7 @@ export default function WorkspaceSettingsPage() {
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-semibold truncate">{current.name}</h1>
+              <h2 className="text-xl font-semibold truncate">{current.name}</h2>
               {/* Fixed at creation, so it reads as identity, not a control. */}
               {kindLabelKey && (
                 <Badge variant="outline" className="text-[11px]">

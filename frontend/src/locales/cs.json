@@ -2670,7 +2670,8 @@
     "remove": "Odebrat",
     "undo": "Undo",
     "clearSearch": "Vymazat hledání",
-    "loadError": "Načtení se nepodařilo. Zkuste to znovu."
+    "loadError": "Načtení se nepodařilo. Zkuste to znovu.",
+    "backTo": "Zpět na {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Hledat skupiny...",

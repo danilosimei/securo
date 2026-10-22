@@ -2522,7 +2522,8 @@
     "remove": "削除",
     "undo": "Undo",
     "clearSearch": "検索をクリア",
-    "loadError": "読み込めませんでした。もう一度お試しください。"
+    "loadError": "読み込めませんでした。もう一度お試しください。",
+    "backTo": "{{name}}に戻る"
   },
   "splitGroups": {
     "searchPlaceholder": "グループを検索...",

@@ -2625,7 +2625,8 @@
     "remove": "Usuń",
     "undo": "Undo",
     "clearSearch": "Wyczyść wyszukiwanie",
-    "loadError": "Nie udało się wczytać. Spróbuj ponownie."
+    "loadError": "Nie udało się wczytać. Spróbuj ponownie.",
+    "backTo": "Wróć do: {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Szukaj grup...",

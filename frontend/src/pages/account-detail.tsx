@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react'
+import { PageHeader } from '@/components/page-header'
+import { PageActions } from '@/components/page-actions'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { getAccountName } from '@/lib/account-utils'
-import { useParams, Link } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -18,7 +20,7 @@ import { toast } from 'sonner'
 import type { CreditCardBill, ProjectedTransaction, Transaction } from '@/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, ArrowLeftRight, CalendarClock, ChevronLeft, ChevronRight, Clock, EyeClosed, HelpCircle, Paperclip, Pencil, Plus, Receipt, X } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, ChevronLeft, ChevronRight, Clock, EyeClosed, HelpCircle, Paperclip, Pencil, Plus, Receipt, X } from 'lucide-react'
 import { MobileTransactionRow } from '@/components/mobile-transaction-row'
 import { transactionDescription } from '@/lib/transaction-description'
 import { CategoryIcon } from '@/components/category-icon'
@@ -891,79 +893,63 @@ export default function AccountDetailPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6 space-y-4">
-        {/* Breadcrumb */}
-        <Link
-          to="/accounts"
-          className="inline-flex items-center text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-          {t('accounts.backToAccounts')}
-        </Link>
-
-        {/* Title row */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-semibold text-foreground tracking-tight truncate">
-              {getAccountName(account)}
-            </h1>
-            <div className="flex items-center gap-2 mt-1 overflow-hidden">
-              <span className="text-xs font-medium text-muted-foreground">
-                {t(`accounts.type${account.type.split('_').map(s => s[0].toUpperCase() + s.slice(1)).join('')}`, account.type)}
+      <PageHeader
+        back={{ to: '/accounts', label: t('nav.accounts') }}
+        section={t('nav.groupDaily')}
+        title={getAccountName(account)}
+        action={
+          !account.is_closed && canWrite ? (
+            <PageActions
+              primary={
+                <Button onClick={openCreateDialog}>
+                  <Plus />
+                  {t('transactions.addManual')}
+                </Button>
+              }
+              items={[{ label: t('transactions.transfer'), icon: ArrowLeftRight, onSelect: () => setTransferDialogOpen(true) }]}
+            />
+          ) : undefined
+        }
+      />
+      <div className="-mt-3 mb-5 flex items-center gap-2 overflow-hidden">
+        <span className="text-xs font-medium text-muted-foreground">
+          {t(`accounts.type${account.type.split('_').map(s => s[0].toUpperCase() + s.slice(1)).join('')}`, account.type)}
+        </span>
+        {isCreditCard && account.next_due_date && (() => {
+          const d = daysUntil(account.next_due_date)
+          if (d > 7) return null
+          const cfg = d < 0
+            ? { bg: 'bg-rose-100 dark:bg-rose-500/20', text: 'text-rose-700 dark:text-rose-400', label: t('accounts.overdue') }
+            : d === 0
+              ? { bg: 'bg-rose-100 dark:bg-rose-500/20', text: 'text-rose-700 dark:text-rose-400', label: t('accounts.dueToday') }
+              : d <= 3
+                ? { bg: 'bg-rose-100 dark:bg-rose-500/20', text: 'text-rose-700 dark:text-rose-400', label: t('accounts.dueIn', { count: d }) }
+                : { bg: 'bg-amber-100 dark:bg-amber-500/20', text: 'text-amber-700 dark:text-amber-400', label: t('accounts.dueIn', { count: d }) }
+          return (
+            <>
+              <span className="text-muted-foreground text-xs">·</span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.bg} ${cfg.text}`}>
+                {cfg.label}
               </span>
-              {isCreditCard && account.next_due_date && (() => {
-                const d = daysUntil(account.next_due_date)
-                if (d > 7) return null
-                const cfg = d < 0
-                  ? { bg: 'bg-rose-100 dark:bg-rose-500/20', text: 'text-rose-700 dark:text-rose-400', label: t('accounts.overdue') }
-                  : d === 0
-                    ? { bg: 'bg-rose-100 dark:bg-rose-500/20', text: 'text-rose-700 dark:text-rose-400', label: t('accounts.dueToday') }
-                    : d <= 3
-                      ? { bg: 'bg-rose-100 dark:bg-rose-500/20', text: 'text-rose-700 dark:text-rose-400', label: t('accounts.dueIn', { count: d }) }
-                      : { bg: 'bg-amber-100 dark:bg-amber-500/20', text: 'text-amber-700 dark:text-amber-400', label: t('accounts.dueIn', { count: d }) }
-                return (
-                  <>
-                    <span className="text-muted-foreground text-xs">·</span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.bg} ${cfg.text}`}>
-                      {cfg.label}
-                    </span>
-                  </>
-                )
-              })()}
-              {isCreditCard && canWrite && (!account.statement_close_day || !account.payment_due_day) && (
-                <>
-                  <span className="text-muted-foreground text-xs">·</span>
-                  <button
-                    type="button"
-                    onClick={() => setCcSettingsOpen(true)}
-                    title={t('accounts.cycleMissingHint')}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-500/30 transition-colors cursor-pointer"
-                  >
-                    <HelpCircle className="h-3 w-3" />
-                    {t('accounts.cycleMissing')}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-          {!account.is_closed && canWrite && (
-            <div className="flex shrink-0 items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setTransferDialogOpen(true)}
-              >
-                <ArrowLeftRight className="h-4 w-4 mr-1" />
-                {t('transactions.transfer')}
-              </Button>
-              <Button size="sm" onClick={openCreateDialog}>
-                <Plus className="h-4 w-4 mr-1" />
-                <span className="sm:hidden">{t('common.add')}</span>
-                <span className="hidden sm:inline">{t('transactions.addManual')}</span>
-              </Button>
-            </div>
-          )}
-        </div>
+            </>
+          )
+        })()}
+        {isCreditCard && canWrite && (!account.statement_close_day || !account.payment_due_day) && (
+          <>
+            <span className="text-muted-foreground text-xs">·</span>
+            <button
+              type="button"
+              onClick={() => setCcSettingsOpen(true)}
+              title={t('accounts.cycleMissingHint')}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-500/30 transition-colors cursor-pointer"
+            >
+              <HelpCircle className="h-3 w-3" />
+              {t('accounts.cycleMissing')}
+            </button>
+          </>
+        )}
+      </div>
+      <div className="mb-6 space-y-4">
         <div className="flex items-center gap-2 sm:gap-3">
           {isCreditCard ? (
             <div className="flex items-center gap-1">

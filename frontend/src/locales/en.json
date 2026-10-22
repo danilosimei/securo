@@ -2522,7 +2522,8 @@
     "remove": "Remove",
     "undo": "Undo",
     "clearSearch": "Clear search",
-    "loadError": "Couldn't load this. Try again."
+    "loadError": "Couldn't load this. Try again.",
+    "backTo": "Back to {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Search groups...",

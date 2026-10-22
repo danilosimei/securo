@@ -2522,7 +2522,8 @@
     "remove": "Αφαίρεση",
     "undo": "Undo",
     "clearSearch": "Εκκαθάριση αναζήτησης",
-    "loadError": "Η φόρτωση απέτυχε. Δοκιμάστε ξανά."
+    "loadError": "Η φόρτωση απέτυχε. Δοκιμάστε ξανά.",
+    "backTo": "Πίσω στο {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Αναζήτηση ομάδων...",

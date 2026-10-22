@@ -3,9 +3,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, ArchiveRestore, ArrowLeft, Package, Plus, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Package, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -57,7 +56,6 @@ type Filter = 'active' | 'archived'
 
 export default function ProductsPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
   const { canWrite } = useWorkspace()
@@ -123,16 +121,8 @@ export default function ProductsPage() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/invoices')}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-        data-testid="products-back"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        {t('invoices.backToList')}
-      </button>
-
       <PageHeader
+        back={{ to: '/invoices', label: t('nav.invoices'), testId: 'products-back' }}
         section={t('nav.groupDaily')}
         title={t('invoices.products.title')}
         action={

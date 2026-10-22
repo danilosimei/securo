@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Ban, Check, CheckCircle2, CircleSlash, Copy, Download, FileText, Link2,
+  Ban, Check, CheckCircle2, CircleSlash, Copy, Download, FileText, Link2,
   MinusCircle, MoreHorizontal, Pencil, Repeat, RotateCcw, Send, Share2, Trash2, Unlink,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -308,15 +308,8 @@ export default function InvoiceDetailPage() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/invoices')}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        {t('invoices.backToList')}
-      </button>
-
       <PageHeader
+        back={{ to: '/invoices', label: t('nav.invoices') }}
         section={
           invoice.payee?.name ??
           t(invoice.direction === 'payable' ? 'invoices.noSupplier' : 'invoices.noClient')

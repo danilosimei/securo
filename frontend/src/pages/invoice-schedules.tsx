@@ -5,7 +5,7 @@ import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Repeat } from 'lucide-react'
+import { Plus, Repeat } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -100,16 +100,8 @@ export default function InvoiceSchedulesPage() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/invoices')}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-        data-testid="schedules-back"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        {t('invoices.backToList')}
-      </button>
-
       <PageHeader
+        back={{ to: '/invoices', label: t('nav.invoices'), testId: 'schedules-back' }}
         section={t('nav.groupDaily')}
         title={t('invoices.schedules.title')}
         action={

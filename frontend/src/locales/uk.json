@@ -2547,7 +2547,8 @@
     "remove": "Видалити",
     "undo": "Undo",
     "clearSearch": "Очистити пошук",
-    "loadError": "Не вдалося завантажити. Спробуйте ще раз."
+    "loadError": "Не вдалося завантажити. Спробуйте ще раз.",
+    "backTo": "Назад: {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Пошук груп...",

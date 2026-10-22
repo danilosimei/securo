@@ -6,7 +6,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  ArrowLeft,
   ArrowRight,
   ChevronDown,
   Link2,
@@ -533,20 +532,15 @@ export default function GroupDetailPage() {
   return (
     <div className="space-y-4">
       <PageHeader
+        back={{ to: '/groups', label: t('nav.splitGroups') }}
         section={t('nav.groupOrganization')}
         title={group.name}
         action={
-          <div className="flex items-center gap-2">
-            {!isOwner && (
-              <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
-                {t('splitGroups.sharedWithYou')}
-              </span>
-            )}
-            <Button variant="outline" onClick={() => navigate('/groups')}>
-              <ArrowLeft size={14} className="mr-1" />
-              {t('common.back')}
-            </Button>
-          </div>
+          !isOwner ? (
+            <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+              {t('splitGroups.sharedWithYou')}
+            </span>
+          ) : undefined
         }
       />
 

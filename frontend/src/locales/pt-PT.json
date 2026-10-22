@@ -2526,7 +2526,8 @@
     "remove": "Remover",
     "undo": "Undo",
     "clearSearch": "Limpar pesquisa",
-    "loadError": "Não foi possível carregar. Tente de novo."
+    "loadError": "Não foi possível carregar. Tente de novo.",
+    "backTo": "Voltar a {{name}}"
   },
   "splitGroups": {
     "searchPlaceholder": "Pesquisar grupos...",

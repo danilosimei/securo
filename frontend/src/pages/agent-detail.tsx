@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { BackLink } from '@/components/page-header'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Plus, MessageSquare } from 'lucide-react'
+import { Plus, MessageSquare } from 'lucide-react'
 import { ConversationRow } from '@/components/agents/conversation-row'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -81,10 +82,10 @@ export default function AgentDetailPage() {
     // and the user has to scroll the whole page — which they don't want.
     // overflow-hidden ensures only the messages div inside ChatPanel scrolls.
     <div className="flex flex-col h-[calc(100dvh-6.5rem)] lg:h-[calc(100dvh-3rem)] overflow-hidden">
-      <div className="border-b px-4 py-3 flex items-center gap-3">
-        <Button size="icon" variant="ghost" onClick={() => navigate('/agents')} title={t('common.back')} aria-label={t('common.back')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+      <div className="px-4 pt-3 shrink-0">
+        <BackLink to="/agents" label={t('agents.title')} />
+      </div>
+      <div className="border-b px-4 pb-3 flex items-center gap-3">
         <div
           className="h-9 w-9 rounded-md flex items-center justify-center text-white shrink-0"
           style={{ backgroundColor: agent.color }}

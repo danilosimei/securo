@@ -4,9 +4,8 @@ import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { SectionCard } from '@/components/ui/section-card'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, CheckCircle2, Plug, Plus, Star, XCircle, Zap } from 'lucide-react'
+import { CheckCircle2, Plug, Plus, Star, XCircle, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -51,14 +50,8 @@ export default function AgentConnectionsPage() {
 
   return (
     <div>
-      <Link
-        to="/agents"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-2 transition-colors"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> {t('agents.title')}
-      </Link>
-
       <PageHeader
+        back={{ to: '/agents', label: t('agents.title') }}
         section={t('agents.title')}
         title={t('agents.connections.title')}
         action={
