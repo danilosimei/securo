@@ -4,9 +4,11 @@
  *  below. `ReportPeriodSelector` is the closed-period flavour (Overview,
  *  Explore, Trends, Habits); Cash Flow and Net Worth pass their own options to
  *  `PeriodSegments`; `MonthPeriodSelector` is the one-month flavour, with
- *  arrows to the month before and after. `PeriodSlot` is where any of them
+ *  arrows to the month before and after; `CyclePeriodSelector` is the same for a
+ *  credit card's statement cycle. `PeriodSlot` is where any of them
  *  sits on a page. */
 import { useState, type ReactNode } from 'react'
+import type { Locale } from 'date-fns'
 import { useTranslation } from 'react-i18next'
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -23,7 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { localDateString } from '@/lib/date-utils'
 import { DEFAULT_REPORT_PERIOD, REPORT_PERIODS, monthLabel, type ReportPeriodKey } from '@/lib/report-period'
-import { DateRangePicker } from '@/components/ui/date-range-picker'
+import { DateRangePanel, DateRangePicker } from '@/components/ui/date-range-picker'
 
 export const CUSTOM_RANGE_MAX_YEARS = 10
 
@@ -243,5 +245,80 @@ export function YearPeriodSelector({ value, years, onChange, yearLabel, allLabel
       value={value ? String(value) : 'all'}
       onSelect={(key) => onChange(key === 'all' ? null : Number(key))}
     />
+  )
+}
+
+interface CyclePeriodSelectorProps {
+  /** What the control reads: the statement month ("Oct 2026") or the dates. */
+  label: string
+  onStep: (direction: -1 | 1) => void
+  previousLabel: string
+  nextLabel: string
+  /** The cycle's dates (YYYY-MM-DD), opened in the range panel. */
+  from: string
+  to: string
+  onRangeChange: (from: string, to: string) => void
+  /** Date-fns locale for the calendars. */
+  dateFnsLocale: Locale
+}
+
+/** A credit card's statement cycle: arrows to the cycle before and after, the
+ *  cycle itself opens the range panel to pick other dates. Same frame, height
+ *  and trigger as the month and the Reports period. */
+export function CyclePeriodSelector({
+  label,
+  onStep,
+  previousLabel,
+  nextLabel,
+  from,
+  to,
+  onRangeChange,
+  dateFnsLocale,
+}: CyclePeriodSelectorProps) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const arrow =
+    'flex shrink-0 items-center justify-center rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-card/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+
+  return (
+    <div role="group" aria-label={t('reports.explore.periodGroup')} data-testid="period-cycle" className={GROUP_CLASS}>
+      <button type="button" aria-label={previousLabel} title={previousLabel} className={arrow} onClick={() => onStep(-1)}>
+        <ChevronLeft size={14} aria-hidden="true" />
+      </button>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={t('reports.periodMenu', { period: label })}
+            title={label}
+            data-testid="period-menu"
+            className={cn(TRIGGER_CLASS, 'min-w-0 bg-card text-foreground shadow-sm capitalize sm:min-w-40')}
+          >
+            <CalendarDays size={13} aria-hidden="true" className="shrink-0 text-muted-foreground" />
+            <span className="truncate">{label}</span>
+            <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" sideOffset={8} className="w-auto p-0" onOpenAutoFocus={(e) => e.preventDefault()}>
+          <DateRangePanel
+            initialFrom={from}
+            initialTo={to}
+            label={t('transactions.filtersBar.customRange')}
+            hint={t('transactions.filtersBar.pickRange')}
+            mode="range"
+            locale={dateFnsLocale}
+            onApply={(f, e) => {
+              // An emptied pair has no cycle to show: keep the one on screen.
+              if (f && e) onRangeChange(f, e)
+              setOpen(false)
+            }}
+            onCancel={() => setOpen(false)}
+          />
+        </PopoverContent>
+      </Popover>
+      <button type="button" aria-label={nextLabel} title={nextLabel} className={arrow} onClick={() => onStep(1)}>
+        <ChevronRight size={14} aria-hidden="true" />
+      </button>
+    </div>
   )
 }

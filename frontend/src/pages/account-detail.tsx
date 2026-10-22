@@ -6,6 +6,9 @@ import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { getAccountName } from '@/lib/account-utils'
 import { useParams } from 'react-router-dom'
+import { CyclePeriodSelector, MonthPeriodSelector } from '@/components/reports/period-selector'
+import { useMonthParam } from '@/hooks/use-month-param'
+import { monthRange } from '@/lib/month-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -20,7 +23,7 @@ import { toast } from 'sonner'
 import type { CreditCardBill, ProjectedTransaction, Transaction } from '@/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { ArrowLeftRight, CalendarClock, ChevronLeft, ChevronRight, Clock, EyeClosed, HelpCircle, Paperclip, Pencil, Plus, Receipt, X } from 'lucide-react'
+import { ArrowLeftRight, CalendarClock, Clock, EyeClosed, HelpCircle, Paperclip, Pencil, Plus, Receipt, X } from 'lucide-react'
 import { MobileTransactionRow } from '@/components/mobile-transaction-row'
 import { transactionDescription } from '@/lib/transaction-description'
 import { CategoryIcon } from '@/components/category-icon'
@@ -30,11 +33,9 @@ import { TransactionDialog, type TransactionSavePayload } from '@/components/tra
 import { RuleDialog } from '@/components/rule-dialog'
 import { extractApiError } from '@/lib/api-errors'
 import { TransferDialog } from '@/components/transfer-dialog'
-import { DatePickerInput } from '@/components/ui/date-picker-input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useAuth } from '@/contexts/auth-context'
@@ -298,17 +299,27 @@ export default function AccountDetailPage() {
     resetForm(null)
     setDialogOpen(true)
   }
-  const [filterFrom, setFilterFrom] = useState(defaultFrom)
-  const [filterTo, setFilterTo] = useState(defaultTo)
+  // A card shows one statement cycle (kept in state: its dates come from the
+  // bills); any other account shows one calendar month, in `?month=` like
+  // Dashboard, Budgets and Transactions.
+  const [cycleFrom, setCycleFrom] = useState(defaultFrom)
+  const [cycleTo, setCycleTo] = useState(defaultTo)
+  const [month, setMonth] = useMonthParam()
   const [showPrimary, setShowPrimary] = useState(false)
   const [filterTouched, setFilterTouched] = useState(false)
-  const handleFilterFromChange = (v: string) => { setFilterTouched(true); setFilterFrom(v) }
-  const handleFilterToChange = (v: string) => { setFilterTouched(true); setFilterTo(v) }
+  const handleCycleRangeChange = (from: string, to: string) => {
+    setFilterTouched(true)
+    setCycleFrom(from)
+    setCycleTo(to)
+  }
   const { data: account, isLoading: accountLoading } = useQuery({
     queryKey: ['accounts', id],
     queryFn: () => accounts.get(id!),
     enabled: !!id,
   })
+  const monthDates = monthRange(month)
+  const filterFrom = account?.type === 'credit_card' ? cycleFrom : monthDates.from
+  const filterTo = account?.type === 'credit_card' ? cycleTo : monthDates.to
 
   // Bills (faturas) from the provider's bills feed — issue #92. Only fetched
   // for CC accounts; non-CC and CC-without-bills both return [] so the UI
@@ -374,8 +385,8 @@ export default function AccountDetailPage() {
         : billsAsc.length > 0 && account.statement_close_day
           ? creditCardCycleBoundaries(account.statement_close_day, new Date())
           : defaultCycleForCreditCard(account.statement_close_day, account.payment_due_day, new Date())
-      setFilterFrom(range.start)
-      setFilterTo(range.end)
+      setCycleFrom(range.start)
+      setCycleTo(range.end)
     }
   }
 
@@ -392,8 +403,8 @@ export default function AccountDetailPage() {
         const next = billsAsc[newIdx]
         const prev = newIdx > 0 ? billsAsc[newIdx - 1] : null
         const { start, end } = rangeForBill(next, prev)
-        setFilterFrom(start)
-        setFilterTo(end)
+        setCycleFrom(start)
+        setCycleTo(end)
         return
       }
       // Stepping forward past the newest bill = the in-progress cycle.
@@ -403,8 +414,8 @@ export default function AccountDetailPage() {
       // path so already-billed txs don't double-count against the bar.
       if (newIdx === billsAsc.length && account?.statement_close_day) {
         const cm = creditCardCycleBoundaries(account.statement_close_day, new Date())
-        setFilterFrom(cm.start)
-        setFilterTo(cm.end)
+        setCycleFrom(cm.start)
+        setCycleTo(cm.end)
         return
       }
     }
@@ -413,12 +424,12 @@ export default function AccountDetailPage() {
         ? new Date(parseISO(filterFrom + 'T00:00:00').getTime() - 86400000)
         : new Date(parseISO(filterTo + 'T00:00:00').getTime() + 86400000)
       const { start, end } = creditCardCycleBoundaries(account.statement_close_day, ref)
-      setFilterFrom(start)
-      setFilterTo(end)
+      setCycleFrom(start)
+      setCycleTo(end)
       return
     }
-    setFilterFrom(format(addMonths(parseISO(filterFrom + 'T00:00:00'), direction), 'yyyy-MM-dd'))
-    setFilterTo(format(addMonths(parseISO(filterTo + 'T00:00:00'), direction), 'yyyy-MM-dd'))
+    setCycleFrom(format(addMonths(parseISO(filterFrom + 'T00:00:00'), direction), 'yyyy-MM-dd'))
+    setCycleTo(format(addMonths(parseISO(filterTo + 'T00:00:00'), direction), 'yyyy-MM-dd'))
   }
 
   const { data: accountsList } = useQuery({
@@ -910,6 +921,30 @@ export default function AccountDetailPage() {
             />
           ) : undefined
         }
+        period={
+          isCreditCard ? (
+            <CyclePeriodSelector
+              label={
+                activeBill
+                  ? format(parseISO(activeBill.due_date + 'T00:00:00'), 'MMM yyyy', {
+                      locale: resolveDateFnsLocale(i18n.resolvedLanguage ?? i18n.language),
+                    })
+                  : isCycleMathWindow
+                    ? creditCardCycleLabel(filterTo, account?.payment_due_day, i18n.language)
+                    : cycleRangeLabel(filterFrom, filterTo, i18n.resolvedLanguage ?? i18n.language)
+              }
+              onStep={shiftCycleBy}
+              previousLabel={t('accounts.previousCycle')}
+              nextLabel={t('accounts.nextCycle')}
+              from={filterFrom}
+              to={filterTo}
+              onRangeChange={handleCycleRangeChange}
+              dateFnsLocale={resolveDateFnsLocale(i18n.resolvedLanguage ?? i18n.language)}
+            />
+          ) : (
+            <MonthPeriodSelector value={month} onChange={setMonth} locale={i18n.resolvedLanguage ?? i18n.language} />
+          )
+        }
       />
       <div className="-mt-3 mb-5 flex items-center gap-2 overflow-hidden">
         <span className="text-xs font-medium text-muted-foreground">
@@ -949,100 +984,22 @@ export default function AccountDetailPage() {
           </>
         )}
       </div>
-      <div className="mb-6 space-y-4">
-        <div className="flex items-center gap-2 sm:gap-3">
-          {isCreditCard ? (
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="h-8 w-8 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all"
-                onClick={() => shiftCycleBy(-1)}
-                title={t('accounts.previousCycle')}
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className="inline-flex items-center justify-center gap-2 min-w-[140px] border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground hover:bg-muted/50 transition-all cursor-pointer capitalize"
-                  >
-                    {activeBill
-                      ? format(parseISO(activeBill.due_date + 'T00:00:00'), 'MMM yyyy', {
-                          locale: resolveDateFnsLocale(i18n.resolvedLanguage ?? i18n.language),
-                        })
-                      : isCycleMathWindow
-                        ? creditCardCycleLabel(filterTo, account?.payment_due_day, i18n.language)
-                        : cycleRangeLabel(filterFrom, filterTo, i18n.resolvedLanguage ?? i18n.language)}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="center" className="w-auto p-3 space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">{t('transactions.from')}</Label>
-                    <DatePickerInput
-                      value={filterFrom}
-                      onChange={handleFilterFromChange}
-                      placeholder={t('transactions.from')}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">{t('transactions.to')}</Label>
-                    <DatePickerInput
-                      value={filterTo}
-                      onChange={handleFilterToChange}
-                      placeholder={t('transactions.to')}
-                    />
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <button
-                type="button"
-                className="h-8 w-8 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all"
-                onClick={() => shiftCycleBy(1)}
-                title={t('accounts.nextCycle')}
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground hidden md:inline">{t('transactions.from')}</label>
-                <DatePickerInput
-                  value={filterFrom}
-                  onChange={handleFilterFromChange}
-                  placeholder={t('transactions.from')}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground hidden md:inline">{t('transactions.to')}</label>
-                <DatePickerInput
-                  value={filterTo}
-                  onChange={handleFilterToChange}
-                  placeholder={t('transactions.to')}
-                />
-              </div>
-            </>
-          )}
-          {hasFilters && (
+      {((isCreditCard && hasFilters) || isForeignCurrency) && (
+        <div className="mb-6 flex items-center gap-2 sm:gap-3">
+          {isCreditCard && hasFilters && (
             <Button
               variant="ghost"
               size="sm"
               className="text-muted-foreground hover:text-foreground min-h-[44px] min-w-[44px] px-3 shrink-0"
               onClick={() => {
                 setFilterTouched(false)
-                if (account?.type === 'credit_card') {
-                  const { start, end } = defaultCycleForCreditCard(
-                    account.statement_close_day,
-                    account.payment_due_day,
-                    new Date(),
-                  )
-                  setFilterFrom(start)
-                  setFilterTo(end)
-                } else {
-                  setFilterFrom(defaultFrom())
-                  setFilterTo(defaultTo())
-                }
+                const { start, end } = defaultCycleForCreditCard(
+                  account.statement_close_day,
+                  account.payment_due_day,
+                  new Date(),
+                )
+                setCycleFrom(start)
+                setCycleTo(end)
               }}
             >
               <X className="h-3.5 w-3.5 sm:mr-1" />
@@ -1066,7 +1023,7 @@ export default function AccountDetailPage() {
             </div>
           )}
         </div>
-      </div>
+      )}
 
       {account.is_closed && (
         <div className="flex items-center justify-between rounded-lg border border-border bg-muted px-4 py-3 mb-6">
@@ -1119,8 +1076,8 @@ export default function AccountDetailPage() {
                     type="button"
                     onClick={() => {
                       setFilterTouched(true)
-                      setFilterFrom(c.start)
-                      setFilterTo(c.end)
+                      setCycleFrom(c.start)
+                      setCycleTo(c.end)
                     }}
                     className={`group flex-1 min-w-[60px] flex flex-col items-center gap-1.5 px-1 py-2 rounded-lg transition-colors ${isCurrent ? 'bg-rose-50 dark:bg-rose-500/10' : 'hover:bg-muted/50'}`}
                   >

@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 
 import AccountDetailPage from '@/pages/account-detail'
-import { renderWithProviders } from '@/test/utils'
+import { renderWithProviders, t } from '@/test/utils'
 
 const api = vi.hoisted(() => ({
   accounts: {
@@ -81,6 +81,15 @@ function cycleHeader() {
     .find((b) => b.getAttribute('aria-haspopup') === 'dialog' && /\d{4}|-/.test(b.textContent ?? ''))!
 }
 
+/** Opens the cycle's range panel, types a new end date and applies it. */
+async function pickEndDate(user: ReturnType<typeof renderWithProviders>['user'], text: string) {
+  await user.click(cycleHeader())
+  const to = await screen.findByLabelText(t('transactions.filtersBar.toLabel'))
+  await user.clear(to)
+  await user.type(to, text)
+  await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
+}
+
 /** Every `transactions.list` call the page has made, oldest first. */
 function txCalls() {
   return api.transactions.list.mock.calls.map(([args]) => args as Record<string, unknown>)
@@ -145,9 +154,7 @@ describe('credit card cycle window', () => {
     await user.click(await screen.findByTitle('Previous cycle'))
     await waitFor(() => expect(txCalls().at(-1)!.bill_id).toBe('bill-may'))
 
-    await user.click(cycleHeader())
-    await user.click(await screen.findByRole('button', { name: '5/10/2026' }))
-    await user.click(await screen.findByRole('button', { name: '15' }))
+    await pickEndDate(user, '05/15/2026')
 
     await waitFor(() => {
       const last = txCalls().at(-1)!
@@ -163,12 +170,21 @@ describe('credit card cycle window', () => {
     const { user } = await renderPage()
 
     await user.click(await screen.findByTitle('Previous cycle'))
-    await user.click(cycleHeader())
-    await user.click(await screen.findByRole('button', { name: '5/10/2026' }))
-    await user.click(await screen.findByRole('button', { name: '15' }))
+    await pickEndDate(user, '05/15/2026')
 
     // Before the fix this read "Jun 2026", naming the window after a bill it
     // has no claim to.
     await waitFor(() => expect(cycleHeader().textContent).toMatch(/11 Apr - 15 May/i))
+  })
+})
+
+describe('account that is not a card', () => {
+  it('shows one calendar month, stepped by the standard month selector', async () => {
+    api.accounts.get.mockResolvedValue({ ...account, type: 'checking', statement_close_day: null, payment_due_day: null })
+    const { user } = await renderPage()
+
+    await waitFor(() => expect(txCalls().at(-1)).toMatchObject({ from: '2026-09-01', to: '2026-09-30' }))
+    await user.click(screen.getByRole('button', { name: t('common.previousMonth') }))
+    await waitFor(() => expect(txCalls().at(-1)).toMatchObject({ from: '2026-08-01', to: '2026-08-31' }))
   })
 })
