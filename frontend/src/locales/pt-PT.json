@@ -2066,7 +2066,17 @@
       "prevPage": "Página anterior",
       "nextPage": "Página seguinte",
       "pageOf": "Página {{page}} de {{pages}}",
-      "periodGroup": "Período"
+      "periodGroup": "Período",
+      "treemap": {
+        "rest": "Restantes ({{n}})",
+        "aria": "{{name}} é o maior: {{share}} do total.",
+        "of": {
+          "group": "da despesa",
+          "category": "do grupo",
+          "merchant": "da categoria"
+        },
+        "openHint": "Clique para descer um nível"
+      }
     },
     "common": {
       "empty": "Nada para mostrar neste período.",

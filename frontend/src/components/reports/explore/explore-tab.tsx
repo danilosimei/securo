@@ -21,6 +21,8 @@ import { FadePanel } from '@/components/ui/fade-panel'
 import { Sparkline } from '@/components/reports/explore/sparkline'
 import { MerchantTransactions } from '@/components/reports/explore/merchant-transactions'
 import { nextStep } from '@/components/reports/explore/drilldown'
+import { ExploreTreemap } from '@/components/reports/explore/explore-treemap'
+import { NEUTRAL_COLOR, useGroupPalette } from '@/components/reports/common/group-colors'
 
 const DEFAULT_PERIOD: ReportPeriod = DEFAULT_REPORT_PERIOD
 
@@ -57,6 +59,7 @@ export function ExploreTab() {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
+  const palette = useGroupPalette()
   const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
   const stateLabels: Labels = (location.state as { exploreLabels?: Labels } | null)?.exploreLabels ?? {}
@@ -162,6 +165,18 @@ export function ExploreTab() {
   }
   if (merchant) crumbs.push({ key: 'merchant', label: merchantLabel })
 
+  // Tiles wear their group's color; below the group level, a shade of it.
+  const groupColor = group && group !== 'none' ? palette.group(group) : NEUTRAL_COLOR
+  const colorOf = (row: BreakdownRow) => {
+    if (level === 'group') return palette.group(row.id, row.label)
+    if (level === 'category') {
+      const own = palette.category(row.id, row.label)
+      return own === NEUTRAL_COLOR ? groupColor : own
+    }
+    const own = category && category !== 'none' ? palette.category(category) : NEUTRAL_COLOR
+    return own === NEUTRAL_COLOR ? groupColor : own
+  }
+
   const total = data ? Number(data.total) : 0
   const previous = data?.previous_total != null ? Number(data.previous_total) : 0
   const headerChange = data && previous > 0 ? (total - previous) / previous : null
@@ -259,6 +274,20 @@ export function ExploreTab() {
               })}
             </p>
           ) : (
+            <>
+            {data.rows.some((r) => Number(r.total) > 0) && (
+            <div className="rounded-xl border border-border bg-card p-2 shadow-sm">
+              <ExploreTreemap
+                rows={data.rows}
+                level={level}
+                currency={data.currency}
+                locale={locale}
+                colorOf={colorOf}
+                onOpen={open}
+                selected={merchant}
+              />
+            </div>
+            )}
             <div className="rounded-xl border border-border bg-card shadow-sm">
               <table className="w-full table-fixed text-sm">
                 <thead>
@@ -316,6 +345,7 @@ export function ExploreTab() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
         {merchant && (

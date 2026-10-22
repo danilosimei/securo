@@ -2190,7 +2190,17 @@
       "prevPage": "Předchozí strana",
       "nextPage": "Další strana",
       "pageOf": "Strana {{page}} z {{pages}}",
-      "periodGroup": "Období"
+      "periodGroup": "Období",
+      "treemap": {
+        "rest": "Ostatní ({{n}})",
+        "aria": "Největší je {{name}}: {{share}} z celku.",
+        "of": {
+          "group": "výdajů",
+          "category": "skupiny",
+          "merchant": "kategorie"
+        },
+        "openHint": "Klikněte pro úroveň níž"
+      }
     },
     "common": {
       "empty": "Pro toto období není co zobrazit.",

@@ -12,9 +12,10 @@ const api = vi.hoisted(() => ({
     breakdown: vi.fn(),
   },
   timezones: { list: vi.fn().mockResolvedValue({ timezones: [], default: null }) },
+  categoryGroups: { list: vi.fn().mockResolvedValue([]) },
 }))
 
-vi.mock('@/lib/api', () => ({ reports: api.reports, timezones: api.timezones }))
+vi.mock('@/lib/api', () => ({ reports: api.reports, timezones: api.timezones, categoryGroups: api.categoryGroups }))
 vi.mock('@/hooks/use-display-locale', () => ({
   useDisplayLocale: () => 'en-US',
   useDateLocale: () => 'en-US',

@@ -2066,7 +2066,17 @@
       "prevPage": "Page précédente",
       "nextPage": "Page suivante",
       "pageOf": "Page {{page}} sur {{pages}}",
-      "periodGroup": "Période"
+      "periodGroup": "Période",
+      "treemap": {
+        "rest": "Autres ({{n}})",
+        "aria": "{{name}} est le plus gros : {{share}} du total.",
+        "of": {
+          "group": "des dépenses",
+          "category": "du groupe",
+          "merchant": "de la catégorie"
+        },
+        "openHint": "Cliquez pour descendre d’un niveau"
+      }
     },
     "common": {
       "empty": "Rien à afficher pour cette période.",

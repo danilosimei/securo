@@ -2062,7 +2062,17 @@
       "prevPage": "Előző oldal",
       "nextPage": "Következő oldal",
       "pageOf": "{{page}}. oldal / {{pages}}",
-      "periodGroup": "Időszak"
+      "periodGroup": "Időszak",
+      "treemap": {
+        "rest": "Egyéb ({{n}})",
+        "aria": "A legnagyobb: {{name}}, az összeg {{share}}-a.",
+        "of": {
+          "group": "a kiadásból",
+          "category": "a csoportból",
+          "merchant": "a kategóriából"
+        },
+        "openHint": "Kattints egy szinttel lejjebb"
+      }
     },
     "common": {
       "empty": "Ebben az időszakban nincs mit mutatni.",

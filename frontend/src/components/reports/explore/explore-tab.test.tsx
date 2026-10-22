@@ -5,9 +5,9 @@ import { ExploreTab } from '@/components/reports/explore/explore-tab'
 import { renderWithProviders, t } from '@/test/utils'
 import type { BreakdownResponse } from '@/lib/api'
 
-const api = vi.hoisted(() => ({ reports: { breakdown: vi.fn() } }))
+const api = vi.hoisted(() => ({ reports: { breakdown: vi.fn() }, categoryGroups: { list: vi.fn().mockResolvedValue([]) } }))
 
-vi.mock('@/lib/api', () => ({ reports: api.reports }))
+vi.mock('@/lib/api', () => ({ reports: api.reports, categoryGroups: api.categoryGroups }))
 vi.mock('@/hooks/use-display-locale', () => ({
   useDisplayLocale: () => 'en-US',
   useDateLocale: () => 'en-US',

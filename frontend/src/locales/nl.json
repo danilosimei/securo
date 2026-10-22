@@ -2064,7 +2064,17 @@
       "prevPage": "Vorige pagina",
       "nextPage": "Volgende pagina",
       "pageOf": "Pagina {{page}} van {{pages}}",
-      "periodGroup": "Periode"
+      "periodGroup": "Periode",
+      "treemap": {
+        "rest": "Overig ({{n}})",
+        "aria": "{{name}} is het grootst: {{share}} van het totaal.",
+        "of": {
+          "group": "van de uitgaven",
+          "category": "van de groep",
+          "merchant": "van de categorie"
+        },
+        "openHint": "Klik om een niveau dieper te gaan"
+      }
     },
     "common": {
       "empty": "Niets te tonen voor deze periode.",

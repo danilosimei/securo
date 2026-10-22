@@ -2062,7 +2062,17 @@
       "prevPage": "Previous page",
       "nextPage": "Next page",
       "pageOf": "Page {{page}} of {{pages}}",
-      "periodGroup": "Period"
+      "periodGroup": "Period",
+      "treemap": {
+        "rest": "Other ({{n}})",
+        "aria": "{{name}} is the biggest: {{share}} of the total.",
+        "of": {
+          "group": "of spending",
+          "category": "of the group",
+          "merchant": "of the category"
+        },
+        "openHint": "Click to go one level down"
+      }
     },
     "common": {
       "empty": "Nothing to show for this period.",

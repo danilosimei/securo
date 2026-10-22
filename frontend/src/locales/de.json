@@ -2063,7 +2063,17 @@
       "prevPage": "Vorherige Seite",
       "nextPage": "Nächste Seite",
       "pageOf": "Seite {{page}} von {{pages}}",
-      "periodGroup": "Zeitraum"
+      "periodGroup": "Zeitraum",
+      "treemap": {
+        "rest": "Weitere ({{n}})",
+        "aria": "{{name}} ist am größten: {{share}} der Summe.",
+        "of": {
+          "group": "der Ausgaben",
+          "category": "der Gruppe",
+          "merchant": "der Kategorie"
+        },
+        "openHint": "Klicke, um eine Ebene tiefer zu gehen"
+      }
     },
     "common": {
       "empty": "Für diesen Zeitraum gibt es nichts anzuzeigen.",

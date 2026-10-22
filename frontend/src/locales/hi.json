@@ -2062,7 +2062,17 @@
       "prevPage": "पिछला पृष्ठ",
       "nextPage": "अगला पृष्ठ",
       "pageOf": "पृष्ठ {{page}} / {{pages}}",
-      "periodGroup": "अवधि"
+      "periodGroup": "अवधि",
+      "treemap": {
+        "rest": "बाकी ({{n}})",
+        "aria": "सबसे बड़ा {{name}} है: कुल का {{share}}।",
+        "of": {
+          "group": "खर्च का",
+          "category": "समूह का",
+          "merchant": "श्रेणी का"
+        },
+        "openHint": "एक स्तर नीचे जाने के लिए क्लिक करें"
+      }
     },
     "common": {
       "empty": "इस अवधि में दिखाने को कुछ नहीं है।",

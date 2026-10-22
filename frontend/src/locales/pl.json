@@ -2148,7 +2148,17 @@
       "prevPage": "Poprzednia strona",
       "nextPage": "Następna strona",
       "pageOf": "Strona {{page}} z {{pages}}",
-      "periodGroup": "Okres"
+      "periodGroup": "Okres",
+      "treemap": {
+        "rest": "Pozostałe ({{n}})",
+        "aria": "{{name}} to największa pozycja: {{share}} całości.",
+        "of": {
+          "group": "wydatków",
+          "category": "grupy",
+          "merchant": "kategorii"
+        },
+        "openHint": "Kliknij, aby zejść poziom niżej"
+      }
     },
     "common": {
       "empty": "Brak danych dla tego okresu.",

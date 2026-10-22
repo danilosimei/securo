@@ -2174,7 +2174,17 @@
       "prevPage": "Predchádzajúca strana",
       "nextPage": "Nasledujúca strana",
       "pageOf": "Strana {{page}} z {{pages}}",
-      "periodGroup": "Obdobie"
+      "periodGroup": "Obdobie",
+      "treemap": {
+        "rest": "Ostatné ({{n}})",
+        "aria": "Najväčšie je {{name}}: {{share}} z celku.",
+        "of": {
+          "group": "výdavkov",
+          "category": "skupiny",
+          "merchant": "kategórie"
+        },
+        "openHint": "Kliknite pre úroveň nižšie"
+      }
     },
     "common": {
       "empty": "Pre toto obdobie nie je čo zobraziť.",

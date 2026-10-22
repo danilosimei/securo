@@ -2062,7 +2062,17 @@
       "prevPage": "前のページ",
       "nextPage": "次のページ",
       "pageOf": "{{page}} / {{pages}} ページ",
-      "periodGroup": "期間"
+      "periodGroup": "期間",
+      "treemap": {
+        "rest": "その他（{{n}}）",
+        "aria": "最大は{{name}}：全体の{{share}}。",
+        "of": {
+          "group": "支出に対して",
+          "category": "グループに対して",
+          "merchant": "カテゴリに対して"
+        },
+        "openHint": "クリックして1階層下へ"
+      }
     },
     "common": {
       "empty": "この期間に表示するものはありません。",
