@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 
-import { DateRangeFields } from '@/components/date-range-fields'
+import { DateRangeFields } from './date-range-picker'
 import { renderWithProviders, t } from '@/test/utils'
 
 vi.mock('@/hooks/use-display-locale', () => ({

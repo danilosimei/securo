@@ -17,8 +17,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { DateRangeFields } from '@/components/date-range-fields'
-import { DateRangeCalendars } from '@/components/ui/date-range-picker'
+import { DateRangeCalendars, DateRangeFields } from '@/components/ui/date-range-picker'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import { CategoryFilterContent } from '@/components/category-filter-content'
 import {

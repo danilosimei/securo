@@ -39,13 +39,12 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from '@/components/ui/popover'
-import { DateRangeCalendars } from '@/components/ui/date-range-picker'
+import { DateRangePanel } from '@/components/ui/date-range-picker'
 import { REPORT_PERIODS, reportPeriodRange } from '@/lib/report-period'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CATEGORY_SOURCE_OPTIONS } from '@/lib/category-source-options'
 import { formatDateShort } from '@/lib/date-input'
-import { DateRangeFields } from '@/components/date-range-fields'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import { CategoryFilterContent } from '@/components/category-filter-content'
 import {
@@ -147,9 +146,6 @@ export function TransactionsFilterBar({
   const keepAccountSubOpenRef = useRef(false)
   const keepCategorySubOpenRef = useRef(false)
   const [dateCustomOpen, setDateCustomOpen] = useState(false)
-  const [draftFrom, setDraftFrom] = useState<string>(filterFrom)
-  const [draftTo, setDraftTo] = useState<string>(filterTo)
-  const [draftValid, setDraftValid] = useState(true)
   const [amountSubOpen, setAmountSubOpen] = useState(false)
   const [draftMinAmount, setDraftMinAmount] = useState<string>(filterMinAmount)
   const [draftMaxAmount, setDraftMaxAmount] = useState<string>(filterMaxAmount)
@@ -313,19 +309,10 @@ export function TransactionsFilterBar({
   }, [t])
 
   const openCustomRange = () => {
-    setDraftFrom(filterFrom)
-    setDraftTo(filterTo)
     setMenuOpen(false)
     // Wait for the dropdown to finish closing before showing the popover
     // so focus and portal state settle correctly.
     setTimeout(() => setDateCustomOpen(true), 80)
-  }
-
-  const applyDraftRange = () => {
-    // One side may stay open ("from" / "until"); the typed fields already block To < From.
-    if (!draftValid || (!draftFrom && !draftTo)) return
-    onDateRangeChange(draftFrom, draftTo)
-    setDateCustomOpen(false)
   }
 
   const accountSummary =
@@ -1155,64 +1142,20 @@ export function TransactionsFilterBar({
           className="w-auto p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <div className="border-b border-border/70 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              {t('transactions.filtersBar.customRange')}
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-              {t('transactions.filtersBar.pickRange')}
-            </p>
-          </div>
-          <div className="border-b border-border/70 px-4 py-3">
-            <DateRangeFields
-              from={draftFrom}
-              to={draftTo}
-              onChange={(from, to) => {
-                setDraftFrom(from)
-                setDraftTo(to)
-              }}
-              onValidityChange={setDraftValid}
-              onSubmit={applyDraftRange}
-            />
-          </div>
-          <DateRangeCalendars
-            from={draftFrom}
-            to={draftTo}
-            onFromChange={setDraftFrom}
-            onToChange={setDraftTo}
+          {/* One side may stay open ("from" / "until"); the typed fields already block To < From. */}
+          <DateRangePanel
+            initialFrom={filterFrom}
+            initialTo={filterTo}
+            label={t('transactions.filtersBar.customRange')}
+            hint={t('transactions.filtersBar.pickRange')}
+            mode="filter"
             locale={dateFnsLocale}
-            className="max-h-[60vh] overflow-y-auto sm:max-h-none sm:overflow-visible"
+            onApply={(from, to) => {
+              onDateRangeChange(from, to)
+              setDateCustomOpen(false)
+            }}
+            onCancel={() => setDateCustomOpen(false)}
           />
-          <div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2">
-            <button
-              type="button"
-              onClick={() => {
-                setDraftFrom('')
-                setDraftTo('')
-              }}
-              className="text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {t('transactions.filtersBar.reset')}
-            </button>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setDateCustomOpen(false)}
-              >
-                {t('transactions.filtersBar.cancel')}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={!draftValid || (!draftFrom && !draftTo)}
-                onClick={applyDraftRange}
-              >
-                {t('transactions.filtersBar.apply')}
-              </Button>
-            </div>
-          </div>
         </PopoverContent>
       </Popover>
     </div>
