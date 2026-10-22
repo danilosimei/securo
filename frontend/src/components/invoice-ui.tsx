@@ -65,7 +65,7 @@ export function Segmented<T extends string>({
   disabled?: boolean
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-border bg-muted p-0.5 text-xs font-medium">
+    <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-border bg-muted p-0.5 text-xs font-medium [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {options.map((option) => {
         const active = value === option.value
         return (
@@ -75,7 +75,7 @@ export function Segmented<T extends string>({
             disabled={disabled}
             data-testid={`${testIdPrefix}-${option.value}`}
             className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60',
+              'inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60',
               active
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',

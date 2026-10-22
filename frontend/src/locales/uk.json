@@ -3653,5 +3653,10 @@
       "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
       "about": "What is counted"
     }
+  },
+  "notFound": {
+    "title": "Сторінку не знайдено",
+    "description": "Такої адреси немає, або сторінку перенесли.",
+    "goHome": "Перейти на головну"
   }
 }

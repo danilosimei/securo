@@ -3626,5 +3626,10 @@
       "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
       "about": "What is counted"
     }
+  },
+  "notFound": {
+    "title": "पेज नहीं मिला",
+    "description": "यह पता मौजूद नहीं है या पेज दूसरी जगह चला गया है।",
+    "goHome": "डैशबोर्ड पर जाएँ"
   }
 }

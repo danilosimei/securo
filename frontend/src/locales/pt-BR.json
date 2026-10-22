@@ -3630,5 +3630,10 @@
       "excluded": "Conta as transações que podem ser categorizadas: transferências entre contas, pendentes e saldo inicial ficam de fora.",
       "about": "O que entra na conta"
     }
+  },
+  "notFound": {
+    "title": "Página não encontrada",
+    "description": "O endereço não existe ou a página mudou de lugar.",
+    "goHome": "Ir para o Painel"
   }
 }

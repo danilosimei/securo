@@ -3630,5 +3630,10 @@
       "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
       "about": "What is counted"
     }
+  },
+  "notFound": {
+    "title": "Page introuvable",
+    "description": "Cette adresse n'existe pas ou la page a été déplacée.",
+    "goHome": "Aller au tableau de bord"
   }
 }

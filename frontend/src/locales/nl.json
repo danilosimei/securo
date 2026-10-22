@@ -3628,5 +3628,10 @@
       "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
       "about": "What is counted"
     }
+  },
+  "notFound": {
+    "title": "Pagina niet gevonden",
+    "description": "Dit adres bestaat niet of de pagina is verplaatst.",
+    "goHome": "Naar het dashboard"
   }
 }

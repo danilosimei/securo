@@ -3626,5 +3626,10 @@
       "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
       "about": "What is counted"
     }
+  },
+  "notFound": {
+    "title": "Η σελίδα δεν βρέθηκε",
+    "description": "Αυτή η διεύθυνση δεν υπάρχει ή η σελίδα μετακινήθηκε.",
+    "goHome": "Μετάβαση στον πίνακα"
   }
 }

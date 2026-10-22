@@ -3792,5 +3792,10 @@
       "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
       "about": "What is counted"
     }
+  },
+  "notFound": {
+    "title": "Stránka nenalezena",
+    "description": "Tato adresa neexistuje nebo se stránka přesunula.",
+    "goHome": "Přejít na přehled"
   }
 }

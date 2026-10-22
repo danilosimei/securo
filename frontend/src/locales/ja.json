@@ -3626,5 +3626,10 @@
       "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
       "about": "What is counted"
     }
+  },
+  "notFound": {
+    "title": "ページが見つかりません",
+    "description": "このアドレスは存在しないか、ページが移動しました。",
+    "goHome": "ダッシュボードへ"
   }
 }

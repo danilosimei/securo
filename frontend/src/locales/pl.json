@@ -3743,5 +3743,10 @@
       "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
       "about": "What is counted"
     }
+  },
+  "notFound": {
+    "title": "Nie znaleziono strony",
+    "description": "Ten adres nie istnieje lub strona została przeniesiona.",
+    "goHome": "Przejdź do pulpitu"
   }
 }
