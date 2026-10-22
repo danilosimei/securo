@@ -882,8 +882,6 @@
   "transactions": {
     "title": "Transacties",
     "section": "Financieel",
-    "monthPrevious": "Vorige maand",
-    "monthNext": "Volgende maand",
     "description": "Beschrijving",
     "originalDescription": "Originele beschrijving",
     "restoreOriginalDescription": "Origineel herstellen",
@@ -2404,6 +2402,8 @@
     "showMore": "+{{count}} meer",
     "previous": "Vorige",
     "next": "Volgende",
+    "previousMonth": "Vorige maand",
+    "nextMonth": "Volgende maand",
     "rowsPerPage": "Rijen per pagina",
     "noResults": "Geen resultaten",
     "preview": "Voorbeeld",

@@ -4,7 +4,6 @@ import { currentMonth, shiftMonth, monthLastDay, monthLabel, monthRange } from '
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
 import { dashboard, transactions, budgets, categories as categoriesApi, categoryGroups as categoryGroupsApi, accounts as accountsApi, goals as goalsApi, groups as groupsApi, payees as payeesApi } from '@/lib/api'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
 import { toast } from 'sonner'
@@ -18,9 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { MonthPicker } from '@/components/ui/monthpicker'
+import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import {
   Table,
   TableBody,
@@ -38,7 +36,7 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { CalendarIcon, Clock, Paperclip, Target, ArrowUpDown, HelpCircle, EyeClosed } from 'lucide-react'
+import { Clock, Paperclip, Target, ArrowUpDown, HelpCircle, EyeClosed } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ICON_MAP } from '@/lib/category-icons'
 import { PageHeader } from '@/components/page-header'
@@ -57,7 +55,6 @@ import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
 import { categoryChanged, withUndoneCategory, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
-import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import type { Transaction } from '@/types'
 import { formatCurrency } from '@/lib/format'
 import { shouldShowPendingBadge } from '@/lib/transaction-status'
@@ -167,9 +164,7 @@ export default function DashboardPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const { openRuleDialog, ruleDialogKey, ruleDialogProps } = useCreateRuleDialog()
   const queryClient = useQueryClient()
-  const [headerCalOpen, setHeaderCalOpen] = useState(false)
   const [hoveredDay, setHoveredDay] = useState<number | null>(null)
-  const dateFnsLocale = resolveDateFnsLocale(i18n.resolvedLanguage ?? i18n.language)
   const { from: monthStart, to: monthEnd } = monthRange(selectedMonth)
   const monthParam = monthStart
   const uiLocale = i18n.resolvedLanguage ?? i18n.language
@@ -601,41 +596,7 @@ export default function DashboardPage() {
       <PageHeader
         section={greeting}
         title={monthLabel(selectedMonth, uiLocale).replace(/^\w/, c => c.toUpperCase())}
-        action={
-          <div className="flex items-center gap-1">
-            <button
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all text-base"
-              onClick={() => handleMonthChange(shiftMonth(selectedMonth, -1))}
-            >&#8249;</button>
-            <Popover open={headerCalOpen} onOpenChange={setHeaderCalOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center gap-2 border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground hover:bg-muted/50 transition-all cursor-pointer min-w-[180px]"
-                >
-                  <CalendarIcon className="size-3.5 text-muted-foreground" />
-                  {monthLabel(selectedMonth, uiLocale).replace(/^\w/, c => c.toUpperCase())}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="center" className="w-auto p-0">
-                <MonthPicker
-                  locale={dateFnsLocale}
-                  selectedMonth={new Date(`${selectedMonth}-01T00:00:00`)}
-                  onMonthSelect={(date) => {
-                    if (!date) return
-                    const newMonth = format(date, 'yyyy-MM')
-                    setSelectedMonth(newMonth)
-                    setHeaderCalOpen(false)
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
-            <button
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all text-base"
-              onClick={() => handleMonthChange(shiftMonth(selectedMonth, 1))}
-            >&#8250;</button>
-          </div>
-        }
+        period={<MonthPeriodSelector value={selectedMonth} onChange={handleMonthChange} locale={uiLocale} />}
       />
 
       {/* Hero Card: Available Balance + secondary indicators */}

@@ -25,7 +25,7 @@ import { reports } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { PeriodSegments } from '@/components/reports/period-selector'
+import { PeriodSegments, PeriodSlot } from '@/components/reports/period-selector'
 import { ClosedPeriodBar, FixedWindowNote, ReportRangeProvider } from '@/components/reports/period-bar'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { PageHeader } from '@/components/page-header'
@@ -738,9 +738,7 @@ export default function ReportsPage() {
           </button>
         ))}
       </div>
-      <div data-testid="reports-period" className="w-full shrink-0 sm:ml-auto sm:w-auto">
-        {periodControl}
-      </div>
+      <PeriodSlot testId="reports-period">{periodControl}</PeriodSlot>
       </div>
 
       {isSelfManaged && (

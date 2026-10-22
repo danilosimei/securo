@@ -1067,8 +1067,6 @@
   "transactions": {
     "title": "Συναλλαγές",
     "section": "Οικονομικά",
-    "monthPrevious": "Προηγούμενος μήνας",
-    "monthNext": "Επόμενος μήνας",
     "description": "Περιγραφή",
     "originalDescription": "Αρχική περιγραφή",
     "restoreOriginalDescription": "Επαναφορά αρχικής",
@@ -2402,6 +2400,8 @@
     "showMore": "+{{count}} ακόμη",
     "previous": "Προηγούμενο",
     "next": "Επόμενο",
+    "previousMonth": "Προηγούμενος μήνας",
+    "nextMonth": "Επόμενος μήνας",
     "rowsPerPage": "Γραμμές ανά σελίδα",
     "noResults": "Δεν βρέθηκαν αποτελέσματα",
     "preview": "Προεπισκόπηση",

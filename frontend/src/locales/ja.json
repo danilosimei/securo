@@ -882,8 +882,6 @@
   "transactions": {
     "title": "取引",
     "section": "財務",
-    "monthPrevious": "前月",
-    "monthNext": "翌月",
     "description": "摘要",
     "originalDescription": "元の摘要",
     "restoreOriginalDescription": "元に戻す",
@@ -2402,6 +2400,8 @@
     "showMore": "+{{count}}件",
     "previous": "前へ",
     "next": "次へ",
+    "previousMonth": "前月",
+    "nextMonth": "翌月",
     "rowsPerPage": "1ページの行数",
     "noResults": "結果はありません",
     "preview": "プレビュー",

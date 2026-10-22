@@ -244,3 +244,27 @@ describe('Dashboard categorization card', () => {
     expect(api.transactions.update).toHaveBeenCalledWith('tx-1', { category_id: 'c2' })
   })
 })
+
+describe('Dashboard month', () => {
+  it('sits in the header where Reports puts its period, with the same control', async () => {
+    const { user } = renderWithProviders(
+      <TooltipProvider delayDuration={0}>
+        <DashboardPage />
+      </TooltipProvider>,
+      { route: '/?month=2026-09' },
+    )
+    await waitFor(() => expect(api.dashboard.summary).toHaveBeenCalledWith('2026-09-01', undefined, undefined, undefined))
+
+    const slot = screen.getByTestId('page-period')
+    // Right of the title from lg up; under it, full width, on a phone.
+    expect(slot).toHaveClass('w-full', 'sm:ml-auto', 'sm:w-auto')
+    expect(slot.parentElement).toHaveClass('flex-col', 'lg:flex-row', 'lg:justify-between')
+    expect(slot.parentElement).toContainElement(screen.getByRole('heading', { level: 1 }))
+    const group = within(slot).getByRole('group', { name: t('reports.explore.periodGroup') })
+    expect(within(group).getByTestId('period-menu')).toHaveTextContent('September 2026')
+
+    await user.click(within(group).getByRole('button', { name: t('common.nextMonth') }))
+    await waitFor(() => expect(api.dashboard.summary).toHaveBeenCalledWith('2026-10-01', undefined, undefined, undefined))
+    expect(screen.getAllByTestId('page-period')).toHaveLength(1)
+  })
+})

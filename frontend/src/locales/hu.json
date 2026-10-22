@@ -882,8 +882,6 @@
   "transactions": {
     "title": "Tranzakciók",
     "section": "Pénzügyek",
-    "monthPrevious": "Előző hónap",
-    "monthNext": "Következő hónap",
     "description": "Leírás",
     "originalDescription": "Eredeti leírás",
     "restoreOriginalDescription": "Eredeti visszaállítása",
@@ -2402,6 +2400,8 @@
     "showMore": "+{{count}} további",
     "previous": "Előző",
     "next": "Következő",
+    "previousMonth": "Előző hónap",
+    "nextMonth": "Következő hónap",
     "rowsPerPage": "Sorok oldalanként",
     "noResults": "Nincs találat",
     "preview": "Előnézet",

@@ -884,8 +884,6 @@
   "transactions": {
     "title": "Transacciones",
     "section": "Financiero",
-    "monthPrevious": "Mes anterior",
-    "monthNext": "Mes siguiente",
     "description": "Descripción",
     "originalDescription": "Descripción original",
     "restoreOriginalDescription": "Restaurar original",
@@ -2406,6 +2404,8 @@
     "showMore": "+{{count}} más",
     "previous": "Anterior",
     "next": "Siguiente",
+    "previousMonth": "Mes anterior",
+    "nextMonth": "Mes siguiente",
     "rowsPerPage": "Filas por página",
     "noResults": "Sin resultados",
     "preview": "Vista previa",

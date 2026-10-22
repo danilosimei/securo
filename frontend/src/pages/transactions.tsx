@@ -1360,8 +1360,6 @@ export default function TransactionsPage() {
               value: steppedMonth,
               onChange: handleMonthChange,
               locale: i18n.resolvedLanguage ?? i18n.language,
-              prevLabel: t('transactions.monthPrevious'),
-              nextLabel: t('transactions.monthNext'),
             }}
             view={{
               value: viewMode,

@@ -890,8 +890,6 @@
   "transactions": {
     "title": "Транзакції",
     "section": "Фінанси",
-    "monthPrevious": "Попередній місяць",
-    "monthNext": "Наступний місяць",
     "description": "Опис",
     "originalDescription": "Початковий опис",
     "restoreOriginalDescription": "Відновити початковий",
@@ -2419,6 +2417,8 @@
     "showMore": "+{{count}} ще",
     "previous": "Назад",
     "next": "Далі",
+    "previousMonth": "Попередній місяць",
+    "nextMonth": "Наступний місяць",
     "rowsPerPage": "Рядків на сторінці",
     "noResults": "Немає результатів",
     "preview": "Перегляд",

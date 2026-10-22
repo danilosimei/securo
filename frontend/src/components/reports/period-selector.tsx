@@ -1,12 +1,19 @@
-/** The period picker of Reports. One look for every tab: the chosen shortcut
- *  (a menu of presets), an optional custom range next to it, and the real
- *  dates covered on a line below. `ReportPeriodSelector` is the closed-period flavour
- *  (Overview, Explore, Trends, Habits); Cash Flow and Net Worth pass their own
- *  options to `PeriodSegments`. */
-import type { ReactNode } from 'react'
+/** The period picker of Reports, also used by the Dashboard, Budgets and
+ *  Transactions. One look everywhere: the chosen shortcut (a menu of presets),
+ *  an optional custom range next to it, and the real dates covered on a line
+ *  below. `ReportPeriodSelector` is the closed-period flavour (Overview,
+ *  Explore, Trends, Habits); Cash Flow and Net Worth pass their own options to
+ *  `PeriodSegments`; `MonthPeriodSelector` is the one-month flavour, with
+ *  arrows to the month before and after. `PeriodSlot` is where any of them
+ *  sits on a page. */
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CalendarDays, ChevronDown } from 'lucide-react'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { MonthPicker } from '@/components/ui/monthpicker'
+import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
+import { monthLabel as fullMonthLabel, shiftMonth } from '@/lib/month-utils'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,6 +26,24 @@ import { DEFAULT_REPORT_PERIOD, REPORT_PERIODS, monthLabel, type ReportPeriodKey
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 
 export const CUSTOM_RANGE_MAX_YEARS = 10
+
+/** Where the period sits: at the right of the title (or tab) row on a wide
+ *  screen, under it on smaller ones, full width on a phone. The row around it
+ *  goes from a column to a line at `lg` (see `PageHeader`'s `period`). */
+export function PeriodSlot({ testId, children }: { testId: string; children: ReactNode }) {
+  return (
+    <div data-testid={testId} className="w-full shrink-0 sm:ml-auto sm:w-auto">
+      {children}
+    </div>
+  )
+}
+
+/** The rounded frame the period controls share (same height and border). */
+const GROUP_CLASS =
+  'flex w-full items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5 text-xs font-medium sm:inline-flex sm:w-auto'
+/** The selected segment: the menu trigger of a period. */
+const TRIGGER_CLASS =
+  'flex flex-1 items-center justify-between gap-1.5 rounded-md px-3 py-1.5 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-none'
 
 interface PeriodSegmentsProps<K extends string> {
   options: { key: K; label: string }[]
@@ -38,17 +63,13 @@ export function PeriodSegments<K extends string>({ options, value, onSelect, cus
   const current = options.find((o) => o.key === value)
   return (
     <div className="space-y-1 sm:text-right">
-      <div
-        role="group"
-        aria-label={t('reports.explore.periodGroup')}
-        className="flex w-full items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5 text-xs font-medium sm:inline-flex sm:w-auto"
-      >
+      <div role="group" aria-label={t('reports.explore.periodGroup')} className={GROUP_CLASS}>
         <DropdownMenu>
           <DropdownMenuTrigger
             aria-label={t('reports.periodMenu', { period: current?.label ?? t('reports.explore.period.custom') })}
             data-testid="period-menu"
             className={cn(
-              'flex flex-1 items-center justify-between gap-1.5 rounded-md px-3 py-1.5 whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:flex-none',
+              TRIGGER_CLASS,
               current ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
             )}
           >
@@ -127,5 +148,75 @@ export function ReportPeriodSelector({
         />
       }
     />
+  )
+}
+
+interface MonthPeriodSelectorProps {
+  /** Selected month as `"YYYY-MM"`. */
+  value: string
+  /** Called with the new `"YYYY-MM"`. The parent keeps the state. */
+  onChange: (yearMonth: string) => void
+  /** BCP-47 locale for the month name (e.g. "pt-BR"). */
+  locale: string
+  /** Show "10/2026" instead of the month name on a phone, for tight rows. */
+  compactOnPhone?: boolean
+}
+
+/** One month at a time: the arrows step to the month before and after, the
+ *  month itself opens a month picker. Same frame, height and trigger as the
+ *  Reports period. */
+export function MonthPeriodSelector({ value, onChange, locale, compactOnPhone = false }: MonthPeriodSelectorProps) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const label = fullMonthLabel(value, locale).replace(/^\w/, (c) => c.toUpperCase())
+  const [year, month] = value.split('-').map(Number)
+  const compactLabel = new Date(year, month - 1, 2).toLocaleDateString(locale, { month: '2-digit', year: 'numeric' })
+  const arrow =
+    'flex shrink-0 items-center justify-center rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-card/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+
+  return (
+    <div role="group" aria-label={t('reports.explore.periodGroup')} data-testid="period-month" className={GROUP_CLASS}>
+      <button type="button" aria-label={t('common.previousMonth')} className={arrow} onClick={() => onChange(shiftMonth(value, -1))}>
+        <ChevronLeft size={14} aria-hidden="true" />
+      </button>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={t('reports.periodMenu', { period: label })}
+            title={label}
+            data-testid="period-menu"
+            className={cn(TRIGGER_CLASS, 'min-w-0 bg-card text-foreground shadow-sm sm:min-w-40')}
+          >
+            <CalendarDays size={13} aria-hidden="true" className="shrink-0 text-muted-foreground" />
+            <span className="truncate">
+              {compactOnPhone ? (
+                <>
+                  <span className="sm:hidden">{compactLabel}</span>
+                  <span className="hidden sm:inline">{label}</span>
+                </>
+              ) : (
+                label
+              )}
+            </span>
+            <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-auto p-0">
+          <MonthPicker
+            locale={resolveDateFnsLocale(locale)}
+            selectedMonth={new Date(`${value}-01T00:00:00`)}
+            onMonthSelect={(date) => {
+              if (!date) return
+              onChange(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`)
+              setOpen(false)
+            }}
+          />
+        </PopoverContent>
+      </Popover>
+      <button type="button" aria-label={t('common.nextMonth')} className={arrow} onClick={() => onChange(shiftMonth(value, 1))}>
+        <ChevronRight size={14} aria-hidden="true" />
+      </button>
+    </div>
   )
 }

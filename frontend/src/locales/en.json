@@ -882,8 +882,6 @@
   "transactions": {
     "title": "Transactions",
     "section": "Financial",
-    "monthPrevious": "Previous month",
-    "monthNext": "Next month",
     "description": "Description",
     "originalDescription": "Original description",
     "restoreOriginalDescription": "Restore original",
@@ -2402,6 +2400,8 @@
     "showMore": "+{{count}} more",
     "previous": "Previous",
     "next": "Next",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
     "rowsPerPage": "Rows per page",
     "noResults": "No results",
     "preview": "Preview",

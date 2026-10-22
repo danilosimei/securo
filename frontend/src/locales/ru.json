@@ -890,8 +890,6 @@
   "transactions": {
     "title": "Транзакции",
     "section": "Финансы",
-    "monthPrevious": "Предыдущий месяц",
-    "monthNext": "Следующий месяц",
     "description": "Описание",
     "originalDescription": "Исходное описание",
     "restoreOriginalDescription": "Восстановить исходное",
@@ -2419,6 +2417,8 @@
     "showMore": "+{{count}} ещё",
     "previous": "Назад",
     "next": "Далее",
+    "previousMonth": "Предыдущий месяц",
+    "nextMonth": "Следующий месяц",
     "rowsPerPage": "Строк на странице",
     "noResults": "Нет результатов",
     "preview": "Просмотр",

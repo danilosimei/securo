@@ -893,8 +893,6 @@
   "transactions": {
     "title": "Transakcje",
     "section": "Finanse",
-    "monthPrevious": "Poprzedni miesiąc",
-    "monthNext": "Następny miesiąc",
     "description": "Opis",
     "originalDescription": "Oryginalny opis",
     "restoreOriginalDescription": "Przywróć oryginał",
@@ -2497,6 +2495,8 @@
     "showMore_other": "+{{count}} więcej",
     "previous": "Poprzedni",
     "next": "Następny",
+    "previousMonth": "Poprzedni miesiąc",
+    "nextMonth": "Następny miesiąc",
     "rowsPerPage": "Wierszy na stronę",
     "noResults": "Brak wyników",
     "preview": "Podgląd",

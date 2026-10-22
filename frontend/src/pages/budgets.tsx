@@ -18,16 +18,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { Budget } from '@/types'
-import { Pencil, Trash2, Plus, Repeat, CalendarIcon } from 'lucide-react'
-import { format } from 'date-fns'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { MonthPicker } from '@/components/ui/monthpicker'
+import { Pencil, Trash2, Plus, Repeat } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
+import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import { CategoryIcon } from '@/components/category-icon'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
-import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import { findCategoryReference } from '@/lib/category-reference-utils'
 import { formatCurrency } from '@/lib/format'
 
@@ -63,8 +60,6 @@ export default function BudgetsPage() {
   const locale = useDisplayLocale()
   const queryClient = useQueryClient()
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
-  const [monthCalOpen, setMonthCalOpen] = useState(false)
-  const dateFnsLocale = resolveDateFnsLocale(i18n.resolvedLanguage ?? i18n.language)
   const monthParam = `${selectedMonth}-01`
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
@@ -148,48 +143,7 @@ export default function BudgetsPage() {
       <PageHeader
         section={t('budgets.title')}
         title={monthTitle}
-        action={
-          <div className="flex items-center gap-1">
-            <button
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all text-base"
-              onClick={() => {
-                const [y, m] = selectedMonth.split('-').map(Number)
-                const d = new Date(y, m - 2, 1)
-                setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-              }}
-            >‹</button>
-            <Popover open={monthCalOpen} onOpenChange={setMonthCalOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center gap-2 border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground hover:bg-muted/50 transition-all cursor-pointer min-w-[180px]"
-                >
-                  <CalendarIcon className="size-3.5 text-muted-foreground" />
-                  {monthTitle}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="center" className="w-auto p-0">
-                <MonthPicker
-                  locale={dateFnsLocale}
-                  selectedMonth={new Date(`${selectedMonth}-01T00:00:00`)}
-                  onMonthSelect={(date) => {
-                    if (!date) return
-                    setSelectedMonth(format(date, 'yyyy-MM'))
-                    setMonthCalOpen(false)
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
-            <button
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all text-base"
-              onClick={() => {
-                const [y, m] = selectedMonth.split('-').map(Number)
-                const d = new Date(y, m, 1)
-                setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-              }}
-            >›</button>
-          </div>
-        }
+        period={<MonthPeriodSelector value={selectedMonth} onChange={setSelectedMonth} locale={uiLocale} />}
       />
 
       <SectionCard>

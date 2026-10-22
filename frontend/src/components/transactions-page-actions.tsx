@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { ArrowLeftRight, CalendarDays, Copy, Download, List, MoreHorizontal } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { MonthStepper } from '@/components/month-stepper'
+import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import { TransactionsViewSwitcher, type TransactionsViewSwitcherProps } from '@/components/transactions-view-switcher'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,18 +14,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-type MonthStepperConfig = {
+type MonthConfig = {
   value: string
   onChange: (value: string) => void
   locale: string
-  prevLabel: string
-  nextLabel: string
 }
 
 type ViewSwitcherConfig = TransactionsViewSwitcherProps
 
 export type TransactionsPageActionsProps = {
-  month: MonthStepperConfig
+  month: MonthConfig
   view: ViewSwitcherConfig
   columnPicker: ReactNode
   exportLabel: string
@@ -37,10 +35,10 @@ export type TransactionsPageActionsProps = {
   testId?: string
 }
 
-function HeaderMonthStepper({ month }: { month: MonthStepperConfig }) {
+function HeaderMonth({ month }: { month: MonthConfig }) {
   return (
     <div className="min-w-0 flex-1 sm:flex-none">
-      <MonthStepper {...month} />
+      <MonthPeriodSelector {...month} compactOnPhone />
     </div>
   )
 }
@@ -105,7 +103,7 @@ export function TransactionsPageActions(props: TransactionsPageActionsProps) {
   // Secondary actions stay labelled on desktop and collapse only where width is scarce.
   return (
     <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-wrap sm:justify-end" data-testid={props.testId}>
-      <HeaderMonthStepper month={props.month} />
+      <HeaderMonth month={props.month} />
       <DesktopSecondaryActions {...props} />
       <PrimaryAddAction onAdd={props.onAdd} />
       <MobileSecondaryMenu {...props} />

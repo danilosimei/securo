@@ -882,8 +882,6 @@
   "transactions": {
     "title": "लेन-देन",
     "section": "वित्तीय",
-    "monthPrevious": "पिछला महीना",
-    "monthNext": "अगला महीना",
     "description": "विवरण",
     "originalDescription": "मूल विवरण",
     "restoreOriginalDescription": "मूल पुनर्स्थापित करें",
@@ -2402,6 +2400,8 @@
     "showMore": "+{{count}} और",
     "previous": "पिछला",
     "next": "अगला",
+    "previousMonth": "पिछला महीना",
+    "nextMonth": "अगला महीना",
     "rowsPerPage": "प्रति पृष्ठ पंक्तियाँ",
     "noResults": "कोई परिणाम नहीं",
     "preview": "पूर्वावलोकन",

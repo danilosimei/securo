@@ -910,8 +910,6 @@
   "transactions": {
     "title": "Transakce",
     "section": "Finance",
-    "monthPrevious": "Předchozí měsíc",
-    "monthNext": "Další měsíc",
     "description": "Popis",
     "originalDescription": "Původní popis",
     "restoreOriginalDescription": "Obnovit původní",
@@ -2542,6 +2540,8 @@
     "showMore_other": "+{{count}} dalších",
     "previous": "Předchozí",
     "next": "Další",
+    "previousMonth": "Předchozí měsíc",
+    "nextMonth": "Další měsíc",
     "rowsPerPage": "Řádků na stránku",
     "noResults": "Žádné výsledky",
     "preview": "Náhled",
