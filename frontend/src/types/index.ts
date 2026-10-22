@@ -89,6 +89,9 @@ export interface UserPreferences {
   onboarding_completed?: boolean
 }
 
+/** How reports read a category: spending as usual, earned money, or an offset of spending. */
+export type ReportKind = 'normal' | 'income' | 'refund'
+
 export interface Category {
   id: string
   user_id: string
@@ -100,6 +103,9 @@ export interface Category {
   is_hidden: boolean
   treat_as_transfer: boolean
   is_ignored: boolean
+  report_kind?: ReportKind
+  /** What belongs in the category, in the person's words (at most 300 characters). */
+  description?: string | null
 }
 
 /** Active rules that assign a category, used when retiring one. */

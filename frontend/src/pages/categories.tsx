@@ -18,7 +18,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import type { Category, CategoryGroup, CategoryUsage } from '@/types'
+import type { Category, CategoryGroup, CategoryUsage, ReportKind } from '@/types'
 import { Pencil, Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff, WandSparkles } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { invalidateCategoryQueries } from '@/lib/invalidate-queries'
@@ -26,6 +26,13 @@ import { CategoryIcon } from '@/components/category-icon'
 import { CategorySelect } from '@/components/category-select'
 import { IconPicker } from '@/components/icon-picker'
 import { useWorkspace } from '@/contexts/workspace-context'
+
+const DESCRIPTION_MAX = 300
+const REPORT_KINDS: { value: ReportKind; label: string; help: string }[] = [
+  { value: 'normal', label: 'categories.reportKindNormal', help: 'categories.reportKindNormalHelp' },
+  { value: 'income', label: 'categories.reportKindIncome', help: 'categories.reportKindIncomeHelp' },
+  { value: 'refund', label: 'categories.reportKindRefund', help: 'categories.reportKindRefundHelp' },
+]
 
 function SectionCard({ children }: { children: React.ReactNode }) {
   return (
@@ -56,6 +63,8 @@ export default function CategoriesPage() {
   const [formColor, setFormColor] = useState('#6366f1')
   const [formTreatAsTransfer, setFormTreatAsTransfer] = useState(false)
   const [formIgnoreTransfer, setFormIgnoreTransfer] = useState(false)
+  const [formReportKind, setFormReportKind] = useState<ReportKind>('normal')
+  const [formDescription, setFormDescription] = useState('')
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<CategoryGroup | null>(null)
   const [groupFormIcon, setGroupFormIcon] = useState('circle-help')
@@ -238,6 +247,8 @@ export default function CategoriesPage() {
     setFormColor(cat?.color ?? '#6366f1')
     setFormTreatAsTransfer(cat?.treat_as_transfer ?? false)
     setFormIgnoreTransfer(cat?.is_ignored ?? false)
+    setFormReportKind(cat?.report_kind ?? 'normal')
+    setFormDescription(cat?.description ?? '')
     setCatDialogOpen(true)
   }
 
@@ -439,7 +450,9 @@ export default function CategoriesPage() {
                 color: formData.get('color') as string,
                 group_id: (formData.get('group_id') as string) || null,
                 treat_as_transfer: formTreatAsTransfer,
-                is_ignored: formIgnoreTransfer
+                is_ignored: formIgnoreTransfer,
+                report_kind: formReportKind,
+                description: formDescription.trim() || null
               }
               if (editingCat) {
                 updateCatMutation.mutate({ id: editingCat.id, ...data })
@@ -477,6 +490,39 @@ export default function CategoriesPage() {
                 <Label>{t('groups.icon')}</Label>
                 <IconPicker value={formIcon} color={formColor} onChange={setFormIcon} />
                 <input type="hidden" name="icon" value={formIcon} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="category-report-kind">{t('categories.reportKind')}</Label>
+                <select
+                  id="category-report-kind"
+                  value={formReportKind}
+                  onChange={(e) => setFormReportKind(e.target.value as ReportKind)}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {REPORT_KINDS.map((kind) => (
+                    <option key={kind.value} value={kind.value}>{t(kind.label)}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {t(REPORT_KINDS.find((kind) => kind.value === formReportKind)!.help)}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="category-description">{t('categories.descriptionLabel')}</Label>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {formDescription.length}/{DESCRIPTION_MAX}
+                  </span>
+                </div>
+                <textarea
+                  id="category-description"
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  maxLength={DESCRIPTION_MAX}
+                  rows={3}
+                  placeholder={t('categories.descriptionPlaceholder')}
+                  className="w-full resize-y border border-border rounded-lg px-3 py-2 text-sm bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
               </div>
               <div className="pt-2 border-t border-border">
                 <label className="flex items-start gap-3 cursor-pointer">
