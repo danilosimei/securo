@@ -24,6 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchBar } from '@/components/ui/search-bar'
+import { useUrlSearch } from '@/hooks/use-url-search'
 import { RowActions } from '@/components/ui/row-actions'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { PageHeader } from '@/components/page-header'
@@ -60,7 +62,7 @@ export default function ProductsPage() {
   const queryClient = useQueryClient()
 
   const [filter, setFilter] = useState<Filter>('active')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlSearch()
   const [editing, setEditing] = useState<Product | 'new' | null>(null)
   const [deleting, setDeleting] = useState<Product | null>(null)
 
@@ -151,12 +153,13 @@ export default function ProductsPage() {
             label: t(`invoices.products.filter.${value}`),
           }))}
         />
-        <Input
+        <SearchBar
+          className="w-full sm:w-72"
+          compact
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder={t('invoices.products.searchPlaceholder')}
-          className="h-9 w-full sm:w-64"
-          data-testid="product-search"
+          inputTestId="product-search"
         />
       </div>
 

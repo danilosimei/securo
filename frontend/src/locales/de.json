@@ -2520,7 +2520,8 @@
     "download": "Herunterladen",
     "closePreview": "Vorschau schließen",
     "remove": "Entfernen",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Suche löschen"
   },
   "splitGroups": {
     "searchPlaceholder": "Gruppen suchen...",

@@ -2521,7 +2521,8 @@
     "download": "Downloaden",
     "closePreview": "Voorbeeld sluiten",
     "remove": "Verwijderen",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Zoekopdracht wissen"
   },
   "splitGroups": {
     "searchPlaceholder": "Groepen zoeken...",

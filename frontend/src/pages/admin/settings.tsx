@@ -1,4 +1,6 @@
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { SearchBar } from '@/components/ui/search-bar'
+import { useUrlSearch } from '@/hooks/use-url-search'
 import { RowActions } from '@/components/ui/row-actions'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -34,7 +36,7 @@ import { PageHeader } from '@/components/page-header'
 import { TimezoneSettings } from '@/components/timezone-settings'
 import { setThemeBasedOnSystem } from '@/lib/theme-utils'
 import { useLocalAuthEnabled } from '@/hooks/use-local-auth'
-import { Search, Plus, Shield, ShieldOff, UserCog, Users, Scale, Tag, Palette, Save, Hash, CalendarDays } from 'lucide-react'
+import { Plus, Shield, ShieldOff, UserCog, Users, Scale, Tag, Palette, Save, Hash, CalendarDays } from 'lucide-react'
 import type { AdminUser } from '@/types'
 
 export default function AdminSettingsPage() {
@@ -43,7 +45,7 @@ export default function AdminSettingsPage() {
   const queryClient = useQueryClient()
   const { resolvedTheme } = useTheme()
 
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlSearch()
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState<AdminUser | null>(null)
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null)
@@ -296,16 +298,12 @@ export default function AdminSettingsPage() {
         }
       />
 
-      {/* Search */}
-      <div className="relative max-w-md mb-5">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('admin.users.searchPlaceholder')}
-          className="pl-9 h-10 bg-card border-border/60 rounded-xl"
-        />
-      </div>
+      <SearchBar
+        className="mb-5"
+        value={search}
+        onChange={setSearch}
+        placeholder={t('admin.users.searchPlaceholder')}
+      />
 
       {/* User list */}
       <div className="rounded-xl border border-border/60 bg-card overflow-hidden mb-8">

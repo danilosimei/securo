@@ -2519,7 +2519,8 @@
     "download": "Letöltés",
     "closePreview": "Előnézet bezárása",
     "remove": "Eltávolítás",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Keresés törlése"
   },
   "splitGroups": {
     "searchPlaceholder": "Csoportok keresése...",

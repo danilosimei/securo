@@ -1,3 +1,4 @@
+import { SearchBar } from '@/components/ui/search-bar'
 import { Segmented } from '@/components/invoice-ui'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -20,7 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { GroupForm } from '@/components/group-form'
 import { PageHeader } from '@/components/page-header'
-import { Archive, ChevronRight, Plus, Search, Trash2, Users, X } from 'lucide-react'
+import { Archive, ChevronRight, Plus, Trash2, Users } from 'lucide-react'
 import type { Group, GroupKind } from '@/types'
 
 type StatusFilter = 'active' | 'archived' | 'all'
@@ -176,26 +177,12 @@ export default function GroupsPage() {
         />
       </div>
 
-      <div className="rounded-xl border border-border bg-card shadow-sm transition-colors mb-4 focus-within:border-primary/40 focus-within:ring-[3px] focus-within:ring-primary/10">
-        <div className="flex items-center gap-1.5 px-2 py-1.5">
-          <div className="relative flex min-w-0 flex-1 items-center gap-1 px-2.5 py-1 min-h-9">
-            <Search size={15} className="pointer-events-none shrink-0 text-muted-foreground/70" />
-            <input
-              type="search"
-              aria-label={t('splitGroups.searchPlaceholder')}
-              placeholder={t('splitGroups.searchPlaceholder')}
-              value={search}
-              onChange={(e) => updateFilter('q', e.target.value)}
-              className="min-w-0 flex-1 bg-transparent px-1.5 text-[13.5px] outline-none placeholder:text-muted-foreground/75"
-            />
-          </div>
-          {search && (
-            <Button variant="ghost" size="icon-sm" aria-label={t('splitGroups.clearSearch')} onClick={() => updateFilter('q', '')}>
-              <X size={15} />
-            </Button>
-          )}
-        </div>
-      </div>
+      <SearchBar
+        className="mb-4"
+        value={search}
+        onChange={(value) => updateFilter('q', value)}
+        placeholder={t('splitGroups.searchPlaceholder')}
+      />
 
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
         {isLoading ? (

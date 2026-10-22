@@ -2519,7 +2519,8 @@
     "download": "Download",
     "closePreview": "Close preview",
     "remove": "Remove",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Clear search"
   },
   "splitGroups": {
     "searchPlaceholder": "Search groups...",

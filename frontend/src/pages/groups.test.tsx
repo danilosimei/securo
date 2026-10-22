@@ -57,7 +57,7 @@ describe('GroupsPage search', () => {
     expect(screen.queryByText('Vacación familiar')).not.toBeInTheDocument()
 
     api.list.mockResolvedValue([groups[0], groups[1]])
-    await user.click(screen.getByRole('button', { name: t('splitGroups.clearSearch') }))
+    await user.click(screen.getByRole('button', { name: t('common.clearSearch') }))
     expect(screen.getByRole('searchbox')).toHaveValue('')
     await screen.findByText('Vacación familiar')
     expect(screen.getByTestId('location').textContent).toBe('/groups')
@@ -98,7 +98,7 @@ describe('GroupsPage search', () => {
     expect(screen.getByRole('searchbox')).toHaveValue('vacacion')
     expect(screen.queryByText('Vacación familiar')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: t('splitGroups.clearSearch') }))
+    await user.click(screen.getByRole('button', { name: t('common.clearSearch') }))
     expect(screen.getByTestId('location')).toHaveTextContent('/groups?status=archived&other=value')
     await waitFor(() => expect(api.list).toHaveBeenLastCalledWith(true, { q: undefined, status: 'archived' }))
   })

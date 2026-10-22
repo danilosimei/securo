@@ -1,5 +1,4 @@
 import { useRef, useState, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { categories as categoriesApi, categoryGroups as categoryGroupsApi, rules as rulesApi, accounts as accountsApi, payees as payeesApi } from '@/lib/api'
@@ -19,8 +18,11 @@ import {
 import type { Category, Payee, Rule, RuleAction, RuleCondition, RuleConditionNode, RuleExportPayload } from '@/types'
 import { isConditionGroup } from '@/lib/rule-conditions'
 import { normalizeRuleMatchValue, ruleSearchText } from '@/lib/rule-match-utils'
-import { Plus, RefreshCw, Package, Check, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Search, Power } from 'lucide-react'
+import { Plus, RefreshCw, Package, Check, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Power } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SearchBar } from '@/components/ui/search-bar'
+import { useUrlTab } from '@/hooks/use-url-tab'
+import { useUrlSearch } from '@/hooks/use-url-search'
 import { RowActions } from '@/components/ui/row-actions'
 import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
@@ -334,7 +336,7 @@ export default function RulesPage() {
 
   const [sortBy, setSortBy] = useState<'priority' | 'name' | 'category'>('priority')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlSearch()
   const [filterCategory, setFilterCategory] = useState('')
   const [filterStatus, setFilterStatus] = useState<'' | 'active' | 'inactive'>('')
   const [filterAction, setFilterAction] = useState('')
@@ -394,16 +396,7 @@ export default function RulesPage() {
   // Addressable, because the queue is now linked to from elsewhere: a
   // badge on a transaction row is a promise to land on the question, and
   // landing on the rules list instead would break it.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const requested = searchParams.get('tab')
-  const asked =
-    requested === 'queue' || requested === 'history' ? requested : 'rules'
-  const tab: 'rules' | 'queue' | 'history' = asked
-  const setTab = (next: 'rules' | 'queue' | 'history') => {
-    // `replace`, so the back button leaves the page rather than walking
-    // back through tabs somebody clicked on the way.
-    setSearchParams(next === 'rules' ? {} : { tab: next }, { replace: true })
-  }
+  const [tab, setTab] = useUrlTab(['rules', 'queue', 'history'] as const)
 
   // Fetched here rather than inside the queue so the count can sit on the
   // tab: a queue nobody can see is not a queue.
@@ -495,22 +488,18 @@ export default function RulesPage() {
       {/* Kept mounted (its state survives a tab trip) and only hidden: the
           animation replays each time it shows again. */}
       <div className={tab === 'rules' ? 'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200' : 'hidden'}>
+      <SearchBar
+        className="mb-4"
+        value={search}
+        onChange={setSearch}
+        placeholder={t('rules.searchPlaceholder')}
+      />
       <SectionCard>
         <SectionHeader
           title={t('rules.sectionTitle')}
           description={t('rules.sectionHint')}
         />
         <div className="px-4 sm:px-5 py-2 bg-muted/50 border-b border-border flex flex-wrap items-center gap-2">
-          <div className="flex min-w-[10rem] flex-1 items-center gap-1.5">
-            <Search size={14} className="pointer-events-none shrink-0 text-muted-foreground/70" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t('rules.searchPlaceholder')}
-              className="w-full min-w-0 rounded-sm bg-transparent text-xs text-foreground focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px] placeholder:text-muted-foreground/75"
-            />
-          </div>
           <select
             className={FILTER_CONTROL_CLASS}
             value={filterCategory}

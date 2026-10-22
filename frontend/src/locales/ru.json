@@ -2544,7 +2544,8 @@
     "download": "Скачать",
     "closePreview": "Закрыть просмотр",
     "remove": "Удалить",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Очистить поиск"
   },
   "splitGroups": {
     "searchPlaceholder": "Поиск групп...",

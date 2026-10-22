@@ -42,6 +42,7 @@ import {
   DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { SearchBar } from '@/components/ui/search-bar'
 import { RowActions } from '@/components/ui/row-actions'
 import { PageHeader } from '@/components/page-header'
 import { calculateRangeSelection } from '@/lib/selection-utils'
@@ -53,7 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Star, Merge, Trash2, ListFilter, X, Check, Plus, ArrowDown, ArrowUp } from 'lucide-react'
+import { Star, Merge, Trash2, ListFilter, X, Check, Plus, ArrowDown, ArrowUp } from 'lucide-react'
 import { useWorkspace } from '@/contexts/workspace-context'
 import type { Payee } from '@/types'
 import { payeeErrorMessage } from '@/lib/payee-error-message'
@@ -492,26 +493,52 @@ export default function PayeesPage() {
       />
 
       {/* Search & Filters */}
-      <div
-        className={cn(
-          'group/filterbar rounded-xl border border-border bg-card shadow-sm transition-colors mb-4',
-          'focus-within:border-primary/40 focus-within:ring-[3px] focus-within:ring-primary/10',
-        )}
-      >
-        {/* Top row: search input + controls */}
-        <div className="flex items-center gap-1.5 px-2 py-1.5">
-          <div className="relative flex min-w-0 flex-1 items-center gap-1 px-2.5 py-1 min-h-9">
-            <Search size={15} className="pointer-events-none shrink-0 text-muted-foreground/70" />
-            <input
-              type="text"
-              placeholder={t('payees.searchPlaceholder')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 bg-transparent px-1.5 text-[13.5px] outline-none placeholder:text-muted-foreground/75"
-            />
-          </div>
+      <SearchBar
+        className="mb-4"
+        value={search}
+        onChange={(value) => { setSearch(value); if (!value) setSearchQuery('') }}
+        placeholder={t('payees.searchPlaceholder')}
+        footer={
+          filterType || filterFavorites ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+            {filterType && (
+              <button
+                type="button"
+                onClick={() => setFilterType('')}
+                className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 pl-2 pr-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
+              >
+                <span className="flex items-center text-muted-foreground group-hover:text-destructive">
+                  <ListFilter size={12} />
+                </span>
+                <span className="text-muted-foreground">{t('payees.type')}:</span>
+                <span className="max-w-[140px] truncate font-medium text-foreground">
+                  {typeLabels[filterType]}
+                </span>
+                <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
+                  <X size={11} />
+                </span>
+              </button>
+            )}
 
-          <div className="ml-auto flex shrink-0 items-center gap-1 pl-1">
+            {filterFavorites && (
+              <button
+                type="button"
+                onClick={() => setFilterFavorites(false)}
+                className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 pl-2 pr-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
+              >
+                <span className="flex items-center text-amber-400 group-hover:text-destructive">
+                  <Star size={12} className="fill-amber-400" />
+                </span>
+                <span className="text-muted-foreground">{t('payees.favoritesOnly')}</span>
+                <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
+                  <X size={11} />
+                </span>
+              </button>
+            )}
+            </div>
+          ) : undefined
+        }
+      >
             {(search || filterType || filterFavorites) && (
               <button
                 type="button"
@@ -609,49 +636,7 @@ export default function PayeesPage() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Bottom row: active filter chips */}
-        {(filterType || filterFavorites) && (
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 px-2 py-1.5">
-            {filterType && (
-              <button
-                type="button"
-                onClick={() => setFilterType('')}
-                className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 pl-2 pr-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
-              >
-                <span className="flex items-center text-muted-foreground group-hover:text-destructive">
-                  <ListFilter size={12} />
-                </span>
-                <span className="text-muted-foreground">{t('payees.type')}:</span>
-                <span className="max-w-[140px] truncate font-medium text-foreground">
-                  {typeLabels[filterType]}
-                </span>
-                <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
-                  <X size={11} />
-                </span>
-              </button>
-            )}
-
-            {filterFavorites && (
-              <button
-                type="button"
-                onClick={() => setFilterFavorites(false)}
-                className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 pl-2 pr-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
-              >
-                <span className="flex items-center text-amber-400 group-hover:text-destructive">
-                  <Star size={12} className="fill-amber-400" />
-                </span>
-                <span className="text-muted-foreground">{t('payees.favoritesOnly')}</span>
-                <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
-                  <X size={11} />
-                </span>
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      </SearchBar>
 
       {/* Table */}
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">

@@ -2519,7 +2519,8 @@
     "download": "Λήψη",
     "closePreview": "Κλείσιμο προεπισκόπησης",
     "remove": "Αφαίρεση",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Εκκαθάριση αναζήτησης"
   },
   "splitGroups": {
     "searchPlaceholder": "Αναζήτηση ομάδων...",

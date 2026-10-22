@@ -2651,7 +2651,8 @@
     "download": "Stiahnuť",
     "closePreview": "Zavrieť náhľad",
     "remove": "Odstrániť",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Vymazať hľadanie"
   },
   "splitGroups": {
     "searchPlaceholder": "Hľadať skupiny...",

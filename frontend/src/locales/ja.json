@@ -2519,7 +2519,8 @@
     "download": "ダウンロード",
     "closePreview": "プレビューを閉じる",
     "remove": "削除",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "検索をクリア"
   },
   "splitGroups": {
     "searchPlaceholder": "グループを検索...",

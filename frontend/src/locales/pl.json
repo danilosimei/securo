@@ -2622,7 +2622,8 @@
     "download": "Pobierz",
     "closePreview": "Zamknij podgląd",
     "remove": "Usuń",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Wyczyść wyszukiwanie"
   },
   "splitGroups": {
     "searchPlaceholder": "Szukaj grup...",

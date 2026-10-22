@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useState } from 'react'
+import { SearchBar } from '@/components/ui/search-bar'
 import { useTranslation } from 'react-i18next'
 import type { ImportReviewTransaction, Category, CategoryGroup } from '@/types'
 import { formatCurrency } from '@/lib/format'
@@ -10,7 +11,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Input } from '@/components/ui/input'
 import { CategorySelect } from '@/components/category-select'
 import { CategoryFilterDropdown } from '@/components/category-filter-dropdown'
 import {
@@ -124,11 +124,12 @@ export function ImportReviewTable({
     <div>
       {/* Filter bar */}
       <div className="px-5 py-3 border-b border-border bg-muted/30 flex flex-wrap items-center gap-3">
-        <Input
-          placeholder={t('import.searchTransactions')}
+        <SearchBar
+          className="w-full sm:max-w-xs"
+          compact
           value={searchQuery}
-          onChange={(e) => { onSearchChange(e.target.value); onPageChange(1) }}
-          className="max-w-xs h-8 text-sm border border-border rounded-md px-3 bg-card focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+          onChange={(value) => { onSearchChange(value); onPageChange(1) }}
+          placeholder={t('import.searchTransactions')}
         />
         <CategoryFilterDropdown
           categoryIds={filterCategoryIds}

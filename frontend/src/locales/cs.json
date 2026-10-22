@@ -2667,7 +2667,8 @@
     "download": "Stáhnout",
     "closePreview": "Zavřít náhled",
     "remove": "Odebrat",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Vymazat hledání"
   },
   "splitGroups": {
     "searchPlaceholder": "Hledat skupiny...",

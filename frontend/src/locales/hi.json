@@ -2519,7 +2519,8 @@
     "download": "डाउनलोड करें",
     "closePreview": "पूर्वावलोकन बंद करें",
     "remove": "हटाएँ",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "खोज साफ़ करें"
   },
   "splitGroups": {
     "searchPlaceholder": "समूह खोजें...",

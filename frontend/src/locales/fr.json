@@ -2523,7 +2523,8 @@
     "download": "Télécharger",
     "closePreview": "Fermer l'aperçu",
     "remove": "Supprimer",
-    "undo": "Undo"
+    "undo": "Undo",
+    "clearSearch": "Effacer la recherche"
   },
   "splitGroups": {
     "searchPlaceholder": "Rechercher des groupes...",

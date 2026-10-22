@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { SEARCH_BAR_CLASS } from '@/components/ui/search-bar'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
@@ -347,12 +348,7 @@ export function TransactionsFilterBar({
     <div className="mb-4">
       <Popover open={dateCustomOpen} onOpenChange={setDateCustomOpen} modal={true}>
       <PopoverAnchor asChild>
-      <div
-        className={cn(
-          'group/filterbar rounded-xl border border-border bg-card shadow-sm transition-colors',
-          'focus-within:border-primary/40 focus-within:ring-[3px] focus-within:ring-primary/10',
-        )}
-      >
+      <div className={SEARCH_BAR_CLASS}>
         {/* Top row: search input + controls */}
         <div className="flex items-center gap-1.5 px-2 py-1.5">
         {/* Search input — splits committed `#tag` tokens into inline chips,
