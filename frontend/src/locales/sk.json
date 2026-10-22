@@ -2123,7 +2123,7 @@
       "refunds": "{{value}} vratiek už odpočítaných od výdavkov.",
       "collapse": "Znova zlúčiť malé skupiny",
       "empty": "V tomto období žiadne príjmy ani výdavky.",
-      "answerIncome": "Z príjmov {{income}} ide najviac na {{group}}: {{share}}.",
+      "answerIncome": "S príjmami {{income}} ste minuli {{spending}}; najviac ide na {{group}}: {{share}} výdavkov.",
       "answerSpending": "Minuli ste {{spending}}; najväčšia skupina je {{group}} ({{share}}).",
       "answerLeft": "Zostalo {{left}}.",
       "answerShort": "Chýbalo {{left}}.",

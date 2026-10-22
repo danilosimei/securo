@@ -2011,7 +2011,7 @@
       "refunds": "{{value}} visszatérítés már levonva a kiadásból.",
       "collapse": "Kis csoportok újra összevonása",
       "empty": "Ebben az időszakban nincs bevétel vagy kiadás.",
-      "answerIncome": "A {{income}} bevételből a legtöbb {{group}} csoportra megy: {{share}}.",
+      "answerIncome": "{{income}} bevétel mellett {{spending}} volt a költésed; a legtöbb {{group}}: a kiadás {{share}}-a.",
       "answerSpending": "{{spending}} volt a költésed; a legnagyobb csoport {{group}} ({{share}}).",
       "answerLeft": "{{left}} maradt.",
       "answerShort": "{{left}} hiányzott.",

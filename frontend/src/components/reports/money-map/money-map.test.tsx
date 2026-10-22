@@ -82,7 +82,7 @@ describe('MoneyMapView', () => {
       t('reports.moneyMap.refunds', { value: 'R$7,142' }),
     )
     expect(screen.getByTestId('money-map-answer')).toHaveTextContent(
-      'Of R$36K in income, Moradia takes the most: 111%. You were R$39.8K short.',
+      'With R$36K in income you spent R$75.8K; Moradia takes the most: 53% of spending. You were R$39.8K short.',
     )
   })
 

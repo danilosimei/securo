@@ -12,7 +12,8 @@ import { useElementWidth } from '@/components/reports/common/chart-utils'
 import { dayTransactionsLink } from '@/components/reports/common/report-url'
 import { calendarWeeks, heatSteps, weekdayName } from './habits-model'
 
-const CELL = 12
+const MIN_CELL = 10
+const MAX_CELL = 16
 const GAP = 3
 const LEFT = 26
 const TOP = 16
@@ -48,6 +49,7 @@ export function CalendarHeatmap({ from, to, days, currency, locale, ariaLabel }:
   const [outer, outerWidth] = useElementWidth<HTMLDivElement>()
 
   const step = (v: number) => (v <= 0 ? 0 : v <= steps[0] ? 1 : v <= steps[1] ? 2 : v <= steps[2] ? 3 : 4)
+  const CELL = Math.max(MIN_CELL, Math.min(MAX_CELL, Math.floor((outerWidth - LEFT) / Math.max(1, weeks.length)) - GAP))
   const width = LEFT + weeks.length * (CELL + GAP)
   const height = TOP + 7 * (CELL + GAP)
   const position = new Map<string, { x: number; y: number }>()

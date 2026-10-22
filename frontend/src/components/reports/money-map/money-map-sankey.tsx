@@ -111,10 +111,18 @@ export function MoneyMapSankey({ model, palette, currency, locale, onOpen, onExp
   }, [nodes, height])
 
   const money = (v: number) => (privacyMode ? MASK : formatMoneyShort(v, currency, locale))
-  const share = (n: MapNode) => {
+  // Each node's share is of what it splits: a category of its group, a group
+  // of the spending, income and what is left or missing of the income. The
+  // hub is the whole, so it has none.
+  const share = (n: MapNode): number | null => {
+    if (n.kind === 'hub') return null
     if (n.kind === 'category' && n.group) return n.amount / n.group.value
-    const base = model.totalIncome > 0 ? model.totalIncome : model.totalSpending
-    return base > 0 ? n.amount / base : 0
+    const base = n.kind === 'group' || n.kind === 'folded' || model.totalIncome <= 0 ? model.totalSpending : model.totalIncome
+    return base > 0 ? n.amount / base : null
+  }
+  const shareText = (n: MapNode) => {
+    const value = share(n)
+    return value === null ? '' : formatPercent(value, locale)
   }
   const clickable = (n: MapNode) => n.kind === 'group' || n.kind === 'category' || n.kind === 'folded'
   const activate = (n: MapNode) => (n.kind === 'folded' ? onExpand() : onOpen(n))
@@ -127,7 +135,7 @@ export function MoneyMapSankey({ model, palette, currency, locale, onOpen, onExp
     t('reports.moneyMap.nodeAria', {
       name: n.label,
       value: mask(formatCurrency(n.amount, currency, locale)),
-      share: formatPercent(share(n), locale),
+      share: shareText(n) || '100%',
     }) + (clickable(n) ? `. ${t(n.kind === 'folded' ? 'reports.moneyMap.expandHint' : 'reports.moneyMap.openHint')}` : '')
 
   return (
@@ -213,7 +221,7 @@ export function MoneyMapSankey({ model, palette, currency, locale, onOpen, onExp
                         {fit(n.label, room)}
                       </tspan>
                       <tspan x={n.x1 + 6} dy="1.25em" fill="var(--muted-foreground)" className="tabular-nums">
-                        {`${money(n.amount)} · ${formatPercent(share(n), locale)}`}
+                        {shareText(n) ? `${money(n.amount)} · ${shareText(n)}` : money(n.amount)}
                       </tspan>
                     </>
                   ) : (

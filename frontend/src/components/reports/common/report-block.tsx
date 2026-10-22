@@ -10,6 +10,16 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { SectionCard } from '@/components/invoice-ui'
 import type { BlockState } from './block-state'
 
+/** Sentences built from data can start with a month or weekday name, which
+ *  some languages write in lower case: the first letter goes up. A first word
+ *  with capitals of its own is a name ("iFood") and stays as it is. */
+function sentence<T>(value: T): T {
+  if (typeof value !== 'string' || !value) return value
+  const first = value.split(/\s/, 1)[0]
+  if (first !== first.toLocaleLowerCase()) return value
+  return (value.charAt(0).toLocaleUpperCase() + value.slice(1)) as T
+}
+
 interface ReportBlockProps {
   title: string
   /** One line under the title: what the chart answers, or how to read it. */
@@ -43,13 +53,13 @@ export function ReportBlock({
 }: ReportBlockProps) {
   const { t } = useTranslation()
   return (
-    <SectionCard className={cn('overflow-visible', className)}>
+    <SectionCard className={cn('min-w-0 overflow-visible', className)}>
       <section aria-label={title} data-testid={testId}>
         <div className="flex flex-wrap items-start justify-between gap-2 px-4 pt-4 sm:px-5">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-foreground">{title}</h2>
             {description && state === 'ready' && (
-              <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{sentence(description)}</p>
             )}
           </div>
           {state === 'ready' && action}
@@ -115,7 +125,7 @@ export function Headline({ text, loading, stale }: { text: string | null; loadin
         stale && 'opacity-60',
       )}
     >
-      {text}
+      {sentence(text)}
     </p>
   )
 }

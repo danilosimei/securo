@@ -2028,7 +2028,7 @@
       "refunds": "{{value}} возвратов уже вычтено из расходов.",
       "collapse": "Снова объединить мелкие группы",
       "empty": "Нет доходов и расходов за этот период.",
-      "answerIncome": "Из дохода {{income}} больше всего уходит на {{group}}: {{share}}.",
+      "answerIncome": "При доходе {{income}} вы потратили {{spending}}; больше всего уходит на {{group}}: {{share}} расходов.",
       "answerSpending": "Вы потратили {{spending}}; крупнейшая группа — {{group}} ({{share}}).",
       "answerLeft": "Осталось {{left}}.",
       "answerShort": "Не хватило {{left}}.",

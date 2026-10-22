@@ -13,7 +13,7 @@ import { ChartTooltip, TooltipRow } from '@/components/reports/common/report-blo
 import { quadrants } from './habits-model'
 
 const HEIGHT = 320
-const PAD = { top: 14, right: 16, bottom: 34, left: 56 }
+const PAD = { top: 26, right: 16, bottom: 34, left: 56 }
 const MAX_R = 26
 const MIN_R = 4
 const LABELS = 6
@@ -55,9 +55,21 @@ export function BubbleChart({ merchants, currency, locale, colorOf, onOpen, aria
   const q = quadrants(points)
   const xTicks = TICKS.filter((v) => Math.log10(v) >= x0 && Math.log10(v) <= x1)
   const yTicks = TICKS.filter((v) => Math.log10(v) >= y0 && Math.log10(v) <= y1)
-  const labelled = new Set(
-    [...points].sort((a, b) => Number(b.total) - Number(a.total)).slice(0, LABELS).map((m) => m.id),
-  )
+  // Labels for the biggest stores, skipping any that would overlap one
+  // already placed; the rest are in the tooltip.
+  const labelText = (m: HabitsMerchant) => (m.label.length > 18 ? `${m.label.slice(0, 17)}…` : m.label)
+  const labelBoxes: { x0: number; x1: number; y0: number; y1: number }[] = []
+  const labelled = new Map<string, number>()
+  for (const m of [...points].sort((a, b) => Number(b.total) - Number(a.total))) {
+    if (labelled.size >= LABELS) break
+    const w = labelText(m).length * 6.4
+    const cx = x(m.per_month)
+    const ly = Math.max(12, y(Number(m.avg_ticket)) - r(m) - 4)
+    const box = { x0: cx - w / 2, x1: cx + w / 2, y0: ly - 11, y1: ly + 2 }
+    if (labelBoxes.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0)) continue
+    labelBoxes.push(box)
+    labelled.set(m.id, ly)
+  }
   // Biggest first, so the small ones sit on top and stay reachable.
   const order = [...points].sort((a, b) => Number(b.total) - Number(a.total))
   const hovered = active ? points.find((m) => m.id === active) : undefined
@@ -142,7 +154,7 @@ export function BubbleChart({ merchants, currency, locale, colorOf, onOpen, aria
               <text
                 key={m.id}
                 x={x(m.per_month)}
-                y={y(Number(m.avg_ticket)) - r(m) - 4}
+                y={labelled.get(m.id)}
                 textAnchor="middle"
                 fontSize={11}
                 fontWeight={600}
@@ -151,7 +163,7 @@ export function BubbleChart({ merchants, currency, locale, colorOf, onOpen, aria
                 strokeWidth={3}
                 paintOrder="stroke"
               >
-                {m.label.length > 18 ? `${m.label.slice(0, 17)}…` : m.label}
+                {labelText(m)}
               </text>
             ))}
         </g>

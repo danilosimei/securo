@@ -69,7 +69,7 @@ export function hasFoldableGroups(map: MoneyMap) {
 export function moneyMapAnswer(model: MapModel, t: (k: string, o?: Record<string, unknown>) => string, money: (v: number) => string, locale: string) {
   const top = model.groups[0]
   if (!top) return ''
-  const base = model.totalIncome > 0 ? model.totalIncome : model.totalSpending
+  const base = model.totalSpending
   const first = t(model.totalIncome > 0 ? 'reports.moneyMap.answerIncome' : 'reports.moneyMap.answerSpending', {
     income: money(model.totalIncome),
     spending: money(model.totalSpending),

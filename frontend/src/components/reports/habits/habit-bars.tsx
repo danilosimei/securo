@@ -60,7 +60,7 @@ export function BandBars({ bands, currency, locale }: { bands: HabitsBand[]; cur
   const maxTotal = Math.max(...bands.map((b) => Number(b.total)), 1)
   return (
     <div data-testid="band-bars">
-      <div className="mb-1.5 grid grid-cols-[6.5rem_1fr_1fr] gap-3 text-[11px] font-medium text-muted-foreground sm:grid-cols-[8rem_1fr_1fr]">
+      <div className="mb-1.5 grid grid-cols-[7.5rem_1fr_1fr] gap-3 text-[11px] font-medium text-muted-foreground sm:grid-cols-[8rem_1fr_1fr]">
         <span>{t('reports.habits.bands.band')}</span>
         <span>{t('reports.habits.bands.count')}</span>
         <span>{t('reports.habits.bands.total')}</span>
@@ -78,7 +78,7 @@ export function BandBars({ bands, currency, locale }: { bands: HabitsBand[]; cur
                 n: band.count,
                 total: mask(formatCurrency(total, currency, locale)),
               })}
-              className="grid grid-cols-[6.5rem_1fr_1fr] items-center gap-3 text-sm sm:grid-cols-[8rem_1fr_1fr]"
+              className="grid grid-cols-[7.5rem_1fr_1fr] items-center gap-3 text-sm sm:grid-cols-[8rem_1fr_1fr]"
             >
               <span className="truncate text-xs font-medium text-foreground">{label}</span>
               <span className="flex min-w-0 items-center gap-1.5">

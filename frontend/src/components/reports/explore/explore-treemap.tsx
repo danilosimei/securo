@@ -96,7 +96,7 @@ export function ExploreTreemap({ rows, level, currency, locale, colorOf, onOpen,
         // carries its full aria-label, and the table below lists the same
         // names, so the page text keeps one copy of each.
         const content = fits && (
-          <span aria-hidden="true" className="pointer-events-none block min-w-0 overflow-hidden px-2 pt-1 text-left leading-tight">
+          <span aria-hidden="true" className="pointer-events-none block w-full min-w-0 overflow-hidden px-2 pt-1.5 text-left leading-tight">
             <span data-text={tile.label} className="block truncate text-xs font-semibold text-foreground before:content-[attr(data-text)]" />
             {roomy && (
               <span
@@ -121,12 +121,12 @@ export function ExploreTreemap({ rows, level, currency, locale, colorOf, onOpen,
             type="button"
             onClick={() => onOpen(tile.row!)}
             data-selected={selected != null && tile.row.id === selected}
-            className="absolute overflow-hidden rounded-[4px] transition-[background] duration-150 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[selected=true]:ring-2 data-[selected=true]:ring-primary motion-reduce:transition-none"
+            className="absolute flex items-start overflow-hidden rounded-[4px] text-left transition-[background] duration-150 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[selected=true]:ring-2 data-[selected=true]:ring-primary motion-reduce:transition-none"
           >
             {content}
           </button>
         ) : (
-          <div key={tile.key} {...common} role="img" tabIndex={0} className="absolute overflow-hidden rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <div key={tile.key} {...common} role="img" tabIndex={0} className="absolute flex items-start overflow-hidden rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             {content}
           </div>
         )

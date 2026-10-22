@@ -2028,7 +2028,7 @@
       "refunds": "{{value}} повернень уже віднято від витрат.",
       "collapse": "Знову об’єднати дрібні групи",
       "empty": "Немає доходів і витрат за цей період.",
-      "answerIncome": "З доходу {{income}} найбільше йде на {{group}}: {{share}}.",
+      "answerIncome": "За доходу {{income}} ви витратили {{spending}}; найбільше йде на {{group}}: {{share}} витрат.",
       "answerSpending": "Ви витратили {{spending}}; найбільша група — {{group}} ({{share}}).",
       "answerLeft": "Залишилося {{left}}.",
       "answerShort": "Забракло {{left}}.",

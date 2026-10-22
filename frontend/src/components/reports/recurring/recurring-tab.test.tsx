@@ -69,7 +69,7 @@ describe('RecurringTab', () => {
         'R$5,407/month in fixed costs = R$64.9K/year, 39% of spending.',
       ),
     )
-    expect(screen.getByTestId('recurring-counts')).toHaveTextContent('4 active · 1 new · 1 went up · 1 stopped')
+    expect(screen.getByTestId('recurring-counts')).toHaveTextContent('Active: 4 · New: 1 · Went up: 1 · Stopped: 1')
   })
 
   it('lists the most expensive per year first, stopped ones last, each with its status', async () => {
