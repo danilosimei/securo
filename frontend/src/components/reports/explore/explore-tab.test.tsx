@@ -3,11 +3,13 @@ import { screen, waitFor, within } from '@testing-library/react'
 
 import { ExploreTab } from '@/components/reports/explore/explore-tab'
 import { renderWithProviders, t } from '@/test/utils'
+import { expectPeriod, pickPeriod } from '@/test/report-period-actions'
+import { WithPeriodBar } from '@/test/report-period'
 import type { BreakdownResponse } from '@/lib/api'
 
-const api = vi.hoisted(() => ({ reports: { breakdown: vi.fn() } }))
+const api = vi.hoisted(() => ({ reports: { breakdown: vi.fn() }, categoryGroups: { list: vi.fn().mockResolvedValue([]) } }))
 
-vi.mock('@/lib/api', () => ({ reports: api.reports }))
+vi.mock('@/lib/api', () => ({ reports: api.reports, categoryGroups: api.categoryGroups }))
 vi.mock('@/hooks/use-display-locale', () => ({
   useDisplayLocale: () => 'en-US',
   useDateLocale: () => 'en-US',
@@ -41,7 +43,7 @@ beforeEach(() => {
 
 describe('ExploreTab', () => {
   it('lists groups with total, share and change, and the header total with its variation', async () => {
-    renderWithProviders(<ExploreTab />)
+    renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
 
     const row = (await screen.findByText('Compras')).closest('tr') as HTMLElement
     expect(within(row).getByText('R$600.00')).toBeInTheDocument()
@@ -55,7 +57,7 @@ describe('ExploreTab', () => {
   })
 
   it('shows a negative group with its sign and "offsets" instead of a share', async () => {
-    renderWithProviders(<ExploreTab />)
+    renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
 
     const row = (await screen.findByText('Estornos')).closest('tr') as HTMLElement
     expect(within(row).getByText('-R$100.00')).toBeInTheDocument()
@@ -65,20 +67,20 @@ describe('ExploreTab', () => {
 
   it('does not show a variation when the previous period was zero', async () => {
     api.reports.breakdown.mockResolvedValue(response({ previous_total: '0.00' }))
-    renderWithProviders(<ExploreTab />)
+    renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
 
     await screen.findByText('Compras')
     expect(screen.queryByText(/vs previous/)).not.toBeInTheDocument()
   })
 
   it('keeps the old table dimmed and busy while a new period loads', async () => {
-    const { user } = renderWithProviders(<ExploreTab />)
+    const { user } = renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
     await screen.findByText('Compras')
     expect(screen.getByTestId('explore-content')).toHaveAttribute('aria-busy', 'false')
 
     let resolve!: (value: BreakdownResponse) => void
     api.reports.breakdown.mockReturnValueOnce(new Promise<BreakdownResponse>((r) => { resolve = r }))
-    await user.click(screen.getByRole('button', { name: t('reports.explore.period.last_6m') }))
+    await pickPeriod(user, t('reports.explore.period.last_6m'))
 
     await waitFor(() =>
       expect(api.reports.breakdown).toHaveBeenLastCalledWith({ level: 'group', period: 'last_6m' }),
@@ -90,28 +92,28 @@ describe('ExploreTab', () => {
 
     resolve(response({ total: '10.00' }))
     await waitFor(() => expect(screen.getByTestId('explore-content')).toHaveAttribute('aria-busy', 'false'))
-    expect(screen.getByRole('button', { name: t('reports.explore.period.last_6m') })).toHaveAttribute('aria-pressed', 'true')
+    expectPeriod(t('reports.explore.period.last_6m'))
   })
 
   it('says the partial range is partial', async () => {
     api.reports.breakdown.mockResolvedValue(
       response({ period: { from: '2026-09-01', to: '2026-09-12', partial: true, previous_from: '2026-08-01', previous_to: '2026-08-12' } }),
     )
-    renderWithProviders(<ExploreTab />, { route: '/reports?tab=explore&period=this_month' })
+    renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>, { route: '/reports?tab=explore&period=this_month' })
 
     expect(await screen.findByText(/Sep 26 – Sep 26, partial/)).toBeInTheDocument()
   })
 
   it('explains an empty period', async () => {
     api.reports.breakdown.mockResolvedValue(response({ rows: [], total: '0.00', previous_total: '0.00' }))
-    renderWithProviders(<ExploreTab />)
+    renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
 
     expect(await screen.findByText(t('reports.explore.empty', { from: 'Oct 25', to: 'Sep 26' }))).toBeInTheDocument()
   })
 
   it('offers a retry when loading fails', async () => {
     api.reports.breakdown.mockRejectedValueOnce(new Error('boom'))
-    const { user } = renderWithProviders(<ExploreTab />)
+    const { user } = renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
 
     expect(await screen.findByText(t('reports.explore.error'))).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: t('reports.explore.retry') }))
@@ -122,13 +124,13 @@ describe('ExploreTab', () => {
 
   it('warns about transactions left out for lack of an exchange rate', async () => {
     api.reports.breakdown.mockResolvedValue(response({ unconverted_count: 2 }))
-    renderWithProviders(<ExploreTab />)
+    renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>)
 
     expect(await screen.findByText(t('reports.explore.unconverted', { n: 2 }))).toBeInTheDocument()
   })
 
   it('reads the period and a custom range from the URL', async () => {
-    renderWithProviders(<ExploreTab />, { route: '/reports?tab=explore&period=custom&from=2026-01-01&to=2026-03-31' })
+    renderWithProviders(<WithPeriodBar><ExploreTab /></WithPeriodBar>, { route: '/reports?tab=explore&period=custom&from=2026-01-01&to=2026-03-31' })
 
     await screen.findByText('Compras')
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'custom', from: '2026-01-01', to: '2026-03-31' })

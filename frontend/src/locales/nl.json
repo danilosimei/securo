@@ -2002,7 +2002,34 @@
     "category": "Categorie",
     "amount": "Bedrag",
     "investments": "Investeringen",
-    "moneyMap": "Geld kaart",
+    "moneyMap": {
+      "title": "Geldkaart",
+      "hubIncome": "Inkomsten",
+      "hubSpending": "Uitgaven",
+      "income": "Inkomsten",
+      "spending": "Uitgaven",
+      "left": "Over",
+      "short": "Tekort",
+      "folded": "Overige groepen ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Klik om te openen in Verkennen",
+      "expandHint": "Klik om deze groepen te zien",
+      "value": "bedrag",
+      "ofIncome": "van de inkomsten",
+      "ofSpending": "van de uitgaven",
+      "ofGroup": "van {{group}}",
+      "tapGroups": "Tik om de groepen te zien",
+      "refunds": "{{value}} aan terugbetalingen al van de uitgaven afgetrokken.",
+      "collapse": "Kleine groepen weer samenvoegen",
+      "empty": "Geen inkomsten of uitgaven in deze periode.",
+      "answerIncome": "Met {{income}} aan inkomsten gaf je {{spending}} uit; {{group}} neemt het meeste: {{share}} van de uitgaven.",
+      "answerSpending": "Je gaf {{spending}} uit; {{group}} is de grootste groep ({{share}}).",
+      "answerLeft": "Er bleef {{left}} over.",
+      "answerShort": "Je kwam {{left}} tekort.",
+      "viewChart": "Grafiek",
+      "viewTable": "Tabel",
+      "colItem": "Post"
+    },
     "range30d": "30D",
     "customRange": "Aangepast bereik",
     "pickCustomRange": "Kies een start- en einddatum",
@@ -2046,8 +2073,201 @@
       "prevPage": "Vorige pagina",
       "nextPage": "Volgende pagina",
       "pageOf": "Pagina {{page}} van {{pages}}",
-      "periodGroup": "Periode"
-    }
+      "periodGroup": "Periode",
+      "treemap": {
+        "rest": "Overig ({{n}})",
+        "aria": "{{name}} is het grootst: {{share}} van het totaal.",
+        "of": {
+          "group": "van de uitgaven",
+          "category": "van de groep",
+          "merchant": "van de categorie"
+        },
+        "openHint": "Klik om een niveau dieper te gaan"
+      }
+    },
+    "common": {
+      "empty": "Niets te tonen voor deze periode.",
+      "error": "Dit onderdeel kon niet worden geladen.",
+      "retry": "Opnieuw proberen"
+    },
+    "overview": {
+      "tab": "Overzicht",
+      "error": "Het overzicht kon niet worden geladen.",
+      "empty": "Geen uitgaven of inkomsten in deze periode. Kies hierboven een andere periode.",
+      "headline": {
+        "month": "In {{month}} gaf je {{spending}} uit",
+        "monthUp": "In {{month}} gaf je {{spending}} uit, {{change}} meer dan in {{previous}}",
+        "monthDown": "In {{month}} gaf je {{spending}} uit, {{change}} minder dan in {{previous}}",
+        "monthPartial": "In {{month}} gaf je tot nu toe {{spending}} uit",
+        "average": "Van {{from}} tot {{to}} gaf je {{spending}} per maand uit",
+        "averageUp": "Van {{from}} tot {{to}} gaf je {{spending}} per maand uit, {{change}} meer dan de {{months}} maanden ervoor",
+        "averageDown": "Van {{from}} tot {{to}} gaf je {{spending}} per maand uit, {{change}} minder dan de {{months}} maanden ervoor",
+        "end": ".",
+        "left": ", en er bleef {{left}} over.",
+        "leftMonthly": ", en er bleef {{left}} per maand over.",
+        "short": ", en je kwam {{left}} tekort.",
+        "shortMonthly": ", en je kwam {{left}} per maand tekort."
+      },
+      "kpi": {
+        "spending": "Uitgaven per maand",
+        "income": "Inkomsten per maand",
+        "left": "Over per maand",
+        "short": "Tekort per maand",
+        "leftShare": "{{share}} van de inkomsten",
+        "shortShare": "{{share}} boven de inkomsten",
+        "noIncome": "Geen inkomsten in de periode",
+        "leftMore": "{{value}} meer dan eerder",
+        "leftLess": "{{value}} minder dan eerder",
+        "fixed": "Vast × variabel",
+        "fixedValue": "{{share}} vast",
+        "fixedAria": "{{fixed}} van de uitgaven is vast en {{variable}} variabel",
+        "fixedSub": "{{variable}} variabel · {{value}}/maand aan vaste lasten",
+        "vsPrevious": "{{change}} t.o.v. vorige"
+      },
+      "highlights": {
+        "title": "Opvallend",
+        "description": "Wat in de periode opviel. Tik op een kaart voor details.",
+        "none": "Niets ongewoons in deze periode.",
+        "see": "Bekijk",
+        "rule": {
+          "spike": "Piek",
+          "what_changed": "Wat veranderde",
+          "recurring_new_or_up": "Nieuwe of duurdere vaste lasten",
+          "recurring_expensive": "Dure vaste last",
+          "small_purchases": "Kleine aankopen",
+          "heavy_group": "Zware groep",
+          "to_review": "Te controleren"
+        }
+      },
+      "changes": {
+        "title": "Wat veranderde",
+        "description": "Laatste afgesloten maand tegen het gemiddelde van de 3 maanden ervoor.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "{{name}} steeg het meest: {{value}} meer.",
+        "answerDown": "{{name}} daalde het meest: {{value}} minder.",
+        "empty": "Geen opvallende verandering."
+      },
+      "monthly": {
+        "title": "Maand per maand",
+        "spending": "Uitgaven",
+        "income": "Inkomsten",
+        "median": "Mediaan van de uitgaven",
+        "spike": "1,5× de mediaan of meer",
+        "aria": "De duurste maand was {{month}}: {{value}}, dicht bij de mediaan van {{median}}.",
+        "ariaSpike": "{{month}} was de duurste maand: {{value}}, {{multiple}}× de mediaan van {{median}}.",
+        "barAria": "{{month}}: uitgaven {{spending}}, inkomsten {{income}}. Openen in Verkennen.",
+        "left": "Over",
+        "short": "Tekort",
+        "vsMedian": "{{multiple}}× de mediaan",
+        "clickHint": "Klik om de maand te zien",
+        "tooShort": "Kies een periode langer dan een maand om maanden te vergelijken."
+      }
+    },
+    "trends": {
+      "tab": "Trends",
+      "legend": "Groepen (tik om aan of uit te zetten)",
+      "monthTotal": "maandtotaal",
+      "restGroups": "Overige groepen",
+      "headlineUp": "{{name}} groeide het meest: {{change}} in de laatste 3 maanden, nu {{value}} per maand.",
+      "headlineDown": "Niets steeg in de laatste 3 maanden; {{name}} daalde het meest: {{change}}.",
+      "headlineFlat": "De uitgaven bleven de laatste 3 maanden stabiel.",
+      "areaTitle": "Uitgaven per groep, maand per maand",
+      "areaAnswer": "In {{month}} waren de uitgaven {{total}}; {{group}} is de grootste groep.",
+      "window": "{{from}} tot {{to}}",
+      "gridTitle": "Categorieën",
+      "gridDescription": "Gesorteerd op grootste stijging: laatste 3 maanden (gearceerd) tegen de 3 ervoor.",
+      "empty": "Geen uitgaven in deze 12 maanden.",
+      "new": "nieuw",
+      "perMonth": "{{value}}/maand",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Openen in Verkennen.",
+      "showAll": "Alle categorieën bekijken ({{n}})",
+      "showFewer": "Minder tonen"
+    },
+    "recurring": {
+      "tab": "Vaste lasten",
+      "headline": "{{month}}/maand aan vaste lasten = {{year}}/jaar.",
+      "headlineShare": "{{month}}/maand aan vaste lasten = {{year}}/jaar, {{share}} van de uitgaven.",
+      "counts": "Actief: {{active}} · Nieuw: {{new}} · Gestegen: {{up}} · Gestopt: {{stopped}}",
+      "title": "Terugkerende uitgaven",
+      "description": "Gevonden in je historie, zonder invoer. Tik op een rij voor de afschrijvingen.",
+      "empty": "Geen terugkerende uitgaven gevonden in de historie.",
+      "noneInFilter": "Niets past bij dit filter.",
+      "window": "De herkenning leest altijd de laatste 12 afgesloten maanden en de huidige.",
+      "status": {
+        "new": "Nieuw",
+        "up": "Gestegen",
+        "stopped": "Gestopt",
+        "steady": "Stabiel"
+      },
+      "filter": {
+        "all": "Alle"
+      },
+      "sort": {
+        "year": "Duurste per jaar",
+        "recent": "Meest recent",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Winkel",
+        "status": "Status",
+        "last": "Laatste afschrijving",
+        "month": "Per maand",
+        "year": "Per jaar"
+      },
+      "perMonth": "{{value}}/maand",
+      "perYear": "{{value}}/jaar",
+      "rowAria": "{{name}}, {{status}}: {{month}} per maand, {{year}} per jaar. Openen in Verkennen.",
+      "fixedWindow": "Laatste 12 maanden"
+    },
+    "habits": {
+      "tab": "Gewoontes",
+      "headline": "Je deed {{n}} aankopen in de periode, {{perMonth}} per maand; bij {{name}} kom je het vaakst terug: {{freq}} keer per maand.",
+      "headlineCount": "Je deed {{n}} aankopen in de periode.",
+      "empty": "Geen aankopen in deze periode.",
+      "openHint": "Klik om te openen in Verkennen",
+      "bubbles": {
+        "title": "Frequentie × bon",
+        "answer": "{{name}} is je duurste gewoonte: {{perMonth}} aankopen per maand, gemiddeld {{ticket}}, {{total}} in de periode.",
+        "xAxis": "aankopen per maand",
+        "yAxis": "gemiddelde bon",
+        "costlyHabit": "Dure gewoonte",
+        "bigRare": "Groot en zeldzaam",
+        "small": "Kleintjes",
+        "aria": "{{name}}: {{perMonth}} aankopen per maand, gemiddeld {{ticket}}, totaal {{total}}. Openen in Verkennen.",
+        "total": "in de periode",
+        "ticket": "gemiddelde bon",
+        "perMonthLabel": "aankopen per maand",
+        "legend": "Kleuren per groep"
+      },
+      "weekdays": {
+        "title": "Dag van de week",
+        "answer": "Op {{day}} geef je het meest uit: {{total}} in {{n}} aankopen.",
+        "aria": "{{day}}: {{total}} in {{n}} aankopen"
+      },
+      "bands": {
+        "title": "Bedragklassen",
+        "answer": "{{n}} aankopen onder {{limit}} zijn samen {{total}}.",
+        "upTo": "tot {{max}}",
+        "above": "boven {{min}}",
+        "between": "{{min}} tot {{max}}",
+        "band": "Klasse",
+        "count": "Aankopen",
+        "total": "Totaal",
+        "aria": "{{band}}: {{n}} aankopen, {{total}}"
+      },
+      "calendar": {
+        "title": "Dag voor dag",
+        "answer": "De duurste dag was {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Transacties van die dag openen.",
+        "spent": "uitgegeven die dag",
+        "openHint": "Klik voor de transacties van die dag",
+        "less": "Minder",
+        "more": "Meer"
+      }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Periode: {{period}}",
+    "periodPresets": "Periode"
   },
   "payees": {
     "noPayeeFound": "Geen begunstigde gevonden.",

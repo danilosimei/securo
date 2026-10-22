@@ -2112,7 +2112,34 @@
     "category": "Kategória",
     "amount": "Suma",
     "investments": "Investície",
-    "moneyMap": "Mapa peňazí",
+    "moneyMap": {
+      "title": "Mapa peňazí",
+      "hubIncome": "Príjmy",
+      "hubSpending": "Výdavky",
+      "income": "Príjmy",
+      "spending": "Výdavky",
+      "left": "Zostalo",
+      "short": "Chýbalo",
+      "folded": "Ostatné skupiny ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Kliknite pre otvorenie v Preskúmať",
+      "expandHint": "Kliknite pre zobrazenie skupín",
+      "value": "suma",
+      "ofIncome": "príjmov",
+      "ofSpending": "výdavkov",
+      "ofGroup": "z {{group}}",
+      "tapGroups": "Ťuknite pre zobrazenie skupín",
+      "refunds": "{{value}} vratiek už odpočítaných od výdavkov.",
+      "collapse": "Znova zlúčiť malé skupiny",
+      "empty": "V tomto období žiadne príjmy ani výdavky.",
+      "answerIncome": "S príjmami {{income}} ste minuli {{spending}}; najviac ide na {{group}}: {{share}} výdavkov.",
+      "answerSpending": "Minuli ste {{spending}}; najväčšia skupina je {{group}} ({{share}}).",
+      "answerLeft": "Zostalo {{left}}.",
+      "answerShort": "Chýbalo {{left}}.",
+      "viewChart": "Graf",
+      "viewTable": "Tabuľka",
+      "colItem": "Položka"
+    },
     "range30d": "30D",
     "customRange": "Vlastný rozsah",
     "pickCustomRange": "Vyberte dátum začiatku a konca",
@@ -2156,8 +2183,201 @@
       "prevPage": "Predchádzajúca strana",
       "nextPage": "Nasledujúca strana",
       "pageOf": "Strana {{page}} z {{pages}}",
-      "periodGroup": "Obdobie"
-    }
+      "periodGroup": "Obdobie",
+      "treemap": {
+        "rest": "Ostatné ({{n}})",
+        "aria": "Najväčšie je {{name}}: {{share}} z celku.",
+        "of": {
+          "group": "výdavkov",
+          "category": "skupiny",
+          "merchant": "kategórie"
+        },
+        "openHint": "Kliknite pre úroveň nižšie"
+      }
+    },
+    "common": {
+      "empty": "Pre toto obdobie nie je čo zobraziť.",
+      "error": "Túto časť sa nepodarilo načítať.",
+      "retry": "Skúsiť znova"
+    },
+    "overview": {
+      "tab": "Prehľad",
+      "error": "Prehľad sa nepodarilo načítať.",
+      "empty": "V tomto období nie sú výdavky ani príjmy. Vyberte iné obdobie vyššie.",
+      "headline": {
+        "month": "V {{month}} ste minuli {{spending}}",
+        "monthUp": "V {{month}} ste minuli {{spending}}, o {{change}} viac ako v {{previous}}",
+        "monthDown": "V {{month}} ste minuli {{spending}}, o {{change}} menej ako v {{previous}}",
+        "monthPartial": "V {{month}} ste zatiaľ minuli {{spending}}",
+        "average": "Od {{from}} do {{to}} ste míňali {{spending}} mesačne",
+        "averageUp": "Od {{from}} do {{to}} ste míňali {{spending}} mesačne, o {{change}} viac ako {{months}} mesiacov predtým",
+        "averageDown": "Od {{from}} do {{to}} ste míňali {{spending}} mesačne, o {{change}} menej ako {{months}} mesiacov predtým",
+        "end": ".",
+        "left": ", a zostalo {{left}}.",
+        "leftMonthly": ", a zostávalo {{left}} mesačne.",
+        "short": ", a chýbalo {{left}}.",
+        "shortMonthly": ", a chýbalo {{left}} mesačne."
+      },
+      "kpi": {
+        "spending": "Výdavky za mesiac",
+        "income": "Príjmy za mesiac",
+        "left": "Zostáva za mesiac",
+        "short": "Chýba za mesiac",
+        "leftShare": "{{share}} príjmov",
+        "shortShare": "{{share}} nad príjmy",
+        "noIncome": "V období žiadne príjmy",
+        "leftMore": "o {{value}} viac ako predtým",
+        "leftLess": "o {{value}} menej ako predtým",
+        "fixed": "Fixné × variabilné",
+        "fixedValue": "{{share}} fixné",
+        "fixedAria": "{{fixed}} výdavkov je fixných a {{variable}} variabilných",
+        "fixedSub": "{{variable}} variabilné · {{value}}/mes. fixne",
+        "vsPrevious": "{{change}} vs predchádzajúce"
+      },
+      "highlights": {
+        "title": "Zaujímavosti",
+        "description": "Čo sa v období vymykalo. Ťuknite na kartu pre podrobnosti.",
+        "none": "V tomto období nič nezvyčajné.",
+        "see": "Zobraziť",
+        "rule": {
+          "spike": "Špička",
+          "what_changed": "Čo sa zmenilo",
+          "recurring_new_or_up": "Nové alebo drahšie fixné",
+          "recurring_expensive": "Drahý fixný náklad",
+          "small_purchases": "Drobné nákupy",
+          "heavy_group": "Ťažká skupina",
+          "to_review": "Na kontrolu"
+        }
+      },
+      "changes": {
+        "title": "Čo sa zmenilo",
+        "description": "Posledný uzavretý mesiac oproti priemeru 3 predchádzajúcich.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "Najviac stúplo {{name}}: o {{value}}.",
+        "answerDown": "Najviac kleslo {{name}}: o {{value}}.",
+        "empty": "Žiadna podstatná zmena."
+      },
+      "monthly": {
+        "title": "Mesiac po mesiaci",
+        "spending": "Výdavky",
+        "income": "Príjmy",
+        "median": "Medián výdavkov",
+        "spike": "1,5× medián a viac",
+        "aria": "Najdrahší mesiac bol {{month}}: {{value}}, blízko mediánu {{median}}.",
+        "ariaSpike": "{{month}} bol najdrahší mesiac: {{value}}, {{multiple}}× medián {{median}}.",
+        "barAria": "{{month}}: výdavky {{spending}}, príjmy {{income}}. Otvoriť v Preskúmať.",
+        "left": "Zostalo",
+        "short": "Chýbalo",
+        "vsMedian": "{{multiple}}× medián",
+        "clickHint": "Kliknite pre zobrazenie mesiaca",
+        "tooShort": "Na porovnanie mesiacov vyberte dlhšie obdobie ako mesiac."
+      }
+    },
+    "trends": {
+      "tab": "Trendy",
+      "legend": "Skupiny (ťuknutím zapnete či vypnete)",
+      "monthTotal": "súčet mesiaca",
+      "restGroups": "Ostatné skupiny",
+      "headlineUp": "Najviac rástlo {{name}}: {{change}} za posledné 3 mesiace, teraz {{value}} mesačne.",
+      "headlineDown": "Za posledné 3 mesiace nič nestúplo; najviac kleslo {{name}}: {{change}}.",
+      "headlineFlat": "Výdavky boli za posledné 3 mesiace stabilné.",
+      "areaTitle": "Výdavky podľa skupín, mesiac po mesiaci",
+      "areaAnswer": "V {{month}} boli výdavky {{total}}; najväčšia skupina je {{group}}.",
+      "window": "{{from}} – {{to}}",
+      "gridTitle": "Kategórie",
+      "gridDescription": "Podľa najväčšieho rastu: posledné 3 mesiace (tieňované) oproti 3 predchádzajúcim.",
+      "empty": "Za týchto 12 mesiacov žiadne výdavky.",
+      "new": "nová",
+      "perMonth": "{{value}}/mes.",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Otvoriť v Preskúmať.",
+      "showAll": "Zobraziť všetky kategórie ({{n}})",
+      "showFewer": "Zobraziť menej"
+    },
+    "recurring": {
+      "tab": "Fixné",
+      "headline": "{{month}}/mes. na fixné výdavky = {{year}}/rok.",
+      "headlineShare": "{{month}}/mes. na fixné výdavky = {{year}}/rok, {{share}} výdavkov.",
+      "counts": "aktívne: {{active}} · nové: {{new}} · zdraželi: {{up}} · skončili: {{stopped}}",
+      "title": "Opakované výdavky",
+      "description": "Nájdené z histórie, bez zadávania. Ťuknutím na riadok uvidíte platby.",
+      "empty": "V histórii sa nenašli opakované výdavky.",
+      "noneInFilter": "Filtru nič nezodpovedá.",
+      "window": "Detekcia vždy číta posledných 12 uzavretých mesiacov a aktuálny.",
+      "status": {
+        "new": "Nový",
+        "up": "Zdražel",
+        "stopped": "Skončil",
+        "steady": "Stabilný"
+      },
+      "filter": {
+        "all": "Všetko"
+      },
+      "sort": {
+        "year": "Najdrahšie za rok",
+        "recent": "Najnovšie",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Obchod",
+        "status": "Stav",
+        "last": "Posledná platba",
+        "month": "Mesačne",
+        "year": "Ročne"
+      },
+      "perMonth": "{{value}}/mes.",
+      "perYear": "{{value}}/rok",
+      "rowAria": "{{name}}, {{status}}: {{month}} mesačne, {{year}} ročne. Otvoriť v Preskúmať.",
+      "fixedWindow": "Posledných 12 mesiacov"
+    },
+    "habits": {
+      "tab": "Návyky",
+      "headline": "V období ste nakúpili {{n}}×, {{perMonth}}× mesačne; najčastejšie sa vraciate do {{name}}: {{freq}}× mesačne.",
+      "headlineCount": "V období ste nakúpili {{n}}×.",
+      "empty": "V tomto období žiadne nákupy.",
+      "openHint": "Kliknite pre otvorenie v Preskúmať",
+      "bubbles": {
+        "title": "Frekvencia × útrata",
+        "answer": "{{name}} je váš najdrahší návyk: {{perMonth}} nákupov mesačne, priemerne {{ticket}}, {{total}} za obdobie.",
+        "xAxis": "nákupy za mesiac",
+        "yAxis": "priemerná útrata",
+        "costlyHabit": "Drahý návyk",
+        "bigRare": "Veľké a zriedkavé",
+        "small": "Drobnosti",
+        "aria": "{{name}}: {{perMonth}} nákupov mesačne, priemer {{ticket}}, spolu {{total}}. Otvoriť v Preskúmať.",
+        "total": "za obdobie",
+        "ticket": "priemerná útrata",
+        "perMonthLabel": "nákupy za mesiac",
+        "legend": "Farby podľa skupín"
+      },
+      "weekdays": {
+        "title": "Deň v týždni",
+        "answer": "Najviac míňate v {{day}}: {{total}} za {{n}} nákupov.",
+        "aria": "{{day}}: {{total}}, nákupov {{n}}"
+      },
+      "bands": {
+        "title": "Pásma súm",
+        "answer": "{{n}} nákupov pod {{limit}} dáva spolu {{total}}.",
+        "upTo": "do {{max}}",
+        "above": "nad {{min}}",
+        "between": "{{min}} až {{max}}",
+        "band": "Pásmo",
+        "count": "Nákupy",
+        "total": "Spolu",
+        "aria": "{{band}}: nákupov {{n}}, {{total}}"
+      },
+      "calendar": {
+        "title": "Deň po dni",
+        "answer": "Najdrahší deň bol {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Otvoriť transakcie dňa.",
+        "spent": "minuté v ten deň",
+        "openHint": "Kliknite pre transakcie dňa",
+        "less": "Menej",
+        "more": "Viac"
+      }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Obdobie: {{period}}",
+    "periodPresets": "Obdobie"
   },
   "payees": {
     "noPayeeFound": "Príjemca sa nenašiel.",

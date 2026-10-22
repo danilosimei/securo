@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 
 import ReportsPage from '@/pages/reports'
 import { renderWithProviders, t } from '@/test/utils'
+import { expectPeriod } from '@/test/report-period-actions'
 
 const api = vi.hoisted(() => ({
   reports: {
@@ -12,9 +13,10 @@ const api = vi.hoisted(() => ({
     breakdown: vi.fn(),
   },
   timezones: { list: vi.fn().mockResolvedValue({ timezones: [], default: null }) },
+  categoryGroups: { list: vi.fn().mockResolvedValue([]) },
 }))
 
-vi.mock('@/lib/api', () => ({ reports: api.reports, timezones: api.timezones }))
+vi.mock('@/lib/api', () => ({ reports: api.reports, timezones: api.timezones, categoryGroups: api.categoryGroups }))
 vi.mock('@/hooks/use-display-locale', () => ({
   useDisplayLocale: () => 'en-US',
   useDateLocale: () => 'en-US',
@@ -54,16 +56,17 @@ describe('Reports page: Explore tab', () => {
 
     expect(await screen.findByText('Compras')).toBeInTheDocument()
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'last_6m' })
-    expect(screen.getByRole('button', { name: t('reports.explore.period.last_6m') })).toHaveAttribute('aria-pressed', 'true')
+    expectPeriod(t('reports.explore.period.last_6m'))
     expect(api.reports.netWorth).not.toHaveBeenCalled()
   })
 
-  it('switches to another tab and back, and Explore is listed first', async () => {
+  it('switches to another tab and back, and Explore comes right after the Overview', async () => {
     const { user } = renderWithProviders(<ReportsPage />, { route: '/reports?tab=explore' })
     await screen.findByText('Compras')
 
     const tabs = screen.getAllByRole('button').filter((b) => b.className.includes('px-4 py-2.5'))
-    expect(tabs[0]).toHaveTextContent(t('reports.explore.tab'))
+    expect(tabs[0]).toHaveTextContent(t('reports.overview.tab'))
+    expect(tabs[1]).toHaveTextContent(t('reports.explore.tab'))
 
     await user.click(screen.getByRole('button', { name: t('reports.netWorth') }))
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalled())

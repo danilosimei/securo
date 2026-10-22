@@ -15,12 +15,14 @@ import { DEFAULT_REPORT_PERIOD, isReportPeriod, monthLabel } from '@/lib/report-
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { Button } from '@/components/ui/button'
-import { ReportPeriodSelector } from '@/components/reports/period-selector'
+import { useReportedRange } from '@/components/reports/common/report-range'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FadePanel } from '@/components/ui/fade-panel'
 import { Sparkline } from '@/components/reports/explore/sparkline'
 import { MerchantTransactions } from '@/components/reports/explore/merchant-transactions'
 import { nextStep } from '@/components/reports/explore/drilldown'
+import { ExploreTreemap } from '@/components/reports/explore/explore-treemap'
+import { NEUTRAL_COLOR, useGroupPalette } from '@/components/reports/common/group-colors'
 
 const DEFAULT_PERIOD: ReportPeriod = DEFAULT_REPORT_PERIOD
 
@@ -57,6 +59,7 @@ export function ExploreTab() {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
+  const palette = useGroupPalette()
   const [searchParams, setSearchParams] = useSearchParams()
   const location = useLocation()
   const stateLabels: Labels = (location.state as { exploreLabels?: Labels } | null)?.exploreLabels ?? {}
@@ -73,23 +76,6 @@ export function ExploreTab() {
   const requestedPeriod = isPeriod(requested) ? requested : DEFAULT_PERIOD
   // A custom period without both dates cannot be asked for: fall back.
   const period: ReportPeriod = requestedPeriod === 'custom' && !hasCustom ? DEFAULT_PERIOD : requestedPeriod
-
-  const update = (next: ReportPeriod, range?: { from: string; to: string }) =>
-    setSearchParams(
-      (prev) => {
-        const params = new URLSearchParams(prev)
-        params.set('period', next)
-        if (range) {
-          params.set('from', range.from)
-          params.set('to', range.to)
-        } else {
-          params.delete('from')
-          params.delete('to')
-        }
-        return params
-      },
-      { replace: true, state: location.state },
-    )
 
   // Going down (or up) pushes a history entry, so Back climbs one level.
   const go = (patch: Record<string, string | null>, labels: Labels) =>
@@ -126,6 +112,7 @@ export function ExploreTab() {
     },
   })
   const data = query.data
+  useReportedRange(data?.period)
   const stale = query.isPlaceholderData
 
   const open = (row: BreakdownRow) => {
@@ -162,21 +149,24 @@ export function ExploreTab() {
   }
   if (merchant) crumbs.push({ key: 'merchant', label: merchantLabel })
 
+  // Tiles wear their group's color; below the group level, a shade of it.
+  const groupColor = group && group !== 'none' ? palette.group(group) : NEUTRAL_COLOR
+  const colorOf = (row: BreakdownRow) => {
+    if (level === 'group') return palette.group(row.id, row.label)
+    if (level === 'category') {
+      const own = palette.category(row.id, row.label)
+      return own === NEUTRAL_COLOR ? groupColor : own
+    }
+    const own = category && category !== 'none' ? palette.category(category) : NEUTRAL_COLOR
+    return own === NEUTRAL_COLOR ? groupColor : own
+  }
+
   const total = data ? Number(data.total) : 0
   const previous = data?.previous_total != null ? Number(data.previous_total) : 0
   const headerChange = data && previous > 0 ? (total - previous) / previous : null
 
   return (
     <div className="space-y-4">
-      <ReportPeriodSelector
-        period={period}
-        from={from}
-        to={to}
-        onChange={update}
-        locale={locale}
-        range={data ? { from: data.period.from, to: data.period.to, partial: data.period.partial } : null}
-      />
-
       {level !== 'group' && (
         <nav aria-label={t('reports.explore.breadcrumb')}>
           <ol className="flex flex-wrap items-center gap-1 text-sm">
@@ -259,6 +249,20 @@ export function ExploreTab() {
               })}
             </p>
           ) : (
+            <>
+            {data.rows.some((r) => Number(r.total) > 0) && (
+            <div className="rounded-xl border border-border bg-card p-2 shadow-sm">
+              <ExploreTreemap
+                rows={data.rows}
+                level={level}
+                currency={data.currency}
+                locale={locale}
+                colorOf={colorOf}
+                onOpen={open}
+                selected={merchant}
+              />
+            </div>
+            )}
             <div className="rounded-xl border border-border bg-card shadow-sm">
               <table className="w-full table-fixed text-sm">
                 <thead>
@@ -316,6 +320,7 @@ export function ExploreTab() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
         {merchant && (

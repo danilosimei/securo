@@ -2000,7 +2000,34 @@
     "category": "श्रेणी",
     "amount": "राशि",
     "investments": "निवेश",
-    "moneyMap": "मनी मैप",
+    "moneyMap": {
+      "title": "पैसे का नक्शा",
+      "hubIncome": "आय",
+      "hubSpending": "खर्च",
+      "income": "आय",
+      "spending": "खर्च",
+      "left": "बचा",
+      "short": "कम पड़ा",
+      "folded": "बाकी समूह ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "एक्सप्लोर में खोलने के लिए क्लिक करें",
+      "expandHint": "ये समूह देखने के लिए क्लिक करें",
+      "value": "राशि",
+      "ofIncome": "आय का",
+      "ofSpending": "खर्च का",
+      "ofGroup": "{{group}} का",
+      "tapGroups": "समूह देखने के लिए टैप करें",
+      "refunds": "{{value}} रिफंड पहले ही खर्च से घटाए गए।",
+      "collapse": "छोटे समूह फिर से मिलाएँ",
+      "empty": "इस अवधि में कोई आय या खर्च नहीं।",
+      "answerIncome": "{{income}} की आय में आपने {{spending}} खर्च किए; सबसे ज़्यादा {{group}} पर: खर्च का {{share}}।",
+      "answerSpending": "आपने {{spending}} खर्च किए; सबसे बड़ा समूह {{group}} है ({{share}})।",
+      "answerLeft": "{{left}} बचे।",
+      "answerShort": "{{left}} कम पड़े।",
+      "viewChart": "चार्ट",
+      "viewTable": "तालिका",
+      "colItem": "मद"
+    },
     "range30d": "30D",
     "customRange": "कस्टम सीमा",
     "pickCustomRange": "प्रारंभ और समाप्ति तिथि चुनें",
@@ -2044,8 +2071,201 @@
       "prevPage": "पिछला पृष्ठ",
       "nextPage": "अगला पृष्ठ",
       "pageOf": "पृष्ठ {{page}} / {{pages}}",
-      "periodGroup": "अवधि"
-    }
+      "periodGroup": "अवधि",
+      "treemap": {
+        "rest": "बाकी ({{n}})",
+        "aria": "सबसे बड़ा {{name}} है: कुल का {{share}}।",
+        "of": {
+          "group": "खर्च का",
+          "category": "समूह का",
+          "merchant": "श्रेणी का"
+        },
+        "openHint": "एक स्तर नीचे जाने के लिए क्लिक करें"
+      }
+    },
+    "common": {
+      "empty": "इस अवधि में दिखाने को कुछ नहीं है।",
+      "error": "यह हिस्सा लोड नहीं हो सका।",
+      "retry": "फिर से कोशिश करें"
+    },
+    "overview": {
+      "tab": "सारांश",
+      "error": "सारांश लोड नहीं हो सका।",
+      "empty": "इस अवधि में कोई खर्च या आय नहीं। ऊपर कोई और अवधि चुनें।",
+      "headline": {
+        "month": "{{month}} में आपने {{spending}} खर्च किए",
+        "monthUp": "{{month}} में आपने {{spending}} खर्च किए, {{previous}} से {{change}} ज़्यादा",
+        "monthDown": "{{month}} में आपने {{spending}} खर्च किए, {{previous}} से {{change}} कम",
+        "monthPartial": "{{month}} में अब तक आपने {{spending}} खर्च किए",
+        "average": "{{from}} से {{to}} तक आपने हर महीने {{spending}} खर्च किए",
+        "averageUp": "{{from}} से {{to}} तक आपने हर महीने {{spending}} खर्च किए, पिछले {{months}} महीनों से {{change}} ज़्यादा",
+        "averageDown": "{{from}} से {{to}} तक आपने हर महीने {{spending}} खर्च किए, पिछले {{months}} महीनों से {{change}} कम",
+        "end": "।",
+        "left": ", और {{left}} बचे।",
+        "leftMonthly": ", और हर महीने {{left}} बचे।",
+        "short": ", और {{left}} कम पड़े।",
+        "shortMonthly": ", और हर महीने {{left}} कम पड़े।"
+      },
+      "kpi": {
+        "spending": "मासिक खर्च",
+        "income": "मासिक आय",
+        "left": "मासिक बचत",
+        "short": "मासिक कमी",
+        "leftShare": "आय का {{share}}",
+        "shortShare": "आय से {{share}} ज़्यादा",
+        "noIncome": "अवधि में कोई आय नहीं",
+        "leftMore": "पहले से {{value}} ज़्यादा",
+        "leftLess": "पहले से {{value}} कम",
+        "fixed": "स्थिर × परिवर्तनशील",
+        "fixedValue": "{{share}} स्थिर",
+        "fixedAria": "खर्च का {{fixed}} स्थिर और {{variable}} परिवर्तनशील है",
+        "fixedSub": "{{variable}} परिवर्तनशील · {{value}}/माह स्थिर",
+        "vsPrevious": "पिछले से {{change}}"
+      },
+      "highlights": {
+        "title": "मुख्य बातें",
+        "description": "इस अवधि में जो सामान्य से अलग रहा। विवरण के लिए कार्ड पर टैप करें।",
+        "none": "इस अवधि में कुछ असामान्य नहीं।",
+        "see": "देखें",
+        "rule": {
+          "spike": "उछाल",
+          "what_changed": "क्या बदला",
+          "recurring_new_or_up": "नए या महंगे स्थिर खर्च",
+          "recurring_expensive": "महंगा स्थिर खर्च",
+          "small_purchases": "छोटी खरीदारी",
+          "heavy_group": "भारी समूह",
+          "to_review": "समीक्षा के लिए"
+        }
+      },
+      "changes": {
+        "title": "क्या बदला",
+        "description": "पिछला बंद महीना बनाम उससे पहले के 3 महीनों का औसत।",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "{{name}} सबसे ज़्यादा बढ़ा: {{value}} ज़्यादा।",
+        "answerDown": "{{name}} सबसे ज़्यादा घटा: {{value}} कम।",
+        "empty": "कोई खास बदलाव नहीं।"
+      },
+      "monthly": {
+        "title": "महीने दर महीने",
+        "spending": "खर्च",
+        "income": "आय",
+        "median": "खर्च का माध्यिका",
+        "spike": "माध्यिका का 1.5× या ज़्यादा",
+        "aria": "सबसे महंगा महीना {{month}} था: {{value}}, {{median}} की माध्यिका के पास।",
+        "ariaSpike": "{{month}} सबसे महंगा महीना था: {{value}}, {{median}} की माध्यिका का {{multiple}}×।",
+        "barAria": "{{month}}: खर्च {{spending}}, आय {{income}}। एक्सप्लोर में खोलें।",
+        "left": "बचा",
+        "short": "कम पड़ा",
+        "vsMedian": "माध्यिका का {{multiple}}×",
+        "clickHint": "महीना देखने के लिए क्लिक करें",
+        "tooShort": "महीनों की तुलना के लिए एक महीने से लंबी अवधि चुनें।"
+      }
+    },
+    "trends": {
+      "tab": "रुझान",
+      "legend": "समूह (चालू या बंद करने के लिए टैप करें)",
+      "monthTotal": "महीने का कुल",
+      "restGroups": "बाकी समूह",
+      "headlineUp": "{{name}} सबसे ज़्यादा बढ़ा: पिछले 3 महीनों में {{change}}, अब {{value}} प्रति माह।",
+      "headlineDown": "पिछले 3 महीनों में कुछ नहीं बढ़ा; {{name}} सबसे ज़्यादा घटा: {{change}}।",
+      "headlineFlat": "पिछले 3 महीनों में खर्च स्थिर रहा।",
+      "areaTitle": "समूह के अनुसार खर्च, महीने दर महीने",
+      "areaAnswer": "{{month}} में खर्च {{total}} रहा; सबसे बड़ा समूह {{group}} है।",
+      "window": "{{from}} से {{to}}",
+      "gridTitle": "श्रेणियाँ",
+      "gridDescription": "सबसे बड़ी बढ़त के क्रम में: पिछले 3 महीने (छायांकित) बनाम उससे पहले के 3।",
+      "empty": "इन 12 महीनों में कोई खर्च नहीं।",
+      "new": "नई",
+      "perMonth": "{{value}}/माह",
+      "cardAria": "{{name}}: {{value}}, {{change}}। एक्सप्लोर में खोलें।",
+      "showAll": "सभी श्रेणियाँ देखें ({{n}})",
+      "showFewer": "कम देखें"
+    },
+    "recurring": {
+      "tab": "स्थिर खर्च",
+      "headline": "स्थिर खर्चों में {{month}}/माह = {{year}}/वर्ष।",
+      "headlineShare": "स्थिर खर्चों में {{month}}/माह = {{year}}/वर्ष, खर्च का {{share}}।",
+      "counts": "सक्रिय: {{active}} · नए: {{new}} · बढ़े: {{up}} · रुके: {{stopped}}",
+      "title": "दोहराए जाने वाले खर्च",
+      "description": "इतिहास से मिले, बिना दर्ज किए। शुल्क देखने के लिए पंक्ति पर टैप करें।",
+      "empty": "इतिहास में कोई दोहराया खर्च नहीं मिला।",
+      "noneInFilter": "इस फ़िल्टर से कुछ नहीं मिला।",
+      "window": "पहचान हमेशा पिछले 12 बंद महीनों और मौजूदा महीने को पढ़ती है।",
+      "status": {
+        "new": "नया",
+        "up": "बढ़ा",
+        "stopped": "रुका",
+        "steady": "स्थिर"
+      },
+      "filter": {
+        "all": "सभी"
+      },
+      "sort": {
+        "year": "सालाना सबसे बड़े",
+        "recent": "हाल के",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "दुकान",
+        "status": "स्थिति",
+        "last": "आखिरी शुल्क",
+        "month": "प्रति माह",
+        "year": "प्रति वर्ष"
+      },
+      "perMonth": "{{value}}/माह",
+      "perYear": "{{value}}/वर्ष",
+      "rowAria": "{{name}}, {{status}}: {{month}} प्रति माह, {{year}} प्रति वर्ष। एक्सप्लोर में खोलें।",
+      "fixedWindow": "पिछले 12 महीने"
+    },
+    "habits": {
+      "tab": "आदतें",
+      "headline": "इस अवधि में आपने {{n}} खरीदारियाँ कीं, हर महीने {{perMonth}}; आप सबसे ज़्यादा {{name}} पर लौटते हैं: महीने में {{freq}} बार।",
+      "headlineCount": "इस अवधि में आपने {{n}} खरीदारियाँ कीं।",
+      "empty": "इस अवधि में कोई खरीदारी नहीं।",
+      "openHint": "एक्सप्लोर में खोलने के लिए क्लिक करें",
+      "bubbles": {
+        "title": "आवृत्ति × बिल",
+        "answer": "{{name}} आपकी सबसे महंगी आदत है: महीने में {{perMonth}} खरीदारियाँ, औसत बिल {{ticket}}, अवधि में {{total}}।",
+        "xAxis": "प्रति माह खरीदारी",
+        "yAxis": "औसत बिल",
+        "costlyHabit": "महंगी आदत",
+        "bigRare": "बड़ी और कभी-कभार",
+        "small": "छोटी-मोटी",
+        "aria": "{{name}}: महीने में {{perMonth}} खरीदारियाँ, औसत बिल {{ticket}}, कुल {{total}}। एक्सप्लोर में खोलें।",
+        "total": "अवधि में",
+        "ticket": "औसत बिल",
+        "perMonthLabel": "प्रति माह खरीदारी",
+        "legend": "समूह के अनुसार रंग"
+      },
+      "weekdays": {
+        "title": "सप्ताह का दिन",
+        "answer": "{{day}} को आप सबसे ज़्यादा खर्च करते हैं: {{n}} खरीदारियों में {{total}}।",
+        "aria": "{{day}}: {{n}} खरीदारियों में {{total}}"
+      },
+      "bands": {
+        "title": "राशि की श्रेणियाँ",
+        "answer": "{{limit}} से कम की {{n}} खरीदारियाँ मिलकर {{total}} होती हैं।",
+        "upTo": "{{max}} तक",
+        "above": "{{min}} से ज़्यादा",
+        "between": "{{min}} से {{max}}",
+        "band": "श्रेणी",
+        "count": "खरीदारियाँ",
+        "total": "कुल",
+        "aria": "{{band}}: {{n}} खरीदारियाँ, {{total}}"
+      },
+      "calendar": {
+        "title": "दिन-ब-दिन",
+        "answer": "सबसे महंगा दिन {{day}} था: {{total}}।",
+        "dayAria": "{{day}}: {{total}}। उस दिन के लेन-देन खोलें।",
+        "spent": "उस दिन खर्च",
+        "openHint": "उस दिन के लेन-देन देखने के लिए क्लिक करें",
+        "less": "कम",
+        "more": "ज़्यादा"
+      }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "अवधि: {{period}}",
+    "periodPresets": "अवधि"
   },
   "payees": {
     "noPayeeFound": "कोई प्राप्तकर्ता नहीं मिला।",

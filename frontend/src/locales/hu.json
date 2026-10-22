@@ -2000,7 +2000,34 @@
     "category": "Kategória",
     "amount": "Összeg",
     "investments": "Befektetések",
-    "moneyMap": "Pénztérkép",
+    "moneyMap": {
+      "title": "Pénztérkép",
+      "hubIncome": "Bevétel",
+      "hubSpending": "Kiadás",
+      "income": "Bevétel",
+      "spending": "Kiadás",
+      "left": "Maradt",
+      "short": "Hiányzott",
+      "folded": "További csoportok ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Kattints a megnyitáshoz a Felfedezésben",
+      "expandHint": "Kattints a csoportok megtekintéséhez",
+      "value": "összeg",
+      "ofIncome": "a bevételből",
+      "ofSpending": "a kiadásból",
+      "ofGroup": "{{group}} csoportból",
+      "tapGroups": "Koppints a csoportokért",
+      "refunds": "{{value}} visszatérítés már levonva a kiadásból.",
+      "collapse": "Kis csoportok újra összevonása",
+      "empty": "Ebben az időszakban nincs bevétel vagy kiadás.",
+      "answerIncome": "{{income}} bevétel mellett {{spending}} volt a költésed; a legtöbb {{group}}: a kiadás {{share}}-a.",
+      "answerSpending": "{{spending}} volt a költésed; a legnagyobb csoport {{group}} ({{share}}).",
+      "answerLeft": "{{left}} maradt.",
+      "answerShort": "{{left}} hiányzott.",
+      "viewChart": "Diagram",
+      "viewTable": "Táblázat",
+      "colItem": "Tétel"
+    },
     "range30d": "30 nap",
     "customRange": "Egyéni időszak",
     "pickCustomRange": "Válassz kezdő és záró dátumot",
@@ -2044,8 +2071,201 @@
       "prevPage": "Előző oldal",
       "nextPage": "Következő oldal",
       "pageOf": "{{page}}. oldal / {{pages}}",
-      "periodGroup": "Időszak"
-    }
+      "periodGroup": "Időszak",
+      "treemap": {
+        "rest": "Egyéb ({{n}})",
+        "aria": "A legnagyobb: {{name}}, az összeg {{share}}-a.",
+        "of": {
+          "group": "a kiadásból",
+          "category": "a csoportból",
+          "merchant": "a kategóriából"
+        },
+        "openHint": "Kattints egy szinttel lejjebb"
+      }
+    },
+    "common": {
+      "empty": "Ebben az időszakban nincs mit mutatni.",
+      "error": "Ezt a részt nem sikerült betölteni.",
+      "retry": "Újra"
+    },
+    "overview": {
+      "tab": "Áttekintés",
+      "error": "Az áttekintést nem sikerült betölteni.",
+      "empty": "Ebben az időszakban nincs kiadás vagy bevétel. Válassz másik időszakot fent.",
+      "headline": {
+        "month": "{{month}} hónapban {{spending}} volt a költésed",
+        "monthUp": "{{month}} hónapban {{spending}} volt a költésed, {{change}} több, mint {{previous}} hónapban",
+        "monthDown": "{{month}} hónapban {{spending}} volt a költésed, {{change}} kevesebb, mint {{previous}} hónapban",
+        "monthPartial": "{{month}} hónapban eddig {{spending}} volt a költésed",
+        "average": "{{from}} és {{to}} között havi {{spending}} volt a költésed",
+        "averageUp": "{{from}} és {{to}} között havi {{spending}} volt a költésed, {{change}} több, mint az előző {{months}} hónapban",
+        "averageDown": "{{from}} és {{to}} között havi {{spending}} volt a költésed, {{change}} kevesebb, mint az előző {{months}} hónapban",
+        "end": ".",
+        "left": ", és {{left}} maradt.",
+        "leftMonthly": ", és havi {{left}} maradt.",
+        "short": ", és {{left}} hiányzott.",
+        "shortMonthly": ", és havi {{left}} hiányzott."
+      },
+      "kpi": {
+        "spending": "Havi kiadás",
+        "income": "Havi bevétel",
+        "left": "Havi maradék",
+        "short": "Havi hiány",
+        "leftShare": "a bevétel {{share}}-a",
+        "shortShare": "{{share}}-kal a bevétel felett",
+        "noIncome": "Nincs bevétel az időszakban",
+        "leftMore": "{{value}} több, mint korábban",
+        "leftLess": "{{value}} kevesebb, mint korábban",
+        "fixed": "Fix × változó",
+        "fixedValue": "{{share}} fix",
+        "fixedAria": "A kiadás {{fixed}}-a fix, {{variable}}-a változó",
+        "fixedSub": "{{variable}} változó · havi {{value}} fix költség",
+        "vsPrevious": "{{change}} az előzőhöz"
+      },
+      "highlights": {
+        "title": "Kiemelések",
+        "description": "Ami kilógott a megszokottból az időszakban. Koppints egy kártyára a részletekért.",
+        "none": "Semmi szokatlan ebben az időszakban.",
+        "see": "Megnézem",
+        "rule": {
+          "spike": "Csúcs",
+          "what_changed": "Mi változott",
+          "recurring_new_or_up": "Új vagy drágább fix költségek",
+          "recurring_expensive": "Drága fix költség",
+          "small_purchases": "Apró vásárlások",
+          "heavy_group": "Nehéz csoport",
+          "to_review": "Átnézendő"
+        }
+      },
+      "changes": {
+        "title": "Mi változott",
+        "description": "Az utolsó lezárt hónap az előző 3 hónap átlagához képest.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "A legjobban {{name}} nőtt: {{value}} többlet.",
+        "answerDown": "A legjobban {{name}} csökkent: {{value}} kevesebb.",
+        "empty": "Nincs figyelemre méltó változás."
+      },
+      "monthly": {
+        "title": "Hónapról hónapra",
+        "spending": "Kiadás",
+        "income": "Bevétel",
+        "median": "Kiadás mediánja",
+        "spike": "A medián 1,5× vagy több",
+        "aria": "A legdrágább hónap {{month}} volt: {{value}}, közel a {{median}} mediánhoz.",
+        "ariaSpike": "{{month}} volt a legdrágább: {{value}}, a {{median}} medián {{multiple}}×-e.",
+        "barAria": "{{month}}: kiadás {{spending}}, bevétel {{income}}. Megnyitás a Felfedezésben.",
+        "left": "Maradt",
+        "short": "Hiányzott",
+        "vsMedian": "a medián {{multiple}}×-e",
+        "clickHint": "Kattints a hónap megtekintéséhez",
+        "tooShort": "Hónapok összevetéséhez válassz egy hónapnál hosszabb időszakot."
+      }
+    },
+    "trends": {
+      "tab": "Trendek",
+      "legend": "Csoportok (koppints a be- vagy kikapcsoláshoz)",
+      "monthTotal": "havi összesen",
+      "restGroups": "További csoportok",
+      "headlineUp": "A legjobban {{name}} nőtt: {{change}} az utolsó 3 hónapban, most havi {{value}}.",
+      "headlineDown": "Az utolsó 3 hónapban semmi sem nőtt; a legjobban {{name}} csökkent: {{change}}.",
+      "headlineFlat": "A kiadások stabilak voltak az utolsó 3 hónapban.",
+      "areaTitle": "Kiadás csoportonként, hónapról hónapra",
+      "areaAnswer": "{{month}} hónapban a kiadás {{total}} volt; a legnagyobb csoport {{group}}.",
+      "window": "{{from}} – {{to}}",
+      "gridTitle": "Kategóriák",
+      "gridDescription": "A legnagyobb növekedés szerint: utolsó 3 hónap (árnyékolt) az előző 3-hoz képest.",
+      "empty": "Nincs kiadás ebben a 12 hónapban.",
+      "new": "új",
+      "perMonth": "havi {{value}}",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Megnyitás a Felfedezésben.",
+      "showAll": "Összes kategória ({{n}})",
+      "showFewer": "Kevesebb"
+    },
+    "recurring": {
+      "tab": "Fix költségek",
+      "headline": "Havi {{month}} fix költség = évi {{year}}.",
+      "headlineShare": "Havi {{month}} fix költség = évi {{year}}, a kiadás {{share}}-a.",
+      "counts": "aktív: {{active}} · új: {{new}} · drágult: {{up}} · megszűnt: {{stopped}}",
+      "title": "Ismétlődő kiadások",
+      "description": "Az előzményekből, külön rögzítés nélkül. Koppints egy sorra a terhelésekért.",
+      "empty": "Nem találtunk ismétlődő kiadást.",
+      "noneInFilter": "Semmi sem felel meg a szűrőnek.",
+      "window": "A felismerés mindig az utolsó 12 lezárt hónapot és az aktuálisat nézi.",
+      "status": {
+        "new": "Új",
+        "up": "Drágult",
+        "stopped": "Megszűnt",
+        "steady": "Stabil"
+      },
+      "filter": {
+        "all": "Mind"
+      },
+      "sort": {
+        "year": "Legdrágább évente",
+        "recent": "Legutóbbi",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Kereskedő",
+        "status": "Állapot",
+        "last": "Utolsó terhelés",
+        "month": "Havonta",
+        "year": "Évente"
+      },
+      "perMonth": "havi {{value}}",
+      "perYear": "évi {{value}}",
+      "rowAria": "{{name}}, {{status}}: havi {{month}}, évi {{year}}. Megnyitás a Felfedezésben.",
+      "fixedWindow": "Utolsó 12 hónap"
+    },
+    "habits": {
+      "tab": "Szokások",
+      "headline": "Az időszakban {{n}} vásárlásod volt, havi {{perMonth}}; leggyakrabban ide térsz vissza: {{name}}, havi {{freq}} alkalommal.",
+      "headlineCount": "Az időszakban {{n}} vásárlásod volt.",
+      "empty": "Nincs vásárlás ebben az időszakban.",
+      "openHint": "Kattints a megnyitáshoz a Felfedezésben",
+      "bubbles": {
+        "title": "Gyakoriság × kosárérték",
+        "answer": "A legdrágább szokásod: {{name}}, havi {{perMonth}} vásárlás, átlagosan {{ticket}}, {{total}} az időszakban.",
+        "xAxis": "vásárlás havonta",
+        "yAxis": "átlagos kosárérték",
+        "costlyHabit": "Drága szokás",
+        "bigRare": "Nagy és ritka",
+        "small": "Apróságok",
+        "aria": "{{name}}: havi {{perMonth}} vásárlás, átlag {{ticket}}, összesen {{total}}. Megnyitás a Felfedezésben.",
+        "total": "az időszakban",
+        "ticket": "átlagos kosárérték",
+        "perMonthLabel": "vásárlás havonta",
+        "legend": "Színek csoportonként"
+      },
+      "weekdays": {
+        "title": "A hét napja",
+        "answer": "{{day}} napon költesz a legtöbbet: {{total}}, {{n}} vásárlás.",
+        "aria": "{{day}}: {{total}}, {{n}} vásárlás"
+      },
+      "bands": {
+        "title": "Összegsávok",
+        "answer": "{{n}} vásárlás {{limit}} alatt összesen {{total}}.",
+        "upTo": "legfeljebb {{max}}",
+        "above": "{{min}} felett",
+        "between": "{{min}} – {{max}}",
+        "band": "Sáv",
+        "count": "Vásárlás",
+        "total": "Összesen",
+        "aria": "{{band}}: {{n}} vásárlás, {{total}}"
+      },
+      "calendar": {
+        "title": "Napról napra",
+        "answer": "A legdrágább nap: {{day}}, {{total}}.",
+        "dayAria": "{{day}}: {{total}}. A nap tranzakcióinak megnyitása.",
+        "spent": "aznapi költés",
+        "openHint": "Kattints a nap tranzakcióiért",
+        "less": "Kevesebb",
+        "more": "Több"
+      }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Időszak: {{period}}",
+    "periodPresets": "Időszak"
   },
   "payees": {
     "noPayeeFound": "Nincs ilyen partner.",

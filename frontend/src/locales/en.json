@@ -2000,7 +2000,34 @@
     "category": "Category",
     "amount": "Amount",
     "investments": "Investments",
-    "moneyMap": "Money Map",
+    "moneyMap": {
+      "title": "Money Map",
+      "hubIncome": "Income",
+      "hubSpending": "Spending",
+      "income": "Income",
+      "spending": "Spending",
+      "left": "Left over",
+      "short": "Short",
+      "folded": "Other groups ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Click to open in Explore",
+      "expandHint": "Click to see these groups",
+      "value": "amount",
+      "ofIncome": "of income",
+      "ofSpending": "of spending",
+      "ofGroup": "of {{group}}",
+      "tapGroups": "Tap to see the groups",
+      "refunds": "{{value}} in refunds already taken off spending.",
+      "collapse": "Fold the small groups again",
+      "empty": "No income or spending in this period.",
+      "answerIncome": "With {{income}} in income you spent {{spending}}; {{group}} takes the most: {{share}} of spending.",
+      "answerSpending": "You spent {{spending}}; {{group}} is the biggest group ({{share}}).",
+      "answerLeft": "{{left}} was left over.",
+      "answerShort": "You were {{left}} short.",
+      "viewChart": "Chart",
+      "viewTable": "Table",
+      "colItem": "Item"
+    },
     "range30d": "30D",
     "customRange": "Custom range",
     "pickCustomRange": "Pick a start and end date",
@@ -2044,8 +2071,201 @@
       "prevPage": "Previous page",
       "nextPage": "Next page",
       "pageOf": "Page {{page}} of {{pages}}",
-      "periodGroup": "Period"
-    }
+      "periodGroup": "Period",
+      "treemap": {
+        "rest": "Other ({{n}})",
+        "aria": "{{name}} is the biggest: {{share}} of the total.",
+        "of": {
+          "group": "of spending",
+          "category": "of the group",
+          "merchant": "of the category"
+        },
+        "openHint": "Click to go one level down"
+      }
+    },
+    "common": {
+      "empty": "Nothing to show for this period.",
+      "error": "Couldn't load this section.",
+      "retry": "Try again"
+    },
+    "overview": {
+      "tab": "Overview",
+      "error": "Couldn't load the Overview.",
+      "empty": "No spending or income in this period. Pick another period above.",
+      "headline": {
+        "month": "In {{month}} you spent {{spending}}",
+        "monthUp": "In {{month}} you spent {{spending}}, {{change}} more than in {{previous}}",
+        "monthDown": "In {{month}} you spent {{spending}}, {{change}} less than in {{previous}}",
+        "monthPartial": "So far in {{month}} you have spent {{spending}}",
+        "average": "From {{from}} to {{to}} you spent {{spending}} a month",
+        "averageUp": "From {{from}} to {{to}} you spent {{spending}} a month, {{change}} more than the {{months}} months before",
+        "averageDown": "From {{from}} to {{to}} you spent {{spending}} a month, {{change}} less than the {{months}} months before",
+        "end": ".",
+        "left": ", and {{left}} was left over.",
+        "leftMonthly": ", and {{left}} a month was left over.",
+        "short": ", and you were {{left}} short.",
+        "shortMonthly": ", and you were {{left}} a month short."
+      },
+      "kpi": {
+        "spending": "Spending per month",
+        "income": "Income per month",
+        "left": "Left over per month",
+        "short": "Short per month",
+        "leftShare": "{{share}} of income",
+        "shortShare": "{{share}} beyond income",
+        "noIncome": "No income in the period",
+        "leftMore": "{{value}} more than before",
+        "leftLess": "{{value}} less than before",
+        "fixed": "Fixed vs variable",
+        "fixedValue": "{{share}} fixed",
+        "fixedAria": "{{fixed}} of spending is fixed and {{variable}} is variable",
+        "fixedSub": "{{variable}} variable · {{value}}/month in fixed costs",
+        "vsPrevious": "{{change}} vs previous"
+      },
+      "highlights": {
+        "title": "Highlights",
+        "description": "What stood out in the period. Tap a card to see the details.",
+        "none": "Nothing out of the ordinary in this period.",
+        "see": "See",
+        "rule": {
+          "spike": "Spike",
+          "what_changed": "What changed",
+          "recurring_new_or_up": "New or pricier fixed costs",
+          "recurring_expensive": "Costly fixed cost",
+          "small_purchases": "Small purchases",
+          "heavy_group": "Heavy group",
+          "to_review": "To review"
+        }
+      },
+      "changes": {
+        "title": "What changed",
+        "description": "Last closed month against the average of the 3 months before.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "{{name}} rose the most: {{value}} more.",
+        "answerDown": "{{name}} fell the most: {{value}} less.",
+        "empty": "No change worth a look."
+      },
+      "monthly": {
+        "title": "Month by month",
+        "spending": "Spending",
+        "income": "Income",
+        "median": "Median spending",
+        "spike": "1.5× the median or more",
+        "aria": "The costliest month was {{month}}: {{value}}, close to the {{median}} median.",
+        "ariaSpike": "{{month}} was the costliest month: {{value}}, {{multiple}}× the {{median}} median.",
+        "barAria": "{{month}}: spending {{spending}}, income {{income}}. Open in Explore.",
+        "left": "Left over",
+        "short": "Short",
+        "vsMedian": "{{multiple}}× the median",
+        "clickHint": "Click to see the month",
+        "tooShort": "Pick a period longer than one month to compare months."
+      }
+    },
+    "trends": {
+      "tab": "Trends",
+      "legend": "Groups (tap to turn on or off)",
+      "monthTotal": "month total",
+      "restGroups": "Other groups",
+      "headlineUp": "{{name}} grew the most: {{change}} in the last 3 months, now {{value}} a month.",
+      "headlineDown": "Nothing rose in the last 3 months; {{name}} fell the most: {{change}}.",
+      "headlineFlat": "Spending held steady over the last 3 months.",
+      "areaTitle": "Spending by group, month by month",
+      "areaAnswer": "In {{month}} spending was {{total}}; {{group}} is the biggest group.",
+      "window": "{{from}} to {{to}}",
+      "gridTitle": "Categories",
+      "gridDescription": "Sorted by the biggest rise: last 3 months (shaded) against the 3 before.",
+      "empty": "No spending in these 12 months.",
+      "new": "new",
+      "perMonth": "{{value}}/month",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Open in Explore.",
+      "showAll": "See all categories ({{n}})",
+      "showFewer": "See fewer"
+    },
+    "recurring": {
+      "tab": "Fixed costs",
+      "headline": "{{month}}/month in fixed costs = {{year}}/year.",
+      "headlineShare": "{{month}}/month in fixed costs = {{year}}/year, {{share}} of spending.",
+      "counts": "Active: {{active}} · New: {{new}} · Went up: {{up}} · Stopped: {{stopped}}",
+      "title": "Charges that repeat",
+      "description": "Found from your history, no sign-up needed. Tap a row to see the charges.",
+      "empty": "No repeating charge found in the history.",
+      "noneInFilter": "Nothing matches this filter.",
+      "window": "Detection always reads the last 12 closed months and the current one.",
+      "status": {
+        "new": "New",
+        "up": "Went up",
+        "stopped": "Stopped",
+        "steady": "Steady"
+      },
+      "filter": {
+        "all": "All"
+      },
+      "sort": {
+        "year": "Biggest per year",
+        "recent": "Most recent",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Store",
+        "status": "Status",
+        "last": "Last charge",
+        "month": "Per month",
+        "year": "Per year"
+      },
+      "perMonth": "{{value}}/month",
+      "perYear": "{{value}}/year",
+      "rowAria": "{{name}}, {{status}}: {{month}} a month, {{year}} a year. Open in Explore.",
+      "fixedWindow": "Last 12 months"
+    },
+    "habits": {
+      "tab": "Habits",
+      "headline": "You made {{n}} purchases in the period, {{perMonth}} a month; {{name}} is where you go back most: {{freq}} times a month.",
+      "headlineCount": "You made {{n}} purchases in the period.",
+      "empty": "No purchases in this period.",
+      "openHint": "Click to open in Explore",
+      "bubbles": {
+        "title": "Frequency × ticket",
+        "answer": "{{name}} is your costliest habit: {{perMonth}} purchases a month, {{ticket}} on average, {{total}} in the period.",
+        "xAxis": "purchases per month",
+        "yAxis": "average ticket",
+        "costlyHabit": "Costly habit",
+        "bigRare": "Big and rare",
+        "small": "Small stuff",
+        "aria": "{{name}}: {{perMonth}} purchases a month, {{ticket}} average ticket, {{total}} in total. Open in Explore.",
+        "total": "in the period",
+        "ticket": "average ticket",
+        "perMonthLabel": "purchases per month",
+        "legend": "Colors by group"
+      },
+      "weekdays": {
+        "title": "Day of the week",
+        "answer": "{{day}} is the day you spend most: {{total}} in {{n}} purchases.",
+        "aria": "{{day}}: {{total}} in {{n}} purchases"
+      },
+      "bands": {
+        "title": "Purchase size",
+        "answer": "{{n}} purchases under {{limit}} add up to {{total}}.",
+        "upTo": "up to {{max}}",
+        "above": "over {{min}}",
+        "between": "{{min}} to {{max}}",
+        "band": "Size",
+        "count": "Purchases",
+        "total": "Total",
+        "aria": "{{band}}: {{n}} purchases, {{total}}"
+      },
+      "calendar": {
+        "title": "Day by day",
+        "answer": "The costliest day was {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Open that day’s transactions.",
+        "spent": "spent that day",
+        "openHint": "Click to see that day’s transactions",
+        "less": "Less",
+        "more": "More"
+      }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Period: {{period}}",
+    "periodPresets": "Period"
   },
   "payees": {
     "noPayeeFound": "No payee found.",

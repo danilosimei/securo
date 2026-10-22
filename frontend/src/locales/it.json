@@ -2004,7 +2004,34 @@
     "category": "Categoria",
     "amount": "Importo",
     "investments": "Investimenti",
-    "moneyMap": "Mappa del Denaro",
+    "moneyMap": {
+      "title": "Mappa del denaro",
+      "hubIncome": "Entrate",
+      "hubSpending": "Spesa",
+      "income": "Entrate",
+      "spending": "Spesa",
+      "left": "Avanzo",
+      "short": "Ammanco",
+      "folded": "Altri gruppi ({{n}})",
+      "nodeAria": "{{name}}: {{value}} ({{share}})",
+      "openHint": "Fai clic per aprire in Esplora",
+      "expandHint": "Fai clic per vedere questi gruppi",
+      "value": "importo",
+      "ofIncome": "delle entrate",
+      "ofSpending": "della spesa",
+      "ofGroup": "di {{group}}",
+      "tapGroups": "Tocca per vedere i gruppi",
+      "refunds": "{{value}} di rimborsi già detratti dalla spesa.",
+      "collapse": "Raggruppa di nuovo i gruppi piccoli",
+      "empty": "Nessuna entrata né spesa in questo periodo.",
+      "answerIncome": "Con entrate di {{income}} hai speso {{spending}}; {{group}} prende la parte maggiore: {{share}} della spesa.",
+      "answerSpending": "Hai speso {{spending}}; {{group}} è il gruppo più grande ({{share}}).",
+      "answerLeft": "Sono avanzati {{left}}.",
+      "answerShort": "Sono mancati {{left}}.",
+      "viewChart": "Grafico",
+      "viewTable": "Tabella",
+      "colItem": "Voce"
+    },
     "range30d": "30D",
     "customRange": "Intervallo personalizzato",
     "pickCustomRange": "Scegli una data di inizio e fine",
@@ -2048,8 +2075,201 @@
       "prevPage": "Pagina precedente",
       "nextPage": "Pagina successiva",
       "pageOf": "Pagina {{page}} di {{pages}}",
-      "periodGroup": "Periodo"
-    }
+      "periodGroup": "Periodo",
+      "treemap": {
+        "rest": "Altri ({{n}})",
+        "aria": "{{name}} è il più grande: {{share}} del totale.",
+        "of": {
+          "group": "della spesa",
+          "category": "del gruppo",
+          "merchant": "della categoria"
+        },
+        "openHint": "Fai clic per scendere di un livello"
+      }
+    },
+    "common": {
+      "empty": "Niente da mostrare per questo periodo.",
+      "error": "Impossibile caricare questa sezione.",
+      "retry": "Riprova"
+    },
+    "overview": {
+      "tab": "Panoramica",
+      "error": "Impossibile caricare la Panoramica.",
+      "empty": "Nessuna spesa né entrata in questo periodo. Scegli un altro periodo qui sopra.",
+      "headline": {
+        "month": "A {{month}} hai speso {{spending}}",
+        "monthUp": "A {{month}} hai speso {{spending}}, {{change}} in più rispetto a {{previous}}",
+        "monthDown": "A {{month}} hai speso {{spending}}, {{change}} in meno rispetto a {{previous}}",
+        "monthPartial": "A {{month}}, finora, hai speso {{spending}}",
+        "average": "Da {{from}} a {{to}} hai speso {{spending}} al mese",
+        "averageUp": "Da {{from}} a {{to}} hai speso {{spending}} al mese, {{change}} in più dei {{months}} mesi precedenti",
+        "averageDown": "Da {{from}} a {{to}} hai speso {{spending}} al mese, {{change}} in meno dei {{months}} mesi precedenti",
+        "end": ".",
+        "left": ", e sono avanzati {{left}}.",
+        "leftMonthly": ", e sono avanzati {{left}} al mese.",
+        "short": ", e sono mancati {{left}}.",
+        "shortMonthly": ", e sono mancati {{left}} al mese."
+      },
+      "kpi": {
+        "spending": "Spesa al mese",
+        "income": "Entrate al mese",
+        "left": "Avanzo al mese",
+        "short": "Ammanco al mese",
+        "leftShare": "{{share}} delle entrate",
+        "shortShare": "{{share}} oltre le entrate",
+        "noIncome": "Nessuna entrata nel periodo",
+        "leftMore": "{{value}} in più di prima",
+        "leftLess": "{{value}} in meno di prima",
+        "fixed": "Fisso × variabile",
+        "fixedValue": "{{share}} fisso",
+        "fixedAria": "{{fixed}} della spesa è fisso e {{variable}} variabile",
+        "fixedSub": "{{variable}} variabile · {{value}}/mese in fissi",
+        "vsPrevious": "{{change}} vs precedente"
+      },
+      "highlights": {
+        "title": "In evidenza",
+        "description": "Ciò che è uscito dal solito nel periodo. Tocca una scheda per i dettagli.",
+        "none": "Niente di insolito in questo periodo.",
+        "see": "Vedi",
+        "rule": {
+          "spike": "Picco",
+          "what_changed": "Cosa è cambiato",
+          "recurring_new_or_up": "Fissi nuovi o più cari",
+          "recurring_expensive": "Fisso costoso",
+          "small_purchases": "Piccoli acquisti",
+          "heavy_group": "Gruppo pesante",
+          "to_review": "Da rivedere"
+        }
+      },
+      "changes": {
+        "title": "Cosa è cambiato",
+        "description": "Ultimo mese chiuso rispetto alla media dei 3 mesi precedenti.",
+        "row": "{{name}}: {{value}} ({{change}})",
+        "answerUp": "{{name}} è salito di più: {{value}} in più.",
+        "answerDown": "{{name}} è sceso di più: {{value}} in meno.",
+        "empty": "Nessun cambiamento rilevante."
+      },
+      "monthly": {
+        "title": "Mese per mese",
+        "spending": "Spesa",
+        "income": "Entrate",
+        "median": "Mediana della spesa",
+        "spike": "1,5× la mediana o più",
+        "aria": "Il mese più caro è stato {{month}}: {{value}}, vicino alla mediana di {{median}}.",
+        "ariaSpike": "{{month}} è stato il mese più caro: {{value}}, {{multiple}}× la mediana di {{median}}.",
+        "barAria": "{{month}}: spesa {{spending}}, entrate {{income}}. Apri in Esplora.",
+        "left": "Avanzo",
+        "short": "Ammanco",
+        "vsMedian": "{{multiple}}× la mediana",
+        "clickHint": "Fai clic per vedere il mese",
+        "tooShort": "Scegli un periodo di più di un mese per confrontare i mesi."
+      }
+    },
+    "trends": {
+      "tab": "Tendenze",
+      "legend": "Gruppi (tocca per attivare o disattivare)",
+      "monthTotal": "totale del mese",
+      "restGroups": "Altri gruppi",
+      "headlineUp": "{{name}} è cresciuto di più: {{change}} negli ultimi 3 mesi, ora {{value}} al mese.",
+      "headlineDown": "Niente è salito negli ultimi 3 mesi; {{name}} è sceso di più: {{change}}.",
+      "headlineFlat": "La spesa è rimasta stabile negli ultimi 3 mesi.",
+      "areaTitle": "Spesa per gruppo, mese per mese",
+      "areaAnswer": "A {{month}} la spesa è stata {{total}}; {{group}} è il gruppo più grande.",
+      "window": "da {{from}} a {{to}}",
+      "gridTitle": "Categorie",
+      "gridDescription": "Ordinate per aumento maggiore: ultimi 3 mesi (in ombra) rispetto ai 3 precedenti.",
+      "empty": "Nessuna spesa in questi 12 mesi.",
+      "new": "nuova",
+      "perMonth": "{{value}}/mese",
+      "cardAria": "{{name}}: {{value}}, {{change}}. Apri in Esplora.",
+      "showAll": "Vedi tutte le categorie ({{n}})",
+      "showFewer": "Vedi meno"
+    },
+    "recurring": {
+      "tab": "Fissi",
+      "headline": "{{month}}/mese di spese fisse = {{year}}/anno.",
+      "headlineShare": "{{month}}/mese di spese fisse = {{year}}/anno, {{share}} della spesa.",
+      "counts": "Attive: {{active}} · Nuove: {{new}} · Aumentate: {{up}} · Ferme: {{stopped}}",
+      "title": "Spese che si ripetono",
+      "description": "Trovate nello storico, senza registrazione. Tocca una riga per vedere gli addebiti.",
+      "empty": "Nessuna spesa ricorrente trovata nello storico.",
+      "noneInFilter": "Niente corrisponde a questo filtro.",
+      "window": "Il rilevamento legge sempre gli ultimi 12 mesi chiusi e il mese corrente.",
+      "status": {
+        "new": "Nuova",
+        "up": "Aumentata",
+        "stopped": "Ferma",
+        "steady": "Stabile"
+      },
+      "filter": {
+        "all": "Tutte"
+      },
+      "sort": {
+        "year": "Più care all’anno",
+        "recent": "Più recenti",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Esercente",
+        "status": "Stato",
+        "last": "Ultimo addebito",
+        "month": "Al mese",
+        "year": "All’anno"
+      },
+      "perMonth": "{{value}}/mese",
+      "perYear": "{{value}}/anno",
+      "rowAria": "{{name}}, {{status}}: {{month}} al mese, {{year}} all’anno. Apri in Esplora.",
+      "fixedWindow": "Ultimi 12 mesi"
+    },
+    "habits": {
+      "tab": "Abitudini",
+      "headline": "Hai fatto {{n}} acquisti nel periodo, {{perMonth}} al mese; {{name}} è dove torni di più: {{freq}} volte al mese.",
+      "headlineCount": "Hai fatto {{n}} acquisti nel periodo.",
+      "empty": "Nessun acquisto in questo periodo.",
+      "openHint": "Fai clic per aprire in Esplora",
+      "bubbles": {
+        "title": "Frequenza × scontrino",
+        "answer": "{{name}} è la tua abitudine più cara: {{perMonth}} acquisti al mese, scontrino medio di {{ticket}}, {{total}} nel periodo.",
+        "xAxis": "acquisti al mese",
+        "yAxis": "scontrino medio",
+        "costlyHabit": "Abitudine cara",
+        "bigRare": "Grande e raro",
+        "small": "Spese minute",
+        "aria": "{{name}}: {{perMonth}} acquisti al mese, scontrino medio {{ticket}}, totale {{total}}. Apri in Esplora.",
+        "total": "nel periodo",
+        "ticket": "scontrino medio",
+        "perMonthLabel": "acquisti al mese",
+        "legend": "Colori per gruppo"
+      },
+      "weekdays": {
+        "title": "Giorno della settimana",
+        "answer": "{{day}} è il giorno in cui spendi di più: {{total}} in {{n}} acquisti.",
+        "aria": "{{day}}: {{total}} in {{n}} acquisti"
+      },
+      "bands": {
+        "title": "Fasce di importo",
+        "answer": "{{n}} acquisti sotto {{limit}} sommano {{total}}.",
+        "upTo": "fino a {{max}}",
+        "above": "oltre {{min}}",
+        "between": "da {{min}} a {{max}}",
+        "band": "Fascia",
+        "count": "Acquisti",
+        "total": "Totale",
+        "aria": "{{band}}: {{n}} acquisti, {{total}}"
+      },
+      "calendar": {
+        "title": "Giorno per giorno",
+        "answer": "Il giorno più caro è stato il {{day}}: {{total}}.",
+        "dayAria": "{{day}}: {{total}}. Apri le transazioni del giorno.",
+        "spent": "speso quel giorno",
+        "openHint": "Fai clic per vedere le transazioni del giorno",
+        "less": "Meno",
+        "more": "Più"
+      }
+    },
+    "periodRange": "{{from}} – {{to}}",
+    "periodMenu": "Periodo: {{period}}",
+    "periodPresets": "Periodo"
   },
   "payees": {
     "noPayeeFound": "Nessun beneficiario trovato.",
