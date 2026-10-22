@@ -653,7 +653,9 @@
       "action": {
         "archive": "Archiwizuj",
         "restore": "Przywróć"
-      }
+      },
+      "confirmDeleteTitle": "Usunąć produkt?",
+      "confirmDeleteDescription": "„{{name}}” zostanie trwale usunięty. Tej operacji nie można cofnąć."
     },
     "installments": {
       "title": "Podziel na raty",
@@ -2008,7 +2010,9 @@
     "total": "Łącznie",
     "confirmRegenerateTitle": "Przeliczyć wartości ponownie?",
     "confirmRegenerate": "Zmieniono parametry wzrostu. Wszystkie automatycznie wygenerowane wartości zostaną usunięte i przeliczone ponownie. Wartości ręczne zostaną zachowane.",
-    "regenerate": "Przelicz ponownie"
+    "regenerate": "Przelicz ponownie",
+    "confirmDeleteValueTitle": "Usunąć wartość?",
+    "confirmDeleteValue": "To usuwa wpis z historii wartości."
   },
   "reports": {
     "section": "Analityka",

@@ -28,6 +28,7 @@ import { RefreshCw, TriangleAlert, Unlink, Settings } from 'lucide-react'
 import { AccountIcon, ConnectionLogo } from '@/components/account-icon'
 import { getAccountTypeConfig } from '@/lib/account-type-config'
 import { AccountPageActions } from '@/components/account-page-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { AccountRowActions } from '@/components/account-row-actions'
 import { PageHeader } from '@/components/page-header'
 import { BankConnectDialog } from '@/components/bank-connect-dialog'
@@ -512,28 +513,14 @@ export default function AccountsPage() {
       )}
 
       {/* Confirm delete dialog */}
-      <Dialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('accounts.confirmDeleteTitle')}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {t('accounts.confirmDeleteDesc')}
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingId(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => deletingId && deleteMutation.mutate(deletingId)}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? t('common.loading') : t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deletingId}
+        title={t('accounts.confirmDeleteTitle')}
+        description={t('accounts.confirmDeleteDesc')}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeletingId(null)}
+        onConfirm={() => deletingId && deleteMutation.mutate(deletingId)}
+      />
 
       {/* Confirm disconnect dialog */}
       <Dialog open={!!disconnectingConnection} onOpenChange={() => setDisconnectingConnection(null)}>

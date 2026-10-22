@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, CheckCircle2, Edit2, Plug, Plus, Star, Trash2, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Plug, Plus, Star, XCircle, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { RowActions } from '@/components/ui/row-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { PageHeader } from '@/components/page-header'
 import { agents } from '@/lib/api'
 import type { LlmConnection } from '@/lib/api'
@@ -18,6 +20,7 @@ export default function AgentConnectionsPage() {
   const qc = useQueryClient()
   const { canWrite } = useWorkspace()
   const [editing, setEditing] = useState<LlmConnection | null>(null)
+  const [deleting, setDeleting] = useState<LlmConnection | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; detail: string }>>({})
 
@@ -31,6 +34,7 @@ export default function AgentConnectionsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['agent-connections'] })
       toast.success(t('agents.connections.deleted'))
+      setDeleting(null)
     },
   })
 
@@ -124,37 +128,17 @@ export default function AgentConnectionsPage() {
                     )}
                   </div>
                   {canWrite && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs"
-                        onClick={() => testMut.mutate(c.id)}
-                        disabled={testMut.isPending}
-                      >
-                        {t('agents.connections.test')}
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={() => setEditing(c)}
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                        title={t('common.edit')}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm(t('agents.connections.deleteConfirm', { name: c.name }))) {
-                            removeMut.mutate(c.id)
-                          }
-                        }}
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-                        title={t('common.delete')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                    <RowActions
+                      label={c.name}
+                      onEdit={() => setEditing(c)}
+                      onDelete={() => setDeleting(c)}
+                      extra={[{
+                        label: t('agents.connections.test'),
+                        icon: Zap,
+                        onSelect: () => testMut.mutate(c.id),
+                        disabled: testMut.isPending,
+                      }]}
+                    />
                   )}
                 </div>
               )
@@ -164,6 +148,15 @@ export default function AgentConnectionsPage() {
       )}
 
       <McpExternalPanel />
+
+      <DeleteConfirmationDialog
+        open={!!deleting}
+        title={t('common.delete')}
+        description={t('agents.connections.deleteConfirm', { name: deleting?.name })}
+        isPending={removeMut.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && removeMut.mutate(deleting.id)}
+      />
 
       <ConnectionFormDialog open={createOpen} onOpenChange={setCreateOpen} />
       <ConnectionFormDialog

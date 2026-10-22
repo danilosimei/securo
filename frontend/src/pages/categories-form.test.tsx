@@ -61,7 +61,8 @@ beforeEach(() => {
 })
 
 async function openEdit(user: ReturnType<typeof renderWithProviders>['user']) {
-  await user.click(await screen.findByTitle('Edit'))
+  await user.click((await screen.findAllByRole('button', { name: /More actions: / }))[0])
+  await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
   return screen.findByRole('dialog')
 }
 

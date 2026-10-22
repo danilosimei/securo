@@ -649,7 +649,9 @@
       "action": {
         "archive": "Archivia",
         "restore": "Ripristina"
-      }
+      },
+      "confirmDeleteTitle": "Eliminare il prodotto?",
+      "confirmDeleteDescription": "\"{{name}}\" verrà eliminato definitivamente. L'azione non si può annullare."
     },
     "installments": {
       "title": "Dividi in rate",
@@ -1926,7 +1928,9 @@
     "total": "Totale",
     "confirmRegenerateTitle": "Rigenerare i valori?",
     "confirmRegenerate": "I parametri di crescita sono cambiati. Tutti i valori generati automaticamente saranno eliminati e ricalcolati. I valori manuali saranno mantenuti.",
-    "regenerate": "Rigenera"
+    "regenerate": "Rigenera",
+    "confirmDeleteValueTitle": "Eliminare il valore?",
+    "confirmDeleteValue": "Questo rimuove la voce dallo storico dei valori."
   },
   "reports": {
     "section": "Analisi",

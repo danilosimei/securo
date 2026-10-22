@@ -68,7 +68,8 @@ beforeEach(() => {
 
 async function clickDelete(user: ReturnType<typeof renderWithProviders>['user'], name: string) {
   const row = (await screen.findByText(name)).closest('div')!.parentElement!
-  await user.click(within(row).getByTitle('Delete'))
+  await user.click(within(row).getByRole('button', { name: /More actions/ }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
 }
 
 describe('deleting a category', () => {
@@ -128,10 +129,10 @@ describe('deleting a category', () => {
 })
 
 describe('organizing with AI', () => {
-  it('links the section header to the organizer tab', async () => {
-    renderWithProviders(<CategoriesPage />)
-    const link = await screen.findByRole('link', { name: /Organize with AI/ })
-    expect(link).toHaveAttribute('href', '/categorization?tab=organize')
+  it('offers the organizer tab in the page menu', async () => {
+    const { user } = renderWithProviders(<CategoriesPage />)
+    await user.click(await screen.findByRole('button', { name: 'More actions' }))
+    expect(await screen.findByRole('menuitem', { name: /Organize with AI/ })).toBeInTheDocument()
   })
 })
 
@@ -140,7 +141,8 @@ describe('creating a group', () => {
     api.categoryGroups.create.mockResolvedValue({ id: 'g1' })
     const { user } = renderWithProviders(<CategoriesPage />)
 
-    await user.click(await screen.findByRole('button', { name: t('groups.add') }))
+    await user.click(await screen.findByRole('button', { name: 'More actions' }))
+    await user.click(await screen.findByRole('menuitem', { name: t('groups.add') }))
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getAllByRole('textbox')[0], 'Viagens')
     await user.click(within(dialog).getByRole('button', { name: 'Save' }))

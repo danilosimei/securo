@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { RowActions } from '@/components/ui/row-actions'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { History, Trash2 } from 'lucide-react'
+import { History, Undo2 } from 'lucide-react'
 
 import { importLogs as importLogsApi } from '@/lib/api'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
@@ -125,14 +126,10 @@ export function ImportHistory({ entity }: ImportHistoryProps) {
                   )}
                   <td className="px-3 py-3 text-right sm:px-4">
                     {canWrite && (
-                      <button
-                        onClick={() => setDeleteTarget(log)}
-                        className="text-muted-foreground transition-colors hover:text-rose-500"
-                        aria-label={t('import.undoImport')}
-                        title={t('import.undoImport')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <RowActions
+                        label={log.filename || t('import.undoImport')}
+                        extra={[{ label: t('import.undoImport'), icon: Undo2, onSelect: () => setDeleteTarget(log) }]}
+                      />
                     )}
                   </td>
                 </tr>

@@ -653,7 +653,9 @@
       "action": {
         "archive": "Archivovať",
         "restore": "Obnoviť"
-      }
+      },
+      "confirmDeleteTitle": "Odstrániť produkt?",
+      "confirmDeleteDescription": "„{{name}}“ bude natrvalo odstránený. Túto akciu nemožno vrátiť späť."
     },
     "installments": {
       "title": "Rozdeliť na splátky",
@@ -2034,7 +2036,9 @@
     "total": "Spolu",
     "confirmRegenerateTitle": "Prepočítať hodnoty?",
     "confirmRegenerate": "Parametre rastu sa zmenili. Všetky automaticky vygenerované hodnoty sa vymažú a prepočítajú. Manuálne hodnoty zostanú zachované.",
-    "regenerate": "Prepočítať"
+    "regenerate": "Prepočítať",
+    "confirmDeleteValueTitle": "Odstrániť hodnotu?",
+    "confirmDeleteValue": "Tým sa záznam odstráni z histórie hodnôt."
   },
   "reports": {
     "section": "Analytika",

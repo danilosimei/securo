@@ -38,6 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { SectionCard, Segmented, StateBadge, TH } from '@/components/invoice-ui'
 import { InvoiceLineEditor } from '@/components/invoice-line-editor'
@@ -166,47 +167,27 @@ export default function InvoicesPage() {
         section={t('nav.groupDaily')}
         title={t('invoices.title')}
         action={
-          <div className="flex items-center gap-2">
-            {/* Only on the receivable side: an agreement is something we
-                bill, and the payable ledger has nothing to emit. */}
-            {direction === 'receivable' && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/invoices/products')}
-                  data-testid="invoice-products-button"
-                >
-                  <Package className="h-4 w-4 mr-1.5" />
-                  {t('invoices.products.title')}
+          <PageActions
+            primary={
+              canWrite ? (
+                <Button onClick={() => setCreateOpen(true)} data-testid="invoice-new-button">
+                  <Plus />
+                  {direction === 'payable' ? t('invoices.newPayable') : t('invoices.new')}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/invoices/schedules')}
-                  data-testid="invoice-schedules-button"
-                >
-                  <Repeat className="h-4 w-4 mr-1.5" />
-                  {t('invoices.schedules.title')}
-                </Button>
-              </>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSettingsOpen(true)}
-              data-testid="invoice-settings-button"
-            >
-              <Settings2 className="h-4 w-4 mr-1.5" />
-              {t('invoices.settings.title')}
-            </Button>
-            {canWrite && (
-              <Button onClick={() => setCreateOpen(true)} data-testid="invoice-new-button">
-                <Plus />
-                {direction === 'payable' ? t('invoices.newPayable') : t('invoices.new')}
-              </Button>
-            )}
-          </div>
+              ) : undefined
+            }
+            items={[
+              // Only on the receivable side: an agreement is something we
+              // bill, and the payable ledger has nothing to emit.
+              ...(direction === 'receivable'
+                ? [
+                    { label: t('invoices.products.title'), icon: Package, onSelect: () => navigate('/invoices/products') },
+                    { label: t('invoices.schedules.title'), icon: Repeat, onSelect: () => navigate('/invoices/schedules') },
+                  ]
+                : []),
+              { label: t('invoices.settings.title'), icon: Settings2, onSelect: () => setSettingsOpen(true) },
+            ]}
+          />
         }
       />
 

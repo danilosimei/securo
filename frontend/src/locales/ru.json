@@ -653,7 +653,9 @@
       "action": {
         "archive": "В архив",
         "restore": "Восстановить"
-      }
+      },
+      "confirmDeleteTitle": "Удалить товар?",
+      "confirmDeleteDescription": "«{{name}}» будет удалён навсегда. Это действие нельзя отменить."
     },
     "installments": {
       "title": "Разбить на платежи",
@@ -1939,7 +1941,9 @@
     "total": "Итого",
     "confirmRegenerateTitle": "Перегенерировать значения?",
     "confirmRegenerate": "Параметры роста изменены. Все автоматически сгенерированные значения будут удалены и пересчитаны. Ручные значения сохранятся.",
-    "regenerate": "Перегенерировать"
+    "regenerate": "Перегенерировать",
+    "confirmDeleteValueTitle": "Удалить значение?",
+    "confirmDeleteValue": "Запись будет удалена из истории значений."
   },
   "reports": {
     "section": "Аналитика",

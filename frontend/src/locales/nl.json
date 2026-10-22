@@ -649,7 +649,9 @@
       "action": {
         "archive": "Archiveren",
         "restore": "Herstellen"
-      }
+      },
+      "confirmDeleteTitle": "Product verwijderen?",
+      "confirmDeleteDescription": "\"{{name}}\" wordt definitief verwijderd. Dit kan niet ongedaan worden gemaakt."
     },
     "installments": {
       "title": "In termijnen splitsen",
@@ -1924,7 +1926,9 @@
     "total": "Totaal",
     "confirmRegenerateTitle": "Waarden opnieuw genereren?",
     "confirmRegenerate": "Groeiparameters veranderd. Alle automatisch gegenereerde waarden worden verwijderd en opnieuw berekend. Handmatige waarden blijven behouden.",
-    "regenerate": "Regenereer"
+    "regenerate": "Regenereer",
+    "confirmDeleteValueTitle": "Waarde verwijderen?",
+    "confirmDeleteValue": "Hierdoor verdwijnt de invoer uit de waardegeschiedenis."
   },
   "reports": {
     "section": "Analyses",

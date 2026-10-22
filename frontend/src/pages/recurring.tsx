@@ -20,8 +20,10 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { Category, CategoryGroup, RecurringTransaction } from '@/types'
-import { Pencil, Trash2, Plus, RefreshCw, Info } from 'lucide-react'
+import { Plus, RefreshCw, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { RowActions } from '@/components/ui/row-actions'
+import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { CategorySelect } from '@/components/category-select'
 import { DatePickerInput } from '@/components/ui/date-picker-input'
@@ -136,30 +138,26 @@ export default function RecurringPage() {
         title={t('recurring.title')}
         action={
           canWrite ? (
-            <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
-              <Plus /> {t('recurring.add')}
-            </Button>
+            <PageActions
+              primary={
+                <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+                  <Plus /> {t('recurring.add')}
+                </Button>
+              }
+              items={[
+                {
+                  label: t('recurring.generatePending'),
+                  icon: RefreshCw,
+                  onSelect: () => generateMutation.mutate(),
+                  disabled: generateMutation.isPending,
+                },
+              ]}
+            />
           ) : undefined
         }
       />
       <SectionCard>
-        <SectionHeader
-          title={t('recurring.title')}
-          action={
-            canWrite ? (
-              <Button
-                variant="outline"
-                onClick={() => generateMutation.mutate()}
-                disabled={generateMutation.isPending}
-                aria-label={t('recurring.generatePending')}
-                title={t('recurring.generatePending')}
-              >
-                <RefreshCw />
-                <span className="hidden sm:inline">{t('recurring.generatePending')}</span>
-              </Button>
-            ) : undefined
-          }
-        />
+        <SectionHeader title={t('recurring.title')} />
         {recurringList && recurringList.length > 0 ? (
           <table className="w-full">
             <thead>
@@ -169,7 +167,7 @@ export default function RecurringPage() {
                 <th className={`${TH} text-left w-28 hidden md:table-cell`}>{t('recurring.frequency')}</th>
                 <th className={`${TH} text-left w-32 hidden md:table-cell`}>{t('recurring.nextOccurrence')}</th>
                 <th className={`${TH} text-left w-24 hidden sm:table-cell`}>{t('recurring.status')}</th>
-                {canWrite && <th className={`${TH} pr-4 sm:pr-5 text-right w-24`}>{t('recurring.actions')}</th>}
+                {canWrite && <th className={`${TH} pr-4 sm:pr-5 text-right w-16`}>{t('recurring.actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -207,24 +205,13 @@ export default function RecurringPage() {
                   </td>
                   {canWrite && (
                     <td className="py-3 pr-4 sm:pr-5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                          onClick={() => { setEditing(rt); setDialogOpen(true) }}
-                          aria-label={t('common.edit')}
-                          title={t('common.edit')}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                          onClick={() => setDeletingRecurring(rt)}
-                          disabled={deleteMutation.isPending}
-                          aria-label={t('common.delete')}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                      <div className="flex items-center justify-end">
+                        <RowActions
+                          label={rt.description}
+                          onEdit={() => { setEditing(rt); setDialogOpen(true) }}
+                          onDelete={() => setDeletingRecurring(rt)}
+                          deleteDisabled={deleteMutation.isPending}
+                        />
                       </div>
                     </td>
                   )}

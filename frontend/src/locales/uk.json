@@ -653,7 +653,9 @@
       "action": {
         "archive": "В архів",
         "restore": "Відновити"
-      }
+      },
+      "confirmDeleteTitle": "Видалити товар?",
+      "confirmDeleteDescription": "«{{name}}» буде видалено назавжди. Цю дію не можна скасувати."
     },
     "installments": {
       "title": "Розбити на внески",
@@ -1939,7 +1941,9 @@
     "total": "Усього",
     "confirmRegenerateTitle": "Перегенерувати значення?",
     "confirmRegenerate": "Параметри зростання змінено. Усі автоматично згенеровані значення буде видалено та перераховано. Ручні значення збережуться.",
-    "regenerate": "Перегенерувати"
+    "regenerate": "Перегенерувати",
+    "confirmDeleteValueTitle": "Видалити значення?",
+    "confirmDeleteValue": "Запис буде вилучено з історії значень."
   },
   "reports": {
     "section": "Аналітика",

@@ -15,9 +15,11 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription,
 } from '@/components/ui/dialog'
-import { FolderOpen, Plus, Pencil, Trash2 } from 'lucide-react'
+import { FolderOpen, Plus } from 'lucide-react'
+import { RowActions } from '@/components/ui/row-actions'
+import { SectionCard } from '@/components/ui/section-card'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import type { Collection } from '@/types'
 
 const SWATCHES = ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#8B5CF6', '#64748B']
@@ -82,7 +84,7 @@ export default function CollectionsPage() {
       />
       <p className="text-sm text-muted-foreground mb-5 max-w-2xl">{t('collections.subtitle')}</p>
 
-      <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+      <SectionCard>
         {isLoading ? (
           <div className="p-4 space-y-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
         ) : list.length === 0 ? (
@@ -106,19 +108,16 @@ export default function CollectionsPage() {
                     {c.wallet_count > 0 && ` · ${t('collections.walletCount', { count: c.wallet_count })}`}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button variant="ghost" size="icon" onClick={() => { setEditing(c); setDialogOpen(true) }} aria-label={t('common.edit')}>
-                    <Pencil size={15} />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setDeleting(c)} aria-label={t('common.delete')} className="text-muted-foreground/60 hover:text-destructive">
-                    <Trash2 size={15} />
-                  </Button>
-                </div>
+                <RowActions
+                  label={c.name}
+                  onEdit={() => { setEditing(c); setDialogOpen(true) }}
+                  onDelete={() => setDeleting(c)}
+                />
               </div>
             ))}
           </div>
         )}
-      </div>
+      </SectionCard>
 
       <CollectionDialog
         open={dialogOpen}
@@ -133,20 +132,14 @@ export default function CollectionsPage() {
         }}
       />
 
-      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
-        <DialogContent size="sm">
-          <DialogHeader>
-            <DialogTitle>{t('collections.confirmDeleteTitle')}</DialogTitle>
-            <DialogDescription>{t('collections.confirmDeleteDesc', { name: deleting?.name })}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-2">
-            <Button variant="outline" onClick={() => setDeleting(null)}>{t('common.cancel')}</Button>
-            <Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => deleting && deleteMutation.mutate(deleting.id)}>
-              {deleteMutation.isPending ? t('common.loading') : t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deleting}
+        title={t('collections.confirmDeleteTitle')}
+        description={t('collections.confirmDeleteDesc', { name: deleting?.name })}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+      />
     </div>
   )
 }

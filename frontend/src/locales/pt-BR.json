@@ -649,7 +649,9 @@
       "action": {
         "archive": "Arquivar",
         "restore": "Restaurar"
-      }
+      },
+      "confirmDeleteTitle": "Excluir produto?",
+      "confirmDeleteDescription": "\"{{name}}\" será excluído permanentemente. Esta ação não pode ser desfeita."
     },
     "installments": {
       "title": "Parcelar",
@@ -1926,7 +1928,9 @@
     "total": "Total",
     "confirmRegenerateTitle": "Regenerar valores?",
     "confirmRegenerate": "Os parâmetros de crescimento foram alterados. Todos os valores gerados automaticamente serão excluídos e recalculados. Valores manuais serão mantidos.",
-    "regenerate": "Regenerar"
+    "regenerate": "Regenerar",
+    "confirmDeleteValueTitle": "Excluir valor?",
+    "confirmDeleteValue": "Isso remove este registro do histórico de valores."
   },
   "reports": {
     "section": "Análises",

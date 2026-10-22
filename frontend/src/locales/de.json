@@ -649,7 +649,9 @@
       "action": {
         "archive": "Archivieren",
         "restore": "Wiederherstellen"
-      }
+      },
+      "confirmDeleteTitle": "Produkt löschen?",
+      "confirmDeleteDescription": "„{{name}}“ wird dauerhaft gelöscht. Das lässt sich nicht rückgängig machen."
     },
     "installments": {
       "title": "In Raten aufteilen",
@@ -1923,7 +1925,9 @@
     "total": "Gesamt",
     "confirmRegenerateTitle": "Werte neu generieren?",
     "confirmRegenerate": "Wachstumsparameter wurden geändert. Alle automatisch generierten Werte werden gelöscht und neu berechnet. Manuell eingegebene Werte bleiben erhalten.",
-    "regenerate": "Neu generieren"
+    "regenerate": "Neu generieren",
+    "confirmDeleteValueTitle": "Wert löschen?",
+    "confirmDeleteValue": "Dadurch wird der Eintrag aus dem Wertverlauf entfernt."
   },
   "reports": {
     "section": "Analysen",

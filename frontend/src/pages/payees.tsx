@@ -42,6 +42,7 @@ import {
   DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { RowActions } from '@/components/ui/row-actions'
 import { PageHeader } from '@/components/page-header'
 import { calculateRangeSelection } from '@/lib/selection-utils'
 import { PayeeDetailDialog } from '@/components/payee-detail-dialog'
@@ -52,7 +53,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Star, Merge, Trash2, ListFilter, X, Check, Pencil, Plus, ArrowDown, ArrowUp } from 'lucide-react'
+import { Search, Star, Merge, Trash2, ListFilter, X, Check, Plus, ArrowDown, ArrowUp } from 'lucide-react'
 import { useWorkspace } from '@/contexts/workspace-context'
 import type { Payee } from '@/types'
 import { payeeErrorMessage } from '@/lib/payee-error-message'
@@ -785,26 +786,16 @@ export default function PayeesPage() {
                   </TableCell>
                   {canWrite && (
                     <TableCell className="py-2.5 pr-4 sm:pr-5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                          onClick={(e) => { e.stopPropagation(); openEdit(payee) }}
-                          title={t('common.edit')}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
+                      <div className="flex items-center justify-end">
+                        <RowActions
+                          label={payee.name}
+                          onEdit={() => openEdit(payee)}
+                          onDelete={() => {
                             setPayeesToDelete([payee.id])
                             setDeleteDialogOpen(true)
                           }}
-                          disabled={deleteMutation.isPending || bulkDeleteMutation.isPending}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                          deleteDisabled={deleteMutation.isPending || bulkDeleteMutation.isPending}
+                        />
                       </div>
                     </TableCell>
                   )}

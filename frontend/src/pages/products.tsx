@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, ArchiveRestore, ArrowLeft, Package, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Package, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -24,8 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { RowActions } from '@/components/ui/row-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { PageHeader } from '@/components/page-header'
-import { IconAction, SectionCard, Segmented, TH } from '@/components/invoice-ui'
+import { SectionCard, Segmented, TH } from '@/components/invoice-ui'
 import { CurrencySelect } from '@/components/currency-select'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -60,6 +62,7 @@ export default function ProductsPage() {
   const [filter, setFilter] = useState<Filter>('active')
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<Product | 'new' | null>(null)
+  const [deleting, setDeleting] = useState<Product | null>(null)
 
   const { data: list, isLoading, isPlaceholderData } = useQuery({
     queryKey: ['products', filter],
@@ -95,6 +98,7 @@ export default function ProductsPage() {
     mutationFn: (id: string) => productsApi.remove(id),
     onSuccess: () => {
       toast.success(t('invoices.products.deleted'))
+      setDeleting(null)
       refresh()
     },
     onError,
@@ -225,31 +229,29 @@ export default function ProductsPage() {
                       </td>
                       {canWrite && (
                         <td className="py-3 pr-4 sm:pr-5">
-                          <div className="flex justify-end gap-1">
-                            <IconAction onClick={() => setEditing(product)} label={t('common.edit')}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </IconAction>
-                            {actions.canArchive && (
-                              <IconAction
-                                onClick={() => archiveMutation.mutate({ id: product.id, active: false })}
-                                label={t('invoices.products.action.archive')}
-                              >
-                                <Archive className="h-3.5 w-3.5" />
-                              </IconAction>
-                            )}
-                            {actions.canRestore && (
-                              <IconAction
-                                onClick={() => archiveMutation.mutate({ id: product.id, active: true })}
-                                label={t('invoices.products.action.restore')}
-                              >
-                                <ArchiveRestore className="h-3.5 w-3.5" />
-                              </IconAction>
-                            )}
-                            {actions.canDelete && (
-                              <IconAction onClick={() => deleteMutation.mutate(product.id)} label={t('common.delete')}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </IconAction>
-                            )}
+                          <div className="flex justify-end">
+                            <RowActions
+                              label={product.name}
+                              onEdit={() => setEditing(product)}
+                              onDelete={actions.canDelete ? () => setDeleting(product) : undefined}
+                              deleteDisabled={deleteMutation.isPending}
+                              extra={[
+                                ...(actions.canArchive
+                                  ? [{
+                                      label: t('invoices.products.action.archive'),
+                                      icon: Archive,
+                                      onSelect: () => archiveMutation.mutate({ id: product.id, active: false }),
+                                    }]
+                                  : []),
+                                ...(actions.canRestore
+                                  ? [{
+                                      label: t('invoices.products.action.restore'),
+                                      icon: ArchiveRestore,
+                                      onSelect: () => archiveMutation.mutate({ id: product.id, active: true }),
+                                    }]
+                                  : []),
+                              ]}
+                            />
                           </div>
                         </td>
                       )}
@@ -262,6 +264,15 @@ export default function ProductsPage() {
         )}
       </SectionCard>
       </div>
+
+      <DeleteConfirmationDialog
+        open={!!deleting}
+        title={t('invoices.products.confirmDeleteTitle')}
+        description={t('invoices.products.confirmDeleteDescription', { name: deleting?.name })}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+      />
 
       <ProductDialog
         key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id}

@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Bot, ChevronRight, FileText, MessageSquare, Plug, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
+import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { agents } from '@/lib/api'
 import { AgentFormDialog } from '@/components/agents/agent-form-dialog'
@@ -14,6 +15,7 @@ import { useWorkspace } from '@/contexts/workspace-context'
 export default function AgentsListPage() {
   const { t } = useTranslation()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const { canWrite } = useWorkspace()
   const [createOpen, setCreateOpen] = useState(false)
   const { data: info } = useQuery({ queryKey: ['agents-info'], queryFn: () => agents.info() })
@@ -41,16 +43,14 @@ export default function AgentsListPage() {
                 title={t('agents.title')}
         action={
           canWrite ? (
-            <div className="flex items-center gap-2">
-              <Link to="/agents/connections">
-                <Button variant="outline">
-                  <Plug /> {t('agents.connections.manage')}
+            <PageActions
+              primary={
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus /> {t('agents.newAgent')}
                 </Button>
-              </Link>
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus /> {t('agents.newAgent')}
-              </Button>
-            </div>
+              }
+              items={[{ label: t('agents.connections.manage'), icon: Plug, onSelect: () => navigate('/agents/connections') }]}
+            />
           ) : undefined
         }
       />

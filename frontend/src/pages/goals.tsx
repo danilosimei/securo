@@ -25,11 +25,12 @@ import {
 } from '@/components/ui/popover'
 import type { Account, Asset, AssetGroup, Goal } from '@/types'
 import {
-  Pencil, Trash2, Plus, Pause, Play, CheckCircle2, Archive, ArchiveRestore, Target,
+  Plus, Pause, Play, CheckCircle2, Archive, ArchiveRestore, Target,
   ChevronDown,
 } from 'lucide-react'
 import { ICON_MAP } from '@/lib/category-icons'
 import { IconPicker } from '@/components/icon-picker'
+import { RowActions } from '@/components/ui/row-actions'
 import { PageHeader } from '@/components/page-header'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
@@ -334,67 +335,28 @@ export default function GoalsPage() {
 
                     {/* Actions */}
                     {canWrite && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        {goal.status === 'active' && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'paused' })}
-                            title={t('goals.pause')}
-                          >
-                            <Pause size={13} />
-                          </button>
-                        )}
-                        {goal.status === 'paused' && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'active' })}
-                            title={t('goals.resume')}
-                          >
-                            <Play size={13} />
-                          </button>
-                        )}
-                        {(goal.status === 'active' || goal.status === 'paused') && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'completed' })}
-                            title={t('goals.complete')}
-                          >
-                            <CheckCircle2 size={13} />
-                          </button>
-                        )}
-                        {goal.status !== 'archived' && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-muted-foreground/80 hover:bg-muted transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'archived' })}
-                            title={t('goals.archive')}
-                          >
-                            <Archive size={13} />
-                          </button>
-                        )}
-                        {(goal.status === 'completed' || goal.status === 'archived') && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'active' })}
-                            title={t('goals.reactivate')}
-                          >
-                            <ArchiveRestore size={13} />
-                          </button>
-                        )}
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                          onClick={() => openEditDialog(goal)}
-                          title={t('common.edit')}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
-                          onClick={() => setDeletingGoal(goal)}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+                      <RowActions
+                        label={goal.name}
+                        onEdit={() => openEditDialog(goal)}
+                        onDelete={() => setDeletingGoal(goal)}
+                        extra={[
+                          ...(goal.status === 'active'
+                            ? [{ label: t('goals.pause'), icon: Pause, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'paused' }) }]
+                            : []),
+                          ...(goal.status === 'paused'
+                            ? [{ label: t('goals.resume'), icon: Play, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'active' }) }]
+                            : []),
+                          ...(goal.status === 'active' || goal.status === 'paused'
+                            ? [{ label: t('goals.complete'), icon: CheckCircle2, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'completed' }) }]
+                            : []),
+                          ...(goal.status !== 'archived'
+                            ? [{ label: t('goals.archive'), icon: Archive, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'archived' }) }]
+                            : []),
+                          ...(goal.status === 'completed' || goal.status === 'archived'
+                            ? [{ label: t('goals.reactivate'), icon: ArchiveRestore, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'active' }) }]
+                            : []),
+                        ]}
+                      />
                     )}
                   </div>
                 </div>

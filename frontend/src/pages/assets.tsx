@@ -1,4 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { PageActions } from '@/components/page-actions'
+import { RowActions } from '@/components/ui/row-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { useUrlTab } from '@/hooks/use-url-tab'
 import { Segmented } from '@/components/invoice-ui'
 import { useTranslation } from 'react-i18next'
@@ -29,8 +32,6 @@ import {
   TrendingUp,
   Package,
   Plus,
-  Pencil,
-  Trash2,
   ChevronDown,
   ChevronUp,
   ChevronRight,
@@ -828,19 +829,14 @@ export default function AssetsPage() {
             {pctOfPortfolio != null ? `${pctOfPortfolio.toFixed(1)}%` : '—'}
           </div>
           {/* actions */}
-          <div className="flex items-center justify-end gap-0.5">
+          <div className="flex items-center justify-end">
             {canWrite && (
-              <>
-                <button onClick={(e) => { e.stopPropagation(); setMovingAsset(asset) }} title={t('assets.moveToWallet')} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                  <FolderInput size={13} />
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); if (!isProviderOwned) openEdit(asset) }} disabled={isProviderOwned} title={isProviderOwned ? t('assets.syncedReadOnly') : t('common.edit')} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                  <Pencil size={13} />
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); if (!isProviderOwned) setDeletingId(asset.id) }} disabled={isProviderOwned} title={isProviderOwned ? t('assets.syncedReadOnly') : t('common.delete')} className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                  <Trash2 size={13} />
-                </button>
-              </>
+              <RowActions
+                label={asset.name}
+                onEdit={isProviderOwned ? undefined : () => openEdit(asset)}
+                onDelete={isProviderOwned ? undefined : () => setDeletingId(asset.id)}
+                extra={[{ label: t('assets.moveToWallet'), icon: FolderInput, onSelect: () => setMovingAsset(asset) }]}
+              />
             )}
             {isExpanded ? <ChevronUp size={15} className="text-muted-foreground" /> : <ChevronDown size={15} className="text-muted-foreground" />}
           </div>
@@ -1004,24 +1000,11 @@ export default function AssetsPage() {
             {mask(formatCurrency(total, userCurrency, locale))}
           </span>
           {canWrite && (
-            <>
-              <button
-                onClick={() => openEditWallet(wallet)}
-                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                title={t('assets.editWallet')}
-              >
-                <Pencil size={12} />
-              </button>
-              {!isSynced && (
-                <button
-                  onClick={() => setDeletingWalletId(wallet.id)}
-                  className="p-1 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                  title={t('assets.deleteWallet')}
-                >
-                  <Trash2 size={12} />
-                </button>
-              )}
-            </>
+            <RowActions
+              label={wallet.name}
+              onEdit={() => openEditWallet(wallet)}
+              onDelete={isSynced ? undefined : () => setDeletingWalletId(wallet.id)}
+            />
           )}
         </div>
         {!isCollapsed && walletAssets.length > 0 && (
@@ -1045,20 +1028,18 @@ export default function AssetsPage() {
         title={t('assets.title')}
         action={
           canWrite ? (
-            <div className="flex items-center gap-2">
-              <Button onClick={() => navigate('/import?tab=investments')} variant="outline" className="gap-1.5">
-                <Upload size={16} />
-                {t('assetImport.action')}
-              </Button>
-              <Button onClick={openCreateWallet} variant="outline" className="gap-1.5">
-                <Wallet size={16} />
-                {t('assets.newWallet')}
-              </Button>
-              <Button onClick={openCreate}>
-                <Plus />
-                {t('assets.addAsset')}
-              </Button>
-            </div>
+            <PageActions
+              primary={
+                <Button onClick={openCreate}>
+                  <Plus />
+                  {t('assets.addAsset')}
+                </Button>
+              }
+              items={[
+                { label: t('assetImport.action'), icon: Upload, onSelect: () => navigate('/import?tab=investments') },
+                { label: t('assets.newWallet'), icon: Wallet, onSelect: openCreateWallet },
+              ]}
+            />
           ) : undefined
         }
       />
@@ -1559,26 +1540,14 @@ export default function AssetsPage() {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <Dialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('assets.confirmDeleteTitle')}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">{t('assets.confirmDelete')}</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingId(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => deletingId && deleteMutation.mutate(deletingId)}
-              disabled={deleteMutation.isPending}
-            >
-              {t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deletingId}
+        title={t('assets.confirmDeleteTitle')}
+        description={t('assets.confirmDelete')}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeletingId(null)}
+        onConfirm={() => deletingId && deleteMutation.mutate(deletingId)}
+      />
 
       {/* Wallet Create/Edit Dialog */}
       <Dialog open={walletDialogOpen} onOpenChange={setWalletDialogOpen}>
@@ -1629,26 +1598,14 @@ export default function AssetsPage() {
       </Dialog>
 
       {/* Delete Wallet Confirmation */}
-      <Dialog open={!!deletingWalletId} onOpenChange={() => setDeletingWalletId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('assets.confirmDeleteWalletTitle')}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">{t('assets.confirmDeleteWallet')}</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingWalletId(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => deletingWalletId && deleteWalletMutation.mutate(deletingWalletId)}
-              disabled={deleteWalletMutation.isPending}
-            >
-              {t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deletingWalletId}
+        title={t('assets.confirmDeleteWalletTitle')}
+        description={t('assets.confirmDeleteWallet')}
+        isPending={deleteWalletMutation.isPending}
+        onClose={() => setDeletingWalletId(null)}
+        onConfirm={() => deletingWalletId && deleteWalletMutation.mutate(deletingWalletId)}
+      />
 
       {/* Move Asset to Wallet Picker */}
       <Dialog open={!!movingAsset} onOpenChange={() => setMovingAsset(null)}>
@@ -2076,6 +2033,7 @@ function AssetDetail({ assetId, currency, locale: loc, dateLocale: dateLoc, purc
     onError: (e) => toast.error(assetErrorMessage(e, t('common.error'))),
   })
 
+  const [deletingValueId, setDeletingValueId] = useState<string | null>(null)
   const deleteValueMutation = useMutation({
     mutationFn: (valueId: string) => assets.deleteValue(valueId),
     onSuccess: () => {
@@ -2084,6 +2042,7 @@ function AssetDetail({ assetId, currency, locale: loc, dateLocale: dateLoc, purc
       queryClient.refetchQueries({ queryKey: ['asset-trend', assetId] })
       queryClient.refetchQueries({ queryKey: ['portfolio-trend'] })
       queryClient.refetchQueries({ queryKey: ['dashboard'] })
+      setDeletingValueId(null)
       toast.success(t('assets.valueDeleted'))
     },
     onError: (e) => toast.error(assetErrorMessage(e, t('common.error'))),
@@ -2243,14 +2202,11 @@ function AssetDetail({ assetId, currency, locale: loc, dateLocale: dateLoc, purc
                       {new Date(v.date + 'T00:00:00').toLocaleDateString(dateLoc)}
                     </span>
                     {valuationMethod === 'manual' && v.source === 'manual' && canWrite && (
-                      <button
-                        onClick={() => deleteValueMutation.mutate(v.id)}
-                        className="p-1 rounded text-muted-foreground/40 hover:text-rose-600 transition-colors"
-                        disabled={deleteValueMutation.isPending}
-                        title={t('common.delete')}
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                      <RowActions
+                        label={new Date(v.date + 'T00:00:00').toLocaleDateString(dateLoc)}
+                        onDelete={() => setDeletingValueId(v.id)}
+                        deleteDisabled={deleteValueMutation.isPending}
+                      />
                     )}
                   </div>
                 </div>
@@ -2261,6 +2217,14 @@ function AssetDetail({ assetId, currency, locale: loc, dateLocale: dateLoc, purc
           <p className="text-xs text-muted-foreground py-3 text-center">{t('dashboard.noData')}</p>
         )}
       </div>}
+      <DeleteConfirmationDialog
+        open={!!deletingValueId}
+        title={t('assets.confirmDeleteValueTitle')}
+        description={t('assets.confirmDeleteValue')}
+        isPending={deleteValueMutation.isPending}
+        onClose={() => setDeletingValueId(null)}
+        onConfirm={() => deletingValueId && deleteValueMutation.mutate(deletingValueId)}
+      />
     </div>
   )
 }
@@ -2509,22 +2473,11 @@ function AssetTransactionsTab({
                   )}
                 </div>
                 {canWrite && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => openEdit(tx)}
-                      title={t('common.edit')}
-                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => setDeletingId(tx.id)}
-                      title={t('common.delete')}
-                      className="p-1.5 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  <RowActions
+                    label={tx.ticker || tx.asset_name || ''}
+                    onEdit={() => openEdit(tx)}
+                    onDelete={() => setDeletingId(tx.id)}
+                  />
                 )}
               </div>
             )
@@ -2655,20 +2608,14 @@ function AssetTransactionsTab({
       </Dialog>
 
       {/* Delete confirmation */}
-      <Dialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('assets.confirmDeleteTxTitle')}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">{t('assets.confirmDeleteTx')}</p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingId(null)}>{t('common.cancel')}</Button>
-            <Button variant="destructive" onClick={() => deletingId && deleteMutation.mutate(deletingId)} disabled={deleteMutation.isPending}>
-              {t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deletingId}
+        title={t('assets.confirmDeleteTxTitle')}
+        description={t('assets.confirmDeleteTx')}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeletingId(null)}
+        onConfirm={() => deletingId && deleteMutation.mutate(deletingId)}
+      />
     </div>
   )
 }
@@ -2700,12 +2647,14 @@ function HoldingLedger({
     queryFn: () => assets.transactions(asset.id),
   })
 
+  const [deletingTxId, setDeletingTxId] = useState<string | null>(null)
   const deleteMutation = useMutation({
     mutationFn: (id: string) => assets.deleteTransaction(id),
     onSuccess: () => {
       queryClient.refetchQueries({ queryKey: ['asset-transactions', asset.id] })
       queryClient.refetchQueries({ queryKey: ['asset-transactions'] })
       onChanged()
+      setDeletingTxId(null)
       toast.success(t('assets.txDeleted'))
     },
     onError: (e) => toast.error(assetErrorMessage(e, t('common.error'))),
@@ -2746,19 +2695,24 @@ function HoldingLedger({
                 {mask(formatCurrency(tx.quantity * tx.price, asset.currency, locale))}
               </span>
               {canWrite && (
-                <button
-                  onClick={() => deleteMutation.mutate(tx.id)}
-                  disabled={deleteMutation.isPending}
-                  className="p-1 rounded text-muted-foreground/50 hover:text-rose-600 transition-colors"
-                  title={t('common.delete')}
-                >
-                  <Trash2 size={12} />
-                </button>
+                <RowActions
+                  label={asset.name}
+                  onDelete={() => setDeletingTxId(tx.id)}
+                  deleteDisabled={deleteMutation.isPending}
+                />
               )}
             </div>
           ))}
         </div>
       )}
+      <DeleteConfirmationDialog
+        open={!!deletingTxId}
+        title={t('assets.confirmDeleteTxTitle')}
+        description={t('assets.confirmDeleteTx')}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeletingTxId(null)}
+        onConfirm={() => deletingTxId && deleteMutation.mutate(deletingTxId)}
+      />
     </div>
   )
 }

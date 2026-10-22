@@ -649,7 +649,9 @@
       "action": {
         "archive": "Termék archiválása",
         "restore": "Termék visszaállítása"
-      }
+      },
+      "confirmDeleteTitle": "Törlöd a terméket?",
+      "confirmDeleteDescription": "A(z) „{{name}}” véglegesen törlődik. Ez nem vonható vissza."
     },
     "installments": {
       "title": "Részletekre bontás",
@@ -1922,7 +1924,9 @@
     "total": "Összesen",
     "confirmRegenerateTitle": "Újragenerálod az értékeket?",
     "confirmRegenerate": "A növekedési paraméterek megváltoztak. Az összes automatikusan generált érték törlődik és újraszámolódik. A kézi értékek megmaradnak.",
-    "regenerate": "Újragenerálás"
+    "regenerate": "Újragenerálás",
+    "confirmDeleteValueTitle": "Törlöd az értéket?",
+    "confirmDeleteValue": "Ez eltávolítja a bejegyzést az értéktörténetből."
   },
   "reports": {
     "section": "Elemzések",

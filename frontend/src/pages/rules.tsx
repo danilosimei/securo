@@ -19,8 +19,10 @@ import {
 import type { Category, Payee, Rule, RuleAction, RuleCondition, RuleConditionNode, RuleExportPayload } from '@/types'
 import { isConditionGroup } from '@/lib/rule-conditions'
 import { normalizeRuleMatchValue, ruleSearchText } from '@/lib/rule-match-utils'
-import { Trash2, Plus, RefreshCw, Package, Check, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Search, Power } from 'lucide-react'
+import { Plus, RefreshCw, Package, Check, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Search, Power } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { RowActions } from '@/components/ui/row-actions'
+import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { RuleDialog } from '@/components/rule-dialog'
@@ -417,11 +419,39 @@ export default function RulesPage() {
         title={t('nav.rules')}
         action={
           canWrite && tab === 'rules' ? (
-            <Button onClick={openCreate}>
-              <Plus /> {t('rules.add')}
-            </Button>
+            <PageActions
+              primary={
+                <Button onClick={openCreate}>
+                  <Plus /> {t('rules.add')}
+                </Button>
+              }
+              items={[
+                { label: t('rules.export'), icon: Download, onSelect: () => exportMutation.mutate(), disabled: exportMutation.isPending },
+                { label: t('rules.import'), icon: Upload, onSelect: () => importInputRef.current?.click(), disabled: importMutation.isPending },
+                { label: t('rules.packs'), icon: Package, onSelect: () => setPacksDialogOpen(true) },
+                {
+                  label: t('rules.resetAndReapplyAll'),
+                  icon: RefreshCw,
+                  onSelect: () => {
+                    if (window.confirm(t('rules.confirmResetAndReapplyAll'))) applyAllMutation.mutate()
+                  },
+                  disabled: applyAllMutation.isPending,
+                },
+              ]}
+            />
           ) : undefined
         }
+      />
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) void handleImportFile(file)
+        }}
       />
 
       <div className="mb-4">
@@ -469,65 +499,6 @@ export default function RulesPage() {
         <SectionHeader
           title={t('rules.sectionTitle')}
           description={t('rules.sectionHint')}
-          action={
-            canWrite ? (
-              <div className="flex gap-2">
-                <input
-                  ref={importInputRef}
-                  type="file"
-                  accept="application/json,.json"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file) void handleImportFile(file)
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => exportMutation.mutate()}
-                  disabled={exportMutation.isPending}
-                >
-                  <Download size={12} />
-                  <span className="hidden sm:inline">{t('rules.export')}</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => importInputRef.current?.click()}
-                  disabled={importMutation.isPending}
-                >
-                  <Upload size={12} />
-                  <span className="hidden sm:inline">{t('rules.import')}</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => setPacksDialogOpen(true)}
-                >
-                  <Package size={12} />
-                  <span className="hidden sm:inline">{t('rules.packs')}</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => {
-                    if (window.confirm(t('rules.confirmResetAndReapplyAll'))) {
-                      applyAllMutation.mutate()
-                    }
-                  }}
-                  disabled={applyAllMutation.isPending}
-                >
-                  <RefreshCw size={12} />
-                  <span className="hidden sm:inline">{t('rules.resetAndReapplyAll')}</span>
-                </Button>
-              </div>
-            ) : undefined
-          }
         />
         <div className="px-4 sm:px-5 py-2 bg-muted/50 border-b border-border flex flex-wrap items-center gap-2">
           <div className="flex min-w-[10rem] flex-1 items-center gap-1.5">
@@ -634,36 +605,21 @@ export default function RulesPage() {
                     </p>
                   </div>
                   {canWrite && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      {/* Stopping a rule and deleting it are different
-                          decisions, and only one of them was reachable
-                          from here. The other was a checkbox inside the
-                          editor, so switching a rule off meant opening
-                          it, finding the box, and saving a form you did
-                          not want to change. It lives on the row now, in
-                          the same place and the same shape as on a
-                          matching rule below. */}
-                      <button
-                        className={cn(
-                          'p-1.5 rounded-md transition-colors hover:bg-background',
-                          rule.is_active
-                            ? 'text-emerald-600 hover:text-emerald-700'
-                            : 'text-muted-foreground hover:text-foreground',
-                        )}
-                        onClick={(e) => { e.stopPropagation(); toggleMutation.mutate(rule) }}
-                        disabled={toggleMutation.isPending}
-                        title={t(rule.is_active ? 'rules.turnOff' : 'rules.turnOn')}
-                      >
-                        <Power size={13} />
-                      </button>
-                      <button
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                        onClick={(e) => { e.stopPropagation(); setDeletingRule(rule) }}
-                        disabled={deleteMutation.isPending}
-                        title={t('common.delete')}
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    <div className="shrink-0">
+                      <RowActions
+                        label={rule.name}
+                        onEdit={() => openEdit(rule)}
+                        onDelete={() => setDeletingRule(rule)}
+                        deleteDisabled={deleteMutation.isPending}
+                        extra={[
+                          {
+                            label: t(rule.is_active ? 'rules.turnOff' : 'rules.turnOn'),
+                            icon: Power,
+                            onSelect: () => toggleMutation.mutate(rule),
+                            disabled: toggleMutation.isPending,
+                          },
+                        ]}
+                      />
                     </div>
                   )}
                 </div>

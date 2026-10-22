@@ -1,3 +1,5 @@
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { RowActions } from '@/components/ui/row-actions'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
@@ -32,7 +34,7 @@ import { PageHeader } from '@/components/page-header'
 import { TimezoneSettings } from '@/components/timezone-settings'
 import { setThemeBasedOnSystem } from '@/lib/theme-utils'
 import { useLocalAuthEnabled } from '@/hooks/use-local-auth'
-import { Search, Plus, Trash2, Shield, ShieldOff, UserCog, Users, Scale, Tag, Palette, Save, Hash, CalendarDays } from 'lucide-react'
+import { Search, Plus, Shield, ShieldOff, UserCog, Users, Scale, Tag, Palette, Save, Hash, CalendarDays } from 'lucide-react'
 import type { AdminUser } from '@/types'
 
 export default function AdminSettingsPage() {
@@ -319,10 +321,10 @@ export default function AdminSettingsPage() {
         ) : (
           <div className="divide-y divide-border/40">
             {filteredUsers.map((u) => (
+              <div key={u.id} className="flex items-center gap-2 pr-3 hover:bg-muted/40 transition-colors">
               <button
-                key={u.id}
                 onClick={() => openEdit(u)}
-                className="flex items-center gap-4 w-full px-5 py-3.5 text-left hover:bg-muted/40 transition-colors"
+                className="flex min-w-0 flex-1 items-center gap-4 pl-5 pr-2 py-3.5 text-left"
               >
                 <Avatar className="h-9 w-9 shrink-0">
                   <AvatarFallback className={u.is_superuser ? 'bg-primary/15 text-primary text-xs font-semibold' : 'bg-muted text-muted-foreground text-xs font-semibold'}>
@@ -353,18 +355,12 @@ export default function AdminSettingsPage() {
                   {u.is_superuser && (
                     <Shield size={14} className="text-primary" />
                   )}
-                  {!isSelf(u) && (
-                    <span
-                      role="button"
-                      onClick={(e) => { e.stopPropagation(); setDeleteUser(u) }}
-                      className="p-1.5 rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      title={t('common.delete')}
-                    >
-                      <Trash2 size={14} />
-                    </span>
-                  )}
                 </div>
               </button>
+              {!isSelf(u) && (
+                <RowActions label={u.email} onEdit={() => openEdit(u)} onDelete={() => setDeleteUser(u)} />
+              )}
+              </div>
             ))}
           </div>
         )}
@@ -806,28 +802,14 @@ export default function AdminSettingsPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
-        <DialogContent size="sm">
-          <DialogHeader>
-            <DialogTitle>{t('admin.users.confirmDeleteTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('admin.users.confirmDeleteDesc', { email: deleteUser?.email })}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-2">
-            <Button variant="outline" onClick={() => setDeleteUser(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteUser && deleteMutation.mutate(deleteUser.id)}
-            >
-              {deleteMutation.isPending ? t('common.loading') : t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deleteUser}
+        title={t('admin.users.confirmDeleteTitle')}
+        description={t('admin.users.confirmDeleteDesc', { email: deleteUser?.email })}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeleteUser(null)}
+        onConfirm={() => deleteUser && deleteMutation.mutate(deleteUser.id)}
+      />
     </div>
   )
 }

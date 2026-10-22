@@ -649,7 +649,9 @@
       "action": {
         "archive": "Archive",
         "restore": "Restore"
-      }
+      },
+      "confirmDeleteTitle": "Delete product?",
+      "confirmDeleteDescription": "\"{{name}}\" will be permanently deleted. This can't be undone."
     },
     "installments": {
       "title": "Split into installments",
@@ -1922,7 +1924,9 @@
     "total": "Total",
     "confirmRegenerateTitle": "Regenerate values?",
     "confirmRegenerate": "Growth parameters changed. All automatically generated values will be deleted and recalculated. Manual values will be kept.",
-    "regenerate": "Regenerate"
+    "regenerate": "Regenerate",
+    "confirmDeleteValueTitle": "Delete value?",
+    "confirmDeleteValue": "This removes the entry from the value history."
   },
   "reports": {
     "section": "Analytics",

@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Edit2, Trash2, Plus, MessageSquare } from 'lucide-react'
+import { ArrowLeft, Plus, MessageSquare } from 'lucide-react'
 import { ConversationRow } from '@/components/agents/conversation-row'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { RowActions } from '@/components/ui/row-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { Segmented } from '@/components/invoice-ui'
 import { useUrlTab } from '@/hooks/use-url-tab'
 import { agents } from '@/lib/api'
@@ -22,6 +24,7 @@ export default function AgentDetailPage() {
   const qc = useQueryClient()
   const { canWrite } = useWorkspace()
   const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [tab, setTab] = useUrlTab(['chat', 'knowledge', 'tools'] as const)
   const [conversationId, setConversationId] = useState<string | null>(null)
   // Increments on every sidebar click so the chat input refocuses even
@@ -95,22 +98,11 @@ export default function AgentDetailPage() {
           </div>
         </div>
         {canWrite && (
-          <>
-            <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-              <Edit2 className="h-3.5 w-3.5 mr-1.5" /> {t('agents.detail.edit')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (confirm(t('agents.detail.deleteConfirm'))) {
-                  removeMut.mutate()
-                }
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> {t('agents.detail.delete')}
-            </Button>
-          </>
+          <RowActions
+            label={agent.name}
+            onEdit={() => setEditOpen(true)}
+            onDelete={() => setDeleteOpen(true)}
+          />
         )}
       </div>
 
@@ -191,6 +183,15 @@ export default function AgentDetailPage() {
           </div>
         )}
       </div>
+
+      <DeleteConfirmationDialog
+        open={deleteOpen}
+        title={t('agents.detail.delete')}
+        description={t('agents.detail.deleteConfirm')}
+        isPending={removeMut.isPending}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => removeMut.mutate()}
+      />
 
       <AgentFormDialog open={editOpen} onOpenChange={setEditOpen} agent={agent} providers={info?.providers ?? []} />
     </div>

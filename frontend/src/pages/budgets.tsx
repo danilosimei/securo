@@ -17,7 +17,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { Budget } from '@/types'
-import { Pencil, Trash2, Plus, Repeat } from 'lucide-react'
+import { Plus, Repeat } from 'lucide-react'
+import { RowActions } from '@/components/ui/row-actions'
 import { PageHeader } from '@/components/page-header'
 import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import { CategoryIcon } from '@/components/category-icon'
@@ -142,7 +143,7 @@ export default function BudgetsPage() {
               <tr className="border-b border-border">
                 <th className={`${TH} pl-4 sm:pl-5 text-left`}>{t('budgets.category')}</th>
                 <th className={`${TH} text-left w-36`}>{t('budgets.amount')}</th>
-                {canWrite && <th className={`${TH} pr-4 sm:pr-5 text-right w-24`}>{t('budgets.actions')}</th>}
+                {canWrite && <th className={`${TH} pr-4 sm:pr-5 text-right w-16`}>{t('budgets.actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -161,24 +162,13 @@ export default function BudgetsPage() {
                   <td className="py-3 text-sm font-semibold tabular-nums text-foreground">{mask(formatCurrency(budget.amount, userCurrency, locale))}</td>
                   {canWrite && (
                     <td className="py-3 pr-4 sm:pr-5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                          onClick={() => { setEditing(budget); setDialogOpen(true) }}
-                          aria-label={t('common.edit')}
-                          title={t('common.edit')}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                          onClick={() => setDeletingBudget(budget)}
-                          disabled={deleteMutation.isPending}
-                          aria-label={t('common.delete')}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                      <div className="flex items-center justify-end">
+                        <RowActions
+                          label={findCategoryReference(displayCategories, budget.category_id)?.name ?? t('budgets.category')}
+                          onEdit={() => { setEditing(budget); setDialogOpen(true) }}
+                          onDelete={() => setDeletingBudget(budget)}
+                          deleteDisabled={deleteMutation.isPending}
+                        />
                       </div>
                     </td>
                   )}

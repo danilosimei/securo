@@ -649,7 +649,9 @@
       "action": {
         "archive": "संग्रहीत करें",
         "restore": "बहाल करें"
-      }
+      },
+      "confirmDeleteTitle": "उत्पाद हटाएं?",
+      "confirmDeleteDescription": "\"{{name}}\" हमेशा के लिए हटा दिया जाएगा। यह कार्रवाई पूर्ववत नहीं की जा सकती।"
     },
     "installments": {
       "title": "किस्तों में बाँटें",
@@ -1922,7 +1924,9 @@
     "total": "कुल",
     "confirmRegenerateTitle": "मूल्य दोबारा बनाएँ?",
     "confirmRegenerate": "वृद्धि पैरामीटर बदले। अपने आप बने सभी मूल्य हटा दिए जाएँगे और दोबारा गणना किए जाएँगे। मैन्युअल मूल्य रखे जाएँगे।",
-    "regenerate": "दोबारा बनाएँ"
+    "regenerate": "दोबारा बनाएँ",
+    "confirmDeleteValueTitle": "मान हटाएं?",
+    "confirmDeleteValue": "यह प्रविष्टि मान इतिहास से हटा दी जाएगी।"
   },
   "reports": {
     "section": "एनालिटिक्स",

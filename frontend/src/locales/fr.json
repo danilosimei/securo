@@ -649,7 +649,9 @@
       "action": {
         "archive": "Archiver",
         "restore": "Restaurer"
-      }
+      },
+      "confirmDeleteTitle": "Supprimer le produit ?",
+      "confirmDeleteDescription": "« {{name}} » sera supprimé définitivement. Cette action est irréversible."
     },
     "installments": {
       "title": "Fractionner en échéances",
@@ -1926,7 +1928,9 @@
     "total": "Total",
     "confirmRegenerateTitle": "Régénérer les valeurs ?",
     "confirmRegenerate": "Les paramètres de croissance ont changé. Toutes les valeurs générées automatiquement seront supprimées et recalculées. Les valeurs manuelles seront conservées.",
-    "regenerate": "Régénérer"
+    "regenerate": "Régénérer",
+    "confirmDeleteValueTitle": "Supprimer la valeur ?",
+    "confirmDeleteValue": "Cela retire l'entrée de l'historique des valeurs."
   },
   "reports": {
     "section": "Analyses",

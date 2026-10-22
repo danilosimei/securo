@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { categories as categoriesApi, categoryGroups as groupsApi } from '@/lib/api'
@@ -19,7 +19,9 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { Category, CategoryGroup, CategoryUsage, ReportKind } from '@/types'
-import { Pencil, Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff, WandSparkles } from 'lucide-react'
+import { Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff, WandSparkles } from 'lucide-react'
+import { RowActions } from '@/components/ui/row-actions'
+import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { invalidateCategoryQueries } from '@/lib/invalidate-queries'
 import { CategoryIcon } from '@/components/category-icon'
@@ -39,6 +41,7 @@ export default function CategoriesPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { canWrite } = useWorkspace()
+  const navigate = useNavigate()
   const [catDialogOpen, setCatDialogOpen] = useState(false)
   const [editingCat, setEditingCat] = useState<Category | null>(null)
   const [formIcon, setFormIcon] = useState('circle-help')
@@ -275,32 +278,23 @@ export default function CategoriesPage() {
         <span className="text-xs text-muted-foreground font-mono">{cat.color}</span>
       </div>
       {canWrite && (
-        <div className="flex items-center gap-1 shrink-0 ml-2">
-          <button
-            className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-            onClick={() => openCatDialog(cat)}
-            title={t('common.edit')}
-          >
-            <Pencil size={13} />
-          </button>
-          {cat.is_system && (
-            <button
-              className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-              onClick={() => handleToggleHidden(cat)}
-              disabled={updateCatMutation.isPending || hideCatMutation.isPending}
-              title={cat.is_hidden ? t('categories.showDefault') : t('categories.hideDefault')}
-            >
-              {cat.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}
-            </button>
-          )}
-          <button
-            className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-            onClick={() => handleDeleteCategory(cat)}
-            disabled={deleteCatMutation.isPending}
-            title={t('common.delete')}
-          >
-            <Trash2 size={13} />
-          </button>
+        <div className="shrink-0 ml-2">
+          <RowActions
+            label={cat.name}
+            onEdit={() => openCatDialog(cat)}
+            onDelete={() => handleDeleteCategory(cat)}
+            deleteDisabled={deleteCatMutation.isPending}
+            extra={
+              cat.is_system
+                ? [{
+                    label: cat.is_hidden ? t('categories.showDefault') : t('categories.hideDefault'),
+                    icon: cat.is_hidden ? Eye : EyeOff,
+                    onSelect: () => handleToggleHidden(cat),
+                    disabled: updateCatMutation.isPending || hideCatMutation.isPending,
+                  }]
+                : []
+            }
+          />
         </div>
       )}
     </div>
@@ -312,11 +306,19 @@ export default function CategoriesPage() {
         section={t('nav.groupOrganization')}
         title={t('categories.title')}
         action={
-          canWrite ? (
-            <Button onClick={() => openCatDialog(null)}>
-              <Plus /> {t('categories.addCategory')}
-            </Button>
-          ) : undefined
+          <PageActions
+            primary={
+              canWrite ? (
+                <Button onClick={() => openCatDialog(null)}>
+                  <Plus /> {t('categories.addCategory')}
+                </Button>
+              ) : undefined
+            }
+            items={[
+              { label: t('categories.organizeWithAi'), icon: WandSparkles, onSelect: () => navigate('/categorization?tab=organize') },
+              ...(canWrite ? [{ label: t('groups.add'), icon: Plus, onSelect: () => openGroupDialog(null) }] : []),
+            ]}
+          />
         }
       />
 
@@ -344,20 +346,6 @@ export default function CategoriesPage() {
               {groups && groups.every((g) => collapsedGroups.has(g.id)) ? t('categories.expandAll') : t('categories.collapseAll')}
             </button>
           }
-          action={
-            <div className="flex gap-2">
-              <Button variant="ghost" asChild>
-                <Link to="/categorization?tab=organize" aria-label={t('categories.organizeWithAi')} title={t('categories.organizeWithAi')}>
-                  <WandSparkles /> <span className="hidden sm:inline">{t('categories.organizeWithAi')}</span>
-                </Link>
-              </Button>
-              {canWrite && (
-                <Button variant="outline" onClick={() => openGroupDialog(null)} aria-label={t('groups.add')} title={t('groups.add')}>
-                  <Plus /> <span className="hidden sm:inline">{t('groups.add')}</span>
-                </Button>
-              )}
-            </div>
-          }
         />
         <div>
           {groups?.map((group) => {
@@ -376,32 +364,23 @@ export default function CategoriesPage() {
                     <span className="text-xs text-muted-foreground">({group.categories.length})</span>
                   </button>
                   {canWrite && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                        onClick={() => openGroupDialog(group)}
-                        title={t('common.edit')}
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      {group.is_system && (
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                          onClick={() => updateGroupMutation.mutate({ id: group.id, is_hidden: !group.is_hidden })}
-                          disabled={updateGroupMutation.isPending}
-                          title={group.is_hidden ? t('groups.showDefault') : t('groups.hideDefault')}
-                        >
-                          {group.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}
-                        </button>
-                      )}
-                      <button
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                        onClick={() => setDeletingGroup(group)}
-                        disabled={deleteGroupMutation.isPending}
-                        title={t('common.delete')}
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    <div className="shrink-0">
+                      <RowActions
+                        label={group.name}
+                        onEdit={() => openGroupDialog(group)}
+                        onDelete={() => setDeletingGroup(group)}
+                        deleteDisabled={deleteGroupMutation.isPending}
+                        extra={
+                          group.is_system
+                            ? [{
+                                label: group.is_hidden ? t('groups.showDefault') : t('groups.hideDefault'),
+                                icon: group.is_hidden ? Eye : EyeOff,
+                                onSelect: () => updateGroupMutation.mutate({ id: group.id, is_hidden: !group.is_hidden }),
+                                disabled: updateGroupMutation.isPending,
+                              }]
+                            : []
+                        }
+                      />
                     </div>
                   )}
                 </div>
