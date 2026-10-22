@@ -52,36 +52,7 @@ import { DatePickerInput } from '@/components/ui/date-picker-input'
 import { PageHeader } from '@/components/page-header'
 import type { GroupMember, GroupSettlement, Transaction } from '@/types'
 import { formatCurrency } from '@/lib/format'
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {children}
-    </div>
-  )
-}
-
-function SectionHeader({
-  title,
-  description,
-  action,
-}: {
-  title: string
-  description?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-        )}
-      </div>
-      {action}
-    </div>
-  )
-}
+import { SectionCard, SectionHeader } from '@/components/ui/section-card'
 
 interface KpiBreakdownItem {
   name: string

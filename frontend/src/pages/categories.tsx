@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
@@ -26,6 +26,7 @@ import { CategoryIcon } from '@/components/category-icon'
 import { CategorySelect } from '@/components/category-select'
 import { IconPicker } from '@/components/icon-picker'
 import { useWorkspace } from '@/contexts/workspace-context'
+import { SectionCard, SectionHeader } from '@/components/ui/section-card'
 
 const DESCRIPTION_MAX = 300
 const REPORT_KINDS: { value: ReportKind; label: string; help: string }[] = [
@@ -33,25 +34,6 @@ const REPORT_KINDS: { value: ReportKind; label: string; help: string }[] = [
   { value: 'income', label: 'categories.reportKindIncome', help: 'categories.reportKindIncomeHelp' },
   { value: 'refund', label: 'categories.reportKindRefund', help: 'categories.reportKindRefundHelp' },
 ]
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {children}
-    </div>
-  )
-}
-function SectionHeader({ title, titleExtra, action }: { title: string; titleExtra?: React.ReactNode; action?: React.ReactNode }) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-      <div className="flex items-center gap-3">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {titleExtra}
-      </div>
-      {action}
-    </div>
-  )
-}
 
 export default function CategoriesPage() {
   const { t } = useTranslation()

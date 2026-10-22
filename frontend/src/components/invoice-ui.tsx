@@ -11,50 +11,7 @@ import type { InvoiceState } from '@/types'
  * the product is the thing to avoid.
  */
 
-/** The card every section sits in. Same shell as `recurring`. */
-export function SectionCard({
-  children,
-  className = '',
-}: {
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <div
-      className={cn(
-        'bg-card rounded-xl border border-border shadow-sm overflow-hidden',
-        className,
-      )}
-    >
-      {children}
-    </div>
-  )
-}
-
-export function SectionHeader({
-  title,
-  description,
-  action,
-}: {
-  title: string
-  /** One line under the title, for a section whose rule is not obvious
-   *  from its rows (what a "term" is, say). */
-  description?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
-      </div>
-      {action}
-    </div>
-  )
-}
-
-/** Table header cell. Byte-identical to the constant in `recurring`. */
-export const TH = 'text-xs font-medium text-muted-foreground py-3'
+export { SectionCard, SectionHeader, TH } from '@/components/ui/section-card'
 
 /**
  * State pill, in the app's badge shape.

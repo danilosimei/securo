@@ -30,38 +30,7 @@ import { ReconciliationHistory } from '@/components/reconciliation-history'
 import { Segmented } from '@/components/invoice-ui'
 import { reconciliation as reconciliationApi } from '@/lib/api'
 import { findCategoryReference, getRuleCategoryName } from '@/lib/category-reference-utils'
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {children}
-    </div>
-  )
-}
-
-function SectionHeader({
-  title,
-  hint,
-  action,
-}: {
-  title: string
-  /** One line saying what this list of rules decides. The matching card
-   *  carried one and this one did not, so the two cards answered
-   *  different questions: one told you what it was for, the other
-   *  assumed you knew. */
-  hint?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-start justify-between gap-2">
-      <div>
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {hint && <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>}
-      </div>
-      {action}
-    </div>
-  )
-}
+import { SectionCard, SectionHeader } from '@/components/ui/section-card'
 
 const CONDITION_FIELDS = [
   { value: 'description', label: 'rules.fieldDescription' },
@@ -499,7 +468,7 @@ export default function RulesPage() {
       <SectionCard>
         <SectionHeader
           title={t('rules.sectionTitle')}
-          hint={t('rules.sectionHint')}
+          description={t('rules.sectionHint')}
           action={
             canWrite ? (
               <div className="flex gap-2">
