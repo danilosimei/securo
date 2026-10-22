@@ -71,6 +71,10 @@ TRANSFER_MARK = " (movimentação)"
 #: Previous choices per store sent as `h`.
 HISTORY_LIMIT = 3
 
+#: The sentence that tells the model how to read descriptions and corrections;
+#: the evaluation script drops it to rebuild the previous prompt.
+RULES_NOTE = " A descrição depois dos dois-pontos numa categoria é a regra dela para o que entra ali, e as correções são a preferência dela onde a sugestão anterior errou: siga as duas."
+
 INSTRUCTIONS = """Você categoriza as transações bancárias e de cartão de crédito de uma pessoa no Brasil. As transações chegam agrupadas por loja: decida uma vez por item e a decisão vale para todas as transações daquele item.
 
 ## Entrada (mensagem do usuário)
@@ -96,7 +100,7 @@ Um objeto por item recebido, sem omitir nenhum, com os campos nesta ordem:
 - new: só quando nenhuma categoria da lista serve razoavelmente: {"g": grupo, "name": nome}, curtos e em português, no estilo da árvore existente (de preferência um grupo que já existe). Caso contrário, null. Com new, c continua sendo a categoria mais próxima, se houver, ou null.
 
 ## Como decidir
-1. O histórico h e os exemplos desta pessoa são os sinais mais fortes: a mesma loja, ou uma muito parecida, vai para a categoria que ela já usou. Os exemplos mostram também como ela organiza (se ela põe padaria em Mercado, siga isso). A descrição depois dos dois-pontos numa categoria é a regra dela para o que entra ali, e as correções são a preferência dela onde a sugestão anterior errou: siga as duas.
+1. O histórico h e os exemplos desta pessoa são os sinais mais fortes: a mesma loja, ou uma muito parecida, vai para a categoria que ela já usou. Os exemplos mostram também como ela organiza (se ela põe padaria em Mercado, siga isso).{RULES_NOTE}
 2. Depois: o que a loja vende, o sentido (t), a recorrência (m) e o tipo de conta (a).
 3. Na dúvida entre duas categorias, ponha a melhor em c, a outra em alt e baixe p.
 4. Categorias marcadas "(movimentação)" são para dinheiro que só muda de lugar (entre contas, cartão e aplicações); nunca as use para compras.
@@ -121,6 +125,8 @@ Um objeto por item recebido, sem omitir nenhum, com os campos nesta ordem:
 - Supermercados (Carrefour, Assaí, Pão de Açúcar), farmácias (Drogasil, Raia, Pague Menos), postos (Shell, Ipiranga, BR) e contas de luz, água, gás, internet e celular: use a categoria correspondente desta pessoa.
 
 Responda apenas no formato pedido."""
+INSTRUCTIONS = INSTRUCTIONS.replace("{RULES_NOTE}", RULES_NOTE)
+
 
 
 def _one_line(text: str) -> str:

@@ -535,3 +535,9 @@ def test_category_context_is_the_cached_tree_block():
         "Exemplos desta pessoa (loja -> id), até 3 por categoria, dos mais usados para os menos usados:\n"
         "(nenhum ainda)"
     )
+
+
+def test_instructions_tell_the_model_to_follow_descriptions_and_corrections():
+    from app.services.categorization.prompts import INSTRUCTIONS, RULES_NOTE
+
+    assert RULES_NOTE in INSTRUCTIONS and "{RULES_NOTE}" not in INSTRUCTIONS
