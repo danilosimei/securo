@@ -309,7 +309,7 @@ export default function CategoriesPage() {
   return (
     <div>
       <PageHeader
-        section={t('categories.title')}
+        section={t('nav.groupOrganization')}
         title={t('categories.title')}
         action={
           canWrite ? (

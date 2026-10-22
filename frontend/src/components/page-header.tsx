@@ -2,7 +2,8 @@
 import { PeriodSlot } from '@/components/reports/period-selector'
 
 interface PageHeaderProps {
-  section: string
+  /** The menu group the page sits in; left out for pages with none. */
+  section?: string
   title: string
   action?: React.ReactNode
   /** The page's period control. It sits where Reports puts its own: at the
@@ -14,9 +15,11 @@ interface PageHeaderProps {
 export function PageHeader({ section, title, action, period }: PageHeaderProps) {
   const heading = (
     <div>
-      <p className="text-xs font-medium text-muted-foreground mb-0.5">
-        {section}
-      </p>
+      {section && (
+        <p className="text-xs font-medium text-muted-foreground mb-0.5">
+          {section}
+        </p>
+      )}
       <h1 className="text-2xl font-semibold text-foreground tracking-tight">{title}</h1>
     </div>
   )

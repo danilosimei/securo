@@ -654,8 +654,8 @@ export default function ImportPage() {
       {/* The title follows the tab: "Bank statement" is about the file you
           are uploading, and an order file is not one. */}
       <PageHeader
-        section={t('import.title')}
-        title={tab === 'investments' ? t('assetImport.title') : t('import.subtitle')}
+        section={t('nav.groupDaily')}
+        title={t('nav.import')}
       />
 
       <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5">

@@ -163,7 +163,7 @@ export default function InvoicesPage() {
   return (
     <div>
       <PageHeader
-        section={t('invoices.section')}
+        section={t('nav.groupDaily')}
         title={t('invoices.title')}
         action={
           <div className="flex items-center gap-2">

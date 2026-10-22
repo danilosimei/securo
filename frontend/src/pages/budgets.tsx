@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
-import { monthLabel } from '@/lib/month-utils'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { categories as categoriesApi, categoryGroups as groupsApi, budgets as budgetsApi } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
@@ -119,13 +118,12 @@ export default function BudgetsPage() {
   }
 
   const uiLocale = i18n.resolvedLanguage ?? i18n.language
-  const monthTitle = monthLabel(selectedMonth, uiLocale).replace(/^\w/, c => c.toUpperCase())
 
   return (
     <div>
       <PageHeader
-        section={t('budgets.title')}
-        title={monthTitle}
+        section={t('nav.groupPlanning')}
+        title={t('budgets.title')}
         action={
           canWrite ? (
             <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>

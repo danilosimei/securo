@@ -230,7 +230,7 @@ export default function AccountsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        section={t('accounts.title')}
+        section={t('nav.groupDaily')}
         title={t('accounts.title')}
         action={
           <AccountPageActions

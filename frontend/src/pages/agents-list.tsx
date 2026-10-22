@@ -38,8 +38,7 @@ export default function AgentsListPage() {
   return (
     <div>
       <PageHeader
-        section={t('agents.title')}
-        title={t('agents.title')}
+                title={t('agents.title')}
         action={
           canWrite ? (
             <div className="flex items-center gap-2">

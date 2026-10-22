@@ -1352,7 +1352,7 @@ export default function TransactionsPage() {
   return (
     <div>
       <PageHeader
-        section={t('transactions.section')}
+        section={t('nav.groupDaily')}
         title={t('transactions.title')}
         action={
           <TransactionsPageActions

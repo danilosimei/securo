@@ -132,7 +132,7 @@ export default function RecurringPage() {
   return (
     <div>
       <PageHeader
-        section={t('recurring.title')}
+        section={t('nav.groupPlanning')}
         title={t('recurring.title')}
         action={
           canWrite ? (

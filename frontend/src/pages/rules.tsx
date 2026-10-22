@@ -413,7 +413,7 @@ export default function RulesPage() {
   return (
     <div>
       <PageHeader
-        section={t('rules.section')}
+        section={t('nav.groupOrganization')}
         title={t('nav.rules')}
         action={
           canWrite && tab === 'rules' ? (

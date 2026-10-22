@@ -461,7 +461,7 @@ export default function PayeesPage() {
   return (
     <div>
       <PageHeader
-        section={t('payees.section')}
+        section={t('nav.groupOrganization')}
         title={t('payees.title')}
         action={
           canWrite ? (

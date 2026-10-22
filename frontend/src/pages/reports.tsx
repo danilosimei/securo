@@ -647,8 +647,8 @@ export default function ReportsPage() {
     <ReportRangeProvider>
     <div>
       <PageHeader
-        section={t('reports.section')}
-        title={t(currentTab.labelKey)}
+        section={t('nav.groupAnalysis')}
+        title={t('nav.reports')}
       />
 
       {/* Tabs and the period share one row on a desktop, the period at the

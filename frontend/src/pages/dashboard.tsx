@@ -97,16 +97,9 @@ export default function DashboardPage() {
   const isMobile = useIsMobile()
   const { user } = useAuth()
   const userCurrency = user?.preferences?.currency_display ?? 'USD'
-  const displayName = user?.preferences?.display_name || ''
   const locale = useDisplayLocale()
   const dateLocale = useDateLocale()
 
-  const greeting = (() => {
-    const hour = new Date().getHours()
-    const key = hour < 12 ? 'greetingMorning' : hour < 18 ? 'greetingAfternoon' : 'greetingEvening'
-    const base = t(`dashboard.${key}`)
-    return displayName ? `${base}, ${displayName}` : base
-  })()
   const [searchParams, setSearchParams] = useSearchParams()
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     return parseMonthFromParams(searchParams) ?? currentMonth()
@@ -594,8 +587,7 @@ export default function DashboardPage() {
     <div>
       {/* Header */}
       <PageHeader
-        section={greeting}
-        title={monthLabel(selectedMonth, uiLocale).replace(/^\w/, c => c.toUpperCase())}
+        title={t('nav.dashboard')}
         period={<MonthPeriodSelector value={selectedMonth} onChange={handleMonthChange} locale={uiLocale} />}
       />
 

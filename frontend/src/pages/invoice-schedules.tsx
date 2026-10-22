@@ -107,7 +107,7 @@ export default function InvoiceSchedulesPage() {
       </button>
 
       <PageHeader
-        section={t('invoices.title')}
+        section={t('nav.groupDaily')}
         title={t('invoices.schedules.title')}
         action={
           canWrite ? (

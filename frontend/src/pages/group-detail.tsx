@@ -533,7 +533,7 @@ export default function GroupDetailPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        section={t('splitGroups.section')}
+        section={t('nav.groupOrganization')}
         title={group.name}
         action={
           <div className="flex items-center gap-2">

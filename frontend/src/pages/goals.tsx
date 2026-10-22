@@ -222,7 +222,7 @@ export default function GoalsPage() {
   return (
     <div>
       <PageHeader
-        section={t('goals.title')}
+        section={t('nav.groupPlanning')}
         title={t('goals.title')}
         action={
           canWrite ? (

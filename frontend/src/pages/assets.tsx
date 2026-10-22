@@ -1039,7 +1039,7 @@ export default function AssetsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        section={t('assets.title')}
+        section={t('nav.groupAnalysis')}
         title={t('assets.title')}
         action={
           canWrite ? (

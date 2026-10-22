@@ -149,7 +149,7 @@ export default function GroupsPage() {
   return (
     <div>
       <PageHeader
-        section={t('splitGroups.section')}
+        section={t('nav.groupOrganization')}
         title={t('splitGroups.title')}
         action={
           canWrite ? (

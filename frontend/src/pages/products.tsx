@@ -125,7 +125,7 @@ export default function ProductsPage() {
       </button>
 
       <PageHeader
-        section={t('invoices.title')}
+        section={t('nav.groupDaily')}
         title={t('invoices.products.title')}
         action={
           canWrite ? (
