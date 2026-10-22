@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { FormDialogFooter } from '@/components/form-dialog-footer'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
@@ -540,12 +541,20 @@ export default function CategoriesPage() {
                 </label>
               </div>
             </div>
-            <DialogFooter className="mt-2 shrink-0 border-t pt-4">
-              <Button type="button" variant="outline" onClick={() => { setCatDialogOpen(false); setEditingCat(null) }}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit">{t('common.save')}</Button>
-            </DialogFooter>
+            <FormDialogFooter
+              className="mt-2 shrink-0 border-t pt-4"
+              onCancel={() => { setCatDialogOpen(false); setEditingCat(null) }}
+              onDelete={
+                editingCat
+                  ? () => {
+                      const category = editingCat
+                      setCatDialogOpen(false)
+                      setEditingCat(null)
+                      handleDeleteCategory(category)
+                    }
+                  : undefined
+              }
+            />
           </form>
         </DialogContent>
       </Dialog>
@@ -592,12 +601,19 @@ export default function CategoriesPage() {
               <IconPicker value={groupFormIcon} color={groupFormColor} onChange={setGroupFormIcon} />
               <input type="hidden" name="icon" value={groupFormIcon} />
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setGroupDialogOpen(false); setEditingGroup(null) }}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit">{t('common.save')}</Button>
-            </DialogFooter>
+            <FormDialogFooter
+              onCancel={() => { setGroupDialogOpen(false); setEditingGroup(null) }}
+              onDelete={
+                editingGroup
+                  ? () => {
+                      const group = editingGroup
+                      setGroupDialogOpen(false)
+                      setEditingGroup(null)
+                      setDeletingGroup(group)
+                    }
+                  : undefined
+              }
+            />
           </form>
         </DialogContent>
       </Dialog>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { FormDialogFooter } from '@/components/form-dialog-footer'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
@@ -20,7 +21,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog'
 import type { Category, CategoryGroup, RecurringTransaction } from '@/types'
 import { Plus, RefreshCw, Repeat, Info } from 'lucide-react'
@@ -265,6 +265,7 @@ export default function RecurringPage() {
               }
             }}
             onCancel={() => { setDialogOpen(false); setEditing(null) }}
+            onDelete={editing ? () => { setDeletingRecurring(editing); setDialogOpen(false); setEditing(null) } : undefined}
             loading={createMutation.isPending || updateMutation.isPending}
           />
         </DialogContent>
@@ -290,6 +291,7 @@ function RecurringForm({
   accounts,
   onSave,
   onCancel,
+  onDelete,
   loading,
 }: {
   recurring: RecurringTransaction | null
@@ -299,6 +301,7 @@ function RecurringForm({
   accounts: { id: string; name: string; display_name?: string | null }[]
   onSave: (data: Partial<RecurringTransaction>) => void
   onCancel: () => void
+  onDelete?: () => void
   loading: boolean
 }) {
   const { t } = useTranslation()
@@ -467,12 +470,12 @@ function RecurringForm({
           <span className="text-sm text-foreground">{t('recurring.active')}</span>
         </label>
       )}
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>{t('common.cancel')}</Button>
-        <Button type="submit" disabled={loading}>
-          {loading ? t('common.loading') : t('common.save')}
-        </Button>
-      </DialogFooter>
+      <FormDialogFooter
+        onCancel={onCancel}
+        onDelete={onDelete}
+        saveDisabled={loading}
+        saveLabel={loading ? t('common.loading') : t('common.save')}
+      />
     </form>
   )
 }

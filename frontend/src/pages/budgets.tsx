@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { FormDialogFooter } from '@/components/form-dialog-footer'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
@@ -17,7 +18,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog'
 import type { Budget } from '@/types'
 import { PiggyBank, Plus, Repeat } from 'lucide-react'
@@ -265,14 +265,11 @@ export default function BudgetsPage() {
                 required
               />
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); setEditing(null) }}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                {t('common.save')}
-              </Button>
-            </DialogFooter>
+            <FormDialogFooter
+              onCancel={() => { setDialogOpen(false); setEditing(null) }}
+              saveDisabled={createMutation.isPending || updateMutation.isPending}
+              onDelete={editing ? () => { setDeletingBudget(editing); setDialogOpen(false); setEditing(null) } : undefined}
+            />
           </form>
         </DialogContent>
       </Dialog>

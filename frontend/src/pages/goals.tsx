@@ -1,4 +1,6 @@
 import { createElement, useState } from 'react'
+import { FormDialogFooter } from '@/components/form-dialog-footer'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
@@ -19,7 +21,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog'
 import {
   Popover,
@@ -581,41 +582,23 @@ export default function GoalsPage() {
               </Popover>
             </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); setEditing(null) }}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                {t('common.save')}
-              </Button>
-            </DialogFooter>
+            <FormDialogFooter
+              onCancel={() => { setDialogOpen(false); setEditing(null) }}
+              saveDisabled={createMutation.isPending || updateMutation.isPending}
+              onDelete={editing ? () => { setDeletingGoal(editing); setDialogOpen(false); setEditing(null) } : undefined}
+            />
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Confirm delete dialog */}
-      <Dialog open={!!deletingGoal} onOpenChange={() => setDeletingGoal(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('goals.confirmDeleteTitle')}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {t('goals.confirmDeleteDesc', { name: deletingGoal?.name })}
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingGoal(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => deletingGoal && deleteMutation.mutate(deletingGoal.id)}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? t('common.loading') : t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deletingGoal}
+        title={t('goals.confirmDeleteTitle')}
+        description={t('goals.confirmDeleteDesc', { name: deletingGoal?.name })}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeletingGoal(null)}
+        onConfirm={() => deletingGoal && deleteMutation.mutate(deletingGoal.id)}
+      />
     </div>
   )
 }

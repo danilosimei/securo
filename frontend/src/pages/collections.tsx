@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { FormDialogFooter } from '@/components/form-dialog-footer'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
@@ -17,7 +18,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog'
 import { FolderOpen, Plus } from 'lucide-react'
 import { RowActions } from '@/components/ui/row-actions'
@@ -138,6 +138,7 @@ export default function CollectionsPage() {
         accounts={sortAccountsByDisplayName(accounts ?? []).map((a) => ({ id: a.id, label: accountName.get(a.id) ?? a.name, currency: a.currency }))}
         wallets={(wallets ?? []).map((w) => ({ id: w.id, label: w.name }))}
         loading={createMutation.isPending || updateMutation.isPending}
+        onDelete={(item) => { setDialogOpen(false); setEditing(null); setDeleting(item) }}
         onSave={(payload) => {
           if (editing) updateMutation.mutate({ id: editing.id, ...payload })
           else createMutation.mutate(payload)
@@ -157,7 +158,7 @@ export default function CollectionsPage() {
 }
 
 function CollectionDialog({
-  open, onClose, collection, accounts, wallets, loading, onSave,
+  open, onClose, collection, accounts, wallets, loading, onSave, onDelete,
 }: {
   open: boolean
   onClose: () => void
@@ -166,6 +167,7 @@ function CollectionDialog({
   wallets: { id: string; label: string }[]
   loading: boolean
   onSave: (payload: { name: string; color: string; account_ids: string[]; wallet_ids: string[] }) => void
+  onDelete: (collection: Collection) => void
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
@@ -270,12 +272,12 @@ function CollectionDialog({
             </div>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
-            <Button type="submit" disabled={loading || !name.trim()}>
-              {loading ? t('common.loading') : t('common.save')}
-            </Button>
-          </DialogFooter>
+          <FormDialogFooter
+            onCancel={onClose}
+            onDelete={collection ? () => onDelete(collection) : undefined}
+            saveDisabled={loading || !name.trim()}
+            saveLabel={loading ? t('common.loading') : t('common.save')}
+          />
         </form>
       </DialogContent>
     </Dialog>
