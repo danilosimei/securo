@@ -92,6 +92,22 @@ describe('OverviewTab', () => {
     expect(screen.getByTestId('highlight-to_review')).toHaveAttribute('href', '/categorization')
   })
 
+  it('the spike card follows the month the server names, not the priciest bar', async () => {
+    const data = overviewFixture()
+    data.highlights = data.highlights.map((h) =>
+      h.rule === 'spike' ? { ...h, link: { tab: 'explore', period: 'custom', from: '2026-07-01', to: '2026-07-31' } } : h,
+    )
+    api.reports.overview.mockImplementation((params: ReportPeriodParams) =>
+      Promise.resolve(params.period === 'custom' ? previousOverview() : data),
+    )
+    renderTab()
+
+    expect(await screen.findByTestId('highlight-spike')).toHaveAttribute(
+      'href',
+      '/reports?tab=explore&period=custom&from=2026-07-01&to=2026-07-31',
+    )
+  })
+
   it('lists what changed as diverging bars, and a click opens the group in Explore', async () => {
     const { user } = renderTab()
 

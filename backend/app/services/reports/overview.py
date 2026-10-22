@@ -384,7 +384,8 @@ async def _highlights(
                         f"{_month_name(month.start)} foi {_number_pt(ratio, 1)}× a mediana",
                         top.spending,
                         explain,
-                        link(),
+                        # Opens the month that spiked, not the whole period.
+                        _link("custom", *month.segment),
                     )
                 )
 

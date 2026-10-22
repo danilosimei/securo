@@ -3,7 +3,7 @@
 import type { OverviewChange, OverviewHighlight, OverviewMonth, OverviewResponse, ReportPeriodParams } from '@/lib/api'
 import { isReportPeriod } from '@/lib/report-period'
 import type { GroupPalette } from '@/components/reports/common/group-colors'
-import { exploreLink, monthExploreLink, tabLink, type ReportLink } from '@/components/reports/common/report-url'
+import { exploreLink, tabLink, type ReportLink } from '@/components/reports/common/report-url'
 
 /** A month at this multiple of the median month (or more) is a spike. */
 export const SPIKE_MULTIPLE = 1.5
@@ -26,7 +26,8 @@ export function changesSummary(changes: OverviewChange[]) {
 }
 
 /** Where a highlight card leads. The server's link names Explore and its
- *  filters; a few rules have a better home of their own. */
+ *  filters (the spike's is the month that spiked); a few rules have a better
+ *  home of their own. */
 export function highlightLink(
   highlight: OverviewHighlight,
   data: OverviewResponse,
@@ -35,11 +36,6 @@ export function highlightLink(
 ): ReportLink {
   const link = highlight.link ?? {}
   if (highlight.rule === 'to_review') return { to: '/categorization' }
-  if (highlight.rule === 'spike') {
-    // The month that spiked is the most expensive one of the period.
-    const peak = [...data.monthly].sort((a, b) => Number(b.spending) - Number(a.spending))[0]
-    if (peak) return monthExploreLink(peak.month)
-  }
   if (highlight.rule === 'recurring_new_or_up' && !link.merchant) return tabLink('recurring', query)
   if (link.tab && link.tab !== 'explore') return tabLink(link.tab, query)
   const period = isReportPeriod(link.period) ? link.period : query.period

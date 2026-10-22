@@ -60,7 +60,7 @@ export function overviewFixture(overrides: Partial<OverviewResponse> = {}): Over
         title: 'Setembro foi 2,1× a mediana',
         value: '75803.12',
         compare: 'Impostos +R$ 20 mil',
-        link: { tab: 'explore', period: 'last_month' },
+        link: { tab: 'explore', period: 'custom', from: '2026-09-01', to: '2026-09-30' },
       },
       {
         rule: 'to_review',

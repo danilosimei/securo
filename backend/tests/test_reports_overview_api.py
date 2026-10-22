@@ -151,7 +151,10 @@ async def test_spike_fires_above_one_and_a_half_times_the_median(client, auth_he
     assert spike["title"] == "Set/26 foi 2,5× a mediana"
     assert spike["value"] == "2500.00"
     assert spike["compare"] == "Carro +R$ 1,5 mil"
-    assert spike["link"] == {"tab": "explore", "period": "last_6m"}
+    # The link opens the month that spiked, not the whole period.
+    assert spike["link"] == {
+        "tab": "explore", "period": "custom", "from": "2026-09-01", "to": "2026-09-30",
+    }
 
 
 @pytest.mark.asyncio
@@ -314,6 +317,9 @@ async def test_custom_period_keeps_its_dates_in_the_links(client, auth_headers, 
     world["add"]("Oficina", "combustivel", 1500, date(2026, 9, 10))
     await world["session"].commit()
     body = await _get(client, auth_headers, period="custom", **{"from": "2026-04-01", "to": "2026-09-30"})
+    link = _rules(body)["heavy_group"]["link"]
+    assert (link["period"], link["from"], link["to"]) == ("custom", "2026-04-01", "2026-09-30")
+    # The spike still opens its own month.
     assert _rules(body)["spike"]["link"] == {
-        "tab": "explore", "period": "custom", "from": "2026-04-01", "to": "2026-09-30",
+        "tab": "explore", "period": "custom", "from": "2026-09-01", "to": "2026-09-30",
     }
