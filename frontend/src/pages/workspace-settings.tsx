@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { SectionCard } from '@/components/ui/section-card'
 import { PageHeader } from '@/components/page-header'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -296,7 +297,7 @@ export default function WorkspaceSettingsPage() {
       <PageHeader title={t('workspace.settingsMenu')} />
 
       {/* Identity card — name + role + stats strip */}
-      <section className="rounded-xl border bg-card overflow-hidden">
+      <SectionCard>
         <div className="p-6 flex items-center gap-5 border-b">
           <CategoryIcon
             icon={current.icon ?? DEFAULT_WORKSPACE_ICON}
@@ -337,10 +338,10 @@ export default function WorkspaceSettingsPage() {
           <StatTile label={t('workspace.statTransactions', 'Transações')} value={String(stats.transactions)} />
           <StatTile label={t('workspace.statCreatedAt', 'Criado em')} value={formatDate(current.created_at, localeForFormat)} />
         </div>
-      </section>
+      </SectionCard>
 
       {/* Details card — 4-column form */}
-      <section className="space-y-4 rounded-xl border bg-card p-6">
+      <SectionCard className="space-y-4 p-6 overflow-visible">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">{t('workspace.details')}</h2>
           {canManage && (
@@ -507,10 +508,10 @@ export default function WorkspaceSettingsPage() {
             </div>
           </div>
         </div>
-      </section>
+      </SectionCard>
 
       {/* Members card */}
-      <section className="space-y-4 rounded-xl border bg-card p-6">
+      <SectionCard className="space-y-4 p-6 overflow-visible">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -598,13 +599,13 @@ export default function WorkspaceSettingsPage() {
             })}
           </ul>
         )}
-      </section>
+      </SectionCard>
 
       <CategorizationSettingsSection />
 
       {/* Danger zone — owners only */}
       {canManage && (
-        <section className="space-y-4 rounded-xl border bg-card p-6">
+        <SectionCard className="space-y-4 p-6 overflow-visible">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
@@ -635,7 +636,7 @@ export default function WorkspaceSettingsPage() {
               {t('workspace.archive', 'Arquivar')}
             </Button>
           </div>
-        </section>
+        </SectionCard>
       )}
 
       {/* Invite dialog */}

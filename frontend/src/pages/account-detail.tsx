@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { SectionCard } from '@/components/ui/section-card'
 import { PageHeader } from '@/components/page-header'
 import { PageActions } from '@/components/page-actions'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -1387,7 +1388,7 @@ export default function AccountDetailPage() {
         const strokeSolid = dataMin >= 0 ? '#10B981' : '#F43F5E'
         const lastBalance = balances.length > 0 ? balances[balances.length - 1] : 0
         return (
-      <div className="bg-card rounded-xl border border-border shadow-sm mb-6">
+      <SectionCard className="mb-6 overflow-visible">
         <div className="px-5 pt-5 pb-3">
           <p className="text-base font-bold text-foreground">
             {isCreditCard ? t('accounts.cycleSpending') : t('dashboard.balanceFlow')}
@@ -1498,12 +1499,12 @@ export default function AccountDetailPage() {
             <p className="text-muted-foreground text-sm text-center py-12">{t('dashboard.noData')}</p>
           )}
         </div>
-      </div>
+      </SectionCard>
         )
       })()}
 
       {/* Transaction table */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+      <SectionCard>
         <div className="px-5 py-4 border-b border-border">
           <p className="font-semibold text-foreground">{t('transactions.title')}</p>
         </div>
@@ -1682,7 +1683,7 @@ export default function AccountDetailPage() {
             </div>
           )}
         </div>
-      </div>
+      </SectionCard>
 
       <TransactionDialog
         onCategoryUndone={(txId, categoryId, source) =>

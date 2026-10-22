@@ -371,7 +371,7 @@ export default function AdminSettingsPage() {
 
       {/* Theme and Customization Section */}
       <div className="grid grid-cols-1 gap-6 mb-8">
-        <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+        <SectionCard>
           <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Palette size={15} className="text-muted-foreground" />
@@ -424,11 +424,11 @@ export default function AdminSettingsPage() {
               </div>
             </div>
           </div>
-        </div>
+        </SectionCard>
       </div>
 
       {/* Accounting section */}
-      <div className="rounded-xl border border-border/60 bg-card overflow-hidden mb-8">
+      <SectionCard className="mb-8">
         <div className="px-5 py-4 border-b border-border/40">
           <div className="flex items-center gap-2 mb-0.5">
             <Scale size={15} className="text-muted-foreground" />
@@ -466,10 +466,10 @@ export default function AdminSettingsPage() {
             </div>
           </button>
         </div>
-      </div>
+      </SectionCard>
 
       {/* Provider categories toggle */}
-      <div className="rounded-xl border border-border/60 bg-card overflow-hidden mb-8">
+      <SectionCard className="mb-8">
         <div className="px-5 py-4 border-b border-border/40">
           <div className="flex items-center gap-2 mb-0.5">
             <Tag size={15} className="text-muted-foreground" />
@@ -492,7 +492,7 @@ export default function AdminSettingsPage() {
             />
           </button>
         </div>
-      </div>
+      </SectionCard>
 
       {/* Number / date format */}
       <div className="rounded-xl border border-border/60 bg-card overflow-hidden mb-8">

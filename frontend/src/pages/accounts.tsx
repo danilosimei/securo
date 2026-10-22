@@ -256,7 +256,7 @@ export default function AccountsPage() {
       ) : (
         <div className="space-y-6">
           {/* Manual Accounts */}
-          <div className="bg-card rounded-xl border border-border shadow-sm">
+          <SectionCard className="overflow-visible">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
               <h2 className="text-sm font-medium text-muted-foreground">{t('accounts.manualAccounts')}</h2>
             </div>
@@ -328,7 +328,7 @@ export default function AccountsPage() {
                 }
               />
             )}
-          </div>
+          </SectionCard>
 
           {/* Bank Connections */}
           {connectionsList && connectionsList.length > 0 ? (
@@ -338,7 +338,7 @@ export default function AccountsPage() {
                 const needsReconnect = conn.status !== 'active'
                 const syncPending = syncMutation.isPending && syncMutation.variables === conn.id
                 return (
-                  <div key={conn.id} className="bg-card rounded-xl border border-border shadow-sm">
+                  <SectionCard key={conn.id} className="overflow-visible">
                     {/* Connection header */}
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <div className="flex items-center gap-3">
@@ -477,7 +477,7 @@ export default function AccountsPage() {
                         </p>
                       </div>
                     )}
-                  </div>
+                  </SectionCard>
                 )
               })}
             </div>
@@ -499,7 +499,7 @@ export default function AccountsPage() {
 
           {/* Closed Accounts */}
           {closedAccounts.length > 0 && (
-            <div className="bg-card rounded-xl border border-border shadow-sm opacity-60">
+            <SectionCard className="opacity-60 overflow-visible">
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                 <h2 className="text-sm font-medium text-muted-foreground">{t('accounts.closedAccounts')}</h2>
               </div>
@@ -529,7 +529,7 @@ export default function AccountsPage() {
                   )
                 })}
               </div>
-            </div>
+            </SectionCard>
           )}
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from 'react'
+import { SectionCard } from '@/components/ui/section-card'
 import { useUrlTab } from '@/hooks/use-url-tab'
 import { Segmented } from '@/components/invoice-ui'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
@@ -357,7 +358,7 @@ function TransactionImportPanel() {
 
       {/* Review section */}
       {previewData && (
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <SectionCard>
           {/* Header */}
           <div className="px-5 py-4 border-b border-border">
             <div className="flex items-center justify-between">
@@ -589,7 +590,7 @@ function TransactionImportPanel() {
                 : t('import.importButton', { count: includedCount })}
             </Button>
           </div>
-        </div>
+        </SectionCard>
       )}
 
       <ImportHistory entity="transactions" />

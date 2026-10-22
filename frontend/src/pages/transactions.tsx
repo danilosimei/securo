@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { SectionCard } from '@/components/ui/section-card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { ListSkeleton } from '@/components/ui/list-skeleton'
@@ -1544,7 +1545,7 @@ export default function TransactionsPage() {
       {/* Table / Mobile Cards */}
       {viewMode === 'list' && isError && <ErrorState error={error} onRetry={() => refetch()} />}
       {viewMode === 'list' && !isError && (
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
+      <SectionCard className="mb-4">
         {isLoading ? (
           <ListSkeleton rows={5} />
         ) : isMobile ? (
@@ -1761,7 +1762,7 @@ export default function TransactionsPage() {
             }}
           />
         )}
-      </div>
+      </SectionCard>
       )}
       {viewMode === 'list' && selectedIds.size > 0 && <div className="h-16" aria-hidden="true" />}
 
