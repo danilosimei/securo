@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 
 import BudgetsPage from '@/pages/budgets'
+import { rememberMonth } from '@/hooks/use-month-param'
 import { renderWithProviders, t } from '@/test/utils'
 
 const api = vi.hoisted(() => ({
@@ -53,5 +54,17 @@ describe('Budgets month', () => {
     await user.click(within(group).getByRole('button', { name: t('common.previousMonth') }))
     await waitFor(() => expect(api.budgets.list).toHaveBeenCalledWith('2026-09-01'))
     expect(within(group).getByTestId('period-menu')).toHaveTextContent('September 2026')
+  })
+
+  it('opens on the month last chosen on another page, and the URL wins over it', async () => {
+    rememberMonth('2026-07')
+    renderWithProviders(<BudgetsPage />)
+    await waitFor(() => expect(api.budgets.list).toHaveBeenCalledWith('2026-07-01'))
+  })
+
+  it('reads the month from the URL', async () => {
+    rememberMonth('2026-07')
+    renderWithProviders(<BudgetsPage />, { route: '/?month=2026-03' })
+    await waitFor(() => expect(api.budgets.list).toHaveBeenCalledWith('2026-03-01'))
   })
 })

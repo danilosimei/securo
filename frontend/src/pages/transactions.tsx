@@ -35,6 +35,8 @@ import {
 import { AlertTriangle, ArrowLeftRight, ArrowUp, ArrowDown, Check, Clock, HelpCircle, Info, Paperclip, Trash2, Users, X, EyeClosed, ChartNoAxesColumn, SlidersHorizontal, Receipt, ReceiptText, Plus } from 'lucide-react'
 import type { Transaction, InstallmentSeriesInput, TransactionApplyScope, TransactionEditPayload, ReconciliationSuggestion } from '@/types'
 import { RuleDialog } from '@/components/rule-dialog'
+import { readRememberedMonth, rememberMonth } from '@/hooks/use-month-param'
+import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import { PageHeader } from '@/components/page-header'
 import { calculateRangeSelection } from '@/lib/selection-utils'
 import { isManualInstallmentSeriesRow } from '@/lib/installment-series'
@@ -123,11 +125,17 @@ export default function TransactionsPage() {
   // (issue #1053), else the current month. Done in the initializer so it
   // survives effect re-runs (e.g. React StrictMode's double-invoke in
   // development).
+  const sharedMonth = readRememberedMonth() ?? currentMonth()
   const [initialRange] = useState(() => {
     const f = searchParams.get('from')
     const t = searchParams.get('to')
     if (f || t) return { from: f ?? '', to: t ?? '' }
-    return loadRange('transactions') ?? monthRange(currentMonth())
+    // A custom range last used here comes back; a whole month follows the month
+    // shared with the Dashboard and Budgets.
+    const saved = loadRange('transactions')
+    if (saved && !monthFromRange(saved.from, saved.to)) return saved
+    const urlMonth = searchParams.get('month')
+    return monthRange(urlMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(urlMonth) ? urlMonth : sharedMonth)
   })
   const [filterFrom, setFilterFrom] = useState<string>(initialRange.from)
   const [filterTo, setFilterTo] = useState<string>(initialRange.to)
@@ -136,7 +144,11 @@ export default function TransactionsPage() {
   }, [filterFrom, filterTo])
   // Month reflected by the stepper: the active range when it spans exactly one
   // full month, otherwise the current month (custom ranges still navigable).
-  const steppedMonth = monthFromRange(filterFrom, filterTo) ?? currentMonth()
+  const rangeMonth = monthFromRange(filterFrom, filterTo)
+  const steppedMonth = rangeMonth ?? sharedMonth
+  useEffect(() => {
+    if (rangeMonth) rememberMonth(rangeMonth)
+  }, [rangeMonth])
   const handleMonthChange = (ym: string) => {
     const { from, to } = monthRange(ym)
     setFilterFrom(from)
@@ -1349,13 +1361,9 @@ export default function TransactionsPage() {
       <PageHeader
         section={t('nav.groupDaily')}
         title={t('transactions.title')}
+        period={<MonthPeriodSelector value={steppedMonth} onChange={handleMonthChange} locale={i18n.resolvedLanguage ?? i18n.language} compactOnPhone />}
         action={
           <TransactionsPageActions
-            month={{
-              value: steppedMonth,
-              onChange: handleMonthChange,
-              locale: i18n.resolvedLanguage ?? i18n.language,
-            }}
             view={{
               value: viewMode,
               onChange: (value) => {

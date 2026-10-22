@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Pagination } from '@/components/ui/pagination'
 import { getAccountLabel, getAccountName, sortAccountsByAbsoluteBalance, sumAccountBalances } from '@/lib/account-utils'
 import { currentMonth, shiftMonth, monthLastDay, monthLabel, monthRange } from '@/lib/month-utils'
@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ProjectedTransactionBadge } from '@/components/projected-transaction-badge'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { useMonthParam } from '@/hooks/use-month-param'
 import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import {
   Table,
@@ -62,27 +63,6 @@ function parseHashtags(notes: string | null): string[] {
   return matches ?? []
 }
 
-const MONTH_REGEX = /^\d{4}-\d{2}$/
-const MONTH_STRING_LENGTH = 7
-
-function parseMonthFromParams(params: URLSearchParams): string | null {
-  const monthParam = params.get('month')
-  if (monthParam && MONTH_REGEX.test(monthParam)) {
-    return monthParam
-  }
-
-  const fromParam = params.get('from')
-  if (fromParam && fromParam.length >= MONTH_STRING_LENGTH) {
-    const parsedMonth = fromParam.substring(0, MONTH_STRING_LENGTH)
-    if (MONTH_REGEX.test(parsedMonth)) {
-      return parsedMonth
-    }
-  }
-
-  return null
-}
-
-
 export default function DashboardPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -94,58 +74,36 @@ export default function DashboardPage() {
   const dateLocale = useDateLocale()
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    return parseMonthFromParams(searchParams) ?? currentMonth()
-  })
+  // The month is shared with Budgets and Transactions (see useMonthParam).
+  const [selectedMonth, setSelectedMonth] = useMonthParam()
   const [drillDown, setDrillDown] = useState<DrillDownFilter | null>(null)
   // Transactions section view, mirroring the transactions page: the choice
   // lives in the URL so the section can be refreshed, bookmarked or shared.
-  const [txViewMode, setTxViewMode] = useState<TransactionsViewMode>(() => (
-    searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
-  ))
-  const [calendarSelectedDate, setCalendarSelectedDate] = useState<string>(() => searchParams.get('day') ?? '')
-
-  const prevSearchRef = useRef<string | null>(null)
-
-  // Sync state from URL when navigating (e.g. back/forward button)
-  useEffect(() => {
-    const search = searchParams.toString()
-    if (prevSearchRef.current === search) return
-    const isInitial = prevSearchRef.current === null
-    prevSearchRef.current = search
-
-    const parsedMonth = parseMonthFromParams(searchParams)
-    if (parsedMonth) {
-      setSelectedMonth(parsedMonth)
-    } else if (!isInitial) {
-      setSelectedMonth(currentMonth())
-    }
-    setTxViewMode(searchParams.get('view') === 'calendar' ? 'calendar' : 'list')
-    setCalendarSelectedDate(searchParams.get('day') ?? '')
-  }, [searchParams])
-
-  // Sync selectedMonth and the transactions view back to URL
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (selectedMonth) {
-      params.set('month', selectedMonth)
-      params.delete('from')
-      params.delete('to')
-    } else {
-      params.delete('month')
-    }
-
-    if (txViewMode === 'calendar') {
-      params.set('view', 'calendar')
-      if (calendarSelectedDate) params.set('day', calendarSelectedDate)
-      else params.delete('day')
-    } else {
-      params.delete('view')
-      params.delete('day')
-    }
-
-    setSearchParams(params, { replace: true })
-  }, [selectedMonth, txViewMode, calendarSelectedDate, setSearchParams])
+  const txViewMode: TransactionsViewMode = searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
+  const calendarSelectedDate = searchParams.get('day') ?? ''
+  const setTxViewMode = (mode: TransactionsViewMode) =>
+    setSearchParams(
+      (previous) => {
+        const params = new URLSearchParams(previous)
+        if (mode === 'calendar') params.set('view', 'calendar')
+        else {
+          params.delete('view')
+          params.delete('day')
+        }
+        return params
+      },
+      { replace: true },
+    )
+  const setCalendarSelectedDate = (day: string) =>
+    setSearchParams(
+      (previous) => {
+        const params = new URLSearchParams(previous)
+        if (day) params.set('day', day)
+        else params.delete('day')
+        return params
+      },
+      { replace: true },
+    )
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const { openRuleDialog, ruleDialogKey, ruleDialogProps } = useCreateRuleDialog()

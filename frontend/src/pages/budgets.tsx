@@ -23,6 +23,7 @@ import type { Budget } from '@/types'
 import { PiggyBank, Plus, Repeat } from 'lucide-react'
 import { RowActions } from '@/components/ui/row-actions'
 import { PageHeader } from '@/components/page-header'
+import { useMonthParam } from '@/hooks/use-month-param'
 import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import { CategoryIcon } from '@/components/category-icon'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
@@ -32,11 +33,6 @@ import { findCategoryReference } from '@/lib/category-reference-utils'
 import { formatCurrency } from '@/lib/format'
 import { SectionCard, SectionHeader, TH } from '@/components/ui/section-card'
 
-function currentMonth() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
-
 export default function BudgetsPage() {
   const { t, i18n } = useTranslation()
   const { mask } = usePrivacyMode()
@@ -45,7 +41,7 @@ export default function BudgetsPage() {
   const userCurrency = user?.preferences?.currency_display ?? 'USD'
   const locale = useDisplayLocale()
   const queryClient = useQueryClient()
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth)
+  const [selectedMonth, setSelectedMonth] = useMonthParam()
   const monthParam = `${selectedMonth}-01`
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Budget | null>(null)
