@@ -8,7 +8,6 @@ import { expectPeriod } from '@/test/report-period-actions'
 const api = vi.hoisted(() => ({
   reports: {
     netWorth: vi.fn(),
-    incomeExpenses: vi.fn(),
     cashFlow: vi.fn(),
     breakdown: vi.fn(),
   },

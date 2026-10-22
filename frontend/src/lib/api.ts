@@ -1719,30 +1719,6 @@ export const reports = {
     })
     return data
   },
-  // `days` requests an exact rolling window ending today, instead of the
-  // month-aligned window `months` produces. `startDate`/`endDate` (both
-  // required together) pin the window to an explicit calendar range and
-  // override the preset selectors on the backend.
-  incomeExpenses: async (
-    months = 12,
-    interval = 'monthly',
-    accountIds?: string[],
-    period?: string,
-    days?: number,
-    startDate?: string,
-    endDate?: string,
-  ): Promise<ReportResponse> => {
-    const extra = acctIdsParam(accountIds)
-    const { data } = await api.get('/reports/income-expenses', {
-      params: {
-        months, interval, period, days,
-        ...(startDate && endDate ? { start_date: startDate, end_date: endDate } : {}),
-        ...(extra.params ?? {}),
-      },
-      ...(extra.paramsSerializer ? { paramsSerializer: extra.paramsSerializer } : {}),
-    })
-    return data
-  },
   cashFlow: async (months = 6, interval = 'daily', baseline = false, accountIds?: string[]): Promise<ReportResponse> => {
     const extra = acctIdsParam(accountIds)
     const { data } = await api.get('/reports/cash-flow', { params: { months, interval, baseline, ...(extra.params ?? {}) }, ...(extra.paramsSerializer ? { paramsSerializer: extra.paramsSerializer } : {}) })

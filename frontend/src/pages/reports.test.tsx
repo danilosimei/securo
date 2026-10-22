@@ -13,7 +13,6 @@ const NET_WORTH = '/reports?tab=net_worth'
 const api = vi.hoisted(() => ({
   reports: {
     netWorth: vi.fn(),
-    incomeExpenses: vi.fn(),
     cashFlow: vi.fn(),
     overview: vi.fn(),
     breakdown: vi.fn(),
@@ -61,7 +60,6 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 8, 12, 12))
   vi.clearAllMocks()
   api.reports.netWorth.mockResolvedValue(emptyReport('net_worth'))
-  api.reports.incomeExpenses.mockResolvedValue(emptyReport('income_expenses'))
   api.reports.cashFlow.mockResolvedValue(emptyReport('cash_flow'))
   api.reports.overview.mockResolvedValue(overviewFixture())
   api.reports.breakdown.mockResolvedValue({
@@ -181,7 +179,6 @@ describe('Reports page, tabs', () => {
     expect(await screen.findByTestId('overview-tab')).toBeInTheDocument()
     expect(api.reports.overview).toHaveBeenCalledWith({ period: 'last_12m' })
     expect(api.reports.netWorth).not.toHaveBeenCalled()
-    expect(api.reports.incomeExpenses).not.toHaveBeenCalled()
     expect(tabButtons().map((b) => b.textContent)).toEqual([
       t('reports.overview.tab'),
       t('reports.explore.tab'),
@@ -199,7 +196,7 @@ describe('Reports page, tabs', () => {
 
     expect(await screen.findByTestId('overview-tab')).toBeInTheDocument()
     expect(api.reports.overview).toHaveBeenCalledWith({ period: 'last_3m' })
-    expect(screen.queryByRole('button', { name: t('reports.incomeExpenses') })).not.toBeInTheDocument()
+    expect(tabButtons()).toHaveLength(7)
   })
 
   it('the period follows a switch between the views on closed periods', async () => {

@@ -38,7 +38,7 @@ import { FadePanel } from '@/components/ui/fade-panel'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
-import type { ReportResponse, CategoryTrendItem } from '@/types'
+import type { ReportResponse } from '@/types'
 import { formatCurrency } from '@/lib/format'
 import { localDateString, todayInTimezone } from '@/lib/date-utils'
 import { useEffectiveTimezone } from '@/hooks/use-timezone'
@@ -74,9 +74,7 @@ function formatCompact(value: number, currency = 'USD', locale = 'en-US') {
 
 
 
-// `days` (when set) asks for an exact rolling window ending today rather than
-// the month-aligned window `months` produces.
-type RangeOption = { key: string; months: number; period?: string; days?: number }
+type RangeOption = { key: string; months: number; period?: string }
 
 const HISTORICAL_RANGE_OPTIONS: readonly RangeOption[] = [
   { key: '6m', months: 6 },
@@ -112,7 +110,6 @@ const INTERVAL_LABELS: Record<string, string> = {
 }
 
 const RANGE_LABELS: Record<string, string> = {
-  '30d': 'range30d',
   '3m': 'range3m',
   '6m': 'range6m',
   '1y': 'range1y',
@@ -145,8 +142,6 @@ interface ReportTab {
   enabled: boolean
   rangeOptions: readonly RangeOption[]
   intervalOptions: readonly { key: string; value: string }[]
-  /** Closed periods shared with Explore, instead of the rolling presets. */
-  closedPeriods?: boolean
   /** Renders its own view, period selector and URL state (Explore and the
    *  views built on the closed periods); the page's range plumbing is off. */
   selfManaged?: boolean
@@ -252,8 +247,6 @@ export default function ReportsPage() {
     saveReportsRange(activeTab, { rangeKey, from: customFrom, to: customTo, interval })
   }, [activeTab, isSelfManaged, rangeKey, customFrom, customTo, interval])
   const [compositionView, setCompositionView] = useState<string>('netWorth')
-  const [sparklineView, setSparklineView] = useState<'byExpenses' | 'byIncome'>('byExpenses')
-  const [sparklinePage, setSparklinePage] = useState(0)
   const [cashFlowBaseline, setCashFlowBaseline] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   // Active Collection filter (issue #105): scope all report tabs to its
@@ -261,8 +254,8 @@ export default function ReportsPage() {
   const { activeAccountIds, activeWalletIds } = useCollectionFilter()
   const acctIds = activeAccountIds ?? undefined
   const walletIds = activeWalletIds ?? undefined
-  // Wallet-only collection (active, zero accounts): the account-based reports
-  // (income/expenses, cash flow) have no data — only net worth (which includes
+  // Wallet-only collection (active, zero accounts): the account-based report
+  // (cash flow) has no data — only net worth (which includes
   // the wallets' assets) is meaningful.
   const noAccounts = activeAccountIds !== null && activeAccountIds.length === 0
 
@@ -271,8 +264,7 @@ export default function ReportsPage() {
   const isCashFlow = activeTab === 'cash_flow'
   const rangeOptions = currentTab.rangeOptions
   // Cash flow's forecast presets don't make sense with a past-only calendar
-  // range, so custom is only offered for the historical tabs (Net Worth,
-  // Income vs Expenses, Money Map).
+  // range, so custom is only offered for Net Worth.
   const supportsCustomRange = currentTab.supportsCustomRange
   const intervalOptions = currentTab.intervalOptions
   const isCustomRange = supportsCustomRange && rangeKey === CUSTOM_RANGE_KEY
@@ -295,10 +287,8 @@ export default function ReportsPage() {
       )
     : selectedRange.months
   const months = isCustomRange ? customMonths : selectedRange.months
-  // Closed-period tabs name the custom window to the API; the others just
-  // send its dates.
-  const period = isCustomRange ? (currentTab.closedPeriods ? 'custom' : undefined) : selectedRange.period
-  const days = isCustomRange ? undefined : selectedRange.days
+  // A custom window is sent as its dates.
+  const period = isCustomRange ? undefined : selectedRange.period
   const apiStart = hasCustomRange ? customFrom : undefined
   const apiEnd = hasCustomRange ? customTo : undefined
 
@@ -314,7 +304,6 @@ export default function ReportsPage() {
     }
     setSearchParams(next, { replace: true })
     setCompositionView(key === 'net_worth' ? 'netWorth' : 'net')
-    setSparklinePage(0)
     setSelectedDate(null)
     const remembered = storedReportsRange(nextTab)
     if (remembered) {
@@ -339,13 +328,11 @@ export default function ReportsPage() {
   }
 
   const { data, isLoading, isError, error, refetch } = useQuery<ReportResponse>({
-    queryKey: ['reports', activeTab, rangeKey, months, period ?? null, days ?? null, interval, isCashFlow ? cashFlowBaseline : false, activeAccountIds, activeWalletIds, apiStart ?? null, apiEnd ?? null],
+    queryKey: ['reports', activeTab, rangeKey, months, period ?? null, interval, isCashFlow ? cashFlowBaseline : false, activeAccountIds, activeWalletIds, apiStart ?? null, apiEnd ?? null],
     queryFn: () =>
       isCashFlow
         ? reports.cashFlow(months, interval, cashFlowBaseline, acctIds)
-        : activeTab === 'income_expenses'
-          ? reports.incomeExpenses(months, interval, acctIds, period, days, apiStart, apiEnd)
-          : reports.netWorth(months, interval, acctIds, walletIds, period, apiStart, apiEnd),
+        : reports.netWorth(months, interval, acctIds, walletIds, period, apiStart, apiEnd),
     // Only request a custom report with both committed endpoints.
     enabled: currentTab.enabled && !isSelfManaged && !(noAccounts && activeTab !== 'net_worth') && (!isCustomRange || hasCustomRange),
   })
@@ -448,9 +435,7 @@ export default function ReportsPage() {
   // Composition toggle options per report type
   const compositionOptions = activeTab === 'net_worth'
     ? ['netWorth', 'assetsAndAccounts', 'liabilities'] as const
-    : activeTab === 'income_expenses' || activeTab === 'cash_flow'
-      ? ['net', 'byIncome', 'byExpenses'] as const
-      : ['summary', 'detailed'] as const
+    : ['net', 'byIncome', 'byExpenses'] as const
 
   // Which breakdown groups are visible in each toggle state. null = show all.
   const activeCompositionGroups: Set<string> | null = (() => {
@@ -904,14 +889,6 @@ export default function ReportsPage() {
                   </div>
                 ))
               )}
-              {meta.type === 'income_expenses' && (
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-0 border-t-2 border-dashed" style={{ borderColor: '#6366F1' }} />
-                  <span className="text-[11px] text-muted-foreground">
-                    {t('reports.netIncome')}
-                  </span>
-                </div>
-              )}
               {meta.type === 'cash_flow' && (
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-0 border-t-2 border-dashed" style={{ borderColor: '#6366F1' }} />
@@ -1037,55 +1014,7 @@ export default function ReportsPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               )
-            })() : meta?.type === 'income_expenses' ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval="preserveStartEnd"
-                />
-                <YAxis
-                  tickFormatter={(v) => {
-                    if (privacyMode) return ''
-                    if (v === 0) return '0'
-                    return formatCompact(v, userCurrency, locale)
-                  }}
-                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={64}
-                  tickCount={5}
-                />
-                <Tooltip
-                  formatter={(value?: number, name?: string) => [
-                    privacyMode ? MASK : formatCurrency(value ?? 0, userCurrency, locale),
-                    name === 'value'
-                      ? t('reports.netIncome')
-                      : t(`reports.${name ?? ''}`, { defaultValue: name ?? '' }),
-                  ]}
-                  labelFormatter={(label) => label}
-                  contentStyle={tooltipStyle}
-                />
-                <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="3 3" />
-                  <Bar dataKey="income" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="expenses" fill="#F43F5E" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="projectedIncome" fill="#34D399" radius={[4, 4, 0, 0]} maxBarSize={20} fillOpacity={0.65} />
-                  <Bar dataKey="projectedExpenses" fill="#FB7185" radius={[4, 4, 0, 0]} maxBarSize={20} fillOpacity={0.65} />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#6366F1"
-                  strokeWidth={2}
-                  strokeDasharray="6 3"
-                  dot={false}
-                  activeDot={{ r: 4, fill: '#6366F1' }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-            ) : (
+            })() : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <defs>
@@ -1298,7 +1227,6 @@ export default function ReportsPage() {
                                 ? t(isHistoricalSnapshot ? 'reports.youOwed' : 'reports.youOwe', { defaultValue: isHistoricalSnapshot ? 'You Owed' : 'You Owe' })
                                 : compositionView === 'byIncome' ? t('reports.income')
                                 : compositionView === 'byExpenses' ? t('reports.expenses')
-                                : meta?.type === 'income_expenses' ? t('reports.netIncome')
                                 : t(currentTab.labelKey)}
                           </span>
                           <span className="text-base font-bold text-foreground tabular-nums">
@@ -1388,16 +1316,12 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Evolution / Category Sparklines */}
-        <div className={`lg:col-span-2 rounded-xl border shadow-sm transition-colors ${selectedDate && meta?.type !== 'income_expenses' ? 'bg-primary/5 border-primary/50' : 'bg-card border-border'}`}>
+        {/* Evolution */}
+        <div className={`lg:col-span-2 rounded-xl border shadow-sm transition-colors ${selectedDate ? 'bg-primary/5 border-primary/50' : 'bg-card border-border'}`}>
           <div className="px-5 pt-5 pb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold text-foreground">
-                {meta?.type === 'income_expenses'
-                  ? t('reports.categoryTrends')
-                  : meta?.type === 'cash_flow'
-                    ? t('reports.inflowOutflow')
-                    : t('reports.evolution')}
+                {meta?.type === 'cash_flow' ? t('reports.inflowOutflow') : t('reports.evolution')}
               </p>
               {selectedDate && (
                 <button
@@ -1410,149 +1334,7 @@ export default function ReportsPage() {
                 </button>
               )}
             </div>
-            {meta?.type === 'income_expenses' && (() => {
-              const groupKey = sparklineView === 'byIncome' ? 'income' : 'expenses'
-              const allItems = (data?.category_trend ?? []).filter((c) => c.group === groupKey)
-              const totalPages = Math.ceil(allItems.length / 6)
-              const hasPagination = totalPages > 1
-              return (
-                <div className="flex items-center gap-2">
-                  {hasPagination && (
-                    <div className="flex items-center gap-0.5">
-                      <button
-                        onClick={() => setSparklinePage((p) => Math.max(0, p - 1))}
-                        disabled={sparklinePage === 0}
-                        aria-label={t('common.previous')}
-                        className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-                      </button>
-                      <button
-                        onClick={() => setSparklinePage((p) => Math.min(totalPages - 1, p + 1))}
-                        disabled={sparklinePage >= totalPages - 1}
-                        aria-label={t('common.next')}
-                        className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex items-center rounded-lg border border-border bg-muted/30 overflow-hidden">
-                    {(['byExpenses', 'byIncome'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        onClick={() => { setSparklineView(opt); setSparklinePage(0) }}
-                        className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                          sparklineView === opt
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                        }`}
-                      >
-                        {t(`reports.${opt}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )
-            })()}
           </div>
-          {meta?.type === 'income_expenses' ? (
-            <div className="pb-4 overflow-hidden">
-              {isLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-4">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : (() => {
-                const groupKey = sparklineView === 'byIncome' ? 'income' : 'expenses'
-                const allGroupItems: CategoryTrendItem[] = (data?.category_trend ?? []).filter(
-                  (c) => c.group === groupKey
-                )
-                if (allGroupItems.length === 0) {
-                  return (
-                    <p className="text-muted-foreground text-sm text-center py-16">
-                      {t('reports.noData')}
-                    </p>
-                  )
-                }
-                const totalPages = Math.ceil(allGroupItems.length / 6)
-                const pages = Array.from({ length: totalPages }, (_, i) =>
-                  allGroupItems.slice(i * 6, i * 6 + 6)
-                )
-                return (
-                  <div
-                    className="flex"
-                    style={{
-                      transform: `translateX(-${sparklinePage * 100}%)`,
-                      transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
-                    }}
-                  >
-                    {pages.map((pageItems, pageIdx) => (
-                      <div
-                        key={pageIdx}
-                        className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full shrink-0 px-4"
-                      >
-                        {pageItems.map((item) => {
-                          const sparkData = item.series.map((s) => ({ date: s.date, v: s.value }))
-                          const gradId = `grad-${item.key}-${item.group}-p${pageIdx}`
-                          return (
-                            <div
-                              key={`${item.key}-${item.group}`}
-                              className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
-                            >
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <div
-                                  className="w-2 h-2 rounded-full shrink-0"
-                                  style={{ backgroundColor: item.color }}
-                                />
-                                <span className="text-[11px] text-muted-foreground truncate">
-                                  {item.key === 'uncategorized' ? t('reports.uncategorized') : item.key === 'other' ? t('reports.other') : item.label}
-                                </span>
-                              </div>
-                              <p className="text-xs font-bold tabular-nums text-foreground mb-1">
-                                {mask(formatCompact(item.total, userCurrency, locale))}
-                              </p>
-                              <div style={{ height: 48 }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <AreaChart data={sparkData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-                                    <defs>
-                                      <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor={item.color} stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor={item.color} stopOpacity={0.02} />
-                                      </linearGradient>
-                                    </defs>
-                                    <XAxis dataKey="date" hide />
-                                    <Tooltip
-                                      formatter={(value?: number) => [
-                                        privacyMode ? MASK : formatCurrency(value ?? 0, userCurrency, locale),
-                                        item.label,
-                                      ]}
-                                      labelFormatter={(label) => label}
-                                      contentStyle={{ ...tooltipStyle, padding: '4px 8px' }}
-                                    />
-                                    <Area
-                                      type="monotone"
-                                      dataKey="v"
-                                      stroke={item.color}
-                                      strokeWidth={1.5}
-                                      fill={`url(#${gradId})`}
-                                      dot={false}
-                                      activeDot={{ r: 2, fill: item.color }}
-                                    />
-                                  </AreaChart>
-                                </ResponsiveContainer>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()}
-            </div>
-          ) : (
           <div className="px-1 pb-4" style={{ height: 280 }}>
             {isLoading ? (
               <div className="px-4">
@@ -1678,7 +1460,6 @@ export default function ReportsPage() {
               </p>
             )}
           </div>
-          )}
         </div>
       </div>
       </>
