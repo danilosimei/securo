@@ -8,9 +8,11 @@ import { GROUPS, overviewFixture } from '@/test/reports-fixtures'
 import type { RecurringRow } from '@/lib/api'
 
 const api = vi.hoisted(() => ({
-  reports: { recurring: vi.fn(), overview: vi.fn() },
+  reports: { recurring: vi.fn(), overview: vi.fn(), endRecurring: vi.fn(), undoEndRecurring: vi.fn() },
   categoryGroups: { list: vi.fn() },
 }))
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
+const workspace = vi.hoisted(() => ({ canWrite: true }))
 
 vi.mock('@/lib/api', () => ({ reports: api.reports, categoryGroups: api.categoryGroups }))
 vi.mock('@/hooks/use-display-locale', () => ({
@@ -20,6 +22,14 @@ vi.mock('@/hooks/use-display-locale', () => ({
 vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => ({ user: { preferences: { currency_display: 'BRL' } } }),
 }))
+vi.mock('sonner', () => ({ toast }))
+vi.mock('@/contexts/workspace-context', async (importOriginal) => {
+  const { createContext } = await import('react')
+  return {
+    ...(await importOriginal<typeof import('@/contexts/workspace-context')>()),
+    WorkspaceContext: createContext(workspace),
+  }
+})
 vi.mock('@/hooks/use-privacy-mode', () => ({
   usePrivacyMode: () => ({ mask: (value: string) => value, privacyMode: false, MASK: '••••' }),
 }))
@@ -47,7 +57,7 @@ const ROWS = [
   rec('NETFLIX', 'Netflix', ['Assinaturas', 'c-subs'], 55.9, 'up', '2026-10-02'),
   rec('SON PET VIDA', 'Son Pet Vida', ['Pets', 'c-pets'], 786, 'steady'),
   rec('STELLANTIS', 'Stellantis', ['Financiamento', 'c-loan'], 4265, 'steady'),
-  rec('GYM', 'Academia', ['Saúde', 'c-health'], 120, 'stopped', '2026-05-10'),
+  { ...rec('GYM', 'Academia', ['Saúde', 'c-health'], 120, 'stopped', '2026-05-10'), ended_on: '2026-05-20' },
   rec('PIX JOAO', 'Pix João', ['Sem categoria', null], 300, 'new'),
 ]
 
@@ -58,6 +68,7 @@ function Probe() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  workspace.canWrite = true
   api.categoryGroups.list.mockResolvedValue(GROUPS)
   api.reports.recurring.mockResolvedValue(ROWS)
   // R$ 13,800 a month of spending: the active fixed costs are 39% of it.
@@ -74,23 +85,61 @@ describe('RecurringTab', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('report-headline')).toHaveTextContent(
-        'R$5,407/month in fixed costs = R$64.9K/year, 39% of spending.',
+        'You pay R$5,407 a month in fixed costs, R$64.9K a year: 39% of what you spend.',
       ),
     )
-    expect(screen.getByTestId('recurring-counts')).toHaveTextContent('Active: 4 · New: 1 · Went up: 1 · Stopped: 1')
+    expect(screen.getByText('Active: 4 · New: 1 · Went up: 1 · Ended: 1')).toBeInTheDocument()
   })
 
-  it('lists the most expensive per year first, stopped ones last, each with its status', async () => {
+  it('lists the active ones, most expensive per year first, and the ended ones apart, at the end', async () => {
     renderWithProviders(<RecurringTab />)
 
     await screen.findAllByTestId('recurring-row')
-    expect(names()).toEqual(['Stellantis', 'Son Pet Vida', 'Pix João', 'Netflix', 'Academia'])
+    expect(names()).toEqual(['Stellantis', 'Son Pet Vida', 'Pix João', 'Netflix'])
     const first = screen.getAllByTestId('recurring-row')[0]
     expect(within(first).getByTestId('status-steady')).toHaveTextContent(t('reports.recurring.status.steady'))
     expect(screen.getByTestId('status-new')).toBeInTheDocument()
     expect(screen.getByTestId('status-up')).toBeInTheDocument()
-    expect(screen.getByTestId('status-stopped')).toBeInTheDocument()
     expect(first).toHaveTextContent('R$51.2K/year')
+    const ended = screen.getByTestId('recurring-ended')
+    expect(ended).toHaveTextContent(t('reports.recurring.endedTitle', { count: 1 }))
+    const row = within(ended).getByTestId('recurring-ended-row')
+    expect(row).toHaveTextContent('Academia')
+    expect(row).toHaveTextContent(t('reports.recurring.lastCharge', { date: 'May 10, 26' }))
+  })
+
+  it('marking one as ended moves it to the ended ones now, with an undo', async () => {
+    api.reports.endRecurring.mockResolvedValue({ merchant_key: 'STELLANTIS', ended_on: '2026-10-22' })
+    api.reports.undoEndRecurring.mockResolvedValue({ merchant_key: 'STELLANTIS', ended_on: null })
+    const { user } = renderWithProviders(<RecurringTab />)
+    await screen.findAllByTestId('recurring-row')
+
+    await user.click(screen.getAllByTestId('recurring-menu')[0])
+    await user.click(await screen.findByTestId('recurring-end'))
+
+    await waitFor(() => expect(api.reports.endRecurring).toHaveBeenCalledWith('STELLANTIS'))
+    await waitFor(() => expect(toast.success).toHaveBeenCalled())
+    const [message, options] = toast.success.mock.calls[0]
+    expect(message).toBe(t('reports.recurring.endedToast'))
+    options.action.onClick()
+    await waitFor(() => expect(api.reports.undoEndRecurring).toHaveBeenCalledWith('STELLANTIS'))
+    // The list is asked again after each change.
+    await waitFor(() => expect(api.reports.recurring.mock.calls.length).toBeGreaterThanOrEqual(3))
+  })
+
+  it('an ended one marked by the person can be undone from the list', async () => {
+    api.reports.undoEndRecurring.mockResolvedValue({ merchant_key: 'GYM', ended_on: null })
+    const { user } = renderWithProviders(<RecurringTab />)
+    await user.click(await screen.findByTestId('recurring-undo'))
+    await waitFor(() => expect(api.reports.undoEndRecurring).toHaveBeenCalledWith('GYM'))
+  })
+
+  it('who can only read sees no menu and no undo', async () => {
+    workspace.canWrite = false
+    renderWithProviders(<RecurringTab />)
+    await screen.findAllByTestId('recurring-row')
+    expect(screen.queryByTestId('recurring-menu')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('recurring-undo')).not.toBeInTheDocument()
   })
 
   it('sorts by the latest charge or by name, and filters by status', async () => {
@@ -100,10 +149,10 @@ describe('RecurringTab', () => {
     await user.click(screen.getByTestId('recurring-sort-recent'))
     expect(names()[0]).toBe('Netflix')
     await user.click(screen.getByTestId('recurring-sort-name'))
-    expect(names()).toEqual(['Academia', 'Netflix', 'Pix João', 'Son Pet Vida', 'Stellantis'])
+    expect(names()).toEqual(['Netflix', 'Pix João', 'Son Pet Vida', 'Stellantis'])
 
-    await user.click(screen.getByTestId('recurring-filter-stopped'))
-    expect(names()).toEqual(['Academia'])
+    await user.click(screen.getByTestId('recurring-filter-new'))
+    expect(names()).toEqual(['Pix João'])
   })
 
   it('a charge opens its store in Explore, under its category and group', async () => {
@@ -153,7 +202,7 @@ describe('RecurringTab', () => {
     api.reports.recurring.mockRejectedValueOnce(new Error('boom'))
     const { user } = renderWithProviders(<RecurringTab />)
     await user.click(await screen.findByRole('button', { name: t('reports.common.retry') }))
-    expect(await screen.findAllByTestId('recurring-row')).toHaveLength(5)
+    expect(await screen.findAllByTestId('recurring-row')).toHaveLength(4)
   })
 
   it('shows the empty state', async () => {

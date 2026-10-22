@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { assignGroupColors, buildPalette, colorDistance, NEUTRAL_COLOR } from '@/components/reports/common/group-colors'
-import { dayTransactionsLink, exploreLink, monthExploreLink, tabLink } from '@/components/reports/common/report-url'
+import { exploreLink, monthExploreLink, tabLink } from '@/components/reports/common/report-url'
 import { formatMoneyShort, maskMoneyInText, niceTicks, sparklineMonths } from '@/components/reports/common/chart-utils'
 import { GROUPS } from '@/test/reports-fixtures'
 
@@ -50,7 +50,6 @@ describe('report links', () => {
   it('opens a whole month, another tab or a single day', () => {
     expect(monthExploreLink('2026-02').to).toBe('/reports?tab=explore&period=custom&from=2026-02-01&to=2026-02-28')
     expect(tabLink('recurring', { period: 'ytd' }).to).toBe('/reports?tab=recurring&period=ytd')
-    expect(dayTransactionsLink('2026-09-05').to).toBe('/transactions?from=2026-09-05&to=2026-09-05&type=debit')
   })
 })
 

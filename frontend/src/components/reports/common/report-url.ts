@@ -78,12 +78,6 @@ export function tabLink(tab: string, query: ReportPeriodParams): ReportLink {
   return { to: `/reports?${params}` }
 }
 
-/** The Transactions page over a single day, spending only. */
-export function dayTransactionsLink(day: string): ReportLink {
-  const params = new URLSearchParams({ from: day, to: day, type: 'debit' })
-  return { to: `/transactions?${params}` }
-}
-
 /** The period of the Reports tabs, read from and written to the URL. A
  *  custom period without both dates falls back to the default. */
 export function useReportPeriod() {

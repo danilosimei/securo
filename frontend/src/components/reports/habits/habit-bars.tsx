@@ -82,12 +82,12 @@ export function BandBars({ bands, currency, locale }: { bands: HabitsBand[]; cur
             >
               <span className="truncate text-xs font-medium text-foreground">{label}</span>
               <span className="flex min-w-0 items-center gap-1.5">
-                <span aria-hidden="true" className="h-2.5 shrink-0 rounded-r" style={{ width: `${(band.count / maxCount) * 70}%`, background: SOFT }} />
+                <span aria-hidden="true" className="h-2.5 shrink-0 rounded-r" style={{ width: `${(band.count / maxCount) * 55}%`, background: SOFT }} />
                 <span className="text-xs tabular-nums text-foreground">{band.count.toLocaleString(locale)}</span>
               </span>
               <span className="flex min-w-0 items-center gap-1.5">
-                <span aria-hidden="true" className="h-2.5 shrink-0 rounded-r bg-primary" style={{ width: `${(total / maxTotal) * 60}%` }} />
-                <span className="truncate text-xs tabular-nums text-foreground">{mask(formatMoneyShort(total, currency, locale))}</span>
+                <span aria-hidden="true" className="h-2.5 shrink-0 rounded-r bg-primary" style={{ width: `${(total / maxTotal) * 45}%` }} />
+                <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-foreground">{mask(formatMoneyShort(total, currency, locale))}</span>
               </span>
             </li>
           )
