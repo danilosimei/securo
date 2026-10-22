@@ -2257,6 +2257,41 @@
       "cardAria": "{{name}}: {{value}}, {{change}}. Otwórz w Eksploruj.",
       "showAll": "Zobacz wszystkie kategorie ({{n}})",
       "showFewer": "Pokaż mniej"
+    },
+    "recurring": {
+      "tab": "Stałe",
+      "headline": "{{month}}/mies. na koszty stałe = {{year}}/rok.",
+      "headlineShare": "{{month}}/mies. na koszty stałe = {{year}}/rok, {{share}} wydatków.",
+      "counts": "{{active}} aktywne · {{new}} nowe · {{up}} droższe · {{stopped}} zakończone",
+      "title": "Powtarzające się wydatki",
+      "description": "Wykryte z historii, bez rejestrowania. Dotknij wiersza, aby zobaczyć obciążenia.",
+      "empty": "Nie znaleziono powtarzających się wydatków.",
+      "noneInFilter": "Nic nie pasuje do filtra.",
+      "window": "Wykrywanie zawsze czyta ostatnie 12 zamkniętych miesięcy i bieżący.",
+      "status": {
+        "new": "Nowy",
+        "up": "Droższy",
+        "stopped": "Zakończony",
+        "steady": "Stały"
+      },
+      "filter": {
+        "all": "Wszystkie"
+      },
+      "sort": {
+        "year": "Najdroższe rocznie",
+        "recent": "Najnowsze",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Sklep",
+        "status": "Status",
+        "last": "Ostatnie obciążenie",
+        "month": "Miesięcznie",
+        "year": "Rocznie"
+      },
+      "perMonth": "{{value}}/mies.",
+      "perYear": "{{value}}/rok",
+      "rowAria": "{{name}}, {{status}}: {{month}} miesięcznie, {{year}} rocznie. Otwórz w Eksploruj."
     }
   },
   "payees": {

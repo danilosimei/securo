@@ -2299,6 +2299,41 @@
       "cardAria": "{{name}}: {{value}}, {{change}}. Otevřít v Prozkoumat.",
       "showAll": "Zobrazit všechny kategorie ({{n}})",
       "showFewer": "Zobrazit méně"
+    },
+    "recurring": {
+      "tab": "Fixní",
+      "headline": "{{month}}/měs. na fixní výdaje = {{year}}/rok.",
+      "headlineShare": "{{month}}/měs. na fixní výdaje = {{year}}/rok, {{share}} výdajů.",
+      "counts": "aktivní: {{active}} · nové: {{new}} · zdražily: {{up}} · skončily: {{stopped}}",
+      "title": "Opakované výdaje",
+      "description": "Nalezeno z historie, bez zadávání. Klepnutím na řádek uvidíte platby.",
+      "empty": "V historii nebyly nalezeny opakované výdaje.",
+      "noneInFilter": "Filtru nic neodpovídá.",
+      "window": "Detekce vždy čte posledních 12 uzavřených měsíců a aktuální.",
+      "status": {
+        "new": "Nový",
+        "up": "Zdražil",
+        "stopped": "Skončil",
+        "steady": "Stabilní"
+      },
+      "filter": {
+        "all": "Vše"
+      },
+      "sort": {
+        "year": "Nejdražší za rok",
+        "recent": "Nejnovější",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Obchod",
+        "status": "Stav",
+        "last": "Poslední platba",
+        "month": "Měsíčně",
+        "year": "Ročně"
+      },
+      "perMonth": "{{value}}/měs.",
+      "perYear": "{{value}}/rok",
+      "rowAria": "{{name}}, {{status}}: {{month}} měsíčně, {{year}} ročně. Otevřít v Prozkoumat."
     }
   },
   "payees": {

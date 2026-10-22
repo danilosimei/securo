@@ -2171,6 +2171,41 @@
       "cardAria": "{{name}}: {{value}}, {{change}}. Megnyitás a Felfedezésben.",
       "showAll": "Összes kategória ({{n}})",
       "showFewer": "Kevesebb"
+    },
+    "recurring": {
+      "tab": "Fix költségek",
+      "headline": "Havi {{month}} fix költség = évi {{year}}.",
+      "headlineShare": "Havi {{month}} fix költség = évi {{year}}, a kiadás {{share}}-a.",
+      "counts": "aktív: {{active}} · új: {{new}} · drágult: {{up}} · megszűnt: {{stopped}}",
+      "title": "Ismétlődő kiadások",
+      "description": "Az előzményekből, külön rögzítés nélkül. Koppints egy sorra a terhelésekért.",
+      "empty": "Nem találtunk ismétlődő kiadást.",
+      "noneInFilter": "Semmi sem felel meg a szűrőnek.",
+      "window": "A felismerés mindig az utolsó 12 lezárt hónapot és az aktuálisat nézi.",
+      "status": {
+        "new": "Új",
+        "up": "Drágult",
+        "stopped": "Megszűnt",
+        "steady": "Stabil"
+      },
+      "filter": {
+        "all": "Mind"
+      },
+      "sort": {
+        "year": "Legdrágább évente",
+        "recent": "Legutóbbi",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Kereskedő",
+        "status": "Állapot",
+        "last": "Utolsó terhelés",
+        "month": "Havonta",
+        "year": "Évente"
+      },
+      "perMonth": "havi {{value}}",
+      "perYear": "évi {{value}}",
+      "rowAria": "{{name}}, {{status}}: havi {{month}}, évi {{year}}. Megnyitás a Felfedezésben."
     }
   },
   "payees": {

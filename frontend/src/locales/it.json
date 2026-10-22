@@ -2175,6 +2175,41 @@
       "cardAria": "{{name}}: {{value}}, {{change}}. Apri in Esplora.",
       "showAll": "Vedi tutte le categorie ({{n}})",
       "showFewer": "Vedi meno"
+    },
+    "recurring": {
+      "tab": "Fissi",
+      "headline": "{{month}}/mese di spese fisse = {{year}}/anno.",
+      "headlineShare": "{{month}}/mese di spese fisse = {{year}}/anno, {{share}} della spesa.",
+      "counts": "{{active}} attive · {{new}} nuove · {{up}} aumentate · {{stopped}} ferme",
+      "title": "Spese che si ripetono",
+      "description": "Trovate nello storico, senza registrazione. Tocca una riga per vedere gli addebiti.",
+      "empty": "Nessuna spesa ricorrente trovata nello storico.",
+      "noneInFilter": "Niente corrisponde a questo filtro.",
+      "window": "Il rilevamento legge sempre gli ultimi 12 mesi chiusi e il mese corrente.",
+      "status": {
+        "new": "Nuova",
+        "up": "Aumentata",
+        "stopped": "Ferma",
+        "steady": "Stabile"
+      },
+      "filter": {
+        "all": "Tutte"
+      },
+      "sort": {
+        "year": "Più care all’anno",
+        "recent": "Più recenti",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Esercente",
+        "status": "Stato",
+        "last": "Ultimo addebito",
+        "month": "Al mese",
+        "year": "All’anno"
+      },
+      "perMonth": "{{value}}/mese",
+      "perYear": "{{value}}/anno",
+      "rowAria": "{{name}}, {{status}}: {{month}} al mese, {{year}} all’anno. Apri in Esplora."
     }
   },
   "payees": {

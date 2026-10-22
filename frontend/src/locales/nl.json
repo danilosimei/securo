@@ -2173,6 +2173,41 @@
       "cardAria": "{{name}}: {{value}}, {{change}}. Openen in Verkennen.",
       "showAll": "Alle categorieën bekijken ({{n}})",
       "showFewer": "Minder tonen"
+    },
+    "recurring": {
+      "tab": "Vaste lasten",
+      "headline": "{{month}}/maand aan vaste lasten = {{year}}/jaar.",
+      "headlineShare": "{{month}}/maand aan vaste lasten = {{year}}/jaar, {{share}} van de uitgaven.",
+      "counts": "{{active}} actief · {{new}} nieuw · {{up}} gestegen · {{stopped}} gestopt",
+      "title": "Terugkerende uitgaven",
+      "description": "Gevonden in je historie, zonder invoer. Tik op een rij voor de afschrijvingen.",
+      "empty": "Geen terugkerende uitgaven gevonden in de historie.",
+      "noneInFilter": "Niets past bij dit filter.",
+      "window": "De herkenning leest altijd de laatste 12 afgesloten maanden en de huidige.",
+      "status": {
+        "new": "Nieuw",
+        "up": "Gestegen",
+        "stopped": "Gestopt",
+        "steady": "Stabiel"
+      },
+      "filter": {
+        "all": "Alle"
+      },
+      "sort": {
+        "year": "Duurste per jaar",
+        "recent": "Meest recent",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Winkel",
+        "status": "Status",
+        "last": "Laatste afschrijving",
+        "month": "Per maand",
+        "year": "Per jaar"
+      },
+      "perMonth": "{{value}}/maand",
+      "perYear": "{{value}}/jaar",
+      "rowAria": "{{name}}, {{status}}: {{month}} per maand, {{year}} per jaar. Openen in Verkennen."
     }
   },
   "payees": {

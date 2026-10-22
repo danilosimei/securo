@@ -2171,6 +2171,41 @@
       "cardAria": "{{name}}: {{value}}, {{change}}. Open in Explore.",
       "showAll": "See all categories ({{n}})",
       "showFewer": "See fewer"
+    },
+    "recurring": {
+      "tab": "Fixed costs",
+      "headline": "{{month}}/month in fixed costs = {{year}}/year.",
+      "headlineShare": "{{month}}/month in fixed costs = {{year}}/year, {{share}} of spending.",
+      "counts": "{{active}} active · {{new}} new · {{up}} went up · {{stopped}} stopped",
+      "title": "Charges that repeat",
+      "description": "Found from your history, no sign-up needed. Tap a row to see the charges.",
+      "empty": "No repeating charge found in the history.",
+      "noneInFilter": "Nothing matches this filter.",
+      "window": "Detection always reads the last 12 closed months and the current one.",
+      "status": {
+        "new": "New",
+        "up": "Went up",
+        "stopped": "Stopped",
+        "steady": "Steady"
+      },
+      "filter": {
+        "all": "All"
+      },
+      "sort": {
+        "year": "Biggest per year",
+        "recent": "Most recent",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Store",
+        "status": "Status",
+        "last": "Last charge",
+        "month": "Per month",
+        "year": "Per year"
+      },
+      "perMonth": "{{value}}/month",
+      "perYear": "{{value}}/year",
+      "rowAria": "{{name}}, {{status}}: {{month}} a month, {{year}} a year. Open in Explore."
     }
   },
   "payees": {

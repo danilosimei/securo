@@ -2172,6 +2172,41 @@
       "cardAria": "{{name}}: {{value}}, {{change}}. In Erkunden öffnen.",
       "showAll": "Alle Kategorien ansehen ({{n}})",
       "showFewer": "Weniger anzeigen"
+    },
+    "recurring": {
+      "tab": "Fixkosten",
+      "headline": "{{month}}/Monat Fixkosten = {{year}}/Jahr.",
+      "headlineShare": "{{month}}/Monat Fixkosten = {{year}}/Jahr, {{share}} der Ausgaben.",
+      "counts": "{{active}} aktiv · {{new}} neu · {{up}} gestiegen · {{stopped}} beendet",
+      "title": "Wiederkehrende Ausgaben",
+      "description": "Aus dem Verlauf erkannt, ohne Erfassung. Tippe auf eine Zeile für die Buchungen.",
+      "empty": "Keine wiederkehrenden Ausgaben im Verlauf gefunden.",
+      "noneInFilter": "Nichts passt zu diesem Filter.",
+      "window": "Die Erkennung liest immer die letzten 12 abgeschlossenen Monate und den aktuellen.",
+      "status": {
+        "new": "Neu",
+        "up": "Gestiegen",
+        "stopped": "Beendet",
+        "steady": "Stabil"
+      },
+      "filter": {
+        "all": "Alle"
+      },
+      "sort": {
+        "year": "Teuerste pro Jahr",
+        "recent": "Neueste",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Händler",
+        "status": "Status",
+        "last": "Letzte Buchung",
+        "month": "Pro Monat",
+        "year": "Pro Jahr"
+      },
+      "perMonth": "{{value}}/Monat",
+      "perYear": "{{value}}/Jahr",
+      "rowAria": "{{name}}, {{status}}: {{month}} pro Monat, {{year}} pro Jahr. In Erkunden öffnen."
     }
   },
   "payees": {

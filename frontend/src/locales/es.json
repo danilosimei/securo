@@ -2175,6 +2175,41 @@
       "cardAria": "{{name}}: {{value}}, {{change}}. Abrir en Explorar.",
       "showAll": "Ver todas las categorías ({{n}})",
       "showFewer": "Ver menos"
+    },
+    "recurring": {
+      "tab": "Fijos",
+      "headline": "{{month}}/mes en gastos fijos = {{year}}/año.",
+      "headlineShare": "{{month}}/mes en gastos fijos = {{year}}/año, {{share}} del gasto.",
+      "counts": "{{active}} activos · {{new}} nuevos · {{up}} subieron · {{stopped}} pararon",
+      "title": "Gastos que se repiten",
+      "description": "Encontrados en el historial, sin registro. Toca una fila para ver los cobros.",
+      "empty": "No se encontraron gastos repetidos en el historial.",
+      "noneInFilter": "Nada coincide con este filtro.",
+      "window": "La detección usa siempre los últimos 12 meses cerrados y el mes actual.",
+      "status": {
+        "new": "Nuevo",
+        "up": "Subió",
+        "stopped": "Paró",
+        "steady": "Estable"
+      },
+      "filter": {
+        "all": "Todos"
+      },
+      "sort": {
+        "year": "Mayor por año",
+        "recent": "Más recientes",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Comercio",
+        "status": "Estado",
+        "last": "Último cobro",
+        "month": "Por mes",
+        "year": "Por año"
+      },
+      "perMonth": "{{value}}/mes",
+      "perYear": "{{value}}/año",
+      "rowAria": "{{name}}, {{status}}: {{month}} al mes, {{year}} al año. Abrir en Explorar."
     }
   },
   "payees": {

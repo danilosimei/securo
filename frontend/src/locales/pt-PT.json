@@ -2175,6 +2175,41 @@
       "cardAria": "{{name}}: {{value}}, {{change}}. Abrir no Explorar.",
       "showAll": "Ver todas as categorias ({{n}})",
       "showFewer": "Ver menos"
+    },
+    "recurring": {
+      "tab": "Fixos",
+      "headline": "{{month}}/mês em despesas fixas = {{year}}/ano.",
+      "headlineShare": "{{month}}/mês em despesas fixas = {{year}}/ano, {{share}} da despesa.",
+      "counts": "{{active}} ativos · {{new}} novos · {{up}} subiram · {{stopped}} pararam",
+      "title": "Despesas que se repetem",
+      "description": "Encontradas pelo histórico, sem registo. Toque numa linha para ver as cobranças.",
+      "empty": "Nenhuma despesa repetida encontrada no histórico.",
+      "noneInFilter": "Nenhum item com este filtro.",
+      "window": "A deteção usa sempre os últimos 12 meses fechados e o mês atual.",
+      "status": {
+        "new": "Novo",
+        "up": "Subiu",
+        "stopped": "Parou",
+        "steady": "Estável"
+      },
+      "filter": {
+        "all": "Todos"
+      },
+      "sort": {
+        "year": "Maior por ano",
+        "recent": "Mais recentes",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Loja",
+        "status": "Situação",
+        "last": "Última cobrança",
+        "month": "Por mês",
+        "year": "Por ano"
+      },
+      "perMonth": "{{value}}/mês",
+      "perYear": "{{value}}/ano",
+      "rowAria": "{{name}}, {{status}}: {{month}} por mês, {{year}} por ano. Abrir no Explorar."
     }
   },
   "payees": {

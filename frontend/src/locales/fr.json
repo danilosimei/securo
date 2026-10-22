@@ -2175,6 +2175,41 @@
       "cardAria": "{{name}} : {{value}}, {{change}}. Ouvrir dans Explorer.",
       "showAll": "Voir toutes les catégories ({{n}})",
       "showFewer": "Voir moins"
+    },
+    "recurring": {
+      "tab": "Fixes",
+      "headline": "{{month}}/mois de dépenses fixes = {{year}}/an.",
+      "headlineShare": "{{month}}/mois de dépenses fixes = {{year}}/an, {{share}} des dépenses.",
+      "counts": "{{active}} actives · {{new}} nouvelles · {{up}} en hausse · {{stopped}} arrêtées",
+      "title": "Dépenses qui se répètent",
+      "description": "Trouvées dans l’historique, sans saisie. Touchez une ligne pour voir les prélèvements.",
+      "empty": "Aucune dépense répétée trouvée dans l’historique.",
+      "noneInFilter": "Rien ne correspond à ce filtre.",
+      "window": "La détection lit toujours les 12 derniers mois clos et le mois en cours.",
+      "status": {
+        "new": "Nouveau",
+        "up": "En hausse",
+        "stopped": "Arrêté",
+        "steady": "Stable"
+      },
+      "filter": {
+        "all": "Tous"
+      },
+      "sort": {
+        "year": "Plus chers par an",
+        "recent": "Plus récents",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "Commerce",
+        "status": "Statut",
+        "last": "Dernier prélèvement",
+        "month": "Par mois",
+        "year": "Par an"
+      },
+      "perMonth": "{{value}}/mois",
+      "perYear": "{{value}}/an",
+      "rowAria": "{{name}}, {{status}} : {{month}} par mois, {{year}} par an. Ouvrir dans Explorer."
     }
   },
   "payees": {

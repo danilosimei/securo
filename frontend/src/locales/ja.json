@@ -2171,6 +2171,41 @@
       "cardAria": "{{name}}：{{value}}、{{change}}。探索で開く。",
       "showAll": "すべてのカテゴリを見る（{{n}}）",
       "showFewer": "表示を減らす"
+    },
+    "recurring": {
+      "tab": "固定費",
+      "headline": "固定費は月{{month}} ＝ 年{{year}}。",
+      "headlineShare": "固定費は月{{month}} ＝ 年{{year}}、支出の{{share}}。",
+      "counts": "有効 {{active}} · 新規 {{new}} · 値上がり {{up}} · 停止 {{stopped}}",
+      "title": "繰り返しの支出",
+      "description": "履歴から自動で検出。行をタップすると請求を表示します。",
+      "empty": "履歴に繰り返しの支出は見つかりませんでした。",
+      "noneInFilter": "この条件に合うものはありません。",
+      "window": "検出は常に直近12か月の締め月と当月を対象にします。",
+      "status": {
+        "new": "新規",
+        "up": "値上がり",
+        "stopped": "停止",
+        "steady": "安定"
+      },
+      "filter": {
+        "all": "すべて"
+      },
+      "sort": {
+        "year": "年額の大きい順",
+        "recent": "新しい順",
+        "name": "A–Z"
+      },
+      "col": {
+        "store": "店舗",
+        "status": "状態",
+        "last": "最後の請求",
+        "month": "月額",
+        "year": "年額"
+      },
+      "perMonth": "月{{value}}",
+      "perYear": "年{{value}}",
+      "rowAria": "{{name}}、{{status}}：月{{month}}、年{{year}}。探索で開く。"
     }
   },
   "payees": {
