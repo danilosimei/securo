@@ -649,61 +649,6 @@ export default function ReportsPage() {
       <PageHeader
         section={t('reports.section')}
         title={t(currentTab.labelKey)}
-        action={
-          <div className={`flex items-center gap-2 ${isSelfManaged ? 'hidden' : ''}`}>
-            {isCashFlow && (
-              <div
-                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  cashFlowBaseline
-                    ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border bg-card text-muted-foreground'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => setCashFlowBaseline((v) => !v)}
-                  className="flex items-center gap-2 hover:text-foreground transition-colors"
-                  aria-pressed={cashFlowBaseline}
-                >
-                  <span
-                    className={`relative inline-flex h-3.5 w-6 shrink-0 items-center rounded-full transition-colors ${
-                      cashFlowBaseline ? 'bg-primary' : 'bg-muted'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
-                        cashFlowBaseline ? 'translate-x-3' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </span>
-                  {t('reports.includeEstimate')}
-                </button>
-                <span
-                  title={t('reports.includeEstimateHelp')}
-                  aria-label={t('reports.includeEstimateHelp')}
-                  className="inline-flex cursor-help"
-                >
-                  <HelpCircle className="h-3.5 w-3.5 opacity-60" />
-                </span>
-              </div>
-            )}
-            <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
-              {intervalOptions.map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => { setInterval(opt.value); setSelectedDate(null) }}
-                  className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                    interval === opt.value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  {t(`reports.${INTERVAL_LABELS[opt.key]}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-        }
       />
 
       {/* Tabs and the period share one row on a desktop, the period at the
@@ -738,11 +683,16 @@ export default function ReportsPage() {
           </button>
         ))}
       </div>
-      <PeriodSlot testId="reports-period">{periodControl}</PeriodSlot>
+      {/* The same height on every tab (the line of dates under the picker
+          included, even where a tab has none), so the content below never
+          moves when switching tabs. */}
+      <div className="min-h-[54px] sm:ml-auto">
+        <PeriodSlot testId="reports-period">{periodControl}</PeriodSlot>
+      </div>
       </div>
 
       {isSelfManaged && (
-        <FadePanel panelKey={activeTab}>
+        <FadePanel panelKey={activeTab} className="min-h-[60vh]" data-testid="reports-content">
           {activeTab === 'overview' && <OverviewTab />}
           {activeTab === 'explore' && <ExploreTab />}
           {activeTab === 'trends' && <TrendsTab />}
@@ -766,6 +716,64 @@ export default function ReportsPage() {
           >
             {t('common.retry')}
           </button>
+        </div>
+      )}
+
+      {/* Cash Flow and Net Worth controls sit with their content, so the
+          title and the tab row stay exactly the same on every tab. */}
+      {!isSelfManaged && (
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+          {isCashFlow && (
+            <div
+              className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                cashFlowBaseline
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-border bg-card text-muted-foreground'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => setCashFlowBaseline((v) => !v)}
+                className="flex items-center gap-2 hover:text-foreground transition-colors"
+                aria-pressed={cashFlowBaseline}
+              >
+                <span
+                  className={`relative inline-flex h-3.5 w-6 shrink-0 items-center rounded-full transition-colors ${
+                    cashFlowBaseline ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
+                      cashFlowBaseline ? 'translate-x-3' : 'translate-x-0.5'
+                    }`}
+                  />
+                </span>
+                {t('reports.includeEstimate')}
+              </button>
+              <span
+                title={t('reports.includeEstimateHelp')}
+                aria-label={t('reports.includeEstimateHelp')}
+                className="inline-flex cursor-help"
+              >
+                <HelpCircle className="h-3.5 w-3.5 opacity-60" />
+              </span>
+            </div>
+          )}
+          <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
+            {intervalOptions.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => { setInterval(opt.value); setSelectedDate(null) }}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                  interval === opt.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                {t(`reports.${INTERVAL_LABELS[opt.key]}`)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

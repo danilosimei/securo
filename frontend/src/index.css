@@ -131,6 +131,16 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* The scrollbar's room is kept even when a page is short, so switching
+     between a short and a long page (Reports tabs) never shifts the layout
+     sideways. */
+  html {
+    scrollbar-gutter: stable;
+  }
+  /* A dialog locks the scroll; the room is still there, so no extra margin. */
+  html body[data-scroll-locked] {
+    margin-right: 0 !important;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
