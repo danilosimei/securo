@@ -267,6 +267,8 @@ interface DateRangeCalendarsProps {
   onToChange: (value: string) => void
   locale: Locale
   className?: string
+  /** Show only this calendar (phones: one at a time). Both when omitted. */
+  only?: 'from' | 'to'
 }
 
 /** The two calendars of a custom range ("From" and "To"), side by side on a
@@ -274,11 +276,11 @@ interface DateRangeCalendarsProps {
  *  Transactions filter bar's "Between dates", so both pick dates the same way.
  *  Each calendar jumps to its date when the date changes from outside (typed
  *  in, or reset). */
-export function DateRangeCalendars({ from, to, onFromChange, onToChange, locale, className }: DateRangeCalendarsProps) {
+export function DateRangeCalendars({ from, to, onFromChange, onToChange, locale, className, only }: DateRangeCalendarsProps) {
   const { t } = useTranslation()
   return (
     <div className={cn('flex flex-col gap-4 p-3 sm:flex-row sm:gap-0', className)}>
-      <div className="sm:border-r sm:border-border/60 sm:pr-2">
+      {only !== 'to' && <div className="sm:border-r sm:border-border/60 sm:pr-2">
         <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
           {t('transactions.filtersBar.fromLabel')}
         </p>
@@ -289,8 +291,8 @@ export function DateRangeCalendars({ from, to, onFromChange, onToChange, locale,
           locale={locale}
           onSelect={(d) => onFromChange(d ? localDateString(d) : '')}
         />
-      </div>
-      <div className="sm:pl-2">
+      </div>}
+      {only !== 'from' && <div className="sm:pl-2">
         <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
           {t('transactions.filtersBar.toLabel')}
         </p>
@@ -301,7 +303,7 @@ export function DateRangeCalendars({ from, to, onFromChange, onToChange, locale,
           locale={locale}
           onSelect={(d) => onToChange(d ? localDateString(d) : '')}
         />
-      </div>
+      </div>}
     </div>
   )
 }

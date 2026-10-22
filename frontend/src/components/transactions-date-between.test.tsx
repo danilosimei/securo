@@ -188,6 +188,21 @@ describe('MobileDateView', () => {
     expect(onChange).toHaveBeenCalledWith('2026-02-01', '2026-03-15')
   })
 
+  it('picks the range on the calendar, one calendar at a time', async () => {
+    const { user, onChange } = renderMobile(vi.fn(), '2026-02-01', '2026-03-15')
+    const menu = await screen.findByRole('menu')
+
+    // Only the "from" calendar shows first; picking a day moves on to "to".
+    expect(within(menu).getAllByRole('button', { name: '10' })).toHaveLength(1)
+    await user.click(within(menu).getByRole('button', { name: '10' }))
+    expect(within(menu).getByLabelText(t('transactions.filtersBar.fromLabel'))).toHaveValue('10/02/2026')
+    await user.click(within(menu).getByRole('button', { name: '20' }))
+    expect(within(menu).getByLabelText(t('transactions.filtersBar.toLabel'))).toHaveValue('20/03/2026')
+
+    await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
+    expect(onChange).toHaveBeenCalledWith('2026-02-10', '2026-03-20')
+  })
+
   it('opens already expanded for an active custom range', async () => {
     renderMobile(vi.fn(), '2026-02-01', '2026-03-15')
     expect(await screen.findByLabelText(t('transactions.filtersBar.fromLabel'))).toHaveValue('01/02/2026')

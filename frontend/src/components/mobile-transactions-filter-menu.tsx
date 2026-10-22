@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DateRangeFields } from '@/components/date-range-fields'
+import { DateRangeCalendars } from '@/components/ui/date-range-picker'
+import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import { CategoryFilterContent } from '@/components/category-filter-content'
 import {
   DropdownMenuCheckboxItem,
@@ -359,7 +361,9 @@ export function MobileDateView({
   presets: MobileDatePreset[]
   onChange: (from: string, to: string) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const dateFnsLocale = resolveDateFnsLocale(i18n.resolvedLanguage ?? i18n.language)
+  const [calendar, setCalendar] = useState<'from' | 'to'>('from')
   const isPreset = presets.some((preset) => preset.from === from && preset.to === to)
   const isCustom = (!!from || !!to) && !isPreset
   const [betweenOpen, setBetweenOpen] = useState(isCustom)
@@ -412,6 +416,34 @@ export function MobileDateView({
             }}
             onValidityChange={setValid}
             onSubmit={apply}
+          />
+          <div className="mt-2 flex gap-1 rounded-lg bg-muted/60 p-0.5" role="group">
+            {(['from', 'to'] as const).map((side) => (
+              <button
+                key={side}
+                type="button"
+                aria-pressed={calendar === side}
+                onClick={() => setCalendar(side)}
+                className={cn(
+                  'h-7 flex-1 rounded-md text-[12px] font-medium text-muted-foreground transition-colors',
+                  calendar === side && 'bg-background text-foreground shadow-sm',
+                )}
+              >
+                {t(`transactions.filtersBar.${side}Label`)}
+              </button>
+            ))}
+          </div>
+          <DateRangeCalendars
+            only={calendar}
+            from={draftFrom}
+            to={draftTo}
+            onFromChange={(value) => {
+              setDraftFrom(value)
+              if (value) setCalendar('to')
+            }}
+            onToChange={setDraftTo}
+            locale={dateFnsLocale}
+            className="justify-center p-0 pt-2"
           />
           <div className="mt-2 flex justify-end">
             <Button type="button" size="sm" disabled={!canApply} onClick={apply}>
