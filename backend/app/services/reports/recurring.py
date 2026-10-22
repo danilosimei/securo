@@ -280,6 +280,7 @@ async def to_api(
             "merchant_key": item.merchant_key,
             "label": names.get(item.merchant_key) or readable_label(item.merchant_key),
             "category": categories.get(item.category_id, NO_CATEGORY_NAME),
+            "category_id": str(item.category_id) if item.category_id in categories else None,
             "amount_month": f"{item.amount_month:.2f}",
             "amount_year": f"{item.amount_year:.2f}",
             "status": item.status,

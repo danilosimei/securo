@@ -1650,6 +1650,8 @@ export interface RecurringRow {
   label: string
   /** Category name. */
   category: string
+  /** Most common category of the charges; null = uncategorized. */
+  category_id: string | null
   amount_month: string
   amount_year: string
   status: RecurringStatus

@@ -20,7 +20,6 @@ import { blockState } from '@/components/reports/common/block-state'
 import { formatMoneyShort, formatPercent } from '@/components/reports/common/chart-utils'
 import { useGroupPalette } from '@/components/reports/common/group-colors'
 import { exploreLink } from '@/components/reports/common/report-url'
-import { NO_CATEGORY_LABEL } from '@/components/reports/explore/drilldown'
 import { fixedSummary, sortRecurring, type RecurringSort } from './recurring-model'
 
 const STATUS: Record<RecurringStatus, { icon: LucideIcon; tone: string }> = {
@@ -90,12 +89,12 @@ export function RecurringTab() {
     : null
 
   const open = (row: RecurringRow) => {
-    const match = row.category === NO_CATEGORY_LABEL ? { id: 'none', groupId: null } : palette.categoryByName(row.category)
-    const range = overview.data?.period
+    const category = row.category_id ?? 'none'
+    const group = row.category_id ? palette.groupOfCategory(row.category_id) : null
     const link = exploreLink(
-      { ...query, group: match?.groupId ?? null, category: match?.id ?? null, merchant: row.merchant_key },
-      { group: match && 'groupName' in match ? match.groupName : undefined, category: row.category, merchant: row.label },
-      range,
+      { ...query, group, category, merchant: row.merchant_key },
+      { group: group ? palette.groupName(group) : undefined, category: row.category, merchant: row.label },
+      overview.data?.period,
     )
     navigate(link.to, { state: link.state })
   }

@@ -24,10 +24,18 @@ vi.mock('@/hooks/use-privacy-mode', () => ({
   usePrivacyMode: () => ({ mask: (value: string) => value, privacyMode: false, MASK: '••••' }),
 }))
 
-const rec = (key: string, label: string, category: string, month: number, status: RecurringRow['status'], last = '2026-09-05'): RecurringRow => ({
+const rec = (
+  key: string,
+  label: string,
+  [category, categoryId]: [string, string | null],
+  month: number,
+  status: RecurringRow['status'],
+  last = '2026-09-05',
+): RecurringRow => ({
   merchant_key: key,
   label,
   category,
+  category_id: categoryId,
   amount_month: month.toFixed(2),
   amount_year: (month * 12).toFixed(2),
   status,
@@ -36,11 +44,11 @@ const rec = (key: string, label: string, category: string, month: number, status
 })
 
 const ROWS = [
-  rec('NETFLIX', 'Netflix', 'Assinaturas', 55.9, 'up', '2026-10-02'),
-  rec('SON PET VIDA', 'Son Pet Vida', 'Pets', 786, 'steady'),
-  rec('STELLANTIS', 'Stellantis', 'Financiamento', 4265, 'steady'),
-  rec('GYM', 'Academia', 'Saúde', 120, 'stopped', '2026-05-10'),
-  rec('PIX JOAO', 'Pix João', 'Sem categoria', 300, 'new'),
+  rec('NETFLIX', 'Netflix', ['Assinaturas', 'c-subs'], 55.9, 'up', '2026-10-02'),
+  rec('SON PET VIDA', 'Son Pet Vida', ['Pets', 'c-pets'], 786, 'steady'),
+  rec('STELLANTIS', 'Stellantis', ['Financiamento', 'c-loan'], 4265, 'steady'),
+  rec('GYM', 'Academia', ['Saúde', 'c-health'], 120, 'stopped', '2026-05-10'),
+  rec('PIX JOAO', 'Pix João', ['Sem categoria', null], 300, 'new'),
 ]
 
 function Probe() {
@@ -113,6 +121,21 @@ describe('RecurringTab', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(
       '/reports?tab=explore&period=last_12m&group=g-life&category=c-pets&merchant=SON+PET+VIDA',
     )
+  })
+
+  it('a charge opens its category by id, even when another category has the same name', async () => {
+    api.reports.recurring.mockResolvedValue([rec('BOOKS', 'Livraria', ['Presentes', 'c-books'], 90, 'steady')])
+    const { user } = renderWithProviders(
+      <>
+        <RecurringTab />
+        <Probe />
+      </>,
+    )
+    await screen.findAllByTestId('recurring-row')
+    await waitFor(() => expect(api.categoryGroups.list).toHaveBeenCalled())
+
+    await user.click(screen.getByRole('button', { name: /^Livraria/ }))
+    expect(screen.getByTestId('location')).toHaveTextContent('group=g-edu&category=c-books&merchant=BOOKS')
   })
 
   it('a charge without category opens the uncategorized store', async () => {

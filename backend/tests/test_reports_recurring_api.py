@@ -24,13 +24,13 @@ async def world(session, test_user, test_account, test_workspace):
     session.add(lazer)
     await session.flush()
 
-    def monthly(desc, amounts, *, first=(2026, 5), day=5, **extra):
+    def monthly(desc, amounts, *, first=(2026, 5), day=5, category_id=lazer.id, **extra):
         """One debit per month from `first`, one entry of `amounts` each."""
         year, month = first
         for amount in amounts:
             _tx(
                 session, test_user, test_account, desc,
-                category_id=lazer.id, amount=str(amount),
+                category_id=category_id, amount=str(amount),
                 day=date(year, month, day), **extra,
             )
             month += 1
@@ -60,7 +60,17 @@ async def test_stable_subscription_is_steady(client, auth_headers, world):
     assert row["months_seen"] == 6
     assert row["last_date"] == "2026-10-05"
     assert row["category"] == "Lazer"
+    assert row["category_id"] == str(world["lazer"].id)
     assert row["label"] == "Netflix"
+
+
+@pytest.mark.asyncio
+async def test_uncategorized_store_has_no_category_id(client, auth_headers, world):
+    world["monthly"]("Academia", [120] * 6, category_id=None)
+    await world["session"].commit()
+    row = (await _rows(client, auth_headers))["ACADEMIA"]
+    assert row["category"] == "Sem categoria"
+    assert row["category_id"] is None
 
 
 @pytest.mark.asyncio

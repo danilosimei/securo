@@ -283,6 +283,8 @@ class RecurringRow(BaseModel):
     merchant_key: str
     label: str
     category: str
+    #: The most common category of the charges; null = uncategorized.
+    category_id: Optional[str]
     amount_month: str
     amount_year: str
     status: Literal["new", "up", "stopped", "steady"]
