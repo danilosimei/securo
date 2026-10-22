@@ -65,7 +65,10 @@ async def world(session, test_user, test_account, test_workspace):
         add(store, "mercado", 1000, date(2026, 4 + offset, 8))
     monthly("Empresa", "salario", [5000] * 6, day=2, type="credit")
     await session.commit()
-    return {"add": add, "monthly": monthly, "session": session, "cats": cats, "groups": (casa, carro, pets)}
+    return {
+        "add": add, "monthly": monthly, "session": session, "cats": cats,
+        "groups": (casa, carro, pets), "user_id": user_id, "ws_id": ws_id,
+    }
 
 
 async def _get(client, auth_headers, **params):
@@ -104,11 +107,40 @@ async def test_money_map_left_is_income_minus_spending(client, auth_headers, wor
     body = await _get(client, auth_headers)
     money_map = body["money_map"]
     income = sum(Decimal(r["value"]) for r in money_map["income"])
-    spending = sum(Decimal(r["value"]) for r in money_map["spending_by_group"])
+    spending = sum(Decimal(r["value"]) for r in money_map["groups"])
     assert Decimal(money_map["left"]) == income - spending
-    assert {"label": "A conferir", "value": "120.00"} in money_map["income"]
-    assert all(Decimal(r["value"]) > 0 for r in money_map["spending_by_group"])
+    assert {"id": None, "label": "A conferir", "value": "120.00"} in money_map["income"]
+    assert all(Decimal(r["value"]) > 0 for r in money_map["groups"])
     assert spending == Decimal("5700.00")
+    assert money_map["refunds"] == "0.00"
+    for group in money_map["groups"]:
+        assert sum(Decimal(c["value"]) for c in group["categories"]) == Decimal(group["value"])
+    assert money_map["groups"][0]["label"] == "Casa"
+    assert money_map["groups"][0]["categories"][0]["label"] == "Mercado"
+
+
+@pytest.mark.asyncio
+async def test_money_map_refund_category_is_eased_out_and_noted(client, auth_headers, world):
+    estornos = Category(
+        id=uuid.uuid4(), user_id=world["user_id"], workspace_id=world["ws_id"],
+        name="Estornos", report_kind="refund",
+    )
+    world["session"].add(estornos)
+    await world["session"].flush()
+    world["cats"]["estornos"] = estornos
+    world["add"]("Reembolso", "estornos", 250, date(2026, 9, 9), "credit")
+    await world["session"].commit()
+    money_map = (await _get(client, auth_headers))["money_map"]
+    assert money_map["refunds"] == "250.00"
+    assert sum(Decimal(g["value"]) for g in money_map["groups"]) == Decimal("5750.00")
+    assert Decimal(money_map["left"]) == Decimal("30000.00") - Decimal("5750.00")
+
+
+@pytest.mark.asyncio
+async def test_money_map_left_can_be_negative(client, auth_headers, world):
+    world["add"]("Reforma", "combustivel", 40000, date(2026, 9, 20))
+    await world["session"].commit()
+    assert (await _get(client, auth_headers))["money_map"]["left"] == "-16000.00"
 
 
 @pytest.mark.asyncio

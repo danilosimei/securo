@@ -287,32 +287,54 @@ async def _money_map(
             )
         ).all()
     }
-    by_group: dict[Optional[str], list] = {}
+    refunds = sum(
+        (-v for v in totals_from(flows, kinds).spend_by_category.values() if v < 0), ZERO
+    )
+    groups: dict[Any, dict] = {}
     for item in expense_items:
         if item.key == UNCATEGORIZED_KEY:
-            gid, label = None, NO_CATEGORY_LABEL
+            slot, gid, label, cid = "none", None, NO_CATEGORY_LABEL, None
         elif item.group_id in group_names:
-            gid, label = str(item.group_id), group_names[item.group_id]
+            slot, gid, label, cid = (
+                item.group_id, str(item.group_id), group_names[item.group_id], item.key,
+            )
         else:
-            gid, label = None, NO_GROUP_LABEL
-        entry = by_group.setdefault(gid if gid is not None else label, [gid, label, ZERO])
+            slot, gid, label, cid = "nogroup", None, NO_GROUP_LABEL, item.key
+        entry = groups.setdefault(slot, {"id": gid, "label": label, "value": ZERO, "categories": []})
+        entry["value"] += item.value
+        entry["categories"].append((cid, item.label, item.value))
+    group_rows = sorted(groups.values(), key=lambda g: (-g["value"], g["label"]))
+
+    # Income is shown by the group its categories sit in ("Salário & Renda").
+    income: dict[Any, list] = {}
+    for item in income_items:
+        if item.key == UNCATEGORIZED_KEY:
+            slot, rid, label = "none", None, INCOME_TO_CHECK_LABEL
+        elif item.group_id in group_names:
+            slot, rid, label = item.group_id, str(item.group_id), group_names[item.group_id]
+        else:
+            slot, rid, label = item.key, item.key, item.label
+        entry = income.setdefault(slot, [rid, label, ZERO])
         entry[2] += item.value
-    spending_by_group = sorted(by_group.values(), key=lambda e: (-e[2], e[1]))
-    income_rows = sorted(
-        (
-            (INCOME_TO_CHECK_LABEL if i.key == UNCATEGORIZED_KEY else i.label, i.value)
-            for i in income_items
-        ),
-        key=lambda e: (-e[1], e[0]),
-    )
-    total_income = sum((v for _, v in income_rows), ZERO)
-    total_spending = sum((e[2] for e in spending_by_group), ZERO)
+    income_rows = sorted(income.values(), key=lambda e: (-e[2], e[1]))
+
+    total_income = sum((e[2] for e in income_rows), ZERO)
+    total_spending = sum((g["value"] for g in group_rows), ZERO)
     return {
-        "income": [{"label": label, "value": _money(value)} for label, value in income_rows],
-        "spending_by_group": [
-            {"id": gid, "label": label, "value": _money(value)}
-            for gid, label, value in spending_by_group
+        "income": [{"id": rid, "label": label, "value": _money(v)} for rid, label, v in income_rows],
+        "groups": [
+            {
+                "id": g["id"],
+                "label": g["label"],
+                "value": _money(g["value"]),
+                "categories": [
+                    {"id": cid, "label": label, "value": _money(v)}
+                    for cid, label, v in sorted(g["categories"], key=lambda c: (-c[2], c[1]))
+                ],
+            }
+            for g in group_rows
         ],
+        "refunds": _money(refunds),
         "left": _money(total_income - total_spending),
     }
 

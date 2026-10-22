@@ -147,6 +147,13 @@ class OverviewMonth(BaseModel):
 
 
 class MoneyMapIncome(BaseModel):
+    id: Optional[str]
+    label: str
+    value: str
+
+
+class MoneyMapCategory(BaseModel):
+    id: Optional[str]
     label: str
     value: str
 
@@ -155,11 +162,13 @@ class MoneyMapGroup(BaseModel):
     id: Optional[str]
     label: str
     value: str
+    categories: list[MoneyMapCategory]
 
 
 class MoneyMap(BaseModel):
     income: list[MoneyMapIncome]
-    spending_by_group: list[MoneyMapGroup]
+    groups: list[MoneyMapGroup]
+    refunds: str
     left: str
 
 
