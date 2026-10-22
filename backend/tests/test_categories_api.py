@@ -467,3 +467,44 @@ async def test_create_category_report_kind_defaults_to_normal(
     assert response.json()["report_kind"] == "refund"
     response = await client.post("/api/categories", headers=auth_headers, json={"name": "Outra"})
     assert response.json()["report_kind"] == "normal"
+
+
+@pytest.mark.asyncio
+async def test_category_description_round_trip_strips_and_clears(
+    client: AsyncClient, auth_headers, test_categories
+):
+    created = await client.post(
+        "/api/categories",
+        headers=auth_headers,
+        json={"name": "Lazer novo", "description": "  bares e passeios  "},
+    )
+    assert created.status_code == 201
+    assert created.json()["description"] == "bares e passeios"
+    cat_id = created.json()["id"]
+
+    blank = await client.patch(
+        f"/api/categories/{cat_id}", headers=auth_headers, json={"description": "   "}
+    )
+    assert blank.status_code == 200
+    assert blank.json()["description"] is None
+
+    other = await client.post("/api/categories", headers=auth_headers, json={"name": "Sem descrição"})
+    assert other.json()["description"] is None
+
+
+@pytest.mark.asyncio
+async def test_category_description_limited_to_300(
+    client: AsyncClient, auth_headers, test_categories
+):
+    ok = await client.patch(
+        f"/api/categories/{test_categories[0].id}",
+        headers=auth_headers,
+        json={"description": "x" * 300},
+    )
+    assert ok.status_code == 200
+    too_long = await client.patch(
+        f"/api/categories/{test_categories[0].id}",
+        headers=auth_headers,
+        json={"description": "x" * 301},
+    )
+    assert too_long.status_code == 422

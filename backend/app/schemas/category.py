@@ -4,6 +4,17 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, field_validator
 
 ReportKind = Literal["normal", "income", "refund"]
+DESCRIPTION_MAX = 300
+
+
+def _clean_description(value: Optional[str]) -> Optional[str]:
+    """Stripped text, or None when blank (a blank description is no description)."""
+    if value is None:
+        return None
+    value = value.strip()
+    if len(value) > DESCRIPTION_MAX:
+        raise ValueError(f"description must have at most {DESCRIPTION_MAX} characters")
+    return value or None
 
 
 class CategoryBase(BaseModel):
@@ -17,6 +28,9 @@ class CategoryCreate(CategoryBase):
     treat_as_transfer: bool = False
     is_ignored: bool = False
     report_kind: ReportKind = "normal"
+    description: Optional[str] = None
+
+    _strip_description = field_validator("description")(_clean_description)
 
 
 class CategoryUpdate(BaseModel):
@@ -28,6 +42,9 @@ class CategoryUpdate(BaseModel):
     is_ignored: Optional[bool] = None
     is_hidden: Optional[bool] = None
     report_kind: Optional[ReportKind] = None
+    description: Optional[str] = None
+
+    _strip_description = field_validator("description")(_clean_description)
 
     @field_validator("report_kind")
     @classmethod
@@ -47,6 +64,7 @@ class CategoryRead(CategoryBase):
     treat_as_transfer: bool = False
     is_ignored: bool = False
     report_kind: ReportKind = "normal"
+    description: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

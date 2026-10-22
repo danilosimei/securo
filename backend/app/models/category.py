@@ -44,5 +44,9 @@ class Category(Base):
     # (earned money) or "refund" (reduces spending instead of counting as income).
     report_kind: Mapped[str] = mapped_column(String(10), default="normal", server_default="normal")
 
+    # What belongs in this category, in the person's words; sent to the
+    # categorizer as the category's rule. Nullable: no description, no rule.
+    description: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+
     user: Mapped["User"] = relationship(back_populates="categories")
     group: Mapped[Optional["CategoryGroup"]] = relationship(back_populates="categories")
