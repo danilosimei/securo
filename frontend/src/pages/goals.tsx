@@ -1,4 +1,6 @@
 import { createElement, useState } from 'react'
+import { useUrlTab } from '@/hooks/use-url-tab'
+import { Segmented } from '@/components/invoice-ui'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
@@ -130,7 +132,8 @@ export default function GoalsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Goal | null>(null)
   const [trackingType, setTrackingType] = useState('manual')
-  const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [tab, setTab] = useUrlTab(['active', 'completed', 'paused', 'archived', 'all'] as const)
+  const statusFilter = tab === 'all' ? '' : tab
   const [deletingGoal, setDeletingGoal] = useState<Goal | null>(null)
   const [selectedIcon, setSelectedIcon] = useState('target')
   const [selectedColor, setSelectedColor] = useState('#3B82F6')
@@ -233,21 +236,19 @@ export default function GoalsPage() {
         }
       />
 
-      {/* Status filter */}
-      <div className="flex items-center gap-2 mb-4">
-        {['active', 'completed', 'paused', 'archived', ''].map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              statusFilter === s
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {s ? t(`goals.status${s.charAt(0).toUpperCase() + s.slice(1)}`) : t('transactions.all')}
-          </button>
-        ))}
+      <div className="mb-4">
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          testIdPrefix="goals-tab"
+          options={(['active', 'completed', 'paused', 'archived', 'all'] as const).map((value) => ({
+            value,
+            label:
+              value === 'all'
+                ? t('transactions.all')
+                : t(`goals.status${value.charAt(0).toUpperCase() + value.slice(1)}`),
+          }))}
+        />
       </div>
 
       <SectionCard>

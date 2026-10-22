@@ -1,3 +1,4 @@
+import { Segmented } from '@/components/invoice-ui'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -163,21 +164,16 @@ export default function GroupsPage() {
         }
       />
 
-      {/* Status filter — pill buttons matching goals.tsx */}
-      <div className="flex items-center gap-2 mb-4">
-        {(['active', 'archived', 'all'] as StatusFilter[]).map((s) => (
-          <button
-            key={s}
-            onClick={() => updateFilter('status', s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              statusFilter === s
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t(`splitGroups.filter.${s}`)}
-          </button>
-        ))}
+      <div className="mb-4">
+        <Segmented<StatusFilter>
+          value={statusFilter}
+          onChange={(value) => updateFilter('status', value)}
+          testIdPrefix="groups-status"
+          options={(['active', 'archived', 'all'] as StatusFilter[]).map((value) => ({
+            value,
+            label: t(`splitGroups.filter.${value}`),
+          }))}
+        />
       </div>
 
       <div className="rounded-xl border border-border bg-card shadow-sm transition-colors mb-4 focus-within:border-primary/40 focus-within:ring-[3px] focus-within:ring-primary/10">

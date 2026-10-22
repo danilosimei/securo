@@ -6,7 +6,8 @@ import { ArrowLeft, Edit2, Trash2, Plus, MessageSquare } from 'lucide-react'
 import { ConversationRow } from '@/components/agents/conversation-row'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Segmented } from '@/components/invoice-ui'
+import { useUrlTab } from '@/hooks/use-url-tab'
 import { agents } from '@/lib/api'
 import { AgentFormDialog } from '@/components/agents/agent-form-dialog'
 import { ChatPanel } from '@/components/agents/chat-panel'
@@ -21,6 +22,7 @@ export default function AgentDetailPage() {
   const qc = useQueryClient()
   const { canWrite } = useWorkspace()
   const [editOpen, setEditOpen] = useState(false)
+  const [tab, setTab] = useUrlTab(['chat', 'knowledge', 'tools'] as const)
   const [conversationId, setConversationId] = useState<string | null>(null)
   // Increments on every sidebar click so the chat input refocuses even
   // when the conversation id didn't actually change (e.g. clicking "+"
@@ -112,16 +114,22 @@ export default function AgentDetailPage() {
         )}
       </div>
 
-      <Tabs defaultValue="chat" className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="px-4 pt-3">
-          <TabsList>
-            <TabsTrigger value="chat">{t('agents.detail.tabs.chat')}</TabsTrigger>
-            <TabsTrigger value="knowledge">{t('agents.detail.tabs.knowledge')}</TabsTrigger>
-            <TabsTrigger value="tools">{t('agents.detail.tabs.tools')}</TabsTrigger>
-          </TabsList>
+          <Segmented
+            value={tab}
+            onChange={setTab}
+            testIdPrefix="agent-tab"
+            options={[
+              { value: 'chat', label: t('agents.detail.tabs.chat') },
+              { value: 'knowledge', label: t('agents.detail.tabs.knowledge') },
+              { value: 'tools', label: t('agents.detail.tabs.tools') },
+            ]}
+          />
         </div>
 
-        <TabsContent value="chat" className="flex-1 flex min-h-0 mt-3">
+        {tab === 'chat' && (
+        <div className="flex-1 flex min-h-0 mt-3">
           <aside className="hidden md:flex md:w-64 border-r flex-col min-h-0">
             <div className="px-3 pt-2 pb-1 flex items-center justify-between shrink-0">
               <span className="text-xs uppercase tracking-wider text-muted-foreground">{t('agents.detail.conversations')}</span>
@@ -168,16 +176,21 @@ export default function AgentDetailPage() {
               }}
             />
           </div>
-        </TabsContent>
+        </div>
+        )}
 
-        <TabsContent value="knowledge" className="flex-1 overflow-y-auto px-4 py-3">
-          <KnowledgeSection agentId={id} />
-        </TabsContent>
+        {tab === 'knowledge' && (
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            <KnowledgeSection agentId={id} />
+          </div>
+        )}
 
-        <TabsContent value="tools" className="flex-1 overflow-y-auto px-4 py-3">
-          <ToolsSection agentId={id} />
-        </TabsContent>
-      </Tabs>
+        {tab === 'tools' && (
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            <ToolsSection agentId={id} />
+          </div>
+        )}
+      </div>
 
       <AgentFormDialog open={editOpen} onOpenChange={setEditOpen} agent={agent} providers={info?.providers ?? []} />
     </div>

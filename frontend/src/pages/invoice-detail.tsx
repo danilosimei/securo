@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { useUrlTab } from '@/hooks/use-url-tab'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -105,7 +106,7 @@ export default function InvoiceDetailPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [recurringOpen, setRecurringOpen] = useState(false)
   const [deductionOpen, setDeductionOpen] = useState(false)
-  const [tab, setTab] = useState<Tab>('details')
+  const [tab, setTab] = useUrlTab(['details', 'document'] as const)
   const [copied, setCopied] = useState(false)
 
   const { data: invoice, isLoading } = useQuery({
