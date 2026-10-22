@@ -115,8 +115,9 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        // Stays at the bottom while the body scrolls (the content pads by 1.5rem).
-        "sticky bottom-0 z-10 -mx-6 -mb-6 flex flex-col-reverse gap-2 border-t bg-background px-6 py-4 sm:flex-row sm:justify-end",
+        // Stays at the bottom while the body scrolls: its own bottom padding
+        // stands in for the content's 1.5rem, which the negative margin gives back.
+        "sticky -bottom-6 z-10 -mb-6 flex flex-col-reverse gap-2 bg-background pt-4 pb-6 sm:flex-row sm:justify-end",
         className
       )}
       {...props}
