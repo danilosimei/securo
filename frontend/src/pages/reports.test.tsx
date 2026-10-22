@@ -212,7 +212,8 @@ describe('Reports page, tabs', () => {
   it('a chart click that changes the URL switches the tab', async () => {
     const { user } = renderWithProviders(<ReportsPage />, { route: '/reports?tab=overview&period=last_month' })
 
-    await user.click(await screen.findByTestId('highlight-heavy_group'))
+    const card = await screen.findByTestId('highlight-heavy_group')
+    await user.click(within(card).getByTestId('highlight-action-explore'))
 
     await waitFor(() =>
       expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'category', group_id: 'g-car', period: 'last_month' }),

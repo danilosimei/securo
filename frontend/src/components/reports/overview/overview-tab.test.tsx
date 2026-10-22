@@ -57,9 +57,11 @@ describe('OverviewTab', () => {
 
     await waitFor(() =>
       expect(screen.getByTestId('report-headline')).toHaveTextContent(
-        'In September you spent R$75.8K, 86% more than in August, and you were R$39.8K short.',
+        'In September you spent R$75.8K, ▲86% more than in August, and you were R$39.8K short.',
       ),
     )
+    // The numbers stand out and the change is a pill, red: spending went up.
+    expect(screen.getByTestId('delta-pill')).toHaveAttribute('data-tone', 'bad')
     expect(api.reports.overview).toHaveBeenCalledWith({ period: 'last_month' })
     // The previous period is asked for with its real dates.
     expect(api.reports.overview).toHaveBeenCalledWith({ period: 'custom', from: '2026-08-01', to: '2026-08-31' })
@@ -77,35 +79,93 @@ describe('OverviewTab', () => {
     expect(screen.getByTestId('kpi-fixed')).toHaveAttribute('href', '/reports?tab=recurring&period=last_month')
   })
 
-  it('turns each highlight into a card that leads to the right place', async () => {
+  it('turns each highlight into a card: tone, number, mini chart, what pulled it and what to do', async () => {
     renderTab()
 
     const heavy = await screen.findByTestId('highlight-heavy_group')
-    expect(heavy).toHaveTextContent('R$54K')
+    expect(heavy).toHaveAttribute('data-tone', 'info')
+    expect(heavy).toHaveTextContent(t('reports.overview.highlights.tone.info'))
+    expect(within(heavy).getByTestId('highlight-value')).toHaveTextContent('R$54K')
     expect(heavy).toHaveTextContent('Carro custa R$ 54 mil por ano')
-    expect(heavy).toHaveAttribute('href', '/reports?tab=explore&period=last_month&group=g-car')
+    expect(within(heavy).getByTestId('mini-trend')).toBeInTheDocument()
+    const drivers = within(heavy).getByTestId('highlight-drivers')
+    expect(within(drivers).getByRole('link', { name: /Financiamento/ })).toHaveAttribute(
+      'href',
+      '/reports?tab=explore&period=last_month&group=g-car&category=c-loan',
+    )
+    expect(within(heavy).getByTestId('highlight-action-explore')).toHaveAttribute(
+      'href',
+      '/reports?tab=explore&period=last_month&group=g-car',
+    )
     // The spike opens the month that spiked, as a custom period.
-    expect(screen.getByTestId('highlight-spike')).toHaveAttribute(
+    const spike = screen.getByTestId('highlight-spike')
+    expect(spike).toHaveAttribute('data-tone', 'alert')
+    expect(within(spike).getByTestId('highlight-action-month')).toHaveAttribute(
       'href',
       '/reports?tab=explore&period=custom&from=2026-09-01&to=2026-09-30',
     )
-    expect(screen.getByTestId('highlight-to_review')).toHaveAttribute('href', '/categorization')
+    // A change is written with its sign.
+    expect(within(spike).getByTestId('highlight-drivers')).toHaveTextContent('+R$20K')
+    const review = screen.getByTestId('highlight-to_review')
+    expect(within(review).getByTestId('highlight-action-review')).toHaveAttribute('href', '/categorization')
+    expect(within(review).queryByTestId('mini-trend')).not.toBeInTheDocument()
   })
 
   it('the spike card follows the month the server names, not the priciest bar', async () => {
     const data = overviewFixture()
+    const july = { tab: 'explore', period: 'custom', from: '2026-07-01', to: '2026-07-31' }
     data.highlights = data.highlights.map((h) =>
-      h.rule === 'spike' ? { ...h, link: { tab: 'explore', period: 'custom', from: '2026-07-01', to: '2026-07-31' } } : h,
+      h.rule === 'spike' ? { ...h, link: july, actions: [{ kind: 'month' as const, label: 'Ver Jul/26', link: july }] } : h,
     )
     api.reports.overview.mockImplementation((params: ReportPeriodParams) =>
       Promise.resolve(params.period === 'custom' ? previousOverview() : data),
     )
     renderTab()
 
-    expect(await screen.findByTestId('highlight-spike')).toHaveAttribute(
+    const spike = await screen.findByTestId('highlight-spike')
+    expect(within(spike).getByTestId('highlight-action-month')).toHaveAttribute(
       'href',
       '/reports?tab=explore&period=custom&from=2026-07-01&to=2026-07-31',
     )
+  })
+
+  it('shows how the month is going first, as a band with the pace bar', async () => {
+    const data = overviewFixture()
+    data.highlights = [
+      {
+        rule: 'month_pace',
+        title: 'Em 21 dias você gastou R$ 31 mil, 18% acima do normal',
+        value: '31000.00',
+        compare: 'Nesse passo, o mês fecha em R$ 46 mil',
+        link: { tab: 'explore', period: 'this_month' },
+        tone: 'alert',
+        sparkline: null,
+        drivers: [
+          { label: 'Normal até hoje', value: '26271.00', link: null },
+          { label: 'Nesse passo, fecha em', value: '45762.00', link: null },
+          { label: 'Um mês normal', value: '38782.00', link: null },
+        ],
+        actions: [{ kind: 'month', label: 'Ver o mês', link: { tab: 'explore', period: 'this_month' } }],
+      },
+      ...data.highlights,
+    ]
+    api.reports.overview.mockImplementation((params: ReportPeriodParams) =>
+      Promise.resolve(params.period === 'custom' ? previousOverview() : data),
+    )
+    renderTab()
+
+    const pace = await screen.findByTestId('month-pace')
+    expect(pace).toHaveAttribute('data-tone', 'alert')
+    expect(pace).toHaveTextContent('Em 21 dias você gastou R$ 31 mil, 18% acima do normal')
+    expect(pace).toHaveTextContent(t('reports.overview.pace.normal'))
+    expect(pace).toHaveTextContent('R$26.3K')
+    expect(pace).toHaveTextContent('R$45.8K')
+    expect(within(pace).getByRole('img')).toHaveAccessibleName(
+      t('reports.overview.pace.aria', { spent: 'R$31K', normal: 'R$26.3K', projection: 'R$45.8K' }),
+    )
+    expect(within(pace).getByTestId('month-pace-action')).toHaveAttribute('href', '/reports?tab=explore&period=this_month')
+    // The band is not one of the cards.
+    expect(within(screen.getByTestId('highlights')).queryByTestId('month-pace')).not.toBeInTheDocument()
   })
 
   it('lists what changed as diverging bars, and a click opens the group in Explore', async () => {
@@ -131,12 +191,12 @@ describe('OverviewTab', () => {
     expect(where()).toBe('/reports?tab=explore&period=last_month&group=g-car&category=c-fuel')
   })
 
-  it('marks the month above 1.5× the median and opens a month in Explore', async () => {
+  it('marks the month well above normal and opens a month in Explore', async () => {
     const { user } = renderTab()
 
     await screen.findByTestId('month-2026-09')
     const block = screen.getByTestId('block-monthly')
-    expect(block).toHaveTextContent(/September was the costliest month: R\$75\.8K, 2\.1× the R\$36K median/)
+    expect(block).toHaveTextContent('September was the costliest month: R$75.8K, 2.1 times a normal month')
     await user.click(within(block).getByTestId('month-2026-09'))
     expect(where()).toBe('/reports?tab=explore&period=custom&from=2026-09-01&to=2026-09-30')
   })

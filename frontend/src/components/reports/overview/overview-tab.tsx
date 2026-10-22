@@ -1,8 +1,9 @@
 /** Reports > Visão geral: the answer first (one sentence), then the four
- *  numbers, the highlights, what changed, month by month and the money map.
+ *  numbers, how the month is going and the highlights, what changed, month
+ *  by month and the money map, each block titled by its answer.
  *  The period lives in the URL; switching it keeps the previous numbers up,
  *  dimmed, until the new ones land. */
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { reports, type OverviewResponse } from '@/lib/api'
@@ -11,15 +12,19 @@ import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { Segmented } from '@/components/invoice-ui'
 import { useReportedRange } from '@/components/reports/common/report-range'
-import { BlockError, Headline, ReportBlock } from '@/components/reports/common/report-block'
+import { Wallet } from 'lucide-react'
+import { BlockError, ReportBlock } from '@/components/reports/common/report-block'
+import { AnswerLine } from '@/components/reports/common/answer-line'
 import { blockState } from '@/components/reports/common/block-state'
-import { formatMoneyShort, monthName } from '@/components/reports/common/chart-utils'
+import { formatMoneyShort, formatPercent, monthName } from '@/components/reports/common/chart-utils'
 import { useGroupPalette } from '@/components/reports/common/group-colors'
 import { tabLink, useReportPeriod } from '@/components/reports/common/report-url'
 import { MoneyMapView } from '@/components/reports/money-map/money-map'
+import { buildMapModel } from '@/components/reports/money-map/money-map-model'
 import { overviewHeadline } from './headline'
 import { KpiRow } from './kpi-row'
 import { Highlights } from './highlights'
+import { Repeats } from './repeats'
 import { ChangesChart } from './changes-chart'
 import { MonthlyChart } from './monthly-chart'
 import { changesSummary, peakMonth } from './overview-model'
@@ -63,7 +68,7 @@ export function OverviewTab() {
     ? t('reports.overview.changes.answerUp', { name: changes.up.label, value: money(Number(changes.up.delta)) })
     : changes?.down
       ? t('reports.overview.changes.answerDown', { name: changes.down.label, value: money(-Number(changes.down.delta)) })
-      : undefined
+      : t('reports.overview.changes.title')
   const peak = data ? peakMonth(data.monthly) : null
   const monthlyAnswer = peak
     ? t(peak.spike ? 'reports.overview.monthly.ariaSpike' : 'reports.overview.monthly.aria', {
@@ -72,6 +77,21 @@ export function OverviewTab() {
         multiple: peak.multiple?.toLocaleString(locale, { maximumFractionDigits: 1 }) ?? '',
         median: money(Number(peak.month.median_spending)),
       })
+    : t('reports.overview.monthly.title')
+  const mapModel = useMemo(() => (data ? buildMapModel(data.money_map, false) : null), [data])
+  const mapTop = mapModel?.groups[0]
+  const mapAnswer = mapModel && mapTop && mapModel.totalSpending > 0
+    ? t('reports.moneyMap.titleAnswer', {
+        group: mapTop.label,
+        share: formatPercent(mapTop.value / mapModel.totalSpending, locale),
+      })
+    : ''
+  const mapNote = mapModel
+    ? mapModel.left > 0
+      ? t('reports.moneyMap.answerLeft', { left: money(mapModel.left) })
+      : mapModel.left < 0
+        ? t('reports.moneyMap.answerShort', { left: money(-mapModel.left) })
+        : undefined
     : undefined
 
   return (
@@ -84,7 +104,7 @@ export function OverviewTab() {
         </p>
       ) : (
         <>
-          <Headline text={headline} loading={!data} stale={stale} />
+          <AnswerLine parts={headline} icon={Wallet} loading={!data} stale={stale} />
 
           <KpiRow
             data={data}
@@ -97,7 +117,6 @@ export function OverviewTab() {
 
           <ReportBlock
             title={t('reports.overview.highlights.title')}
-            description={t('reports.overview.highlights.description')}
             state={blockState(overview, false)}
             stale={stale}
             onRetry={() => overview.refetch()}
@@ -108,10 +127,26 @@ export function OverviewTab() {
             {data && <Highlights data={data} query={query} currency={currency} locale={locale} palette={palette} />}
           </ReportBlock>
 
+          {data && (data.repeats?.length ?? 0) > 0 && (
+            <ReportBlock
+              question={t('reports.overview.repeats.question')}
+              title={t('reports.overview.repeats.title')}
+              description={t('reports.overview.repeats.sum', {
+                value: money((data.repeats ?? []).reduce((sum, r) => sum + Number(r.month_total), 0)),
+              })}
+              state={blockState(overview, false)}
+              stale={stale}
+              onRetry={() => overview.refetch()}
+              testId="block-repeats"
+            >
+              <Repeats data={data} query={query} currency={currency} locale={locale} palette={palette} />
+            </ReportBlock>
+          )}
+
           <div className="grid gap-5 lg:grid-cols-5">
             <ReportBlock
-              title={t('reports.overview.monthly.title')}
-              description={monthlyAnswer}
+              question={t('reports.overview.monthly.question')}
+              title={monthlyAnswer}
               state={blockState(overview, (data?.monthly.length ?? 0) < 2)}
               emptyText={t('reports.overview.monthly.tooShort')}
               stale={stale}
@@ -122,8 +157,9 @@ export function OverviewTab() {
               {data && <MonthlyChart months={data.monthly} currency={currency} locale={locale} />}
             </ReportBlock>
             <ReportBlock
-              title={t('reports.overview.changes.title')}
-              description={changesAnswer}
+              question={t('reports.overview.changes.question')}
+              title={changesAnswer}
+              description={t('reports.overview.changes.description')}
               state={blockState(overview, (data?.changes.length ?? 0) === 0)}
               emptyText={t('reports.overview.changes.empty')}
               stale={stale}
@@ -132,16 +168,15 @@ export function OverviewTab() {
               testId="block-changes"
             >
               {data && (
-                <>
-                  <p className="mb-2 text-[11px] text-muted-foreground">{t('reports.overview.changes.description')}</p>
-                  <ChangesChart changes={data.changes} query={query} currency={currency} locale={locale} palette={palette} />
-                </>
+                <ChangesChart changes={data.changes} query={query} currency={currency} locale={locale} palette={palette} />
               )}
             </ReportBlock>
           </div>
 
           <ReportBlock
-            title={t('reports.moneyMap.title')}
+            question={t('reports.moneyMap.question')}
+            title={mapAnswer || t('reports.moneyMap.title')}
+            description={mapNote}
             state={blockState(overview, false)}
             stale={stale}
             onRetry={() => overview.refetch()}
@@ -167,6 +202,7 @@ export function OverviewTab() {
                 locale={locale}
                 palette={palette}
                 view={mapView}
+                showAnswer={false}
               />
             )}
           </ReportBlock>

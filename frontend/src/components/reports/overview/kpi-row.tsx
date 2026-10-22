@@ -77,7 +77,13 @@ export function KpiRow({ data, previous, currency, locale, stale, fixedHref }: K
   const comparable = previous && !data.period.partial ? previous.kpis : null
   const prev = (v: string | undefined) => (comparable && v !== undefined ? Number(v) : null)
   const short = left < 0
-  const money = (v: number) => mask(formatCurrency(v, currency, locale))
+  // The full value from a tablet up; on a phone, the short one fits.
+  const money = (v: number) => (
+    <>
+      <span className="sm:hidden">{mask(formatMoneyShort(v, currency, locale))}</span>
+      <span className="hidden sm:inline">{mask(formatCurrency(v, currency, locale))}</span>
+    </>
+  )
   const fixed = k.fixed_share
   const leftDiff = comparable ? left - Number(comparable.left) : null
 
