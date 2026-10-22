@@ -1622,7 +1622,8 @@
     "hideWithRulesDescription": "{{count}} aktív szabály rendeli hozzá ezt a kategóriát. Már az elrejtés is megakadályozza, hogy új tranzakciókat ebbe kategorizáljanak. Ha kikapcsolod őket, a teljes szabály leáll, az általa beállított partnerrel és jegyzetekkel együtt.",
     "hideKeepRules": "Csak elrejtés",
     "hideAndTurnOffRules": "Elrejtés és a szabályok kikapcsolása",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "Még nincs kategória"
   },
   "groups": {
     "title": "Kategóriacsoportok",
@@ -2520,7 +2521,8 @@
     "closePreview": "Előnézet bezárása",
     "remove": "Eltávolítás",
     "undo": "Undo",
-    "clearSearch": "Keresés törlése"
+    "clearSearch": "Keresés törlése",
+    "loadError": "Nem sikerült betölteni. Próbáld újra."
   },
   "splitGroups": {
     "searchPlaceholder": "Csoportok keresése...",

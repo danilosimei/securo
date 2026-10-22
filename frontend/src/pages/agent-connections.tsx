@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -24,7 +28,7 @@ export default function AgentConnectionsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; detail: string }>>({})
 
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['agent-connections'],
     queryFn: () => agents.connections.list(),
   })
@@ -68,27 +72,27 @@ export default function AgentConnectionsPage() {
 
       <p className="text-sm text-muted-foreground mb-6 max-w-2xl">{t('agents.connections.subtitle')}</p>
 
-      {isLoading ? (
-        <div className="bg-card rounded-xl border border-border shadow-sm p-6 text-sm text-muted-foreground">
-          {t('agents.loading')}
-        </div>
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <SectionCard><ListSkeleton /></SectionCard>
       ) : (list?.length ?? 0) === 0 ? (
-        <div className="bg-card rounded-xl border border-border shadow-sm p-10 text-center">
-          <div className="h-12 w-12 mx-auto rounded-full bg-muted flex items-center justify-center mb-3">
-            <Plug className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <h2 className="text-base font-semibold">{t('agents.connections.empty.title')}</h2>
-          <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-            {t('agents.connections.empty.subtitle')}
-          </p>
-          {canWrite && (
-            <Button size="sm" className="gap-1.5 h-8 mt-4" onClick={() => setCreateOpen(true)}>
-              <Plus size={13} /> {t('agents.connections.add')}
-            </Button>
-          )}
-        </div>
+        <SectionCard>
+          <EmptyState
+            icon={Plug}
+            title={t('agents.connections.empty.title')}
+            hint={t('agents.connections.empty.subtitle')}
+            action={
+              canWrite ? (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus /> {t('agents.connections.add')}
+                </Button>
+              ) : undefined
+            }
+          />
+        </SectionCard>
       ) : (
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <SectionCard>
           <div className="divide-y divide-border">
             {list?.map((c) => {
               const tested = testResults[c.id]
@@ -144,7 +148,7 @@ export default function AgentConnectionsPage() {
               )
             })}
           </div>
-        </div>
+        </SectionCard>
       )}
 
       <McpExternalPanel />

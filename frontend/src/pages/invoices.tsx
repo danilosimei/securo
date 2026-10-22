@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -130,7 +133,7 @@ export default function InvoicesPage() {
     queryFn: () => invoicesApi.facets(year ?? undefined, direction),
     placeholderData: keepPreviousData,
   })
-  const { data: list, isLoading, isPlaceholderData } = useQuery({
+  const { data: list, isLoading, isError, error, refetch, isPlaceholderData } = useQuery({
     queryKey: ['invoices', filter, year, direction],
     queryFn: () =>
       invoicesApi.list({
@@ -378,40 +381,38 @@ export default function InvoicesPage() {
         aria-busy={isPlaceholderData}
         className={cn('transition-opacity duration-200', isPlaceholderData && 'opacity-60')}
       >
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         {isLoading ? (
-          <div className="p-5 space-y-3">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
+          <ListSkeleton />
         ) : visible.length === 0 ? (
-          <div className="px-5 py-14 text-center" data-testid="invoices-empty">
-            <Receipt className="h-8 w-8 mx-auto text-muted-foreground/50" />
-            <p className="mt-3 text-sm text-muted-foreground max-w-sm mx-auto">
-              {filter !== 'all'
+          <EmptyState
+            icon={Receipt}
+            testId="invoices-empty"
+            title={
+              filter !== 'all'
                 ? t('invoices.emptyFiltered')
                 : year
                   ? t('invoices.emptyYear', { year: t('invoices.fiscalYear', { year }) })
-                  : t('invoices.empty')}
-            </p>
-            {/* When a year emptied the list, the useful next move is to
-                widen it — not to create an invoice in a year nobody is
-                looking at. */}
-            {filter === 'all' && year && facets && facets.years.length > 0 ? (
-              <Button size="sm" variant="outline" className="mt-4" onClick={() => setYear(null)}>
-                {t('invoices.showAllYears')}
-              </Button>
-            ) : (
-              filter === 'all' &&
-              canWrite && (
-                <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  {t('invoices.new')}
+                  : t('invoices.empty')
+            }
+            action={
+              // When a year emptied the list, the useful next move is to
+              // widen it, not to create an invoice in a year nobody is
+              // looking at.
+              filter === 'all' && year && facets && facets.years.length > 0 ? (
+                <Button variant="outline" onClick={() => setYear(null)}>
+                  {t('invoices.showAllYears')}
                 </Button>
-              )
-            )}
-          </div>
+              ) : filter === 'all' && canWrite ? (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus /> {t('invoices.new')}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -513,6 +514,7 @@ export default function InvoicesPage() {
           </div>
         )}
       </SectionCard>
+      )}
       </div>
 
       <CreateInvoiceDialog

@@ -1,4 +1,8 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
 import { formatAccountMask, getAccountLabel, getAccountName } from '@/lib/account-utils'
 import { getConnectionName } from '@/lib/connection-utils'
 import { Link, useNavigate } from 'react-router-dom'
@@ -22,9 +26,8 @@ import {
 } from '@/components/ui/dialog'
 import { DatePickerInput } from '@/components/ui/date-picker-input'
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
 import type { Account, BankConnection } from '@/types'
-import { RefreshCw, TriangleAlert, Unlink, Settings } from 'lucide-react'
+import { Landmark, Plus, RefreshCw, TriangleAlert, Unlink, Settings, Wallet } from 'lucide-react'
 import { AccountIcon, ConnectionLogo } from '@/components/account-icon'
 import { getAccountTypeConfig } from '@/lib/account-type-config'
 import { AccountPageActions } from '@/components/account-page-actions'
@@ -88,12 +91,12 @@ export default function AccountsPage() {
   const [reconnectItemId, setReconnectItemId] = useState<string | null>(null)
   const [tokenReconnectConnection, setTokenReconnectConnection] = useState<BankConnection | null>(null)
 
-  const { data: accountsList, isLoading: accountsLoading } = useQuery({
+  const { data: accountsList, isLoading: accountsLoading, isError: accountsError, error: accountsErr, refetch: refetchAccounts } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => accounts.list(),
   })
 
-  const { data: connectionsList, isLoading: connectionsLoading } = useQuery({
+  const { data: connectionsList, isLoading: connectionsLoading, isError: connectionsError, error: connectionsErr, refetch: refetchConnections } = useQuery({
     queryKey: ['connections'],
     queryFn: connections.list,
   })
@@ -243,10 +246,13 @@ export default function AccountsPage() {
         }
       />
 
-      {isLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
-        </div>
+      {accountsError || connectionsError ? (
+        <ErrorState
+          error={accountsErr ?? connectionsErr}
+          onRetry={() => { void refetchAccounts(); void refetchConnections() }}
+        />
+      ) : isLoading ? (
+        <SectionCard><ListSkeleton /></SectionCard>
       ) : (
         <div className="space-y-6">
           {/* Manual Accounts */}
@@ -310,11 +316,17 @@ export default function AccountsPage() {
                 })}
               </div>
             ) : (
-              <div className="px-5 py-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  {t(activeAccountIds ? 'accounts.emptyFiltered' : 'accounts.noManualAccounts')}
-                </p>
-              </div>
+              <EmptyState
+                icon={Wallet}
+                title={t(activeAccountIds ? 'accounts.emptyFiltered' : 'accounts.noManualAccounts')}
+                action={
+                  canWrite && !activeAccountIds ? (
+                    <Button onClick={() => { setEditingAccount(null); setDialogOpen(true) }}>
+                      <Plus /> {t('accounts.addManual')}
+                    </Button>
+                  ) : undefined
+                }
+              />
             )}
           </div>
 
@@ -470,9 +482,19 @@ export default function AccountsPage() {
               })}
             </div>
           ) : (
-            <div className="bg-card rounded-xl border border-dashed border-border p-8 text-center">
-              <p className="text-sm text-muted-foreground">{t('accounts.noBankConnections')}</p>
-            </div>
+            <SectionCard>
+              <EmptyState
+                icon={Landmark}
+                title={t('accounts.noBankConnections')}
+                action={
+                  canWrite ? (
+                    <Button variant="outline" onClick={() => setConnectorSelectOpen(true)}>
+                      <Plus /> {t('accounts.connectBank')}
+                    </Button>
+                  ) : undefined
+                }
+              />
+            </SectionCard>
           )}
 
           {/* Closed Accounts */}

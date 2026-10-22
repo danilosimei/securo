@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { Pagination } from '@/components/ui/pagination'
 import { getAccountLabel, getAccountName, sortAccountsByAbsoluteBalance, sumAccountBalances } from '@/lib/account-utils'
 import { currentMonth, shiftMonth, monthLastDay, monthLabel, monthRange } from '@/lib/month-utils'
 import { useTranslation } from 'react-i18next'
@@ -8,15 +9,7 @@ import { dashboard, transactions, budgets, categories as categoriesApi, category
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
 import { ProjectedTransactionBadge } from '@/components/projected-transaction-badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import {
@@ -566,7 +559,6 @@ export default function DashboardPage() {
     return rows
   }, [currentMonthTxs, projectedTxs, txSortDesc, groupNameById])
 
-  const txTotalPages = Math.ceil(allDisplayRows.length / txPerPage)
   const pagedRows = allDisplayRows.slice((txPage - 1) * txPerPage, txPage * txPerPage)
   const txListLoading = currentTxLoading || projectedTxLoading
 
@@ -1395,63 +1387,20 @@ export default function DashboardPage() {
                 </TableBody>
               </Table>
               )}
-              {allDisplayRows.length > 10 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-5 py-4 border-t border-border">
-                  <div className="hidden sm:block w-32" />
-                  {txTotalPages > 1 ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={txPage <= 1}
-                        onClick={() => setTxPage(txPage - 1)}
-                      >
-                        {t('dashboard.previous')}
-                      </Button>
-                      <span className="text-sm text-muted-foreground">
-                        {txPage} / {txTotalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={txPage >= txTotalPages}
-                        onClick={() => setTxPage(txPage + 1)}
-                      >
-                        {t('dashboard.next')}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="hidden sm:block" />
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{t('common.rowsPerPage', 'Rows per page')}</span>
-                    <Select
-                      value={String(txPerPage)}
-                      onValueChange={(val) => {
-                        const nextLimit = Number(val)
-                        setTxPerPage(nextLimit)
-                        setTxPage(1)
-                        try {
-                          localStorage.setItem('securo.dashboard.pageSize', String(nextLimit))
-                        } catch {
-                          // ignored
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="w-[70px] h-8 text-xs">
-                        <SelectValue placeholder={txPerPage} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="10">10</SelectItem>
-                        <SelectItem value="20">20</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                        <SelectItem value="100">100</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
+              <Pagination
+                page={txPage}
+                pageSize={txPerPage}
+                total={allDisplayRows.length}
+                onPageChange={setTxPage}
+                onPageSizeChange={(nextLimit) => {
+                  setTxPerPage(nextLimit)
+                  try {
+                    localStorage.setItem('securo.dashboard.pageSize', String(nextLimit))
+                  } catch {
+                    // ignored
+                  }
+                }}
+              />
             </>
           ) : (
             <p className="text-muted-foreground text-sm text-center py-8">{t('dashboard.noTransactions')}</p>

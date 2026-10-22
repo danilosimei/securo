@@ -1,4 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { Pagination } from '@/components/ui/pagination'
 import { useRegisterPageChatContext } from '@/lib/page-chat-context'
 import { getAccountName } from '@/lib/account-utils'
 import { AccountIcon } from '@/components/account-icon'
@@ -21,13 +25,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Table,
   TableBody,
   TableCell,
@@ -35,8 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, ArrowLeftRight, ArrowUp, ArrowDown, Check, Clock, HelpCircle, Info, Paperclip, Trash2, Users, X, EyeClosed, ChartNoAxesColumn, SlidersHorizontal, Receipt } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, ArrowUp, ArrowDown, Check, Clock, HelpCircle, Info, Paperclip, Trash2, Users, X, EyeClosed, ChartNoAxesColumn, SlidersHorizontal, Receipt, ReceiptText, Plus } from 'lucide-react'
 import type { Transaction, InstallmentSeriesInput, TransactionApplyScope, TransactionEditPayload, ReconciliationSuggestion } from '@/types'
 import { RuleDialog } from '@/components/rule-dialog'
 import { PageHeader } from '@/components/page-header'
@@ -395,7 +391,7 @@ export default function TransactionsPage() {
   const noAccounts = filterAccountIds.length === 0
     && activeAccountIds !== null && activeAccountIds.length === 0
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['transactions', page, limit, effectiveAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterMerchantKey, filterGroupId, filterType, filterStatus, filterCategorySource, filterFrom, filterTo, filterMinAmount, filterMaxAmount, hideIgnored, searchQuery, tagFilters, isMobile ? 'date' : grid.sortBy, isMobile ? 'desc' : grid.sortDir],
     enabled: !noAccounts,
     queryFn: () =>
@@ -844,7 +840,6 @@ export default function TransactionsPage() {
       ? t('transactions.linkTransferInvalidPair')
       : undefined
 
-  const totalPages = data ? Math.ceil(data.total / limit) : 0
 
   const isTransferCategoryPromptOpen = !!pendingTransferCategoryUpdate
 
@@ -1505,14 +1500,11 @@ export default function TransactionsPage() {
       )}
 
       {/* Table / Mobile Cards */}
-      {viewMode === 'list' && (
+      {viewMode === 'list' && isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {viewMode === 'list' && !isError && (
       <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
         {isLoading ? (
-          <div className="p-6 space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
+          <ListSkeleton rows={5} />
         ) : isMobile ? (
           /* ── Mobile card view: grouped by date ── */
           <div>
@@ -1614,15 +1606,21 @@ export default function TransactionsPage() {
                   {grid.visibleColumns.map(col => renderBodyCell(col, tx))}
                 </TableRow>
               ))}
-              {filteredItems.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={grid.visibleColumns.length + 1} className="text-center py-16 text-muted-foreground">
-                    {t('transactions.noResults')}
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
+          {filteredItems.length === 0 && (
+            <EmptyState
+              icon={ReceiptText}
+              title={t('transactions.noResults')}
+              action={
+                canWrite ? (
+                  <Button onClick={() => { setEditingTx(null); setDialogOpen(true) }}>
+                    <Plus /> {t('transactions.addManual')}
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
           </div>
         )}
         {/* Filtered summary (issue #185): income / expenses / net across
@@ -1705,67 +1703,26 @@ export default function TransactionsPage() {
             </span>
           </div>
         )}
+        {data && (
+          <Pagination
+            page={page}
+            pageSize={limit}
+            total={data.total}
+            onPageChange={setPage}
+            onPageSizeChange={(nextLimit) => {
+              setLimit(nextLimit)
+              try {
+                localStorage.setItem('securo.transactions.pageSize', String(nextLimit))
+              } catch {
+                // ignored
+              }
+            }}
+          />
+        )}
       </div>
       )}
+      {viewMode === 'list' && selectedIds.size > 0 && <div className="h-16" aria-hidden="true" />}
 
-      {/* Pagination */}
-      {viewMode === 'list' && data && data.total > 10 && (
-        <div className={`flex flex-col sm:flex-row items-center justify-between gap-4 py-4 ${selectedIds.size > 0 ? 'pb-20' : ''}`}>
-          <div className="hidden sm:block w-32" />
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-              >
-                {t('transactions.previous')}
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage(page + 1)}
-              >
-                {t('transactions.next')}
-              </Button>
-            </div>
-          ) : (
-            <div className="hidden sm:block" />
-          )}
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{t('common.rowsPerPage', 'Rows per page')}</span>
-            <Select
-              value={String(limit)}
-              onValueChange={(val) => {
-                const nextLimit = Number(val)
-                setLimit(nextLimit)
-                setPage(1)
-                try {
-                  localStorage.setItem('securo.transactions.pageSize', String(nextLimit))
-                } catch {
-                  // ignored
-                }
-              }}
-            >
-              <SelectTrigger className="w-[70px] h-8 text-xs">
-                <SelectValue placeholder={limit} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      )}
       {/* Bulk Action Bar — aligned with the main content area: clears the
           fixed sidebar on lg+ and matches the page's max-w-7xl + p-6 wrapper
           so the bar visually sits over the transactions list, not the

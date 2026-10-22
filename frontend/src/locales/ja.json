@@ -1622,7 +1622,8 @@
     "hideWithRulesDescription": "{{count}}件の有効なルールがこのカテゴリを割り当てています。非表示にするだけでも新しい取引の分類は停止されます。ルールを無効にすると、取引相手やメモの設定を含むルール全体が停止されます。",
     "hideKeepRules": "非表示のみ",
     "hideAndTurnOffRules": "非表示にしてルールを無効化",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "カテゴリはまだありません"
   },
   "groups": {
     "title": "カテゴリグループ",
@@ -2520,7 +2521,8 @@
     "closePreview": "プレビューを閉じる",
     "remove": "削除",
     "undo": "Undo",
-    "clearSearch": "検索をクリア"
+    "clearSearch": "検索をクリア",
+    "loadError": "読み込めませんでした。もう一度お試しください。"
   },
   "splitGroups": {
     "searchPlaceholder": "グループを検索...",

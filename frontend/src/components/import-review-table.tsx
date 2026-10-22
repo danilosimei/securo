@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useState } from 'react'
+import { Pagination } from '@/components/ui/pagination'
 import { SearchBar } from '@/components/ui/search-bar'
 import { useTranslation } from 'react-i18next'
 import type { ImportReviewTransaction, Category, CategoryGroup } from '@/types'
@@ -13,13 +14,6 @@ import {
 } from '@/components/ui/table'
 import { CategorySelect } from '@/components/category-select'
 import { CategoryFilterDropdown } from '@/components/category-filter-dropdown'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 
@@ -243,61 +237,20 @@ export function ImportReviewTable({
         </Table>
       </div>
 
-      {/* Pagination */}
-      {filtered.length > 10 && (
-        <div className="px-5 py-3 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
-          {totalPages > 1 ? (
-            <div className="flex items-center gap-4">
-              <button
-                className="text-muted-foreground hover:text-foreground disabled:opacity-30 font-medium"
-                disabled={safePage <= 1}
-                onClick={() => onPageChange(safePage - 1)}
-              >
-                ← {t('common.previous', 'Previous')}
-              </button>
-              <span className="text-xs text-muted-foreground">
-                {t('import.page', { current: safePage, total: totalPages })}
-              </span>
-              <button
-                className="text-muted-foreground hover:text-foreground disabled:opacity-30 font-medium"
-                disabled={safePage >= totalPages}
-                onClick={() => onPageChange(safePage + 1)}
-              >
-                {t('common.next', 'Next')} →
-              </button>
-            </div>
-          ) : (
-            <div className="hidden sm:block" />
-          )}
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{t('common.rowsPerPage', 'Rows per page')}</span>
-            <Select
-              value={String(pageSize)}
-              onValueChange={(val) => {
-                const nextSize = Number(val)
-                setPageSize(nextSize)
-                onPageChange(1)
-                try {
-                  localStorage.setItem('securo.import.pageSize', String(nextSize))
-                } catch {
-                  // ignored
-                }
-              }}
-            >
-              <SelectTrigger className="w-[70px] h-8 text-xs">
-                <SelectValue placeholder={pageSize} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      )}
+      <Pagination
+        page={safePage}
+        pageSize={pageSize}
+        total={filtered.length}
+        onPageChange={onPageChange}
+        onPageSizeChange={(nextSize) => {
+          setPageSize(nextSize)
+          try {
+            localStorage.setItem('securo.import.pageSize', String(nextSize))
+          } catch {
+            // ignored
+          }
+        }}
+      />
     </div>
   )
 }

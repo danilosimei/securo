@@ -1624,7 +1624,8 @@
     "hideWithRulesDescription": "{{count}} actieve regels wijzen deze categorie toe. Verbergen zorgt er al voor dat ze geen nieuwe transacties meer categoriseren. Ze uitschakelen stopt de hele regel, inclusief de begunstigde of notities die de regel ook instelt.",
     "hideWithRulesTitle": "{{name}} verbergen?",
     "showDefault": "Standaardcategorie tonen",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "Nog geen categorieën"
   },
   "groups": {
     "title": "Categoriegroepen",
@@ -2522,7 +2523,8 @@
     "closePreview": "Voorbeeld sluiten",
     "remove": "Verwijderen",
     "undo": "Undo",
-    "clearSearch": "Zoekopdracht wissen"
+    "clearSearch": "Zoekopdracht wissen",
+    "loadError": "Laden is mislukt. Probeer het opnieuw."
   },
   "splitGroups": {
     "searchPlaceholder": "Groepen zoeken...",

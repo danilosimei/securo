@@ -1626,7 +1626,8 @@
     "hideWithRulesDescription": "{{count}} regras ativas atribuem esta categoria. Ocultá-la já impede que elas categorizem novas transações. Desligá-las para a regra inteira, incluindo a pessoa ou as notas que ela também define.",
     "hideKeepRules": "Apenas ocultar",
     "hideAndTurnOffRules": "Ocultar e desligar as regras",
-    "organizeWithAi": "Organizar com IA"
+    "organizeWithAi": "Organizar com IA",
+    "empty": "Nenhuma categoria ainda"
   },
   "groups": {
     "title": "Grupos de Categorias",
@@ -2524,7 +2525,8 @@
     "closePreview": "Fechar visualização",
     "remove": "Remover",
     "undo": "Desfazer",
-    "clearSearch": "Limpar busca"
+    "clearSearch": "Limpar busca",
+    "loadError": "Não deu para carregar. Tente de novo."
   },
   "splitGroups": {
     "searchPlaceholder": "Buscar grupos...",

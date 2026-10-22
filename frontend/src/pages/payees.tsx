@@ -1,4 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { Pagination } from '@/components/ui/pagination'
+import { SectionCard } from '@/components/ui/section-card'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { useQuery, useMutation, useQueryClient, type Query } from '@tanstack/react-query'
@@ -12,7 +17,6 @@ import { fiscal as fiscalApi, type PayeeWritePayload } from '@/lib/api'
 import { applyMask, formatTaxId } from '@/lib/tax-id'
 import { TaxIdKindPicker } from '@/components/tax-id-kind-picker'
 import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -47,14 +51,7 @@ import { RowActions } from '@/components/ui/row-actions'
 import { PageHeader } from '@/components/page-header'
 import { calculateRangeSelection } from '@/lib/selection-utils'
 import { PayeeDetailDialog } from '@/components/payee-detail-dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Star, Merge, Trash2, ListFilter, X, Check, Plus, ArrowDown, ArrowUp } from 'lucide-react'
+import { Star, Merge, Trash2, ListFilter, X, Check, Plus, ArrowDown, ArrowUp, Users } from 'lucide-react'
 import { useWorkspace } from '@/contexts/workspace-context'
 import type { Payee } from '@/types'
 import { payeeErrorMessage } from '@/lib/payee-error-message'
@@ -219,7 +216,7 @@ export default function PayeesPage() {
   const localKinds = allKinds.filter((k) => k.offered)
   const usedKinds = new Set(taxIdRows.map((r) => r.kind))
 
-  const { data: payeesList, isLoading } = useQuery({
+  const { data: payeesList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['payees', searchQuery, filterType, filterFavorites],
     queryFn: () => payeesApi.list({
       q: searchQuery || undefined,
@@ -639,13 +636,12 @@ export default function PayeesPage() {
       </SearchBar>
 
       {/* Table */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
+      <SectionCard className="mb-4">
         {isLoading ? (
-          <div className="p-6 space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
+          <ListSkeleton rows={5} />
         ) : (
           <>
           <Table>
@@ -786,70 +782,33 @@ export default function PayeesPage() {
                   )}
                 </TableRow>
               ))}
-              {sortedPayees.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={canWrite ? 6 : 4} className="text-center py-16 text-muted-foreground">
-                    {t('payees.empty')}
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
-
-          {/* Pagination. Inside the card so the strip reads as part of the
-              table rather than as loose controls under it. */}
-          {sortedPayees.length > 10 && (
-            <div className="px-5 py-3 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-              {totalPages > 1 ? (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={safePage <= 1}
-                    onClick={() => setPage(safePage - 1)}
-                  >
-                    {t('common.previous')}
+          {sortedPayees.length === 0 && (
+            <EmptyState
+              icon={Users}
+              title={t('payees.empty')}
+              action={
+                canWrite ? (
+                  <Button onClick={openCreate}>
+                    <Plus /> {t('payees.add')}
                   </Button>
-                  <span className="text-sm text-muted-foreground tabular-nums">
-                    {safePage} / {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={safePage >= totalPages}
-                    onClick={() => setPage(safePage + 1)}
-                  >
-                    {t('common.next')}
-                  </Button>
-                </div>
-              ) : (
-                <div className="hidden sm:block" />
-              )}
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{t('common.rowsPerPage')}</span>
-                <Select
-                  value={String(pageSize)}
-                  onValueChange={(value) => {
-                    setPageSize(Number(value))
-                    setPage(1)
-                  }}
-                >
-                  <SelectTrigger className="w-[70px] h-8 text-xs">
-                    <SelectValue placeholder={pageSize} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAGE_SIZES.map((value) => (
-                      <SelectItem key={value} value={String(value)}>{value}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                ) : undefined
+              }
+            />
           )}
+
+          <Pagination
+            page={safePage}
+            pageSize={pageSize}
+            total={sortedPayees.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
           </>
         )}
-      </div>
+      </SectionCard>
+      )}
 
       {/* Payee detail. Edit and Delete open on top of it rather than replacing
           it, so cancelling either lands back on the payee instead of the

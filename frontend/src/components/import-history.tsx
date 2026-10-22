@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
 import { RowActions } from '@/components/ui/row-actions'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -44,7 +48,7 @@ export function ImportHistory({ entity }: ImportHistoryProps) {
   const userCurrency = user?.preferences?.currency_display ?? 'USD'
   const [deleteTarget, setDeleteTarget] = useState<ImportLog | null>(null)
 
-  const { data: logs = [] } = useQuery({
+  const { data: logs = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['import-logs'],
     queryFn: importLogsApi.list,
   })
@@ -71,10 +75,12 @@ export function ImportHistory({ entity }: ImportHistoryProps) {
         <h2 className="text-lg font-semibold text-foreground">{t('import.history')}</h2>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
-          {t('import.noHistory')}
-        </div>
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <SectionCard><ListSkeleton /></SectionCard>
+      ) : rows.length === 0 ? (
+        <SectionCard><EmptyState icon={History} title={t('import.noHistory')} /></SectionCard>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <table className="w-full text-sm">

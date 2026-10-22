@@ -1,4 +1,7 @@
 import { useState, useMemo } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { getAccountName } from '@/lib/account-utils'
 import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -15,7 +18,7 @@ import { toast } from 'sonner'
 import type { CreditCardBill, ProjectedTransaction, Transaction } from '@/types'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, ArrowLeftRight, CalendarClock, ChevronLeft, ChevronRight, Clock, EyeClosed, HelpCircle, Paperclip, Pencil, Plus, X } from 'lucide-react'
+import { ArrowLeft, ArrowLeftRight, CalendarClock, ChevronLeft, ChevronRight, Clock, EyeClosed, HelpCircle, Paperclip, Pencil, Plus, Receipt, X } from 'lucide-react'
 import { MobileTransactionRow } from '@/components/mobile-transaction-row'
 import { transactionDescription } from '@/lib/transaction-description'
 import { CategoryIcon } from '@/components/category-icon'
@@ -514,7 +517,7 @@ export default function AccountDetailPage() {
     })),
   })
 
-  const { data: txData, isLoading: txLoading } = useQuery({
+  const { data: txData, isLoading: txLoading, isError: txError, error: txErr, refetch: refetchTx } = useQuery({
     queryKey: ['transactions', { account_id: id, bill_id: activeBill?.id, from: filterFrom, to: filterTo, limit: 500, include_opening_balance: true, unbilled_only: isInProgressCycle }],
     queryFn: () => transactions.list({
       account_id: id,
@@ -1562,12 +1565,12 @@ export default function AccountDetailPage() {
           <p className="font-semibold text-foreground">{t('transactions.title')}</p>
         </div>
         <div className="p-0">
-          {txLoading ? (
-            <div className="p-6 space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10" />)}
-            </div>
+          {txError ? (
+            <ErrorState className="m-4" error={txErr} onRetry={() => refetchTx()} />
+          ) : txLoading ? (
+            <ListSkeleton rows={5} />
           ) : displayRows.length === 0 ? (
-            <p className="p-6 text-center text-muted-foreground">{t('accounts.noTransactions')}</p>
+            <EmptyState icon={Receipt} title={t('accounts.noTransactions')} />
           ) : isMobile ? (
             <div>
               {groupedByDate.map((group) => (

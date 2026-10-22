@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -19,7 +23,7 @@ export default function AgentsListPage() {
   const { canWrite } = useWorkspace()
   const [createOpen, setCreateOpen] = useState(false)
   const { data: info } = useQuery({ queryKey: ['agents-info'], queryFn: () => agents.info() })
-  const { data: list, isLoading } = useQuery({ queryKey: ['agents'], queryFn: () => agents.list() })
+  const { data: list, isLoading, isError, error, refetch } = useQuery({ queryKey: ['agents'], queryFn: () => agents.list() })
   const { data: connections } = useQuery({
     queryKey: ['agent-connections'],
     queryFn: () => agents.connections.list(),
@@ -57,25 +61,27 @@ export default function AgentsListPage() {
 
       <p className="text-sm text-muted-foreground mb-6 max-w-2xl">{t('agents.subtitle')}</p>
 
-      {isLoading ? (
-        <div className="bg-card rounded-xl border border-border shadow-sm p-6 text-sm text-muted-foreground">
-          {t('agents.loading')}
-        </div>
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <SectionCard><ListSkeleton /></SectionCard>
       ) : (list?.length ?? 0) === 0 ? (
-        <div className="bg-card rounded-xl border border-border shadow-sm p-10 text-center">
-          <div className="h-12 w-12 mx-auto rounded-full bg-muted flex items-center justify-center mb-3">
-            <Bot className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <h2 className="text-base font-semibold">{t('agents.empty.title')}</h2>
-          <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">{t('agents.empty.subtitle')}</p>
-          {canWrite && (
-            <Button size="sm" className="gap-1.5 h-8 mt-4" onClick={() => setCreateOpen(true)}>
-              <Plus size={13} /> {t('agents.empty.create')}
-            </Button>
-          )}
-        </div>
+        <SectionCard>
+          <EmptyState
+            icon={Bot}
+            title={t('agents.empty.title')}
+            hint={t('agents.empty.subtitle')}
+            action={
+              canWrite ? (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus /> {t('agents.empty.create')}
+                </Button>
+              ) : undefined
+            }
+          />
+        </SectionCard>
       ) : (
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <SectionCard>
           <div className="divide-y divide-border">
             {list?.map((a) => (
               <div
@@ -173,7 +179,7 @@ export default function AgentsListPage() {
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       )}
 
       <AgentFormDialog open={createOpen} onOpenChange={setCreateOpen} providers={info?.providers ?? []} />

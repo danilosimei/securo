@@ -1,4 +1,7 @@
 import { createElement, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useUrlTab } from '@/hooks/use-url-tab'
 import { Segmented } from '@/components/invoice-ui'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
@@ -140,7 +143,7 @@ export default function GoalsPage() {
   const [selectedColor, setSelectedColor] = useState('#3B82F6')
   const [targetDate, setTargetDate] = useState('')
 
-  const { data: goalsList } = useQuery({
+  const { data: goalsList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['goals', statusFilter],
     queryFn: () => goalsApi.list(statusFilter || undefined),
   })
@@ -252,9 +255,14 @@ export default function GoalsPage() {
         />
       </div>
 
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         <SectionHeader title={t('goals.title')} />
-        {goalsList && goalsList.length > 0 ? (
+        {isLoading ? (
+          <ListSkeleton />
+        ) : goalsList && goalsList.length > 0 ? (
           <div className="divide-y divide-border">
             {goalsList.map((goal) => {
               const days = goal.target_date ? daysUntil(goal.target_date) : null
@@ -364,9 +372,20 @@ export default function GoalsPage() {
             })}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-10">{t('goals.empty')}</p>
+          <EmptyState
+            icon={Target}
+            title={t('goals.empty')}
+            action={
+              canWrite ? (
+                <Button onClick={openCreateDialog}>
+                  <Plus /> {t('goals.add')}
+                </Button>
+              ) : undefined
+            }
+          />
         )}
       </SectionCard>
+      )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={() => { setDialogOpen(false); setEditing(null) }}>

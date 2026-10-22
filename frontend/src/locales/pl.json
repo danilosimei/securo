@@ -1690,7 +1690,8 @@
     "hideWithRulesDescription": "Tę kategorię przypisuje {{count}} aktywnych reguł. Ukrycie jej już powstrzymuje je przed kategoryzowaniem nowych transakcji. Wyłączenie zatrzymuje całą regułę, w tym odbiorcę i notatki, które również ustawia.",
     "hideKeepRules": "Tylko ukryj",
     "hideAndTurnOffRules": "Ukryj i wyłącz reguły",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "Brak kategorii"
   },
   "groups": {
     "title": "Grupy kategorii",
@@ -2623,7 +2624,8 @@
     "closePreview": "Zamknij podgląd",
     "remove": "Usuń",
     "undo": "Undo",
-    "clearSearch": "Wyczyść wyszukiwanie"
+    "clearSearch": "Wyczyść wyszukiwanie",
+    "loadError": "Nie udało się wczytać. Spróbuj ponownie."
   },
   "splitGroups": {
     "searchPlaceholder": "Szukaj grup...",

@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -17,7 +20,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { Budget } from '@/types'
-import { Plus, Repeat } from 'lucide-react'
+import { PiggyBank, Plus, Repeat } from 'lucide-react'
 import { RowActions } from '@/components/ui/row-actions'
 import { PageHeader } from '@/components/page-header'
 import { MonthPeriodSelector } from '@/components/reports/period-selector'
@@ -48,7 +51,7 @@ export default function BudgetsPage() {
   const [editing, setEditing] = useState<Budget | null>(null)
   const [deletingBudget, setDeletingBudget] = useState<Budget | null>(null)
 
-  const { data: budgetsList } = useQuery({
+  const { data: budgetsList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['budgets', selectedMonth],
     queryFn: () => budgetsApi.list(monthParam),
   })
@@ -135,9 +138,14 @@ export default function BudgetsPage() {
         period={<MonthPeriodSelector value={selectedMonth} onChange={setSelectedMonth} locale={uiLocale} />}
       />
 
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         <SectionHeader title={t('budgets.title')} />
-        {budgetsList && budgetsList.length > 0 ? (
+        {isLoading ? (
+          <ListSkeleton />
+        ) : budgetsList && budgetsList.length > 0 ? (
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
@@ -177,9 +185,20 @@ export default function BudgetsPage() {
             </tbody>
           </table>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-10">{t('budgets.empty')}</p>
+          <EmptyState
+            icon={PiggyBank}
+            title={t('budgets.empty')}
+            action={
+              canWrite ? (
+                <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+                  <Plus /> {t('budgets.add')}
+                </Button>
+              ) : undefined
+            }
+          />
         )}
       </SectionCard>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={() => { setDialogOpen(false); setEditing(null) }}>
         <DialogContent>

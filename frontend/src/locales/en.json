@@ -1622,7 +1622,8 @@
     "hideWithRulesDescription": "{{count}} active rules assign this category. Hiding it already stops them from categorizing new transactions. Turning them off stops the whole rule, including any payee or notes it also sets.",
     "hideKeepRules": "Hide only",
     "hideAndTurnOffRules": "Hide and turn off the rules",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "No categories yet"
   },
   "groups": {
     "title": "Category Groups",
@@ -2520,7 +2521,8 @@
     "closePreview": "Close preview",
     "remove": "Remove",
     "undo": "Undo",
-    "clearSearch": "Clear search"
+    "clearSearch": "Clear search",
+    "loadError": "Couldn't load this. Try again."
   },
   "splitGroups": {
     "searchPlaceholder": "Search groups...",

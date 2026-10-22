@@ -1726,7 +1726,8 @@
     "hideWithRulesDescription": "Tuto kategorii přiřazuje {{count}} aktivních pravidel. Skrytí kategorie jim zabrání kategorizovat nové transakce. Jejich vypnutí zastaví celé pravidlo včetně příjemce nebo poznámek, které také nastavuje.",
     "hideKeepRules": "Jen skrýt",
     "hideAndTurnOffRules": "Skrýt a vypnout pravidla",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "Zatím žádné kategorie"
   },
   "groups": {
     "title": "Skupiny kategorií",
@@ -2668,7 +2669,8 @@
     "closePreview": "Zavřít náhled",
     "remove": "Odebrat",
     "undo": "Undo",
-    "clearSearch": "Vymazat hledání"
+    "clearSearch": "Vymazat hledání",
+    "loadError": "Načtení se nepodařilo. Zkuste to znovu."
   },
   "splitGroups": {
     "searchPlaceholder": "Hledat skupiny...",

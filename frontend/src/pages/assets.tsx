@@ -1,4 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
 import { PageActions } from '@/components/page-actions'
 import { RowActions } from '@/components/ui/row-actions'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
@@ -259,7 +263,7 @@ export default function AssetsPage() {
   const [formUnitPrice, setFormUnitPrice] = useState('')
   const [quoteLoading, setQuoteLoading] = useState(false)
 
-  const { data: rawAssetsList, isLoading } = useQuery({
+  const { data: rawAssetsList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['assets'],
     queryFn: () => assets.list(false),
   })
@@ -1079,10 +1083,10 @@ export default function AssetsPage() {
         />
       )}
 
-      {isLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
-        </div>
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <SectionCard><ListSkeleton /></SectionCard>
       ) : (
         <div className="space-y-6">
           {/* Wallets (active assets grouped) */}
@@ -1112,10 +1116,19 @@ export default function AssetsPage() {
           )}
 
           {activeAssets.length === 0 && soldAssets.length === 0 && (
-            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden text-center py-16 text-muted-foreground">
-              <Package size={32} className="mx-auto mb-2 opacity-50" />
-              <p>{t('assets.noAssets')}</p>
-            </div>
+            <SectionCard>
+              <EmptyState
+                icon={Package}
+                title={t('assets.noAssets')}
+                action={
+                  canWrite ? (
+                    <Button onClick={openCreate}>
+                      <Plus /> {t('assets.addAsset')}
+                    </Button>
+                  ) : undefined
+                }
+              />
+            </SectionCard>
           )}
         </div>
       )}
@@ -2253,7 +2266,7 @@ function AssetTransactionsTab({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
 
-  const { data: txs, isLoading } = useQuery({
+  const { data: txs, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['asset-transactions'],
     queryFn: () => assets.allTransactions(),
   })
@@ -2429,16 +2442,15 @@ function AssetTransactionsTab({
         </div>
       )}
 
-      {isLoading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
-        </div>
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <SectionCard><ListSkeleton rows={4} /></SectionCard>
       ) : (txs ?? []).length === 0 ? (
         holdingsWithoutCost.length === 0 ? (
-          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden text-center py-16 text-muted-foreground">
-            <TrendingUp size={32} className="mx-auto mb-2 opacity-50" />
-            <p>{t('assets.noTransactions')}</p>
-          </div>
+          <SectionCard>
+            <EmptyState icon={TrendingUp} title={t('assets.noTransactions')} />
+          </SectionCard>
         ) : null
       ) : (
         <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">

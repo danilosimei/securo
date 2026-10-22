@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
@@ -19,7 +22,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { Category, CategoryGroup, CategoryUsage, ReportKind } from '@/types'
-import { Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff, WandSparkles } from 'lucide-react'
+import { Tags, Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff, WandSparkles } from 'lucide-react'
 import { RowActions } from '@/components/ui/row-actions'
 import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
@@ -67,7 +70,7 @@ export default function CategoriesPage() {
   >(null)
   const [transferTargetId, setTransferTargetId] = useState('')
 
-  const { data: groups } = useQuery({
+  const { data: groups, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['category-groups', 'management'],
     queryFn: groupsApi.listIncludingHidden,
   })
@@ -326,6 +329,9 @@ export default function CategoriesPage() {
         {t('categories.hiddenScopeDescription')}
       </p>
 
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         <SectionHeader
           title={t('categories.title')}
@@ -347,6 +353,21 @@ export default function CategoriesPage() {
             </button>
           }
         />
+        {isLoading ? (
+          <ListSkeleton />
+        ) : (groups?.length ?? 0) === 0 && ungrouped.length === 0 ? (
+          <EmptyState
+            icon={Tags}
+            title={t('categories.empty')}
+            action={
+              canWrite ? (
+                <Button onClick={() => openCatDialog(null)}>
+                  <Plus /> {t('categories.addCategory')}
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
         <div>
           {groups?.map((group) => {
             const isCollapsed = collapsedGroups.has(group.id)
@@ -397,7 +418,9 @@ export default function CategoriesPage() {
             </div>
           )}
         </div>
+        )}
       </SectionCard>
+      )}
 
       {/* Category Dialog */}
       <Dialog open={catDialogOpen} onOpenChange={() => { setCatDialogOpen(false); setEditingCat(null) }}>

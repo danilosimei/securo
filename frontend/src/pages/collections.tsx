@@ -1,4 +1,8 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -8,7 +12,6 @@ import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -31,7 +34,7 @@ export default function CollectionsPage() {
   const [editing, setEditing] = useState<Collection | null>(null)
   const [deleting, setDeleting] = useState<Collection | null>(null)
 
-  const { data: collections, isLoading } = useQuery({
+  const { data: collections, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['collections'],
     queryFn: collectionsApi.list,
   })
@@ -84,14 +87,22 @@ export default function CollectionsPage() {
       />
       <p className="text-sm text-muted-foreground mb-5 max-w-2xl">{t('collections.subtitle')}</p>
 
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         {isLoading ? (
-          <div className="p-4 space-y-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
+          <ListSkeleton />
         ) : list.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <FolderOpen size={32} className="mb-3 opacity-40" />
-            <p className="text-sm">{t('collections.empty')}</p>
-          </div>
+          <EmptyState
+            icon={FolderOpen}
+            title={t('collections.empty')}
+            action={
+              <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+                <Plus /> {t('collections.add')}
+              </Button>
+            }
+          />
         ) : (
           <div className="divide-y divide-border/40">
             {list.map((c) => (
@@ -118,6 +129,7 @@ export default function CollectionsPage() {
           </div>
         )}
       </SectionCard>
+      )}
 
       <CollectionDialog
         open={dialogOpen}

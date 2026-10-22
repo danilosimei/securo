@@ -1639,7 +1639,8 @@
     "hideWithRulesDescription": "Эту категорию назначают {{count}} активных правил. Скрытие уже не даёт им категоризировать новые транзакции. Отключение останавливает правило целиком, включая получателя и заметки, которые оно тоже задаёт.",
     "hideKeepRules": "Только скрыть",
     "hideAndTurnOffRules": "Скрыть и отключить правила",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "Категорий пока нет"
   },
   "groups": {
     "title": "Группы категорий",
@@ -2545,7 +2546,8 @@
     "closePreview": "Закрыть просмотр",
     "remove": "Удалить",
     "undo": "Undo",
-    "clearSearch": "Очистить поиск"
+    "clearSearch": "Очистить поиск",
+    "loadError": "Не удалось загрузить. Попробуйте ещё раз."
   },
   "splitGroups": {
     "searchPlaceholder": "Поиск групп...",

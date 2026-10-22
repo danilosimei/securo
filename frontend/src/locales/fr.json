@@ -1626,7 +1626,8 @@
     "hideWithRulesDescription": "{{count}} règles actives attribuent cette catégorie. La masquer les empêche déjà de catégoriser de nouvelles transactions. Les désactiver arrête la règle entière, y compris le bénéficiaire ou les notes qu’elle définit aussi.",
     "hideKeepRules": "Masquer seulement",
     "hideAndTurnOffRules": "Masquer et désactiver les règles",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "Aucune catégorie pour le moment"
   },
   "groups": {
     "title": "Groupes de catégories",
@@ -2524,7 +2525,8 @@
     "closePreview": "Fermer l'aperçu",
     "remove": "Supprimer",
     "undo": "Undo",
-    "clearSearch": "Effacer la recherche"
+    "clearSearch": "Effacer la recherche",
+    "loadError": "Impossible de charger. Réessayez."
   },
   "splitGroups": {
     "searchPlaceholder": "Rechercher des groupes...",

@@ -1,4 +1,8 @@
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
 import { SearchBar } from '@/components/ui/search-bar'
 import { useUrlSearch } from '@/hooks/use-url-search'
 import { RowActions } from '@/components/ui/row-actions'
@@ -67,7 +71,7 @@ export default function AdminSettingsPage() {
   const [localLight, setLocalLight] = useState<string>('#6366F1')
   const [localDark, setLocalDark] = useState<string>('#818CF8')
 
-  const { data: usersData, isLoading: usersLoading } = useQuery({
+  const { data: usersData, isLoading: usersLoading, isError: usersError, error: usersErr, refetch: refetchUsers } = useQuery({
     queryKey: ['admin', 'users', search],
     queryFn: () => adminApi.listUsers({ search: search || undefined }),
   })
@@ -306,16 +310,14 @@ export default function AdminSettingsPage() {
       />
 
       {/* User list */}
-      <div className="rounded-xl border border-border/60 bg-card overflow-hidden mb-8">
+      {usersError ? (
+        <ErrorState error={usersErr} onRetry={() => refetchUsers()} />
+      ) : (
+      <SectionCard className="mb-8">
         {usersLoading ? (
-          <div className="p-4 space-y-3">
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
-          </div>
+          <ListSkeleton />
         ) : filteredUsers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <Users size={32} className="mb-3 opacity-40" />
-            <p className="text-sm">{t('admin.users.empty')}</p>
-          </div>
+          <EmptyState icon={Users} title={t('admin.users.empty')} />
         ) : (
           <div className="divide-y divide-border/40">
             {filteredUsers.map((u) => (
@@ -362,7 +364,8 @@ export default function AdminSettingsPage() {
             ))}
           </div>
         )}
-      </div>
+      </SectionCard>
+      )}
 
       <TimezoneSettings />
 

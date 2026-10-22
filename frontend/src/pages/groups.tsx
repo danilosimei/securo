@@ -1,4 +1,8 @@
 import { SearchBar } from '@/components/ui/search-bar'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
 import { Segmented } from '@/components/invoice-ui'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -11,7 +15,6 @@ import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { Button } from '@/components/ui/button'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -64,7 +67,7 @@ export default function GroupsPage() {
   const [notes, setNotes] = useState('')
 
 
-  const { data: list = [], isLoading } = useQuery({
+  const { data: list = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['groups', { q: searchQuery, status: statusFilter }],
     queryFn: () => groupsApi.list(statusFilter !== 'active', { q: searchQuery || undefined, status: statusFilter }),
   })
@@ -184,21 +187,25 @@ export default function GroupsPage() {
         placeholder={t('splitGroups.searchPlaceholder')}
       />
 
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
+      <SectionCard className="mb-4">
         {isLoading ? (
-          <div className="p-6 space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
+          <ListSkeleton />
         ) : list.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <Users size={32} className="mx-auto mb-2 opacity-50" />
-            <p>{t(searchQuery ? 'common.noResults' : 'splitGroups.empty')}</p>
-            {!searchQuery && (
-              <p className="text-xs mt-1">{t('splitGroups.emptyHint')}</p>
-            )}
-          </div>
+          <EmptyState
+            icon={Users}
+            title={t(searchQuery ? 'common.noResults' : 'splitGroups.empty')}
+            hint={searchQuery ? undefined : t('splitGroups.emptyHint')}
+            action={
+              canWrite && !searchQuery ? (
+                <Button onClick={openCreate}>
+                  <Plus /> {t('splitGroups.add')}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <ul className="divide-y divide-border">
             {list.map((group) => (
@@ -254,7 +261,8 @@ export default function GroupsPage() {
             ))}
           </ul>
         )}
-      </div>
+      </SectionCard>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent size="sm">

@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
@@ -20,7 +23,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { Category, CategoryGroup, RecurringTransaction } from '@/types'
-import { Plus, RefreshCw, Info } from 'lucide-react'
+import { Plus, RefreshCw, Repeat, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { RowActions } from '@/components/ui/row-actions'
 import { PageActions } from '@/components/page-actions'
@@ -46,7 +49,7 @@ export default function RecurringPage() {
   const [editing, setEditing] = useState<RecurringTransaction | null>(null)
   const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransaction | null>(null)
 
-  const { data: recurringList } = useQuery({
+  const { data: recurringList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['recurring'],
     queryFn: recurringApi.list,
   })
@@ -156,9 +159,14 @@ export default function RecurringPage() {
           ) : undefined
         }
       />
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         <SectionHeader title={t('recurring.title')} />
-        {recurringList && recurringList.length > 0 ? (
+        {isLoading ? (
+          <ListSkeleton />
+        ) : recurringList && recurringList.length > 0 ? (
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
@@ -220,9 +228,20 @@ export default function RecurringPage() {
             </tbody>
           </table>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-10">{t('recurring.empty')}</p>
+          <EmptyState
+            icon={Repeat}
+            title={t('recurring.empty')}
+            action={
+              canWrite ? (
+                <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+                  <Plus /> {t('recurring.add')}
+                </Button>
+              ) : undefined
+            }
+          />
         )}
       </SectionCard>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={() => { setDialogOpen(false); setEditing(null) }}>
         <DialogContent>

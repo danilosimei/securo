@@ -1639,7 +1639,8 @@
     "hideWithRulesDescription": "Цю категорію призначають {{count}} активних правил. Приховування вже не дає їм категоризувати нові транзакції. Вимкнення зупиняє правило повністю, разом з одержувачем і нотатками, які воно теж встановлює.",
     "hideKeepRules": "Лише приховати",
     "hideAndTurnOffRules": "Приховати та вимкнути правила",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "Категорій поки немає"
   },
   "groups": {
     "title": "Групи категорій",
@@ -2545,7 +2546,8 @@
     "closePreview": "Закрити перегляд",
     "remove": "Видалити",
     "undo": "Undo",
-    "clearSearch": "Очистити пошук"
+    "clearSearch": "Очистити пошук",
+    "loadError": "Не вдалося завантажити. Спробуйте ще раз."
   },
   "splitGroups": {
     "searchPlaceholder": "Пошук груп...",

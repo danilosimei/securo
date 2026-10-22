@@ -1623,7 +1623,8 @@
     "hideWithRulesDescription": "{{count}} aktive Regeln weisen diese Kategorie zu. Das Ausblenden verhindert bereits, dass sie neue Transaktionen kategorisieren. Sie zu deaktivieren stoppt die ganze Regel, einschließlich Zahlungsempfänger oder Notizen, die sie ebenfalls setzt.",
     "hideKeepRules": "Nur ausblenden",
     "hideAndTurnOffRules": "Ausblenden und Regeln deaktivieren",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "Noch keine Kategorien"
   },
   "groups": {
     "title": "Kategoriegruppen",
@@ -2521,7 +2522,8 @@
     "closePreview": "Vorschau schließen",
     "remove": "Entfernen",
     "undo": "Undo",
-    "clearSearch": "Suche löschen"
+    "clearSearch": "Suche löschen",
+    "loadError": "Laden fehlgeschlagen. Bitte erneut versuchen."
   },
   "splitGroups": {
     "searchPlaceholder": "Gruppen suchen...",

@@ -1,4 +1,7 @@
 import { useRef, useState, useMemo } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { categories as categoriesApi, categoryGroups as categoryGroupsApi, rules as rulesApi, accounts as accountsApi, payees as payeesApi } from '@/lib/api'
@@ -18,7 +21,7 @@ import {
 import type { Category, Payee, Rule, RuleAction, RuleCondition, RuleConditionNode, RuleExportPayload } from '@/types'
 import { isConditionGroup } from '@/lib/rule-conditions'
 import { normalizeRuleMatchValue, ruleSearchText } from '@/lib/rule-match-utils'
-import { Plus, RefreshCw, Package, Check, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Power } from 'lucide-react'
+import { Plus, RefreshCw, Package, Check, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Power, Search, ListChecks } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchBar } from '@/components/ui/search-bar'
 import { useUrlTab } from '@/hooks/use-url-tab'
@@ -164,7 +167,7 @@ export default function RulesPage() {
     setDialogOpen(true)
   }
 
-  const { data: rulesList } = useQuery({
+  const { data: rulesList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['rules'],
     queryFn: rulesApi.list,
   })
@@ -494,6 +497,9 @@ export default function RulesPage() {
         onChange={setSearch}
         placeholder={t('rules.searchPlaceholder')}
       />
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         <SectionHeader
           title={t('rules.sectionTitle')}
@@ -562,7 +568,9 @@ export default function RulesPage() {
             </button>
           ))}
         </div>
-        {sortedRules.length > 0 ? (
+        {isLoading ? (
+          <ListSkeleton />
+        ) : sortedRules.length > 0 ? (
           <div className="divide-y divide-border">
             {sortedRules.map((rule) => (
               <div
@@ -616,11 +624,20 @@ export default function RulesPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-10">
-            {hasFilters ? t('rules.noFilterResults') : t('rules.empty')}
-          </p>
+          <EmptyState
+            icon={hasFilters ? Search : ListChecks}
+            title={hasFilters ? t('rules.noFilterResults') : t('rules.empty')}
+            action={
+              canWrite && !hasFilters ? (
+                <Button onClick={openCreate}>
+                  <Plus /> {t('rules.add')}
+                </Button>
+              ) : undefined
+            }
+          />
         )}
       </SectionCard>
+      )}
 
       {/* Matching rules below categorization rules, because they are the
           same promise made twice: the software decides things about your

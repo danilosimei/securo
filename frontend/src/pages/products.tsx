@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,7 +11,6 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -66,7 +68,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | 'new' | null>(null)
   const [deleting, setDeleting] = useState<Product | null>(null)
 
-  const { data: list, isLoading, isPlaceholderData } = useQuery({
+  const { data: list, isLoading, isError, error, refetch, isPlaceholderData } = useQuery({
     queryKey: ['products', filter],
     queryFn: () => productsApi.list({ active: filter === 'active' }),
     placeholderData: keepPreviousData,
@@ -170,30 +172,31 @@ export default function ProductsPage() {
         aria-busy={isPlaceholderData}
         className={cn('transition-opacity duration-200', isPlaceholderData && 'opacity-60')}
       >
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         {isLoading ? (
-          <div className="p-5 space-y-3">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
+          <ListSkeleton />
         ) : visible.length === 0 ? (
-          <div className="px-5 py-14 text-center" data-testid="products-empty">
-            <Package className="h-8 w-8 mx-auto text-muted-foreground/50" />
-            <p className="mt-3 text-sm text-muted-foreground max-w-sm mx-auto">
-              {search
+          <EmptyState
+            icon={Package}
+            testId="products-empty"
+            title={
+              search
                 ? t('invoices.products.noneFound')
                 : filter === 'archived'
                   ? t('invoices.products.emptyArchived')
-                  : t('invoices.products.empty')}
-            </p>
-            {!search && filter === 'active' && canWrite && (
-              <Button size="sm" className="mt-4" onClick={() => setEditing('new')}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                {t('invoices.products.new')}
-              </Button>
-            )}
-          </div>
+                  : t('invoices.products.empty')
+            }
+            action={
+              !search && filter === 'active' && canWrite ? (
+                <Button onClick={() => setEditing('new')}>
+                  <Plus /> {t('invoices.products.new')}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -266,6 +269,7 @@ export default function ProductsPage() {
           </div>
         )}
       </SectionCard>
+      )}
       </div>
 
       <DeleteConfirmationDialog

@@ -1622,7 +1622,8 @@
     "hideWithRulesDescription": "{{count}} सक्रिय नियम इस श्रेणी को सौंपते हैं। इसे छिपाना उन्हें नए लेन-देन वर्गीकृत करने से पहले ही रोक देता है। उन्हें बंद करना पूरे नियम को रोक देता है, जिसमें वह प्राप्तकर्ता या नोट्स भी शामिल हैं जो यह सेट करता है।",
     "hideKeepRules": "केवल छिपाएँ",
     "hideAndTurnOffRules": "छिपाएँ और नियम बंद करें",
-    "organizeWithAi": "Organize with AI"
+    "organizeWithAi": "Organize with AI",
+    "empty": "अभी कोई श्रेणी नहीं"
   },
   "groups": {
     "title": "श्रेणी समूह",
@@ -2520,7 +2521,8 @@
     "closePreview": "पूर्वावलोकन बंद करें",
     "remove": "हटाएँ",
     "undo": "Undo",
-    "clearSearch": "खोज साफ़ करें"
+    "clearSearch": "खोज साफ़ करें",
+    "loadError": "लोड नहीं हो सका। फिर से कोशिश करें।"
   },
   "splitGroups": {
     "searchPlaceholder": "समूह खोजें...",
