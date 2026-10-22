@@ -46,6 +46,8 @@ class RowRef:
     id: Optional[str]
     label: str
     kind: str
+    #: Only on the "all categories" listing: the group the category sits in.
+    group_label: Optional[str] = None
 
 
 #: category id (None = no category) or store key -> the row its spending lands
@@ -102,8 +104,10 @@ async def _category_level(
     workspace_id: uuid.UUID,
     group_id: Optional[uuid.UUID],
     no_group: bool,
+    all_groups: bool = False,
 ) -> RowOf:
-    """The categories of one group (or of no group). Income categories are not
+    """The categories of one group (or of no group, or of every group with
+    `all_groups`, each carrying its group's name). Income categories are not
     spending and refund categories have their own line on the group level, so
     neither belongs to the group's total."""
     rows = (
@@ -113,25 +117,30 @@ async def _category_level(
             )
         )
     ).all()
-    group_ids = set(
-        (
+    group_names = {
+        gid: name
+        for gid, name in (
             await session.execute(
-                select(CategoryGroup.id).where(CategoryGroup.workspace_id == workspace_id)
+                select(CategoryGroup.id, CategoryGroup.name).where(
+                    CategoryGroup.workspace_id == workspace_id
+                )
             )
-        ).scalars()
-    )
-    members: dict[uuid.UUID, str] = {}
+        ).all()
+    }
+    members: dict[uuid.UUID, RowRef] = {}
     for cid, gid, name, kind in rows:
         if kind != KIND_NORMAL:
             continue
-        in_group = (gid is None or gid not in group_ids) if no_group else gid == group_id
-        if in_group:
-            members[cid] = name
+        ungrouped = gid is None or gid not in group_names
+        if all_groups:
+            members[cid] = RowRef(
+                str(cid), name, "category", NO_GROUP_LABEL if ungrouped else group_names[gid]
+            )
+        elif (ungrouped if no_group else gid == group_id):
+            members[cid] = RowRef(str(cid), name, "category")
 
     def row_of(category_id: Any) -> Optional[RowRef]:
-        if category_id not in members:
-            return None
-        return RowRef(str(category_id), members[category_id], "category")
+        return members.get(category_id)
 
     return row_of
 
@@ -232,12 +241,13 @@ async def breakdown(
     level: str,
     group_id: Optional[uuid.UUID] = None,
     no_group: bool = False,
+    all_groups: bool = False,
     category_id: Optional[uuid.UUID] = None,
     no_category: bool = False,
 ) -> dict:
     if level not in LEVELS:
         raise _bad_request("level_unknown", f"Unknown breakdown level '{level}'")
-    if level == "category" and group_id is None and not no_group:
+    if level == "category" and group_id is None and not no_group and not all_groups:
         raise _bad_request("group_required", "The category level needs a group_id")
     if level == "merchant" and category_id is None and not no_category:
         raise _bad_request("category_required", "The store level needs a category_id")
@@ -279,7 +289,7 @@ async def breakdown(
         if level == "group":
             row_of = await _group_level(session, workspace_id)
         else:
-            row_of = await _category_level(session, workspace_id, group_id, no_group)
+            row_of = await _category_level(session, workspace_id, group_id, no_group, all_groups)
         current_flows, previous_flows = await collect_flows(
             session, segments=[(period.from_, period.to), (period.previous_from, period.previous_to)],
             **flow_kwargs,
@@ -325,6 +335,10 @@ async def breakdown(
         )
     ranked.sort(key=lambda item: (-item[0], item[1]))
     rows = [item[2] for item in ranked]
+    if level == "category" and all_groups:
+        labels = {ref.id: ref.group_label for ref in counts}
+        for row in rows:
+            row["group_label"] = labels.get(row["id"])
 
     return {
         "period": {
