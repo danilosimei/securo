@@ -11,6 +11,7 @@ from app.core.app_clock import app_today
 from app.core.database import get_async_session
 from app.core.workspace_context import WorkspaceContext, current_workspace
 from app.services.reports import breakdown as breakdown_service
+from app.services.reports import recurring as recurring_service
 from app.services.reports.periods import resolve_period
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -96,4 +97,33 @@ async def get_breakdown(
         no_group=no_group,
         category_id=category_uuid,
         no_category=no_category,
+    )
+
+
+class RecurringRow(BaseModel):
+    merchant_key: str
+    label: str
+    category: str
+    amount_month: str
+    amount_year: str
+    status: Literal["new", "up", "stopped", "steady"]
+    last_date: date
+    months_seen: int
+
+
+@router.get("/recurring", response_model=list[RecurringRow])
+async def get_recurring(
+    # Accepted for URL parity with the other tabs; the detection always reads
+    # the last 12 closed months plus the current one.
+    period: Literal[
+        "this_month", "last_month", "last_3m", "last_6m", "last_12m", "ytd", "custom"
+    ] = Query("last_12m"),
+    ctx: WorkspaceContext = Depends(current_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return await recurring_service.recurring_report(
+        session,
+        workspace_id=ctx.workspace.id,
+        primary_currency=ctx.user.primary_currency,
+        today=app_today(),
     )
