@@ -259,6 +259,11 @@ class OverviewResponse(BaseModel):
     period: OverviewPeriod
     currency: str
     kpis: OverviewKpis
+    #: The same numbers over the comparison period; null while the period is
+    #: still open (a partial period has nothing to be compared with).
+    kpis_previous: Optional[OverviewKpis] = None
+    #: Rows in another currency with no rate, left out of every total.
+    unconverted_count: int = 0
     changes: list[OverviewChange]
     highlights: list[OverviewHighlight]
     #: Up to 8 stores, biggest spending per month first.

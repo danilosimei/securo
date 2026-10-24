@@ -31,10 +31,11 @@ from app.services.reports.income_expenses import (
     _bucket_items,
     _category_meta,
 )
-from app.services.reports.periods import Period, _month_end, _shift_months
+from app.services.reports.periods import Period, _count_months, _month_end, _shift_months
 from app.services.reports.rules import (
     CENT,
     ZERO,
+    RangeTotals,
     SegmentFlows,
     collect_flows,
     load_category_kinds,
@@ -51,6 +52,20 @@ INCOME_TO_CHECK_LABEL = "A conferir"
 
 def _money(value: Decimal) -> str:
     return f"{value.quantize(CENT):.2f}"
+
+
+def _kpis(totals: RangeTotals, months: int, fixed_month: Decimal) -> dict:
+    """The four monthly numbers of a period, averaged over its `months`."""
+    monthly_spending = totals.spending / months
+    monthly_income = (totals.income + totals.uncategorized_income) / months
+    left = monthly_income - monthly_spending
+    return {
+        "spending": _money(monthly_spending),
+        "income": _money(monthly_income),
+        "left": _money(left),
+        "left_share": round(float(left / monthly_income), 3) if monthly_income > 0 else None,
+        "fixed_share": round(float(fixed_month / monthly_spending), 3) if monthly_spending > 0 else None,
+    }
 
 
 def _change_api(change: Change) -> dict:
@@ -104,25 +119,24 @@ async def overview(
     totals = totals_from(flows, kinds)
     month_totals = [totals_from([seg], kinds) for seg in flows]
 
-    spending = totals.spending
-    income = totals.income + totals.uncategorized_income
-    monthly_spending = spending / period.months
-    monthly_income = income / period.months
-    left = monthly_income - monthly_spending
-
     recurring = await recurring_service.detect_recurring(
         session, workspace_id=workspace_id, primary_currency=primary_currency, today=today
     )
     active_recurring = [r for r in recurring if r.status != "stopped"]
     fixed_month = sum((r.amount_month for r in active_recurring), ZERO)
 
-    kpis = {
-        "spending": _money(monthly_spending),
-        "income": _money(monthly_income),
-        "left": _money(left),
-        "left_share": round(float(left / monthly_income), 3) if monthly_income > 0 else None,
-        "fixed_share": round(float(fixed_month / monthly_spending), 3) if monthly_spending > 0 else None,
-    }
+    kpis = _kpis(totals, period.months, fixed_month)
+    # The comparison only makes sense against a closed period.
+    kpis_previous = None
+    if not period.partial:
+        (previous_flows,) = await collect_flows(
+            session, segments=[(period.previous_from, period.previous_to)], **flow_kwargs
+        )
+        kpis_previous = _kpis(
+            totals_from([previous_flows], kinds),
+            _count_months(period.previous_from, period.previous_to),
+            fixed_month,
+        )
 
     closed_spending = [t.spending for m, t in zip(months, month_totals) if m.closed]
     median_pool = closed_spending or [t.spending for t in month_totals]
@@ -164,6 +178,8 @@ async def overview(
         },
         "currency": primary_currency,
         "kpis": kpis,
+        "kpis_previous": kpis_previous,
+        "unconverted_count": totals.unconverted_count,
         "changes": [_change_api(c) for c in changes],
         "highlights": highlights,
         **repeats,

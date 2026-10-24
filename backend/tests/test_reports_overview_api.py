@@ -408,3 +408,43 @@ async def test_heavy_group_skips_the_generic_other_group(client, auth_headers, w
     card = _rules(await _get(client, auth_headers))["heavy_group"]
     assert card["title"].startswith("Casa custa")
     assert card["link"]["group_id"] == str(world["groups"][0].id)
+
+
+@pytest.mark.asyncio
+async def test_kpis_previous_are_the_kpis_of_the_period_before(client, auth_headers, world):
+    world["add"]("Mercado velho", "mercado", 600, date(2026, 1, 8))
+    world["add"]("Salario velho", "salario", 3000, date(2026, 1, 2), "credit")
+    await world["session"].commit()
+    body = await _get(client, auth_headers)
+    # Oct 2025..Mar 2026: 6 months.
+    assert body["period"]["previous_from"] == "2025-10-01"
+    assert body["kpis_previous"] == {
+        "spending": "100.00",
+        "income": "500.00",
+        "left": "400.00",
+        "left_share": 0.8,
+        "fixed_share": 0.0,
+    }
+    separate = await _get(
+        client, auth_headers, period="custom",
+        **{"from": body["period"]["previous_from"], "to": body["period"]["previous_to"]},
+    )
+    assert body["kpis_previous"] == separate["kpis"]
+
+
+@pytest.mark.asyncio
+async def test_kpis_previous_is_null_while_the_period_is_partial(client, auth_headers, world):
+    body = await _get(client, auth_headers, period="this_month")
+    assert body["period"]["partial"] is True
+    assert body["kpis_previous"] is None
+
+
+@pytest.mark.asyncio
+async def test_unconverted_count_counts_foreign_rows_without_a_rate(client, auth_headers, world):
+    assert (await _get(client, auth_headers))["unconverted_count"] == 0
+    tx = world["add"]("Compra fora", "mercado", 50, date(2026, 9, 9))
+    tx.currency = "USD"
+    await world["session"].commit()
+    body = await _get(client, auth_headers)
+    assert body["unconverted_count"] == 1
+    assert body["kpis"]["spending"] == "1000.00"
