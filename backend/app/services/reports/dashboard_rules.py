@@ -208,6 +208,57 @@ async def get_monthly_trend(
     )
 
 
+async def forecast_by_category(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    user_id: uuid.UUID,
+    month: date,
+    account_ids: Optional[list[uuid.UUID]] = None,
+) -> dict[Optional[str], float]:
+    """Debit forecast of the month per category (primary currency): virtual
+    recurring occurrences plus pending and future-dated real rows."""
+    from app.services import dashboard_service  # circular at import time
+    from app.services.admin_service import get_credit_card_accounting_mode
+    from app.services._query_filters import reporting_date_col
+    from app.services.fx_rate_service import convert
+
+    month_start, month_end = dashboard_service._month_range(month)
+    primary_currency = await primary_currency_of(session, user_id)
+    report_date = reporting_date_col(await get_credit_card_accounting_mode(session))
+
+    forecast: dict[Optional[str], float] = {}
+
+    projections = await dashboard_service._get_recurring_projections(
+        session, workspace_id, month_start, month_end, account_ids
+    )
+    for proj in projections:
+        if proj["type"] != "debit":
+            continue
+        key = str(proj["category_id"]) if proj["category_id"] else None
+        amount, _ = await convert(
+            session, Decimal(str(proj["amount"])), proj["currency"], primary_currency
+        )
+        forecast[key] = forecast.get(key, 0.0) + float(amount)
+
+    rows = await dashboard_service._get_forecast_transactions(
+        session, workspace_id, month_start, month_end, account_ids,
+        range_date_col=report_date,
+    )
+    for tx in rows:
+        if tx.type != "debit" or tx.is_ignored or not dashboard_service._counts_as_user_pnl_row(tx):
+            continue
+        key = str(tx.category_id) if tx.category_id else None
+        if tx.amount_primary is not None:
+            amount = abs(tx.amount_primary)
+        else:
+            amount, _ = await convert(
+                session, Decimal(str(abs(tx.amount))), tx.currency, primary_currency
+            )
+        forecast[key] = forecast.get(key, 0.0) + float(amount)
+
+    return {key: value for key, value in forecast.items() if value > 0.005}
+
+
 async def get_spending_by_category(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -217,18 +268,9 @@ async def get_spending_by_category(
 ) -> list[SpendingByCategory]:
     """Actuals by the shared rules; the forecast each category carried stays
     the dashboard's own (recurring rules, pending and future rows)."""
-    from app.services import dashboard_service  # circular at import time
-
     today = app_today()
     month = month or today.replace(day=1)
-    legacy = await dashboard_service.get_spending_by_category(
-        session, workspace_id, user_id, month, account_ids
-    )
-    forecast = {
-        entry.category_id: entry.projected_total - entry.total
-        for entry in legacy
-        if entry.projected_total - entry.total > 0.005
-    }
+    forecast = await forecast_by_category(session, workspace_id, user_id, month, account_ids)
     return await spending_by_category(
         session,
         workspace_id=workspace_id,
