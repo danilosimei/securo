@@ -11,6 +11,8 @@ import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort, formatPercent, useElementWidth } from '@/components/reports/common/chart-utils'
 import { ChartTooltip, TooltipRow } from '@/components/reports/common/report-block'
 import type { GroupPalette } from '@/components/reports/common/group-colors'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import { categoryGlyph, groupGlyph } from '@/components/reports/common/glyph-of'
 import type { MapModel } from './money-map-model'
 import { buildGraph, type MapLink, type MapNode } from './money-map-graph'
 
@@ -19,6 +21,9 @@ type LaidNode = MapNode & { x0: number; x1: number; y0: number; y1: number; inde
 const NODE_W = 10
 const LABEL_FONT = 11
 const CHAR_W = 6.1
+/** The group/category icon before a label, and the room it takes. */
+const GLYPH = 12
+const GLYPH_ROOM = GLYPH + 4
 
 interface SankeyProps {
   model: MapModel
@@ -131,6 +136,11 @@ export function MoneyMapSankey({ model, palette, currency, locale, onOpen, onExp
     const max = Math.max(4, Math.floor(room / CHAR_W))
     return text.length > max ? `${text.slice(0, max - 1)}…` : text
   }
+  const glyphOf = (n: MapNode) => {
+    if (n.kind === 'group' || n.kind === 'income') return groupGlyph(palette, n.item?.id ?? n.group?.id, n.label)
+    if (n.kind === 'category') return categoryGlyph(palette, n.item?.id, n.group?.label)
+    return null
+  }
   const nodeAria = (n: MapNode) =>
     t('reports.moneyMap.nodeAria', {
       name: n.label,
@@ -164,7 +174,9 @@ export function MoneyMapSankey({ model, palette, currency, locale, onOpen, onExp
           const on = !hover || lit.has(n.id)
           const label = labels.get(n.index)
           const last = n.kind === 'category' || ((n.kind === 'left' || n.kind === 'folded' || n.kind === 'group') && categoryCount === 0)
-          const room = last ? right - 12 : (width - right) / 3 - 24
+          const glyph = label ? glyphOf(n) : null
+          const textX = n.x1 + 6 + (glyph ? GLYPH_ROOM : 0)
+          const room = (last ? right - 12 : (width - right) / 3 - 24) - (glyph ? GLYPH_ROOM : 0)
           const interactive = clickable(n)
           return (
             <g
@@ -203,9 +215,20 @@ export function MoneyMapSankey({ model, palette, currency, locale, onOpen, onExp
               />
               {/* A wider invisible target, so thin nodes are easy to hit. */}
               <rect x={n.x0 - 6} y={n.y0 - 3} width={n.x1 - n.x0 + 12 + (label ? Math.min(room, 120) : 0)} height={h + 6} fill="transparent" />
+              {label && glyph && (
+                <foreignObject
+                  x={n.x1 + 6}
+                  y={label.y - (label.lines === 2 ? GLYPH + 1 : GLYPH / 2)}
+                  width={GLYPH}
+                  height={GLYPH}
+                  pointerEvents="none"
+                >
+                  <CategoryGlyph icon={glyph.icon} color={glyph.color} size={GLYPH} />
+                </foreignObject>
+              )}
               {label && (
                 <text
-                  x={n.x1 + 6}
+                  x={textX}
                   y={label.y}
                   fontSize={LABEL_FONT}
                   fill="var(--foreground)"
@@ -217,10 +240,10 @@ export function MoneyMapSankey({ model, palette, currency, locale, onOpen, onExp
                 >
                   {label.lines === 2 ? (
                     <>
-                      <tspan x={n.x1 + 6} dy="-0.25em" fontWeight={600}>
+                      <tspan x={textX} dy="-0.25em" fontWeight={600}>
                         {fit(n.label, room)}
                       </tspan>
-                      <tspan x={n.x1 + 6} dy="1.25em" fill="var(--muted-foreground)" className="tabular-nums">
+                      <tspan x={textX} dy="1.25em" fill="var(--muted-foreground)" className="tabular-nums">
                         {shareText(n) ? `${money(n.amount)} · ${shareText(n)}` : money(n.amount)}
                       </tspan>
                     </>

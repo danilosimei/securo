@@ -10,6 +10,8 @@ import { formatCurrency } from '@/lib/format'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort, formatPercent, useIsNarrow } from '@/components/reports/common/chart-utils'
 import type { GroupPalette } from '@/components/reports/common/group-colors'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import { categoryGlyph, groupGlyph } from '@/components/reports/common/glyph-of'
 import { exploreLink, type ExploreTarget } from '@/components/reports/common/report-url'
 import { NO_GROUP_LABEL } from '@/components/reports/explore/drilldown'
 import { buildMapModel, moneyMapAnswer, type MapGroup, type MapItem, type MapModel } from './money-map-model'
@@ -70,7 +72,7 @@ export function MoneyMapView({ map, query, currency, locale, palette, view, show
     <div className="space-y-3">
       {showAnswer && <p className="text-sm text-muted-foreground" data-testid="money-map-answer">{answer}</p>}
       {view === 'table' ? (
-        <MoneyMapTable model={buildMapModel(map, true)} currency={currency} locale={locale} />
+        <MoneyMapTable model={buildMapModel(map, true)} palette={palette} currency={currency} locale={locale} />
       ) : narrow ? (
         <MoneyMapBars
           model={model}
@@ -111,7 +113,18 @@ export function MoneyMapView({ map, query, currency, locale, palette, view, show
   )
 }
 
-function MoneyMapTable({ model, currency, locale }: { model: MapModel; currency: string; locale: string }) {
+/** A name with its group or category icon before it, when it has one. */
+function Named({ label, glyph }: { label: string; glyph: { icon: string; color: string } | null }) {
+  if (!glyph) return <>{label}</>
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <CategoryGlyph icon={glyph.icon} color={glyph.color} size={14} />
+      {label}
+    </span>
+  )
+}
+
+function MoneyMapTable({ model, palette, currency, locale }: { model: MapModel; palette: GroupPalette; currency: string; locale: string }) {
   const { t } = useTranslation()
   const { mask } = usePrivacyMode()
   const money = (v: number) => mask(formatCurrency(v, currency, locale))
@@ -134,7 +147,7 @@ function MoneyMapTable({ model, currency, locale }: { model: MapModel; currency:
           </tr>
           {model.income.map((i) => (
             <tr key={`in:${i.id ?? i.label}`} className="border-b border-border/60">
-              <td className="py-1.5 pl-4 pr-2">{i.label}</td>
+              <td className="py-1.5 pl-4 pr-2"><Named label={i.label} glyph={groupGlyph(palette, i.id, i.label)} /></td>
               <td className="py-1.5 px-2 text-right">{money(i.value)}</td>
               <td className="py-1.5 pl-2 text-right text-muted-foreground">{ofIncome(i.value)}</td>
             </tr>
@@ -145,7 +158,7 @@ function MoneyMapTable({ model, currency, locale }: { model: MapModel; currency:
             <td className="py-2 pl-2 text-right text-muted-foreground">{ofIncome(model.totalSpending)}</td>
           </tr>
           {model.groups.map((g) => (
-            <GroupRows key={`g:${g.id ?? g.label}`} group={g} money={money} ofIncome={ofIncome} />
+            <GroupRows key={`g:${g.id ?? g.label}`} group={g} palette={palette} money={money} ofIncome={ofIncome} />
           ))}
           <tr>
             <th scope="row" className="py-2 pr-2 text-left font-semibold">
@@ -160,18 +173,18 @@ function MoneyMapTable({ model, currency, locale }: { model: MapModel; currency:
   )
 }
 
-function GroupRows({ group, money, ofIncome }: { group: MapGroup; money: (v: number) => string; ofIncome: (v: number) => string }) {
+function GroupRows({ group, palette, money, ofIncome }: { group: MapGroup; palette: GroupPalette; money: (v: number) => string; ofIncome: (v: number) => string }) {
   return (
     <>
       <tr className="border-b border-border/60">
-        <td className="py-1.5 pl-4 pr-2 font-medium">{group.label}</td>
+        <td className="py-1.5 pl-4 pr-2 font-medium"><Named label={group.label} glyph={groupGlyph(palette, group.id, group.label)} /></td>
         <td className="py-1.5 px-2 text-right">{money(group.value)}</td>
         <td className="py-1.5 pl-2 text-right text-muted-foreground">{ofIncome(group.value)}</td>
       </tr>
       {/* A group whose only category carries its own name adds nothing. */}
       {(group.categories.length === 1 && group.categories[0].label === group.label ? [] : group.categories).map((c) => (
         <tr key={c.id ?? c.label} className="border-b border-border/40 text-muted-foreground">
-          <td className="py-1 pl-8 pr-2">{c.label}</td>
+          <td className="py-1 pl-8 pr-2"><Named label={c.label} glyph={categoryGlyph(palette, c.id, group.label)} /></td>
           <td className="py-1 px-2 text-right">{money(c.value)}</td>
           <td className="py-1 pl-2 text-right">{ofIncome(c.value)}</td>
         </tr>

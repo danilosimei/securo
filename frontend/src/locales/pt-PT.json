@@ -1812,6 +1812,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Somar",
+      "all": "Todos",
+      "investmentsOnly": "Só investimentos",
+      "summary": "A somar {{shown}} de {{total}} · {{value}}",
+      "showAll": "Mostrar tudo"
+    },
     "title": "Património",
     "addAsset": "Novo ativo",
     "oversellWarning": "Só tens {{available}} unidades — posições vendidas (short) não são suportadas.",

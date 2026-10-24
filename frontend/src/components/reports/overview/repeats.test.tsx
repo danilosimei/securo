@@ -5,6 +5,7 @@ import { OverviewTab } from '@/components/reports/overview/overview-tab'
 import { renderWithProviders, t } from '@/test/utils'
 import { WithPeriodBar } from '@/test/report-period'
 import { GROUPS, overviewFixture } from '@/test/reports-fixtures'
+import { buildPalette } from '@/components/reports/common/group-colors'
 
 const api = vi.hoisted(() => ({
   reports: { overview: vi.fn() },
@@ -72,6 +73,20 @@ describe('Overview: what keeps coming back', () => {
     expect(within(block).getByTestId('repeat-categories')).toHaveTextContent(
       t('reports.overview.repeats.categoryLine', { freq: t('reports.habits.timesPerMonth', { count: 20, n: '20' }), value: 'R$2,200' }),
     )
+  })
+
+  it('a store carries no icon; a category carries its own, bare, in the group color', async () => {
+    api.reports.overview.mockResolvedValue(withRepeats())
+    renderWithProviders(<WithPeriodBar><OverviewTab /></WithPeriodBar>, { route: '/reports?tab=overview&period=last_month' })
+
+    const block = await screen.findByTestId('block-repeats')
+    const categories = within(block).getByTestId('repeat-categories')
+    await waitFor(() =>
+      expect(within(categories).getByTestId('category-glyph')).toHaveStyle({ color: buildPalette(GROUPS).group('g-food') }),
+    )
+    for (const store of within(block).getAllByTestId('repeat-store')) {
+      expect(within(store).queryByTestId('category-glyph')).not.toBeInTheDocument()
+    }
   })
 
   it('is not shown when nothing repeats', async () => {

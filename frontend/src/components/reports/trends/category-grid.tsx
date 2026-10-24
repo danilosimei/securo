@@ -8,6 +8,8 @@ import { ArrowDownRight, ArrowUpRight, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort, formatPercent } from '@/components/reports/common/chart-utils'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import type { GlyphSpec } from '@/components/reports/common/glyph-of'
 import type { CategoryTrend } from './trends-model'
 
 const W = 120
@@ -36,10 +38,11 @@ interface CategoryGridProps {
   currency: string
   locale: string
   colorOf: (trend: CategoryTrend) => string
+  glyphOf: (trend: CategoryTrend) => GlyphSpec | null
   onOpen: (trend: CategoryTrend) => void
 }
 
-export function CategoryGrid({ trends, currency, locale, colorOf, onOpen }: CategoryGridProps) {
+export function CategoryGrid({ trends, currency, locale, colorOf, glyphOf, onOpen }: CategoryGridProps) {
   const { t } = useTranslation()
   const { mask } = usePrivacyMode()
   const [all, setAll] = useState(false)
@@ -57,6 +60,7 @@ export function CategoryGrid({ trends, currency, locale, colorOf, onOpen }: Cate
             : tr.change === null
               ? '—'
               : formatPercent(tr.change, locale, true)
+          const glyph = glyphOf(tr)
           const perMonth = t('reports.trends.perMonth', { value: mask(formatMoneyShort(tr.perMonth, currency, locale)) })
           return (
             <li key={tr.row.id ?? tr.row.label}>
@@ -69,7 +73,10 @@ export function CategoryGrid({ trends, currency, locale, colorOf, onOpen }: Cate
               >
                 <span className="flex items-start justify-between gap-2">
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-foreground">{tr.row.label}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      {glyph && <CategoryGlyph icon={glyph.icon} color={glyph.color} size={14} />}
+                      <span className="truncate text-sm font-semibold text-foreground">{tr.row.label}</span>
+                    </span>
                     {tr.row.group_label && <span className="block truncate text-[11px] text-muted-foreground">{tr.row.group_label}</span>}
                   </span>
                   <span

@@ -19,13 +19,15 @@ import {
   TrendingUp,
   Zap,
 } from 'lucide-react'
-import type { HighlightRule, OverviewHighlight, OverviewResponse, ReportPeriodParams } from '@/lib/api'
+import type { HighlightLink, HighlightRule, OverviewHighlight, OverviewResponse, ReportPeriodParams } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { Button } from '@/components/ui/button'
 import { formatMoneyShort, maskMoneyInText } from '@/components/reports/common/chart-utils'
 import type { GroupPalette } from '@/components/reports/common/group-colors'
 import { MiniTrend } from '@/components/reports/common/mini-trend'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import { categoryGlyph, groupGlyph } from '@/components/reports/common/glyph-of'
 import { reportLinkFrom } from './overview-model'
 import { MonthPace } from './month-pace'
 import { TONE_STYLE } from './tone'
@@ -40,6 +42,13 @@ const ICONS: Record<HighlightRule, LucideIcon> = {
   heavy_group: Layers,
   frequent_spot: MapPin,
   to_review: ClipboardCheck,
+}
+
+/** A driver that names a group or a category gets its icon; a store none. */
+function driverGlyph(link: HighlightLink | null, palette: GroupPalette) {
+  if (!link || link.merchant) return null
+  if (link.category_id) return categoryGlyph(palette, link.category_id)
+  return link.group_id ? groupGlyph(palette, link.group_id) : null
 }
 
 /** Rules whose drivers are changes, written with a sign. */
@@ -165,9 +174,13 @@ function HighlightCard({ highlight: h, data, query, currency, locale, palette }:
                   {drivers.map((d) => {
                     const amount = money(Number(d.value), SIGNED.has(h.rule))
                     const label = maskMoneyInText(d.label, privacyMode, MASK)
+                    const glyph = driverGlyph(d.link, palette)
                     const inner = (
                       <>
-                        <span className="min-w-0 truncate">{label}</span>
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          {glyph && <CategoryGlyph icon={glyph.icon} color={glyph.color} size={14} />}
+                          <span className="min-w-0 truncate">{label}</span>
+                        </span>
                         <span className="shrink-0 font-semibold tabular-nums text-foreground">{amount}</span>
                       </>
                     )

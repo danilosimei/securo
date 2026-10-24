@@ -9,6 +9,8 @@ import { formatCurrency } from '@/lib/format'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort, formatPercent } from '@/components/reports/common/chart-utils'
 import { LEFT_COLOR, NEUTRAL_COLOR, SHORT_COLOR, type GroupPalette } from '@/components/reports/common/group-colors'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import { groupGlyph } from '@/components/reports/common/glyph-of'
 import type { MapGroup, MapModel } from './money-map-model'
 
 interface BarsProps {
@@ -81,14 +83,20 @@ export function MoneyMapBars({ model, palette, currency, locale, onOpenGroup, on
         </button>
         {open && (
           <ul className="mt-2 divide-y divide-border rounded-lg border border-border">
-            {model.groups.map((g) => (
+            {model.groups.map((g) => {
+              const glyph = groupGlyph(palette, g.id, g.label)
+              return (
               <li key={g.id ?? g.label}>
                 <button
                   type="button"
                   onClick={() => onOpenGroup(g)}
                   className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
                 >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: palette.group(g.id, g.label) }} />
+                  {glyph ? (
+                    <CategoryGlyph icon={glyph.icon} color={glyph.color} size={14} />
+                  ) : (
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: palette.group(g.id, g.label) }} />
+                  )}
                   <span className="min-w-0 flex-1 truncate font-medium text-foreground">{g.label}</span>
                   <span className="tabular-nums text-foreground">{mask(formatCurrency(g.value, currency, locale))}</span>
                   <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">
@@ -96,7 +104,8 @@ export function MoneyMapBars({ model, palette, currency, locale, onOpenGroup, on
                   </span>
                 </button>
               </li>
-            ))}
+              )
+            })}
             {model.folded && (
               <li>
                 <button

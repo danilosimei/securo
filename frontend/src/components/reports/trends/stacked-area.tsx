@@ -9,6 +9,8 @@ import { formatCurrency } from '@/lib/format'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort, niceTicks, useElementWidth } from '@/components/reports/common/chart-utils'
 import { ChartTooltip, TooltipRow } from '@/components/reports/common/report-block'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import type { GlyphSpec } from '@/components/reports/common/glyph-of'
 import type { Layer } from './trends-model'
 
 const HEIGHT = 260
@@ -18,12 +20,13 @@ interface StackedAreaProps {
   layers: Layer[]
   months: string[]
   colorOf: (layer: Layer) => string
+  glyphOf: (layer: Layer) => GlyphSpec | null
   currency: string
   locale: string
   ariaLabel: string
 }
 
-export function StackedArea({ layers, months, colorOf, currency, locale, ariaLabel }: StackedAreaProps) {
+export function StackedArea({ layers, months, colorOf, glyphOf, currency, locale, ariaLabel }: StackedAreaProps) {
   const { t } = useTranslation()
   const { mask, privacyMode } = usePrivacyMode()
   const [ref, width] = useElementWidth<HTMLDivElement>()
@@ -80,6 +83,7 @@ export function StackedArea({ layers, months, colorOf, currency, locale, ariaLab
       <ul className="mb-3 flex flex-wrap gap-1.5" aria-label={t('reports.trends.legend')}>
         {layers.map((layer) => {
           const on = !hidden.has(layer.key)
+          const glyph = glyphOf(layer)
           return (
             <li key={layer.key}>
               <button
@@ -92,7 +96,13 @@ export function StackedArea({ layers, months, colorOf, currency, locale, ariaLab
                   on ? 'border-border bg-card text-foreground' : 'border-dashed border-border bg-transparent text-muted-foreground line-through',
                 )}
               >
-                <span className="h-2.5 w-2.5 rounded-sm" style={{ background: on ? colorOf(layer) : 'transparent', border: `1.5px solid ${colorOf(layer)}` }} />
+                {glyph ? (
+                  <span className={cn('flex', !on && 'opacity-50')}>
+                    <CategoryGlyph icon={glyph.icon} color={glyph.color} size={14} />
+                  </span>
+                ) : (
+                  <span className="h-2.5 w-2.5 rounded-sm" style={{ background: on ? colorOf(layer) : 'transparent', border: `1.5px solid ${colorOf(layer)}` }} />
+                )}
                 {layer.label}
               </button>
             </li>

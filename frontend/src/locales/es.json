@@ -1812,6 +1812,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Sumar",
+      "all": "Todos",
+      "investmentsOnly": "Solo inversiones",
+      "summary": "Sumando {{shown}} de {{total}} · {{value}}",
+      "showAll": "Mostrar todo"
+    },
     "title": "Activos",
     "addAsset": "Agregar activo",
     "oversellWarning": "Solo tienes {{available}} unidades — no se admiten posiciones cortas.",

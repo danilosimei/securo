@@ -8,6 +8,9 @@ import { RowActions } from '@/components/ui/row-actions'
 import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { useUrlTab } from '@/hooks/use-url-tab'
+import { useHiddenParam } from '@/hooks/use-hidden-param'
+import { HoldingsFilter } from '@/components/holdings-filter'
+import { holdingChips, holdingKey, scopePortfolio, type HoldingChip } from '@/lib/holdings-filter'
 import { Segmented } from '@/components/invoice-ui'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
@@ -289,23 +292,7 @@ export default function AssetsPage() {
   const portfolioData = useMemo(() => {
     if (!activeWalletIds || !rawPortfolioData) return rawPortfolioData
     const allowed = new Set(activeWalletIds)
-    const keptAssets = rawPortfolioData.assets.filter((a) => a.group_id && allowed.has(a.group_id))
-    const keptIds = new Set(keptAssets.map((a) => a.id))
-    const trend = rawPortfolioData.trend.map((row) => {
-      const next: Record<string, unknown> = { date: (row as { date: unknown }).date }
-      let total = 0
-      for (const [k, v] of Object.entries(row)) {
-        if (k === 'date' || k === '_total') continue
-        if (keptIds.has(k)) {
-          next[k] = v
-          total += Number(v) || 0
-        }
-      }
-      next._total = total
-      return next
-    })
-    const lastTotal = trend.length ? Number((trend[trend.length - 1] as { _total?: number })._total) || 0 : 0
-    return { ...rawPortfolioData, assets: keptAssets, trend, total: lastTotal }
+    return scopePortfolio(rawPortfolioData, (a) => !!a.group_id && allowed.has(a.group_id))
   }, [rawPortfolioData, activeWalletIds])
 
   // Publish a snapshot of what's on the Assets page so the global chat
@@ -499,8 +486,39 @@ export default function AssetsPage() {
     return Math.round(current * 100) / 100
   }, [formMethod, formPurchasePrice, formGrowthRate, formGrowthType, formGrowthFrequency, formGrowthStartDate, formPurchaseDate])
 
-  const activeAssets = useMemo(() => assetsList?.filter(a => !a.sell_date && !a.is_archived) ?? [], [assetsList])
-  const soldAssets = assetsList?.filter(a => a.sell_date) ?? []
+  const allActiveAssets = useMemo(() => assetsList?.filter(a => !a.sell_date && !a.is_archived) ?? [], [assetsList])
+  const allSoldAssets = useMemo(() => assetsList?.filter(a => a.sell_date) ?? [], [assetsList])
+
+  const sortedWallets = useMemo(() => {
+    return (walletsList ?? []).slice().sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
+  }, [walletsList])
+
+  // "Somar" filter (holdings tab only): one chip per wallet and per asset
+  // outside a wallet. The URL/browser keep what is off; only keys that are
+  // still chips count, so a deleted wallet or a stale link changes nothing.
+  // It stacks on top of the Collection filter above.
+  const sumChips = useMemo(() => holdingChips(sortedWallets, allActiveAssets), [sortedWallets, allActiveAssets])
+  const [hiddenParam, setHiddenHoldings] = useHiddenParam('securo.assets.hide')
+  const hiddenHoldings = useMemo(
+    () => new Set(sumChips.filter((c) => hiddenParam.has(c.key)).map((c) => c.key)),
+    [sumChips, hiddenParam],
+  )
+  const activeAssets = useMemo(
+    () => allActiveAssets.filter((a) => !hiddenHoldings.has(holdingKey(a))),
+    [allActiveAssets, hiddenHoldings],
+  )
+  const soldAssets = allSoldAssets.filter((a) => !hiddenHoldings.has(holdingKey(a)))
+  const shownWallets = sortedWallets.filter((w) => !hiddenHoldings.has(w.id))
+  const shownPortfolio = useMemo(() => {
+    if (!portfolioData || hiddenHoldings.size === 0) return portfolioData
+    return scopePortfolio(portfolioData, (a) => !hiddenHoldings.has(holdingKey(a)))
+  }, [portfolioData, hiddenHoldings])
+  const sumChipIcon = (chip: HoldingChip) => {
+    if (chip.kind === 'wallet') return <Wallet size={12} style={{ color: chip.color ?? undefined }} aria-hidden="true" />
+    const config = getTypeConfig(chip.type ?? 'other')
+    const Icon = config.icon
+    return <Icon size={12} className={config.color} aria-hidden="true" />
+  }
   // Denominator for the "% of portfolio" column: current holdings only, in the
   // user's primary currency, so the active rows add up to 100%.
   const portfolioTotalPrimary = getPortfolioTotalPrimary(activeAssets)
@@ -916,10 +934,6 @@ export default function AssetsPage() {
     return map
   }, [activeAssets])
 
-  const sortedWallets = useMemo(() => {
-    return (walletsList ?? []).slice().sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
-  }, [walletsList])
-
   const ungroupedAssets = assetsByGroup.get(null) ?? []
 
   function toggleWalletCollapse(id: string) {
@@ -1073,10 +1087,24 @@ export default function AssetsPage() {
         />
       ) : (
       <>
+      {!isLoading && !isError && (
+        <HoldingsFilter
+          chips={sumChips}
+          hidden={hiddenHoldings}
+          onChange={setHiddenHoldings}
+          iconOf={sumChipIcon}
+          shownTotal={mask(formatCurrency(
+            shownPortfolio && shownPortfolio.trend.length > 0 ? shownPortfolio.total : getPortfolioTotalPrimary(activeAssets),
+            userCurrency,
+            locale,
+          ))}
+        />
+      )}
+
       {/* Portfolio Chart */}
-      {portfolioData && portfolioData.trend.length > 0 && (
+      {shownPortfolio && shownPortfolio.trend.length > 0 && (
         <PortfolioChart
-          data={portfolioData}
+          data={shownPortfolio}
           wallets={sortedWallets}
           currency={userCurrency}
           locale={locale}
@@ -1092,9 +1120,9 @@ export default function AssetsPage() {
       ) : (
         <div className="space-y-6">
           {/* Wallets (active assets grouped) */}
-          {(sortedWallets.length > 0 || ungroupedAssets.length > 0) && (
+          {(shownWallets.length > 0 || ungroupedAssets.length > 0) && (
             <div className="space-y-4">
-              {sortedWallets.map(w => renderWalletSection(w, assetsByGroup.get(w.id) ?? []))}
+              {shownWallets.map(w => renderWalletSection(w, assetsByGroup.get(w.id) ?? []))}
 
               {ungroupedAssets.length > 0 && (
                 <div className="space-y-2">
@@ -1117,7 +1145,7 @@ export default function AssetsPage() {
             </div>
           )}
 
-          {activeAssets.length === 0 && soldAssets.length === 0 && (
+          {allActiveAssets.length === 0 && allSoldAssets.length === 0 && (
             <SectionCard>
               <EmptyState
                 icon={Package}

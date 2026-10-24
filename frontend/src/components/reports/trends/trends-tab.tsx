@@ -16,6 +16,7 @@ import { answerParts } from '@/components/reports/common/answer-parts'
 import { blockState } from '@/components/reports/common/block-state'
 import { formatMoneyShort, monthName, sparklineMonths } from '@/components/reports/common/chart-utils'
 import { NEUTRAL_COLOR, useGroupPalette } from '@/components/reports/common/group-colors'
+import { categoryGlyph, groupGlyph } from '@/components/reports/common/glyph-of'
 import { exploreLink, useReportPeriod } from '@/components/reports/common/report-url'
 import { StackedArea } from './stacked-area'
 import { CategoryGrid } from './category-grid'
@@ -92,6 +93,8 @@ export function TrendsTab() {
     const own = palette.category(tr.row.id, tr.row.label)
     return own === NEUTRAL_COLOR ? palette.group(null, tr.row.group_label ?? undefined) : own
   }
+  const layerGlyph = (layer: Layer) => (layer.rest ? null : groupGlyph(palette, layer.id, layer.label))
+  const trendGlyph = (tr: CategoryTrend) => categoryGlyph(palette, tr.row.id, tr.row.group_label ?? undefined)
   const openCategory = (tr: CategoryTrend) => {
     const link = categoryLink(tr)
     navigate(link.to, { state: link.state })
@@ -120,7 +123,7 @@ export function TrendsTab() {
         testId="block-trends-area"
       >
         {data && (
-          <StackedArea layers={layers} months={months} colorOf={layerColor} currency={currency} locale={locale} ariaLabel={areaAnswer} />
+          <StackedArea layers={layers} months={months} colorOf={layerColor} glyphOf={layerGlyph} currency={currency} locale={locale} ariaLabel={areaAnswer} />
         )}
       </ReportBlock>
 
@@ -135,7 +138,7 @@ export function TrendsTab() {
         skeletonHeight={260}
         testId="block-trends-grid"
       >
-        <CategoryGrid trends={trends} currency={currency} locale={locale} colorOf={trendColor} onOpen={openCategory} />
+        <CategoryGrid trends={trends} currency={currency} locale={locale} colorOf={trendColor} glyphOf={trendGlyph} onOpen={openCategory} />
       </ReportBlock>
     </div>
   )

@@ -1812,6 +1812,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Somma",
+      "all": "Tutti",
+      "investmentsOnly": "Solo investimenti",
+      "summary": "Somma di {{shown}} su {{total}} · {{value}}",
+      "showAll": "Mostra tutto"
+    },
     "title": "Beni",
     "addAsset": "Aggiungi bene",
     "oversellWarning": "Possiedi solo {{available}} unità — le posizioni corte non sono supportate.",
