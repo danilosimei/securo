@@ -29,6 +29,8 @@ class DashboardSummary(BaseModel):
     # waiting to be paid back). Computed from group balance lines so
     # it already accounts for any partial settlements.
     pending_shares_net: float = 0.0
+    # Rows in another currency with no rate this month: left out of the totals.
+    unconverted_count: int = 0
 
 
 class SpendingByCategory(BaseModel):

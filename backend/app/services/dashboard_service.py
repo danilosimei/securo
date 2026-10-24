@@ -621,7 +621,7 @@ async def get_summary(
     # The forecast each projected field already carried stays on top of them.
     from app.services.reports.dashboard_rules import month_income_expenses
 
-    rules_income, rules_expenses = await month_income_expenses(
+    rules_income, rules_expenses, unconverted_count = await month_income_expenses(
         session,
         workspace_id=workspace_id,
         user_id=user_id,
@@ -661,6 +661,7 @@ async def get_summary(
         assets_value_primary=round(assets_value_primary, 2),
         primary_currency=primary_currency,
         pending_shares_net=round(pending_shares_net, 2),
+        unconverted_count=unconverted_count,
     )
 
 

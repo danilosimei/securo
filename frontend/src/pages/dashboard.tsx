@@ -741,6 +741,12 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {(summary?.unconverted_count ?? 0) > 0 && (
+          <p className="text-xs text-amber-700 dark:text-amber-400" data-testid="dashboard-unconverted">
+            {t('reports.explore.unconverted', { n: summary?.unconverted_count })}
+          </p>
+        )}
+
         {/* Spending projection */}
         {projectedSpend !== null && !summaryLoading && (
           <p className="text-xs text-muted-foreground mt-3">

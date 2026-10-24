@@ -193,6 +193,28 @@ describe('Dashboard categorization card', () => {
     expect(screen.queryByTestId('categorization-card-pending')).not.toBeInTheDocument()
   })
 
+  it('warns about rows in another currency with no rate, only when there are some', async () => {
+    api.dashboard.summary.mockResolvedValue({ ...summary, unconverted_count: 2 })
+    const { unmount } = renderWithProviders(
+      <TooltipProvider delayDuration={0}>
+        <DashboardPage />
+      </TooltipProvider>,
+    )
+    expect(await screen.findByTestId('dashboard-unconverted')).toHaveTextContent(
+      t('reports.explore.unconverted', { n: 2 }),
+    )
+    unmount()
+
+    api.dashboard.summary.mockResolvedValue(summary)
+    renderWithProviders(
+      <TooltipProvider delayDuration={0}>
+        <DashboardPage />
+      </TooltipProvider>,
+    )
+    await screen.findByTestId('categorization-card-pending')
+    expect(screen.queryByTestId('dashboard-unconverted')).not.toBeInTheDocument()
+  })
+
   it('falls back to the uncategorized banner when AI is off and opens its drill-down', async () => {
     api.categorization.summary.mockResolvedValue({
       pending_groups: 0, pending_transactions: 0, applied_last_7d: 0, last_run: null,

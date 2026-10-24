@@ -48,11 +48,12 @@ async def month_income_expenses(
     month: date,
     today: date,
     account_ids: Optional[list[uuid.UUID]] = None,
-) -> tuple[Decimal, Decimal]:
-    """(income, expenses) of the month so far, by the shared rules."""
+) -> tuple[Decimal, Decimal, int]:
+    """(income, expenses, unconverted rows) of the month so far, by the
+    shared rules."""
     start, end = _window(month, today)
     if end < start:
-        return ZERO, ZERO
+        return ZERO, ZERO, 0
     flows = await collect_flows(
         session,
         workspace_id=workspace_id,
@@ -62,7 +63,7 @@ async def month_income_expenses(
         account_ids=account_ids,
     )
     totals = totals_from(flows, await load_category_kinds(session, workspace_id))
-    return totals.income + totals.uncategorized_income, totals.spending
+    return totals.income + totals.uncategorized_income, totals.spending, totals.unconverted_count
 
 
 async def monthly_trend(

@@ -1322,3 +1322,21 @@ async def test_spending_forecast_comes_from_recurring_and_pending(
     assert rent.projected_total == pytest.approx(2000.0)
     assert market.total == pytest.approx(40.0)
     assert market.projected_total == pytest.approx(70.0)
+
+
+@pytest.mark.asyncio
+async def test_summary_counts_foreign_rows_without_a_rate(session, test_user, test_workspace):
+    account = await _make_account(session, test_user.id, "Fx Acc")
+    today = date.today()
+    await _add_txn(session, test_user.id, account.id, 80, "debit", today)
+
+    summary = await get_summary(session, test_workspace.id, test_user.id)
+    assert summary.unconverted_count == 0
+
+    foreign = await _add_txn(session, test_user.id, account.id, 20, "debit", today)
+    foreign.currency = "EUR"
+    await session.commit()
+
+    summary = await get_summary(session, test_workspace.id, test_user.id)
+    assert summary.unconverted_count == 1
+    assert summary.monthly_expenses_primary == pytest.approx(80.0)
