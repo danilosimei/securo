@@ -26,6 +26,7 @@ import {
   drilldownTransactionParams,
   transactionsPageLink,
 } from '@/components/reports/explore/drilldown'
+import type { BreakdownFlow } from '@/lib/api'
 import type { Transaction } from '@/types'
 
 interface MerchantTransactionsProps {
@@ -35,9 +36,11 @@ interface MerchantTransactionsProps {
   categoryId: string
   range: { from: string; to: string }
   accountId?: string | null
+  /** Omitted = expense. */
+  flow?: BreakdownFlow
 }
 
-export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, range, accountId }: MerchantTransactionsProps) {
+export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, range, accountId, flow }: MerchantTransactionsProps) {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
@@ -45,7 +48,7 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<Transaction | null>(null)
 
-  const params = drilldownTransactionParams({ range, categoryId, merchantKey, page, accountId })
+  const params = drilldownTransactionParams({ range, categoryId, merchantKey, page, accountId, flow })
   const query = useQuery({
     queryKey: ['transactions', 'explore-merchant', params],
     queryFn: () => transactions.list(params),
@@ -77,11 +80,17 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
 
   const pages = data ? Math.max(1, Math.ceil(data.total / DRILLDOWN_PAGE_SIZE)) : 1
   // Same rule as the report: refunds in a category reduce its spending, but
-  // credits without a category are income to check, not a reduction.
+  // credits without a category are income to check, not a reduction. On
+  // the income side the list holds credits only, or an income category
+  // (what came in minus what went back).
   const spent = data?.summary
-    ? categoryId === 'none'
-      ? data.summary.expense
-      : data.summary.expense - data.summary.income
+    ? flow === 'income'
+      ? categoryId === 'none' || categoryId === 'all'
+        ? data.summary.income
+        : data.summary.income - data.summary.expense
+      : categoryId === 'none'
+        ? data.summary.expense
+        : data.summary.expense - data.summary.income
     : null
 
   return (
@@ -96,7 +105,7 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
           )}
         </h3>
         <Link
-          to={transactionsPageLink({ range, categoryId, merchantKey, accountId })}
+          to={transactionsPageLink({ range, categoryId, merchantKey, accountId, flow })}
           className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
         >
           {t('reports.explore.openInTransactions')}
@@ -131,7 +140,10 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
         >
           <ul className="divide-y divide-border">
             {data.items.map((tx) => {
-              const value = tx.type === 'credit' ? 0 - Number(tx.amount) : Number(tx.amount)
+              // Each row in the direction of the list: spending positive on
+              // the spending side, money received positive on the income side.
+              const signed = tx.type === 'credit' ? 0 - Number(tx.amount) : Number(tx.amount)
+              const value = flow === 'income' ? 0 - signed : signed
               return (
                 <li key={tx.id}>
                   <button

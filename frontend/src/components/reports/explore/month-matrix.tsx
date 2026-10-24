@@ -10,7 +10,8 @@ import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort, useIsNarrow } from '@/components/reports/common/chart-utils'
-import { HEAT_STEPS, heatStep } from './explore-model'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import { HEAT_STEPS, heatStep, type Glyph } from './explore-model'
 
 interface MonthMatrixProps {
   rows: BreakdownRow[]
@@ -22,12 +23,16 @@ interface MonthMatrixProps {
   onOpenCell: (row: BreakdownRow, month: string) => void
   onOpenRow: (row: BreakdownRow) => void
   ariaLabel: string
+  /** The group's or category's icon before its name. */
+  glyphOf?: (row: BreakdownRow) => Glyph
+  /** Money received instead of spending: the legend says so. */
+  income?: boolean
 }
 
 const heatColor = (step: number) => (step === 0 ? 'transparent' : `var(--heat-${step})`)
 const heatInk = (step: number) => (step === 0 ? 'var(--muted-foreground)' : `var(--heat-ink-${step})`)
 
-export function MonthMatrix({ rows, months, currency, locale, sublabel, onOpenCell, onOpenRow, ariaLabel }: MonthMatrixProps) {
+export function MonthMatrix({ rows, months, currency, locale, sublabel, onOpenCell, onOpenRow, ariaLabel, glyphOf, income }: MonthMatrixProps) {
   const { t } = useTranslation()
   const { mask } = usePrivacyMode()
   const narrow = useIsNarrow()
@@ -52,8 +57,10 @@ export function MonthMatrix({ rows, months, currency, locale, sublabel, onOpenCe
         </span>
         <span>{t('reports.explore.month.more')}</span>
         {/* The ramp runs dark-to-light on a dark screen: the words follow it. */}
-        <span className="ml-1 dark:hidden">{t('reports.explore.month.legend')}</span>
-        <span className="ml-1 hidden dark:inline">{t('reports.explore.month.legendDark')}</span>
+        <span className="ml-1 dark:hidden">{t(income ? 'reports.explore.income.month.legend' : 'reports.explore.month.legend')}</span>
+        <span className="ml-1 hidden dark:inline">
+          {t(income ? 'reports.explore.income.month.legendDark' : 'reports.explore.month.legendDark')}
+        </span>
       </div>
       <table className="w-full table-fixed border-separate border-spacing-0.5 text-xs" aria-label={ariaLabel}>
         <thead>
@@ -72,6 +79,7 @@ export function MonthMatrix({ rows, months, currency, locale, sublabel, onOpenCe
         <tbody>
           {shown.map((row) => {
             const sub = sublabel?.(row)
+            const glyph = glyphOf?.(row)
             return (
               <tr key={row.id ?? row.label} data-testid="month-row">
                 <th scope="row" className="pr-1 text-left font-normal">
@@ -80,7 +88,10 @@ export function MonthMatrix({ rows, months, currency, locale, sublabel, onOpenCe
                     onClick={() => onOpenRow(row)}
                     className="block w-full min-w-0 rounded text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <span className="block truncate text-xs font-medium text-foreground">{row.label}</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      {glyph && <CategoryGlyph icon={glyph.icon} color={glyph.color} size={12} />}
+                      <span className="block truncate text-xs font-medium text-foreground">{row.label}</span>
+                    </span>
                     {sub && <span className="hidden truncate text-[10px] text-muted-foreground sm:block">{sub}</span>}
                   </button>
                 </th>

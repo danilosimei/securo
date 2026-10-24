@@ -1,6 +1,6 @@
 /** Pure helpers for drilling down in Reports > Explore: which level a row
  *  opens and which filters list the transactions behind a store. */
-import type { BreakdownRow } from '@/lib/api'
+import type { BreakdownFlow, BreakdownRow } from '@/lib/api'
 
 /** Labels the backend sends on the two rows that have no id. */
 export const NO_GROUP_LABEL = 'Sem grupo'
@@ -30,6 +30,13 @@ export interface DrilldownInput {
   page: number
   /** Only the transactions of this account. */
   accountId?: string | null
+  /** On the income side, a payer without a category (or across all of
+   *  them) is listed by its credits only: its debits are spending. */
+  flow?: BreakdownFlow
+}
+
+function creditsOnly(flow: BreakdownFlow | undefined, categoryId: string) {
+  return flow === 'income' && (categoryId === 'none' || categoryId === 'all')
 }
 
 function categoryFilter(categoryId: string) {
@@ -40,11 +47,12 @@ function categoryFilter(categoryId: string) {
 export const DRILLDOWN_PAGE_SIZE = 50
 
 /** Params of `GET /api/transactions` for the transactions of one store. */
-export function drilldownTransactionParams({ range, categoryId, merchantKey, page, accountId }: DrilldownInput) {
+export function drilldownTransactionParams({ range, categoryId, merchantKey, page, accountId, flow }: DrilldownInput) {
   return {
     from: range.from,
     to: range.to,
     ...categoryFilter(categoryId),
+    ...(creditsOnly(flow, categoryId) ? { type: 'credit' } : {}),
     ...(accountId ? { account_id: accountId } : {}),
     merchant_key: merchantKey,
     status: 'posted',
@@ -55,11 +63,12 @@ export function drilldownTransactionParams({ range, categoryId, merchantKey, pag
 }
 
 /** Same filters as a link to the Transactions page. */
-export function transactionsPageLink({ range, categoryId, merchantKey, accountId }: Omit<DrilldownInput, 'page'>) {
+export function transactionsPageLink({ range, categoryId, merchantKey, accountId, flow }: Omit<DrilldownInput, 'page'>) {
   const params = new URLSearchParams({ from: range.from, to: range.to })
   if (categoryId === 'none') params.set('uncategorized', '1')
   else if (categoryId !== 'all') params.set('category_id', categoryId)
   if (accountId) params.set('account_id', accountId)
+  if (creditsOnly(flow, categoryId)) params.set('type', 'credit')
   params.set('merchant_key', merchantKey)
   params.set('from_screen', 'reports')
   return `/transactions?${params}`

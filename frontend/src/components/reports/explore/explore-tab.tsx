@@ -1,8 +1,11 @@
-/** Reports > Explore: where the money went. "Ver por" picks the angle: by
- *  category (group, then category, store and the store's transactions), by
- *  store, by month (a table of colors), by account, or two periods side by
- *  side. "Exibir como" draws a ranking as bars, blocks or lines; the table
- *  is always below. Everything lives in the URL (`view`, `chart`, `group`,
+/** Reports > Explore: where the money went ("Gasto") or where it came from
+ *  ("Renda", `flow=income`). "Ver por" picks the angle: by category (group,
+ *  then category, store and the store's transactions; income starts at its
+ *  categories, then who paid), by store, by month (a table of colors), by
+ *  account, or two periods side by side. "Exibir como" draws a ranking as
+ *  bars, blocks or lines; the table is always below. A group with categories
+ *  of the person's own money (a home purchase) lists them apart, under "Vai
+ *  para o patrimônio". Everything lives in the URL (`flow`, `view`, `chart`, `group`,
  *  `category`, `merchant`, `account`, `cmp`...), so a link, a reload or the
  *  browser's Back lands on the same view. A period switch keeps the previous
  *  render up, dimmed, until the new one lands. */
@@ -11,7 +14,9 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import {
+  ArrowDownLeft,
   ArrowLeft,
+  ArrowUpRight,
   BarChart3,
   CalendarRange,
   ChevronRight,
@@ -24,7 +29,14 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { reports, type BreakdownCompare, type BreakdownParams, type BreakdownRow, type BreakdownResponse } from '@/lib/api'
+import {
+  reports,
+  type BreakdownCompare,
+  type BreakdownFlow,
+  type BreakdownParams,
+  type BreakdownRow,
+  type BreakdownResponse,
+} from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { monthLabel } from '@/lib/report-period'
@@ -33,7 +45,7 @@ import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { FadePanel } from '@/components/ui/fade-panel'
-import { CategoryIcon } from '@/components/category-icon'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
 import { useReportedRange } from '@/components/reports/common/report-range'
 import { BlockError } from '@/components/reports/common/report-block'
 import { DeltaPill } from '@/components/reports/common/answer-line'
@@ -48,17 +60,21 @@ import { ExploreBars } from './explore-bars'
 import { ExploreTrend } from './explore-trend'
 import { MonthMatrix } from './month-matrix'
 import { CompareView } from './compare-view'
+import { ToAssets } from './to-assets'
 import {
   RANKING_VIEWS,
   accountColors,
   concentration,
+  glyphOfRow,
   monthRange,
   parseChart,
   parseCompare,
+  parseFlow,
   parseView,
   trendSeries,
   type ExploreChart,
   type ExploreView,
+  type Glyph,
   type TrendSeries,
 } from './explore-model'
 
@@ -70,11 +86,16 @@ function formatChange(change: number, locale: string) {
   }).format(change)
 }
 
-/** More spending is the bad direction here. */
-function changeTone(change: number) {
-  if (change > 0) return 'text-rose-600 dark:text-rose-400'
-  if (change < 0) return 'text-emerald-600 dark:text-emerald-400'
-  return 'text-muted-foreground'
+/** More spending is the bad direction; more money received, the good one. */
+function changeTone(change: number, income: boolean) {
+  if (change === 0) return 'text-muted-foreground'
+  return (change > 0) !== income ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+}
+
+/** The key of a text that reads differently on the income side ("recebido"
+ *  instead of "gasto"): `reports.explore.income.<key>` there. */
+function flowKey(income: boolean, key: string) {
+  return income ? `reports.explore.income.${key}` : `reports.explore.${key}`
 }
 
 type Level = 'group' | 'category' | 'merchant' | 'account'
@@ -97,6 +118,10 @@ const VIEW_ICONS: Record<ExploreView, LucideIcon> = {
   month: CalendarRange,
   account: CreditCard,
   compare: Scale,
+}
+const FLOW_ICONS: Record<BreakdownFlow, LucideIcon> = {
+  expense: ArrowUpRight,
+  income: ArrowDownLeft,
 }
 const CHART_ICONS: Record<ExploreChart, LucideIcon> = {
   bars: BarChart3,
@@ -155,10 +180,14 @@ export function ExploreTab() {
   const { period, from, to, query: periodQuery } = useReportPeriod()
   const carried: Labels = (location.state as { exploreLabels?: Labels } | null)?.exploreLabels ?? {}
 
+  const flow = parseFlow(searchParams.get('flow'))
+  const income = flow === 'income'
+  const k = (key: string) => flowKey(income, key)
   const view = parseView(searchParams.get('view'))
   const chart = parseChart(searchParams.get('chart'))
   const account = view === 'group' ? searchParams.get('account') : null
-  const group = view === 'group' || view === 'compare' ? searchParams.get('group') : null
+  // Income has no group level: it starts at its categories.
+  const group = !income && (view === 'group' || view === 'compare') ? searchParams.get('group') : null
   const category = view === 'group' ? searchParams.get('category') : null
   const merchant = view === 'group' ? (category ? searchParams.get('merchant') : null) : view === 'merchant' ? searchParams.get('merchant') : null
   const monthMode = searchParams.get('mm') === 'categories' ? 'categories' : 'groups'
@@ -171,11 +200,18 @@ export function ExploreTab() {
   const stateLabels: Labels = {
     ...carried,
     group: carried.group ?? (group && group !== 'none' ? palette.groupName(group) : undefined),
-    category: carried.category ?? (category && category !== 'none' ? palette.categoryName(category) : undefined),
+    category:
+      carried.category ??
+      (category && category !== 'none'
+        ? palette.categoryName(category)
+        : category === 'none' && income
+          ? t('reports.explore.income.toCheck')
+          : undefined),
   }
 
+  const rootLevel: Level = income ? 'category' : 'group'
   const level: Level =
-    view === 'merchant' ? 'merchant' : view === 'account' ? 'account' : category ? 'merchant' : group ? 'category' : 'group'
+    view === 'merchant' ? 'merchant' : view === 'account' ? 'account' : category ? 'merchant' : group ? 'category' : rootLevel
 
   // Going down (or up) pushes a history entry, so Back climbs one level.
   const go = (patch: Record<string, string | null>, labels: Labels, replace = false) =>
@@ -193,6 +229,10 @@ export function ExploreTab() {
   const setView = (next: ExploreView) =>
     go({ view: next === 'group' ? null : next, group: null, category: null, merchant: null, account: null }, {})
   const setChart = (next: ExploreChart) => go({ chart: next === 'bars' ? null : next }, stateLabels, true)
+  // The view, the chart and the account stay; what was open belongs to the
+  // other side.
+  const setFlow = (next: BreakdownFlow) =>
+    go({ flow: next === 'income' ? 'income' : null, group: null, category: null, merchant: null }, { account: stateLabels.account })
 
   const scope = { period, ...(period === 'custom' ? { from, to } : {}) }
   const params: BreakdownParams | null =
@@ -204,6 +244,7 @@ export function ExploreTab() {
           ...(view === 'group' && level === 'category' && group ? { group_id: group } : {}),
           ...(view === 'group' && level === 'merchant' && category ? { category_id: category } : {}),
           ...(account ? { account_id: account } : {}),
+          ...(income ? { flow: 'income' as const } : {}),
           ...scope,
         }
   const query = useQuery({
@@ -214,6 +255,7 @@ export function ExploreTab() {
     placeholderData: (previous, previousQuery) => {
       const before = previousQuery?.queryKey[2] as BreakdownParams | undefined
       return before?.level === params?.level &&
+        before?.flow === params?.flow &&
         before?.group_id === params?.group_id &&
         before?.category_id === params?.category_id &&
         before?.account_id === params?.account_id
@@ -263,12 +305,10 @@ export function ExploreTab() {
     const own = category && category !== 'none' ? palette.category(category) : NEUTRAL_COLOR
     return own === NEUTRAL_COLOR ? groupColor : own
   }
-  const iconOf =
-    level === 'group'
-      ? (row: BreakdownRow) => (row.kind === 'category' ? palette.categoryIcon(row.id) : palette.groupIcon(row.id))
-      : level === 'category'
-        ? (row: BreakdownRow) => palette.categoryIcon(row.id)
-        : undefined
+  // Groups and categories wear their icon, in their group's color; stores
+  // and accounts do not.
+  const glyphOf =
+    level === 'group' || level === 'category' ? (row: BreakdownRow): Glyph => glyphOfRow(palette, row) : undefined
   const sublabel = view === 'merchant' ? (row: BreakdownRow) => row.category_label : undefined
 
   // The selected store: only the store is shown, with a way back.
@@ -301,17 +341,30 @@ export function ExploreTab() {
   return (
     <div className="space-y-5" data-testid="explore-tab">
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <Choice
-          label={t('reports.explore.viewBy')}
-          value={view}
-          onChange={setView}
-          testIdPrefix="explore-view"
-          options={(['group', 'merchant', 'month', 'account', 'compare'] as ExploreView[]).map((v) => ({
-            value: v,
-            label: t(`reports.explore.view.${v}`),
-            icon: VIEW_ICONS[v],
-          }))}
-        />
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <Choice
+            label={t('reports.explore.flow.label')}
+            value={flow}
+            onChange={setFlow}
+            testIdPrefix="explore-flow"
+            options={(['expense', 'income'] as BreakdownFlow[]).map((f) => ({
+              value: f,
+              label: t(`reports.explore.flow.${f}`),
+              icon: FLOW_ICONS[f],
+            }))}
+          />
+          <Choice
+            label={t('reports.explore.viewBy')}
+            value={view}
+            onChange={setView}
+            testIdPrefix="explore-view"
+            options={(['group', 'merchant', 'month', 'account', 'compare'] as ExploreView[]).map((v) => ({
+              value: v,
+              label: t(v === 'merchant' ? k('view.merchant') : `reports.explore.view.${v}`),
+              icon: VIEW_ICONS[v],
+            }))}
+          />
+        </div>
         {ranking && (
           <Choice
             label={t('reports.explore.showAs')}
@@ -344,7 +397,7 @@ export function ExploreTab() {
         </div>
       )}
 
-      {view === 'group' && level !== 'group' && (
+      {view === 'group' && level !== rootLevel && (
         <nav aria-label={t('reports.explore.breadcrumb')}>
           <ol className="flex flex-wrap items-center gap-1 text-sm">
             {crumbs.map((crumb, i) => (
@@ -368,12 +421,17 @@ export function ExploreTab() {
       {view === 'month' ? (
         <MonthView
           scope={scope}
+          income={income}
+          glyphOf={(row) => glyphOfRow(palette, row)}
           mode={monthMode}
           onMode={(mode) => go({ mm: mode === 'groups' ? null : mode }, {}, true)}
           onOpen={(row, month, isCategory) => {
             const patch: Record<string, string | null> = { view: null, merchant: null, account: null }
             const labels: Labels = {}
-            if (isCategory) {
+            if (income) {
+              patch.category = row.id ?? 'none'
+              labels.category = row.label
+            } else if (isCategory) {
               const g = row.id ? palette.groupOfCategory(row.id) : null
               patch.group = g ?? 'none'
               patch.category = row.id ?? 'none'
@@ -409,6 +467,7 @@ export function ExploreTab() {
           groupLabel={stateLabels.group}
           palette={palette}
           locale={locale}
+          flow={flow}
           onMode={(mode: BreakdownCompare, range) =>
             go(
               {
@@ -443,22 +502,23 @@ export function ExploreTab() {
           categoryLabel={storeCategoryLabel}
           categoryId={view === 'merchant' ? 'all' : category!}
           accountId={account}
+          flow={flow}
           backLabel={
             view === 'merchant'
-              ? t('reports.explore.backToStores')
-              : t('reports.explore.backToCategory', { category: stateLabels.category ?? '…' })
+              ? t(k('backToStores'))
+              : t(k('backToCategory'), { category: stateLabels.category ?? '…' })
           }
           onBack={() => go({ merchant: null }, { ...stateLabels, merchant: undefined })}
           locale={locale}
         />
       ) : (
-        <FadePanel panelKey={`${view}:${level}:${group ?? ''}:${category ?? ''}:${account ?? ''}`} className="space-y-4">
+        <FadePanel panelKey={`${flow}:${view}:${level}:${group ?? ''}:${category ?? ''}:${account ?? ''}`} className="space-y-4">
           <div
             aria-busy={stale}
             data-testid="explore-content"
             className={cn('space-y-4 transition-opacity duration-200', stale && 'opacity-60')}
           >
-            <TotalCard data={data} locale={locale} level={level} rows={data.rows} />
+            <TotalCard data={data} locale={locale} level={level} rows={data.rows} income={income} />
 
             {data.unconverted_count > 0 && (
               <p className="text-xs text-amber-700 dark:text-amber-400">
@@ -468,7 +528,7 @@ export function ExploreTab() {
 
             {data.rows.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-                {t('reports.explore.empty', {
+                {t(k('empty'), {
                   from: monthLabel(data.period.from, locale),
                   to: monthLabel(data.period.to, locale),
                 })}
@@ -478,19 +538,39 @@ export function ExploreTab() {
                 {data.rows.some((r) => Number(r.total) > 0) && (
                   <div className="rounded-xl border border-border bg-card p-3 shadow-sm sm:p-4" data-testid="explore-chart">
                     {chart === 'treemap' ? (
-                      <ExploreTreemap rows={data.rows} level={level} currency={data.currency} locale={locale} colorOf={colorOf} onOpen={open} selected={merchant} />
+                      <ExploreTreemap
+                        rows={data.rows}
+                        level={level}
+                        currency={data.currency}
+                        locale={locale}
+                        colorOf={colorOf}
+                        onOpen={open}
+                        selected={merchant}
+                        income={income}
+                      />
                     ) : chart === 'trend' ? (
-                      <TrendChart rows={data.rows} months={months} colorOf={colorOf} level={level} view={view} onOpen={open} currency={data.currency} locale={locale} />
+                      <TrendChart
+                        rows={data.rows}
+                        months={months}
+                        colorOf={colorOf}
+                        glyphOf={glyphOf}
+                        level={level}
+                        view={view}
+                        onOpen={open}
+                        currency={data.currency}
+                        locale={locale}
+                        ariaKey={k('trend.aria')}
+                      />
                     ) : (
                       <ExploreBars
                         rows={data.rows}
                         currency={data.currency}
                         locale={locale}
                         colorOf={colorOf}
-                        iconOf={iconOf}
+                        glyphOf={glyphOf}
                         sublabel={sublabel}
                         onOpen={open}
-                        ariaLabel={t('reports.explore.bars.aria', { name: data.rows[0]?.label ?? '' })}
+                        ariaLabel={t(k('bars.aria'), { name: data.rows[0]?.label ?? '' })}
                       />
                     )}
                   </div>
@@ -500,12 +580,24 @@ export function ExploreTab() {
                   level={level}
                   locale={locale}
                   colorOf={colorOf}
-                  iconOf={iconOf}
+                  glyphOf={glyphOf}
                   sublabel={sublabel}
                   onOpen={open}
                   mask={mask}
+                  income={income}
                 />
               </>
+            )}
+
+            {view === 'group' && level === 'category' && group && data.to_assets && data.to_assets.length > 0 && (
+              <ToAssets
+                rows={data.to_assets}
+                spending={Number(data.total)}
+                currency={data.currency}
+                locale={locale}
+                iconOf={(id) => palette.categoryIcon(id)}
+                color={groupColor}
+              />
             )}
           </div>
         </FadePanel>
@@ -516,7 +608,19 @@ export function ExploreTab() {
 
 /** The total of the list, big, with its change against the period before
  *  and, when a few rows make most of it, that fact in one line. */
-function TotalCard({ data, locale, level, rows }: { data: BreakdownResponse; locale: string; level: Level; rows: BreakdownRow[] }) {
+function TotalCard({
+  data,
+  locale,
+  level,
+  rows,
+  income,
+}: {
+  data: BreakdownResponse
+  locale: string
+  level: Level
+  rows: BreakdownRow[]
+  income: boolean
+}) {
   const { t } = useTranslation()
   const { mask } = usePrivacyMode()
   const total = Number(data.total)
@@ -525,20 +629,20 @@ function TotalCard({ data, locale, level, rows }: { data: BreakdownResponse; loc
   const head = concentration(rows)
   return (
     <div className="rounded-xl border border-border bg-card px-4 py-4 shadow-sm sm:px-5">
-      <p className="text-xs font-medium text-muted-foreground">{t('reports.explore.spending')}</p>
+      <p className="text-xs font-medium text-muted-foreground">{t(flowKey(income, 'spending'))}</p>
       <div className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <p className="text-3xl font-semibold text-foreground" data-testid="explore-total">
           {mask(formatCurrency(total, data.currency, locale))}
         </p>
         {change !== null && Math.abs(change) >= 0.005 && (
           <span className="text-sm text-muted-foreground">
-            <DeltaPill change={change} good={change < 0} locale={locale} /> {t('reports.explore.vsBefore')}
+            <DeltaPill change={change} good={income ? change > 0 : change < 0} locale={locale} /> {t('reports.explore.vsBefore')}
           </span>
         )}
       </div>
       {head && (
         <p className="mt-2 text-sm text-muted-foreground" data-testid="explore-concentration">
-          {t(`reports.explore.concentration.${level}`, { n: head.n, m: head.m })}
+          {t(flowKey(income, `concentration.${level}`), { n: head.n, m: head.m })}
         </p>
       )}
     </div>
@@ -549,20 +653,24 @@ function TrendChart({
   rows,
   months,
   colorOf,
+  glyphOf,
   level,
   view,
   onOpen,
   currency,
   locale,
+  ariaKey,
 }: {
   rows: BreakdownRow[]
   months: string[]
   colorOf: (row: BreakdownRow) => string
+  glyphOf?: (row: BreakdownRow) => Glyph
   level: Level
   view: ExploreView
   onOpen: (row: BreakdownRow) => void
   currency: string
   locale: string
+  ariaKey: string
 }) {
   const { t } = useTranslation()
   const series = trendSeries(rows, t('reports.explore.trend.rest'))
@@ -581,7 +689,8 @@ function TrendChart({
       onOpen={onOpen}
       currency={currency}
       locale={locale}
-      ariaLabel={top ? t('reports.explore.trend.aria', { name: top.label }) : ''}
+      ariaLabel={top ? t(ariaKey, { name: top.label }) : ''}
+      glyphOf={glyphOf}
     />
   )
 }
@@ -591,19 +700,21 @@ function ExploreTable({
   level,
   locale,
   colorOf,
-  iconOf,
+  glyphOf,
   sublabel,
   onOpen,
   mask,
+  income,
 }: {
   data: BreakdownResponse
   level: Level
   locale: string
   colorOf: (row: BreakdownRow) => string
-  iconOf?: (row: BreakdownRow) => string | null
+  glyphOf?: (row: BreakdownRow) => Glyph
   sublabel?: (row: BreakdownRow) => string | null | undefined
   onOpen: (row: BreakdownRow) => void
   mask: (value: string) => string
+  income: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -611,7 +722,7 @@ function ExploreTable({
       <table className="w-full table-fixed text-sm" data-testid="explore-table">
         <thead>
           <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
-            <th className="px-3 py-2.5 sm:px-4">{t(`reports.explore.col.${level}`)}</th>
+            <th className="px-3 py-2.5 sm:px-4">{t(flowKey(income, `col.${level}`))}</th>
             <th className="w-24 px-2 py-2.5 text-right sm:w-32">{t('reports.explore.col.total')}</th>
             <th className="w-12 px-2 py-2.5 text-right sm:w-16">{t('reports.explore.col.share')}</th>
             <th className="w-16 px-2 py-2.5 text-right sm:w-20">{t('reports.explore.col.change')}</th>
@@ -624,6 +735,7 @@ function ExploreTable({
             const value = Number(row.total)
             const offsets = value < 0
             const sub = sublabel?.(row)
+            const glyph = glyphOf?.(row)
             return (
               <tr
                 key={row.id ?? row.label}
@@ -637,8 +749,8 @@ function ExploreTable({
               >
                 <td className="px-3 py-2.5 sm:px-4">
                   <span className="flex min-w-0 items-center gap-2">
-                    {iconOf ? (
-                      <CategoryIcon icon={iconOf(row)} color={colorOf(row)} size="xs" />
+                    {glyph ? (
+                      <CategoryGlyph icon={glyph.icon} color={glyph.color} />
                     ) : (
                       <span aria-hidden="true" className="size-2.5 shrink-0 rounded-sm" style={{ background: colorOf(row) }} />
                     )}
@@ -652,7 +764,7 @@ function ExploreTable({
                 <td className="px-2 py-2.5 text-right tabular-nums text-muted-foreground">
                   {offsets ? t('reports.explore.offsets') : row.share != null ? formatPercent(row.share, locale) : '—'}
                 </td>
-                <td className={cn('px-2 py-2.5 text-right tabular-nums', row.change === null ? 'text-muted-foreground' : changeTone(row.change))}>
+                <td className={cn('px-2 py-2.5 text-right tabular-nums', row.change === null ? 'text-muted-foreground' : changeTone(row.change, income))}>
                   {row.change === null ? '—' : formatChange(row.change, locale)}
                 </td>
                 <td className="hidden px-2 py-2.5 text-right tabular-nums text-muted-foreground sm:table-cell">{row.count}</td>
@@ -678,6 +790,7 @@ function StorePanel({
   categoryLabel,
   categoryId,
   accountId,
+  flow,
   backLabel,
   onBack,
   locale,
@@ -689,6 +802,7 @@ function StorePanel({
   categoryLabel?: string | null
   categoryId: string
   accountId: string | null
+  flow: BreakdownFlow
   backLabel: string
   onBack: () => void
   locale: string
@@ -721,59 +835,73 @@ function StorePanel({
         merchantKey={merchant}
         categoryId={categoryId}
         accountId={accountId}
+        flow={flow}
         range={{ from: data.period.from, to: data.period.to }}
       />
     </FadePanel>
   )
 }
 
-/** "Mês": groups (or every category) by month, as a table of colors. */
+/** "Mês": groups (or every category) by month, as a table of colors. Income
+ *  has no groups: its categories, straight away. */
 function MonthView({
   scope,
+  income,
+  glyphOf,
   mode,
   onMode,
   onOpen,
   locale,
 }: {
   scope: { period: BreakdownParams['period']; from?: string; to?: string }
+  income: boolean
+  glyphOf: (row: BreakdownRow) => Glyph
   mode: 'groups' | 'categories'
   onMode: (mode: 'groups' | 'categories') => void
   onOpen: (row: BreakdownRow, month: string | null, isCategory: boolean) => void
   locale: string
 }) {
   const { t } = useTranslation()
-  const params: BreakdownParams =
-    mode === 'groups' ? { level: 'group', ...scope } : { level: 'category', group_id: 'all', ...scope }
+  const params: BreakdownParams = income
+    ? { level: 'category', flow: 'income', ...scope }
+    : mode === 'groups'
+      ? { level: 'group', ...scope }
+      : { level: 'category', group_id: 'all', ...scope }
   const query = useQuery({
     queryKey: ['reports', 'breakdown', params],
     queryFn: () => reports.breakdown(params),
     placeholderData: (previous, previousQuery) =>
-      (previousQuery?.queryKey[2] as BreakdownParams | undefined)?.level === params.level ? previous : undefined,
+      (previousQuery?.queryKey[2] as BreakdownParams | undefined)?.level === params.level &&
+      (previousQuery?.queryKey[2] as BreakdownParams | undefined)?.flow === params.flow
+        ? previous
+        : undefined,
   })
   const data = query.data
   const months = data ? sparklineMonths(data.period.to) : []
-  const isCategory = mode === 'categories'
+  const isCategory = income || mode === 'categories'
   const top = data?.rows[0]
 
   return (
     <div className="space-y-4" data-testid="explore-month">
-      <Choice
-        label={t('reports.explore.month.mode')}
-        value={mode}
-        onChange={onMode}
-        testIdPrefix="month-mode"
-        options={[
-          { value: 'groups', label: t('reports.explore.month.groups'), icon: Tags },
-          { value: 'categories', label: t('reports.explore.month.categories'), icon: LayoutGrid },
-        ]}
-      />
+      {!income && (
+        <Choice
+          label={t('reports.explore.month.mode')}
+          value={mode}
+          onChange={onMode}
+          testIdPrefix="month-mode"
+          options={[
+            { value: 'groups', label: t('reports.explore.month.groups'), icon: Tags },
+            { value: 'categories', label: t('reports.explore.month.categories'), icon: LayoutGrid },
+          ]}
+        />
+      )}
       {query.isError && !data ? (
         <BlockError onRetry={() => query.refetch()} message={t('reports.explore.error')} />
       ) : !data ? (
         <Skeleton className="h-72 w-full" />
       ) : data.rows.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-          {t('reports.explore.empty', { from: monthLabel(data.period.from, locale), to: monthLabel(data.period.to, locale) })}
+          {t(flowKey(income, 'empty'), { from: monthLabel(data.period.from, locale), to: monthLabel(data.period.to, locale) })}
         </p>
       ) : (
         <div
@@ -785,10 +913,12 @@ function MonthView({
             months={months}
             currency={data.currency}
             locale={locale}
-            sublabel={isCategory ? (row) => row.group_label : undefined}
+            sublabel={isCategory && !income ? (row) => row.group_label : undefined}
+            glyphOf={glyphOf}
+            income={income}
             onOpenCell={(row, month) => onOpen(row, month, isCategory)}
             onOpenRow={(row) => onOpen(row, null, isCategory)}
-            ariaLabel={top ? t('reports.explore.month.aria', { name: top.label }) : t('reports.explore.view.month')}
+            ariaLabel={top ? t(flowKey(income, 'month.aria'), { name: top.label }) : t('reports.explore.view.month')}
           />
         </div>
       )}
