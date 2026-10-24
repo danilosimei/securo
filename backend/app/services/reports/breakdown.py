@@ -20,6 +20,7 @@ from app.models.account import Account
 from app.models.categorization import CategorizationSuggestion, MerchantMemory
 from app.models.category import Category
 from app.models.category_group import CategoryGroup
+from app.services.category_defaults import DEFAULT_CATEGORIES, name_variants
 from app.services.reports.merchant_labels import FIXED_LABELS, readable_label
 from app.services.reports.periods import Period, _month_end, _shift_months
 from app.services.reports.rules import (
@@ -430,13 +431,19 @@ async def _to_assets(
 ) -> list[dict]:
     """What the group's transfer-like categories (`treat_as_transfer`, e.g.
     the purchase of a home) moved in the period: money that went to the
-    person's own assets, shown apart and never added to the spending."""
+    person's own assets, shown apart and never added to the spending. The
+    default "Transfers" category only moves money between the person's own
+    accounts, and a category where more came back than left sent nothing."""
     rows = (
         await session.execute(
             select(Category.id, Category.group_id, Category.name).where(
                 Category.workspace_id == workspace_id,
                 Category.treat_as_transfer.is_(True),
                 Category.is_ignored.is_(False),
+                ~(
+                    Category.is_system.is_(True)
+                    & Category.name.in_(name_variants(DEFAULT_CATEGORIES["transfers"]))
+                ),
             )
         )
     ).all()
@@ -465,7 +472,7 @@ async def _to_assets(
     moved = [
         (flow.debit - flow.credit, names[cid], cid)
         for cid, flow in flows.by_category.items()
-        if cid in names and flow.debit != flow.credit
+        if cid in names and flow.debit > flow.credit
     ]
     moved.sort(key=lambda item: (-item[0], item[1]))
     return [{"id": str(cid), "label": name, "total": _money(value)} for value, name, cid in moved]

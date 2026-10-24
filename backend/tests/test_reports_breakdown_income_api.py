@@ -201,6 +201,45 @@ async def test_group_without_asset_categories_shows_nothing(client, auth_headers
 
 
 @pytest.mark.asyncio
+async def test_moving_money_between_own_accounts_is_not_going_to_assets(
+    client, auth_headers, world, session, test_user, test_account, test_workspace
+):
+    """The default "Transfers" category only moves money between the person's
+    own accounts, and a category where more came back than left sent nothing
+    to the assets: neither shows up."""
+    financas = CategoryGroup(
+        id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id, name="Finanças"
+    )
+    session.add(financas)
+    await session.flush()
+
+    def cat(name, **kw):
+        c = Category(
+            id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id,
+            name=name, group_id=financas.id, treat_as_transfer=True, **kw,
+        )
+        session.add(c)
+        return c
+
+    transferencias = cat("Transferências", is_system=True)
+    caixinha = cat("Caixinha")
+    poupanca = cat("Poupança")
+    await session.flush()
+    for desc, category, amount, type in [
+        ("Para o Nubank", transferencias, "3000.00", "debit"),
+        ("Do BB", transferencias, "500.00", "credit"),
+        ("Aplicação", caixinha, "700.00", "debit"),
+        ("Resgate", poupanca, "400.00", "credit"),
+    ]:
+        _tx(session, test_user, test_account, desc, category_id=category.id,
+            amount=amount, type=type, day=date(2026, 9, 14))
+    await session.commit()
+
+    body = await _get(client, auth_headers, level="category", group_id=str(financas.id))
+    assert body["to_assets"] == [{"id": str(caixinha.id), "label": "Caixinha", "total": "700.00"}]
+
+
+@pytest.mark.asyncio
 async def test_assets_follow_the_account_filter(client, auth_headers, world):
     body = await _get(
         client, auth_headers, level="category", group_id=str(world["moradia"].id),
