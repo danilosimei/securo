@@ -42,4 +42,14 @@ describe('PageHeader', () => {
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
+
+  it('renders the back link above the title', () => {
+    renderWithProviders(<PageHeader back={{ to: '/accounts', label: 'Accounts' }} title="Nubank" />)
+
+    const link = screen.getByRole('link', { name: 'Back to Accounts' })
+    expect(link).toHaveAttribute('href', '/accounts')
+    expect(link.compareDocumentPosition(screen.getByRole('heading', { level: 1 }))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+  })
 })

@@ -1,4 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { SectionCard } from '@/components/ui/section-card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { Pagination } from '@/components/ui/pagination'
 import { useRegisterPageChatContext } from '@/lib/page-chat-context'
 import { getAccountName } from '@/lib/account-utils'
 import { AccountIcon } from '@/components/account-icon'
@@ -8,7 +13,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { transactions, categories as categoriesApi, categoryGroups as categoryGroupsApi, accounts as accountsApi, recurring, payees as payeesApi, admin, groups as groupsApi, rules as rulesApi, reconciliation as reconciliationApi } from '@/lib/api'
+import { transactions, categories as categoriesApi, categoryGroups as categoryGroupsApi, accounts as accountsApi, recurring, payees as payeesApi, admin, groups as groupsApi, reconciliation as reconciliationApi } from '@/lib/api'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -21,13 +26,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Table,
   TableBody,
   TableCell,
@@ -35,11 +33,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Skeleton } from '@/components/ui/skeleton'
-import { AlertTriangle, ArrowLeftRight, ArrowUp, ArrowDown, Check, Clock, HelpCircle, Info, Paperclip, Trash2, Users, X, EyeClosed, ChartNoAxesColumn, SlidersHorizontal, Receipt } from 'lucide-react'
-import type { Transaction, Rule, InstallmentSeriesInput, TransactionApplyScope, TransactionEditPayload, ReconciliationSuggestion } from '@/types'
-import { RuleDialog, type RuleDialogInitialData } from '@/components/rule-dialog'
+import { AlertTriangle, ArrowLeftRight, ArrowUp, ArrowDown, Check, Clock, HelpCircle, Info, Paperclip, Trash2, Users, X, EyeClosed, ChartNoAxesColumn, SlidersHorizontal, Receipt, ReceiptText, Plus } from 'lucide-react'
+import type { Transaction, InstallmentSeriesInput, TransactionApplyScope, TransactionEditPayload, ReconciliationSuggestion } from '@/types'
+import { RuleDialog } from '@/components/rule-dialog'
+import { readRememberedMonth, rememberMonth } from '@/hooks/use-month-param'
+import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import { PageHeader } from '@/components/page-header'
+import { FilterOriginBanner } from '@/components/filter-origin-banner'
+import { parseFilterOrigin, type FilterOrigin } from '@/lib/filter-origin'
 import { calculateRangeSelection } from '@/lib/selection-utils'
 import { isManualInstallmentSeriesRow } from '@/lib/installment-series'
 import { CategoryIcon } from '@/components/category-icon'
@@ -55,11 +56,15 @@ import { useSidebarState } from '@/contexts/sidebar-state-context'
 import { cn } from '@/lib/utils'
 import { LinkTransferDialog } from '@/components/link-transfer-dialog'
 import { BulkAddToGroupDialog, type BulkAddToGroupSubmission } from '@/components/bulk-add-to-group-dialog'
+import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
+import { parseCategorySourceParam } from '@/lib/category-source-options'
 import { TransactionsFilterBar } from '@/components/transactions-filter-bar'
 import { TransactionCalendarView } from '@/components/transaction-calendar-view'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useCreateTransaction } from '@/hooks/use-create-transaction'
+import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
+import { categoryChanged, withUndoneCategory, singleStoreReference, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
 import { MobileTransactionRow } from '@/components/mobile-transaction-row'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
@@ -117,15 +122,23 @@ export default function TransactionsPage() {
     return initial ? [initial] : []
   })
   const [filterUncategorized, setFilterUncategorized] = useState<boolean>(false)
+  // Set by the link from Reports > Explore; there is no control for it here.
+  const [filterMerchantKey, setFilterMerchantKey] = useState<string>(() => searchParams.get('merchant_key') ?? '')
   // Seed the date range from the URL, else the range last used on this page
   // (issue #1053), else the current month. Done in the initializer so it
   // survives effect re-runs (e.g. React StrictMode's double-invoke in
   // development).
+  const sharedMonth = readRememberedMonth() ?? currentMonth()
   const [initialRange] = useState(() => {
     const f = searchParams.get('from')
     const t = searchParams.get('to')
     if (f || t) return { from: f ?? '', to: t ?? '' }
-    return loadRange('transactions') ?? monthRange(currentMonth())
+    // A custom range last used here comes back; a whole month follows the month
+    // shared with the Dashboard and Budgets.
+    const saved = loadRange('transactions')
+    if (saved && !monthFromRange(saved.from, saved.to)) return saved
+    const urlMonth = searchParams.get('month')
+    return monthRange(urlMonth && /^\d{4}-(0[1-9]|1[0-2])$/.test(urlMonth) ? urlMonth : sharedMonth)
   })
   const [filterFrom, setFilterFrom] = useState<string>(initialRange.from)
   const [filterTo, setFilterTo] = useState<string>(initialRange.to)
@@ -134,13 +147,19 @@ export default function TransactionsPage() {
   }, [filterFrom, filterTo])
   // Month reflected by the stepper: the active range when it spans exactly one
   // full month, otherwise the current month (custom ranges still navigable).
-  const steppedMonth = monthFromRange(filterFrom, filterTo) ?? currentMonth()
+  const rangeMonth = monthFromRange(filterFrom, filterTo)
+  const steppedMonth = rangeMonth ?? sharedMonth
+  useEffect(() => {
+    if (rangeMonth) rememberMonth(rangeMonth)
+  }, [rangeMonth])
   const handleMonthChange = (ym: string) => {
     const { from, to } = monthRange(ym)
     setFilterFrom(from)
     setFilterTo(to)
     setPage(1)
   }
+  // Set when another screen (Reports, Dashboard, a group, a person) opened the page with filters.
+  const [filterOrigin, setFilterOrigin] = useState<FilterOrigin | null>(() => parseFilterOrigin(searchParams.get('from_screen')))
   const [searchInput, setSearchInput] = useState(() => searchParams.get('q') ?? '')
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') ?? '')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -158,6 +177,7 @@ export default function TransactionsPage() {
   const [filterGroupId, setFilterGroupId] = useState<string>(searchParams.get('group_id') ?? '')
   const [filterType, setFilterType] = useState<string>(searchParams.get('type') ?? '')
   const [filterStatus, setFilterStatus] = useState<string>(searchParams.get('status') ?? '')
+  const [filterCategorySource, setFilterCategorySource] = useState<string[]>(() => parseCategorySourceParam(searchParams.get('category_source')))
   // Hiding ignored rows is a reading preference, not a query someone re-picks
   // every visit, so it outlives the page the way page size and columns do. The
   // URL still wins when present, so a shared link shows what its sender saw.
@@ -216,8 +236,7 @@ export default function TransactionsPage() {
   const [bulkCategory, setBulkCategory] = useState<string>('')
   const [bulkAddToGroupOpen, setBulkAddToGroupOpen] = useState(false)
   const [bulkTagInput, setBulkTagInput] = useState<string>('')
-  const [createRuleOpen, setCreateRuleOpen] = useState(false)
-  const [createRuleInitialData, setCreateRuleInitialData] = useState<RuleDialogInitialData | undefined>(undefined)
+  const { openRuleDialog, ruleDialogKey, ruleDialogProps } = useCreateRuleDialog()
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
   const highlightId = searchParams.get('highlight')
   const highlightedRowRef = useRef<HTMLTableRowElement | null>(null)
@@ -238,6 +257,7 @@ export default function TransactionsPage() {
     prevSearchRef.current = search
 
     const nextQ = searchParams.get('q') ?? ''
+    setFilterOrigin(parseFilterOrigin(searchParams.get('from_screen')))
     setViewMode(searchParams.get('view') === 'calendar' ? 'calendar' : 'list')
     setCalendarSelectedDate(searchParams.get('day') ?? '')
     setSearchInput(nextQ)
@@ -245,9 +265,11 @@ export default function TransactionsPage() {
     const tags = searchParams.get('tags');
     setTagFilters(tags ? tags.split(',') : []);
     setFilterPayee(searchParams.get('payee_id') ?? '')
+    setFilterMerchantKey(searchParams.get('merchant_key') ?? '')
     setFilterGroupId(searchParams.get('group_id') ?? '')
     setFilterType(searchParams.get('type') ?? '')
     setFilterStatus(searchParams.get('status') ?? '')
+    setFilterCategorySource(parseCategorySourceParam(searchParams.get('category_source')))
     const urlHideIgnored = searchParams.get('hide_ignored')
     if (urlHideIgnored !== null) setHideIgnored(urlHideIgnored === 'true')
     const categories = searchParams.get('category_id');
@@ -282,9 +304,11 @@ export default function TransactionsPage() {
         ['day', viewMode === 'calendar' ? calendarSelectedDate : ''],
         ['tags', tagFilters.join(',')],
         ['payee_id', filterPayee],
+        ['merchant_key', filterMerchantKey],
         ['group_id', filterGroupId],
         ['type', filterType],
         ['status', filterStatus],
+        ['category_source', filterCategorySource.join(',')],
         ['category_id', filterCategoryIds.join(',')],
         ['uncategorized', filterUncategorized ? '1' : ''],
         ['account_id', filterAccountIds.join(',')],
@@ -293,6 +317,7 @@ export default function TransactionsPage() {
         ['min_amount', filterMinAmount],
         ['max_amount', filterMaxAmount],
         ['hide_ignored', hideIgnored ? 'true' : ''],
+        ['from_screen', filterOrigin ?? ''],
       ].filter(([, v]) => v.length),
     );
 
@@ -307,9 +332,11 @@ export default function TransactionsPage() {
     calendarSelectedDate,
     tagFilters,
     filterPayee,
+    filterMerchantKey,
     filterGroupId,
     filterType,
     filterStatus,
+    filterCategorySource,
     filterCategoryIds,
     filterUncategorized,
     filterAccountIds,
@@ -318,6 +345,7 @@ export default function TransactionsPage() {
     filterMinAmount,
     filterMaxAmount,
     hideIgnored,
+    filterOrigin,
   ]);
 
   useEffect(() => {
@@ -334,7 +362,7 @@ export default function TransactionsPage() {
     setSelectedIds(new Set())
     setLastSelectedId(null)
     setBulkCategory('')
-  }, [page, filterAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterType, filterStatus, filterFrom, filterTo, filterMinAmount, filterMaxAmount, searchQuery])
+  }, [page, filterAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterType, filterStatus, filterCategorySource, filterFrom, filterTo, filterMinAmount, filterMaxAmount, searchQuery])
 
   useEffect(() => {
     if (viewMode === 'calendar') {
@@ -383,8 +411,8 @@ export default function TransactionsPage() {
   const noAccounts = filterAccountIds.length === 0
     && activeAccountIds !== null && activeAccountIds.length === 0
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['transactions', page, limit, effectiveAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterGroupId, filterType, filterStatus, filterFrom, filterTo, filterMinAmount, filterMaxAmount, hideIgnored, searchQuery, tagFilters, isMobile ? 'date' : grid.sortBy, isMobile ? 'desc' : grid.sortDir],
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['transactions', page, limit, effectiveAccountIds, filterCategoryIds, filterUncategorized, filterPayee, filterMerchantKey, filterGroupId, filterType, filterStatus, filterCategorySource, filterFrom, filterTo, filterMinAmount, filterMaxAmount, hideIgnored, searchQuery, tagFilters, isMobile ? 'date' : grid.sortBy, isMobile ? 'desc' : grid.sortDir],
     enabled: !noAccounts,
     queryFn: () =>
       transactions.list({
@@ -393,9 +421,11 @@ export default function TransactionsPage() {
         account_ids: effectiveAccountIds.length > 0 ? effectiveAccountIds : undefined,
         category_ids: filterCategoryIds.length > 0 ? filterCategoryIds : undefined,
         payee_id: filterPayee || undefined,
+        merchant_key: filterMerchantKey || undefined,
         group_id: filterGroupId || undefined,
         type: filterType || undefined,
         status: filterStatus || undefined,
+        category_source: filterCategorySource.length > 0 ? filterCategorySource.join(',') : undefined,
         uncategorized: filterUncategorized ? true : undefined,
         from: filterFrom || undefined,
         to: filterTo || undefined,
@@ -536,14 +566,19 @@ export default function TransactionsPage() {
     resetForm,
   } = useCreateTransaction({ onDone: () => setDialogOpen(false) })
 
+  // After a category fix: "apply to the similar ones" / "create rule".
+  const { notifyCorrection } = useCategoryCorrectionToast({ onCreateRule: openRuleDialog })
+
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }: TransactionUpdatePayload & { id: string }) =>
       transactions.update(id, data),
-    onSuccess: () => {
+    onSuccess: (_updated, { id, ...payload }) => {
+      const before = editingTx?.id === id ? editingTx : data?.items.find((tx) => tx.id === id)
       invalidateAfterTxMutation()
       setDialogOpen(false)
       setEditingTx(null)
-      toast.success(t('transactions.updated'))
+      if (categoryChanged(before, payload)) void notifyCorrection({ id })
+      else toast.success(t('transactions.updated'))
     },
     onError: (error) => {
       toast.error(extractApiError(error))
@@ -567,11 +602,16 @@ export default function TransactionsPage() {
   const bulkCategorizeMutation = useMutation({
     mutationFn: ({ ids, categoryId }: { ids: string[]; categoryId: string | null }) =>
       transactions.bulkCategorize(ids, categoryId),
-    onSuccess: (result) => {
+    onSuccess: (result, { ids, categoryId }) => {
       invalidateAfterTxMutation()
       setSelectedIds(new Set())
       setBulkCategory('')
-      toast.success(t('transactions.bulkSuccess', { count: result.updated }))
+      const title = t('transactions.bulkSuccess', { count: result.updated })
+      // Shortcuts only when the selection is one store (all rows on screen).
+      const rows = (data?.items ?? []).filter((tx) => ids.includes(tx.id))
+      const reference = categoryId && rows.length === ids.length ? singleStoreReference(rows) : null
+      if (reference) void notifyCorrection(reference, { title })
+      else toast.success(title)
     },
     onError: (error) => {
       toast.error(extractApiError(error))
@@ -703,31 +743,6 @@ export default function TransactionsPage() {
     },
   })
 
-  const createRuleMutation = useMutation({
-    mutationFn: (data: Omit<Rule, 'id' | 'user_id'>) => rulesApi.create(data),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
-      setCreateRuleOpen(false)
-      setCreateRuleInitialData(undefined)
-      const applied = result.applied_count ?? 0
-      if (applied > 0) {
-        invalidateAfterTxMutation()
-        queryClient.invalidateQueries({ queryKey: ['payees'] })
-        toast.success(t('rules.createdAndApplied', { count: applied }))
-      } else {
-        toast.success(t('rules.created'))
-      }
-    },
-    onError: (error: unknown) => {
-      const err = error as { response?: { status?: number } }
-      if (err?.response?.status === 409) {
-        toast.error(t('rules.duplicateName'))
-      } else {
-        toast.error(t('common.error'))
-      }
-    },
-  })
-
   const handleCreateRuleFromTransaction = (tx: Transaction) => {
     const conditions = [
       { field: 'description', op: 'contains', value: tx.description },
@@ -742,8 +757,7 @@ export default function TransactionsPage() {
     if (tags.length > 0) {
       actions.push({ op: 'append_notes', value: tags.join(' ') })
     }
-    setCreateRuleInitialData({ conditions, actions })
-    setCreateRuleOpen(true)
+    openRuleDialog({ conditions, actions })
   }
 
   const toggleSelect = (id: string, isShiftKey: boolean = false) => {
@@ -846,7 +860,6 @@ export default function TransactionsPage() {
       ? t('transactions.linkTransferInvalidPair')
       : undefined
 
-  const totalPages = data ? Math.ceil(data.total / limit) : 0
 
   const isTransferCategoryPromptOpen = !!pendingTransferCategoryUpdate
 
@@ -1108,6 +1121,10 @@ export default function TransactionsPage() {
                 is not a fact yet. It lived only in a tab on the rules
                 page, which meant you found out a question existed by
                 going somewhere you had no reason to go. */}
+            <CategorizationOriginBadge
+              source={tx.category_source}
+              pending={!!tx.categorization_pending}
+            />
             {suggestionsByTransaction.get(tx.id) && (
               <Link
                 to="/rules?tab=queue"
@@ -1332,6 +1349,47 @@ export default function TransactionsPage() {
     }
   }
 
+  const clearAllFilters = () => {
+    setFilterFrom('')
+    setFilterMerchantKey('')
+    setFilterTo('')
+    setFilterAccountIds([])
+    setFilterCategoryIds([])
+    setFilterUncategorized(false)
+    setFilterPayee('')
+    setFilterGroupId('')
+    setFilterType('')
+    setFilterStatus('')
+    setFilterCategorySource([])
+    setFilterMinAmount('')
+    setFilterMaxAmount('')
+    handleHideIgnoredChange(false)
+    setSearchInput('')
+    setSearchQuery('')
+    clearTagFilters()
+    setPage(1)
+    setFilterOrigin(null)
+  }
+
+  // What the filters from another screen add up to, in a line for the banner.
+  const originSummary = (() => {
+    const names = <T extends { id: string; name: string }>(list: T[] | undefined, ids: string[]) =>
+      ids.map((id) => list?.find((item) => item.id === id)?.name).filter((name): name is string => !!name)
+    const day = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString(locale)
+    const parts: string[] = []
+    if (filterFrom || filterTo) parts.push(filterFrom && filterTo ? `${day(filterFrom)} - ${day(filterTo)}` : day(filterFrom || filterTo))
+    if (filterUncategorized) parts.push(t('transactions.uncategorized'))
+    parts.push(...names(allCategoriesList, filterCategoryIds))
+    parts.push(...names(accountsList, filterAccountIds))
+    if (filterPayee) parts.push(...names(payeesList, [filterPayee]))
+    if (filterGroupId && filterGroup?.name) parts.push(filterGroup.name)
+    if (filterMerchantKey) parts.push(filterMerchantKey)
+    if (filterType) parts.push(filterType === 'credit' ? t('transactions.typeIncome') : t('transactions.typeExpense'))
+    if (filterStatus) parts.push(filterStatus === 'pending' ? t('transactions.statusPending') : t('transactions.statusPosted'))
+    if (searchQuery) parts.push(`"${searchQuery}"`)
+    return parts.join(', ')
+  })()
+
   // A single non-shared, non-transfer row selected can be duplicated; shared
   // and transfer rows can't (issue #158). Computed once for both the desktop
   // button and the mobile overflow menu.
@@ -1350,17 +1408,11 @@ export default function TransactionsPage() {
   return (
     <div>
       <PageHeader
-        section={t('transactions.section')}
+        section={t('nav.groupDaily')}
         title={t('transactions.title')}
+        period={<MonthPeriodSelector value={steppedMonth} onChange={handleMonthChange} locale={i18n.resolvedLanguage ?? i18n.language} compactOnPhone />}
         action={
           <TransactionsPageActions
-            month={{
-              value: steppedMonth,
-              onChange: handleMonthChange,
-              locale: i18n.resolvedLanguage ?? i18n.language,
-              prevLabel: t('transactions.monthPrevious'),
-              nextLabel: t('transactions.monthNext'),
-            }}
             view={{
               value: viewMode,
               onChange: (value) => {
@@ -1380,6 +1432,10 @@ export default function TransactionsPage() {
           />
         }
       />
+
+      {filterOrigin && (
+        <FilterOriginBanner origin={filterOrigin} summary={originSummary} onClear={clearAllFilters} />
+      )}
 
       {/* Filters */}
       <TransactionsFilterBar
@@ -1413,6 +1469,8 @@ export default function TransactionsPage() {
         onTypeChange={(v) => { setFilterType(v); setPage(1) }}
         filterStatus={filterStatus}
         onStatusChange={(v) => { setFilterStatus(v); setPage(1) }}
+        filterCategorySource={filterCategorySource}
+        onCategorySourceChange={(v) => { setFilterCategorySource(v); setPage(1) }}
         hideIgnored={hideIgnored}
         onHideIgnoredChange={handleHideIgnoredChange}
         filterFrom={filterFrom}
@@ -1421,24 +1479,7 @@ export default function TransactionsPage() {
         filterMinAmount={filterMinAmount}
         filterMaxAmount={filterMaxAmount}
         onAmountRangeChange={(min, max) => { setFilterMinAmount(min); setFilterMaxAmount(max); setPage(1) }}
-        onClearAll={() => {
-          setFilterFrom('')
-          setFilterTo('')
-          setFilterAccountIds([])
-          setFilterCategoryIds([])
-          setFilterUncategorized(false)
-          setFilterPayee('')
-          setFilterGroupId('')
-          setFilterType('')
-          setFilterStatus('')
-          setFilterMinAmount('')
-          setFilterMaxAmount('')
-          handleHideIgnoredChange(false)
-          setSearchInput('')
-          setSearchQuery('')
-          clearTagFilters()
-          setPage(1)
-        }}
+        onClearAll={clearAllFilters}
         accounts={accountsList ?? []}
         categories={categoriesList ?? []}
         referenceCategories={allCategoriesList}
@@ -1502,14 +1543,11 @@ export default function TransactionsPage() {
       )}
 
       {/* Table / Mobile Cards */}
-      {viewMode === 'list' && (
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
+      {viewMode === 'list' && isError && <ErrorState error={error} onRetry={() => refetch()} />}
+      {viewMode === 'list' && !isError && (
+      <SectionCard className="mb-4">
         {isLoading ? (
-          <div className="p-6 space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
+          <ListSkeleton rows={5} />
         ) : isMobile ? (
           /* ── Mobile card view: grouped by date ── */
           <div>
@@ -1611,15 +1649,21 @@ export default function TransactionsPage() {
                   {grid.visibleColumns.map(col => renderBodyCell(col, tx))}
                 </TableRow>
               ))}
-              {filteredItems.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={grid.visibleColumns.length + 1} className="text-center py-16 text-muted-foreground">
-                    {t('transactions.noResults')}
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
+          {filteredItems.length === 0 && (
+            <EmptyState
+              icon={ReceiptText}
+              title={t('transactions.noResults')}
+              action={
+                canWrite ? (
+                  <Button onClick={() => { setEditingTx(null); setDialogOpen(true) }}>
+                    <Plus /> {t('transactions.addManual')}
+                  </Button>
+                ) : undefined
+              }
+            />
+          )}
           </div>
         )}
         {/* Filtered summary (issue #185): income / expenses / net across
@@ -1702,67 +1746,26 @@ export default function TransactionsPage() {
             </span>
           </div>
         )}
-      </div>
+        {data && (
+          <Pagination
+            page={page}
+            pageSize={limit}
+            total={data.total}
+            onPageChange={setPage}
+            onPageSizeChange={(nextLimit) => {
+              setLimit(nextLimit)
+              try {
+                localStorage.setItem('securo.transactions.pageSize', String(nextLimit))
+              } catch {
+                // ignored
+              }
+            }}
+          />
+        )}
+      </SectionCard>
       )}
+      {viewMode === 'list' && selectedIds.size > 0 && <div className="h-16" aria-hidden="true" />}
 
-      {/* Pagination */}
-      {viewMode === 'list' && data && data.total > 10 && (
-        <div className={`flex flex-col sm:flex-row items-center justify-between gap-4 py-4 ${selectedIds.size > 0 ? 'pb-20' : ''}`}>
-          <div className="hidden sm:block w-32" />
-          {totalPages > 1 ? (
-            <div className="flex items-center justify-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-              >
-                {t('transactions.previous')}
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => setPage(page + 1)}
-              >
-                {t('transactions.next')}
-              </Button>
-            </div>
-          ) : (
-            <div className="hidden sm:block" />
-          )}
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{t('common.rowsPerPage', 'Rows per page')}</span>
-            <Select
-              value={String(limit)}
-              onValueChange={(val) => {
-                const nextLimit = Number(val)
-                setLimit(nextLimit)
-                setPage(1)
-                try {
-                  localStorage.setItem('securo.transactions.pageSize', String(nextLimit))
-                } catch {
-                  // ignored
-                }
-              }}
-            >
-              <SelectTrigger className="w-[70px] h-8 text-xs">
-                <SelectValue placeholder={limit} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      )}
       {/* Bulk Action Bar — aligned with the main content area: clears the
           fixed sidebar on lg+ and matches the page's max-w-7xl + p-6 wrapper
           so the bar visually sits over the transactions list, not the
@@ -2020,6 +2023,9 @@ export default function TransactionsPage() {
 
       {/* Add/Edit Dialog */}
       <TransactionDialog
+        onCategoryUndone={(txId, categoryId, source) =>
+          setEditingTx((prev) => withUndoneCategory(prev, txId, categoryId, source))
+        }
         open={dialogOpen}
         onClose={() => {
           setDialogOpen(false)
@@ -2162,7 +2168,7 @@ export default function TransactionsPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setBulkDeleteConfirmOpen(false)}>
+            <Button variant="outline" onClick={() => setBulkDeleteConfirmOpen(false)}>
               {t('common.cancel')}
             </Button>
             <Button
@@ -2178,17 +2184,12 @@ export default function TransactionsPage() {
 
       {/* Create Rule from Transaction Dialog */}
       <RuleDialog
-        key={createRuleOpen ? 'rule-open' : 'rule-closed'}
-        open={createRuleOpen}
-        onClose={() => { setCreateRuleOpen(false); setCreateRuleInitialData(undefined) }}
-        rule={null}
+        key={ruleDialogKey}
+        {...ruleDialogProps}
         categories={categoriesList ?? []}
         categoryGroups={categoryGroupsList ?? []}
         accounts={accountsList ?? []}
         payees={payeesList ?? []}
-        onSave={(data) => createRuleMutation.mutate(data as Omit<Rule, 'id' | 'user_id'>)}
-        loading={createRuleMutation.isPending}
-        initialData={createRuleInitialData}
       />
     </div>
   )

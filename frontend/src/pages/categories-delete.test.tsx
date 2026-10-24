@@ -9,7 +9,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 
 import CategoriesPage from '@/pages/categories'
-import { renderWithProviders } from '@/test/utils'
+import { renderWithProviders, t } from '@/test/utils'
 
 const api = vi.hoisted(() => ({
   categories: {
@@ -68,7 +68,8 @@ beforeEach(() => {
 
 async function clickDelete(user: ReturnType<typeof renderWithProviders>['user'], name: string) {
   const row = (await screen.findByText(name)).closest('div')!.parentElement!
-  await user.click(within(row).getByTitle('Delete'))
+  await user.click(within(row).getByRole('button', { name: /More actions/ }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
 }
 
 describe('deleting a category', () => {
@@ -124,5 +125,32 @@ describe('deleting a category', () => {
 
     const options = await screen.findAllByRole('option')
     expect(options.map((option) => option.textContent)).toEqual(['Transport'])
+  })
+})
+
+describe('organizing with AI', () => {
+  it('offers the organizer tab in the page menu', async () => {
+    const { user } = renderWithProviders(<CategoriesPage />)
+    await user.click(await screen.findByRole('button', { name: 'More actions' }))
+    expect(await screen.findByRole('menuitem', { name: /Organize with AI/ })).toBeInTheDocument()
+  })
+})
+
+describe('creating a group', () => {
+  it('defaults the icon to one the icon set has', async () => {
+    api.categoryGroups.create.mockResolvedValue({ id: 'g1' })
+    const { user } = renderWithProviders(<CategoriesPage />)
+
+    await user.click(await screen.findByRole('button', { name: 'More actions' }))
+    await user.click(await screen.findByRole('menuitem', { name: t('groups.add') }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getAllByRole('textbox')[0], 'Viagens')
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(api.categoryGroups.create).toHaveBeenCalled())
+    expect(api.categoryGroups.create.mock.calls[0][0]).toMatchObject({
+      name: 'Viagens',
+      icon: 'circle-help',
+    })
   })
 })

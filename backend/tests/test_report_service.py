@@ -22,6 +22,7 @@ from app.schemas.report import (
     ReportSummary,
 )
 from app.services import report_service
+from app.services.reports import income_expenses as income_expenses_service
 from app.api.reports import (
     _add_years,
     _financial_year_start_month,
@@ -547,7 +548,7 @@ async def test_income_expenses_api_accepts_ytd_period(client, auth_headers, monk
             category_trend=[],
         )
 
-    monkeypatch.setattr(report_service, "get_income_expenses_report", fake_report)
+    monkeypatch.setattr(income_expenses_service, "get_income_expenses_report", fake_report)
 
     resp = await client.get(
         "/api/reports/income-expenses",
@@ -586,7 +587,7 @@ async def test_income_expenses_api_forwards_days_window(client, auth_headers, mo
             category_trend=[],
         )
 
-    monkeypatch.setattr(report_service, "get_income_expenses_report", fake_report)
+    monkeypatch.setattr(income_expenses_service, "get_income_expenses_report", fake_report)
 
     resp = await client.get(
         "/api/reports/income-expenses",
@@ -624,7 +625,7 @@ async def test_income_expenses_api_forwards_custom_range(client, auth_headers, m
             category_trend=[],
         )
 
-    monkeypatch.setattr(report_service, "get_income_expenses_report", fake_report)
+    monkeypatch.setattr(income_expenses_service, "get_income_expenses_report", fake_report)
 
     resp = await client.get(
         "/api/reports/income-expenses",
@@ -703,7 +704,7 @@ async def test_report_api_forwards_workspace_financial_year(
     income_expenses = AsyncMock(return_value=empty_report)
     app.dependency_overrides[current_workspace] = override_workspace
     monkeypatch.setattr(report_service, "get_net_worth_report", net_worth)
-    monkeypatch.setattr(report_service, "get_income_expenses_report", income_expenses)
+    monkeypatch.setattr(income_expenses_service, "get_income_expenses_report", income_expenses)
     try:
         net_response = await client.get(
             "/api/reports/net-worth", params={"period": "ytd"}, headers=auth_headers
@@ -2767,7 +2768,10 @@ async def test_historical_api_custom_range_boundaries(
         composition=[], category_trend=[],
     )
     service = AsyncMock(return_value=report)
-    monkeypatch.setattr(report_service, service_name, service)
+    monkeypatch.setattr(
+        income_expenses_service if endpoint == 'income-expenses' else report_service,
+        service_name, service,
+    )
     params = {}
     for name, offset in [('start_date', start_offset), ('end_date', end_offset)]:
         if offset is not None:
@@ -2805,7 +2809,10 @@ async def test_custom_dates_override_indian_yearly_ytd(
                                  interval='yearly'), composition=[], category_trend=[],
     )
     service = AsyncMock(return_value=report)
-    monkeypatch.setattr(report_service, service_name, service)
+    monkeypatch.setattr(
+        income_expenses_service if endpoint == 'income-expenses' else report_service,
+        service_name, service,
+    )
     app.dependency_overrides[current_workspace] = override_workspace
     try:
         params = {'period': 'ytd', 'interval': 'yearly'}
@@ -2821,3 +2828,39 @@ async def test_custom_dates_override_indian_yearly_ytd(
         assert service.call_args.kwargs['financial_year_start_month'] == 4
     finally:
         app.dependency_overrides.pop(current_workspace, None)
+
+
+@pytest.mark.asyncio
+async def test_cash_flow_baseline_does_not_count_installments_twice(
+    session: AsyncSession, test_user, test_workspace: User
+):
+    """The baseline average leaves installment rows out: the future ones are
+    already booked and added once, so an R$100 monthly installment adds R$100
+    to the projection, not R$100 plus its share of the average."""
+    today = date.today()
+    account = await _make_manual_account(session, test_user.id, "CF Installments")
+    for offset in range(1, 31):
+        await _add_txn(session, test_user.id, account.id, 10, "debit", today - timedelta(days=offset))
+
+    async def projected_expenses() -> float:
+        report = await get_cash_flow_report(
+            session, test_workspace.id, test_user.id, months=3, interval="daily", baseline=True,
+        )
+        assert report.meta.baseline_lookback_days == 30
+        return next(b for b in report.summary.breakdowns if b.key == "projectedExpenses").value
+
+    without = await projected_expenses()
+    series = uuid.uuid4()
+    for number, day in enumerate(
+        (today - timedelta(days=20), today + timedelta(days=10), today + timedelta(days=40)),
+        start=1,
+    ):
+        tx = await _add_txn(session, test_user.id, account.id, 100, "debit", day)
+        tx.installment_number = number
+        tx.total_installments = 3
+        tx.installment_series_id = series
+    await session.commit()
+    with_installments = await projected_expenses()
+    # Only the two future installments (R$200) are added; the past one does
+    # not raise the daily average.
+    assert with_installments - without == pytest.approx(200.0, abs=0.01)

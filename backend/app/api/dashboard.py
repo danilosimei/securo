@@ -9,6 +9,7 @@ from app.core.database import get_async_session
 from app.core.workspace_context import WorkspaceContext, current_workspace
 from app.schemas.dashboard import DashboardSummary, SpendingByCategory, MonthlyTrend, ProjectedTransaction, BalanceHistory
 from app.services import dashboard_service
+from app.services.reports import dashboard_rules
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -35,7 +36,7 @@ async def get_spending_by_category(
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    return await dashboard_service.get_spending_by_category(
+    return await dashboard_rules.get_spending_by_category(
         session, ctx.workspace.id, ctx.user_id, month, account_ids
     )
 
@@ -47,7 +48,7 @@ async def get_monthly_trend(
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    return await dashboard_service.get_monthly_trend(
+    return await dashboard_rules.get_monthly_trend(
         session, ctx.workspace.id, ctx.user_id, months, account_ids
     )
 

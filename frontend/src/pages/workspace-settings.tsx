@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { SectionCard } from '@/components/ui/section-card'
+import { PageHeader } from '@/components/page-header'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useDateLocale } from '@/hooks/use-display-locale'
@@ -16,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { CategorizationSettingsSection } from '@/components/categorization/categorization-settings-section'
 import { IconPicker } from '@/components/icon-picker'
 import { CategoryIcon } from '@/components/category-icon'
 import {
@@ -276,7 +279,7 @@ export default function WorkspaceSettingsPage() {
 
   if (!current) {
     return (
-      <div className="container max-w-5xl py-8 space-y-4">
+      <div className="space-y-4">
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -290,9 +293,11 @@ export default function WorkspaceSettingsPage() {
   const kindLabelKey = WORKSPACE_KIND_LABEL_KEY[current.kind as WorkspaceKind]
 
   return (
-    <div className="container max-w-5xl py-8 space-y-6">
-      {/* Header card — identity + role + stats strip */}
-      <section className="rounded-xl border bg-card overflow-hidden">
+    <div className="space-y-6">
+      <PageHeader title={t('workspace.settingsMenu')} />
+
+      {/* Identity card — name + role + stats strip */}
+      <SectionCard>
         <div className="p-6 flex items-center gap-5 border-b">
           <CategoryIcon
             icon={current.icon ?? DEFAULT_WORKSPACE_ICON}
@@ -302,7 +307,7 @@ export default function WorkspaceSettingsPage() {
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-semibold truncate">{current.name}</h1>
+              <h2 className="text-xl font-semibold truncate">{current.name}</h2>
               {/* Fixed at creation, so it reads as identity, not a control. */}
               {kindLabelKey && (
                 <Badge variant="outline" className="text-[11px]">
@@ -333,10 +338,10 @@ export default function WorkspaceSettingsPage() {
           <StatTile label={t('workspace.statTransactions', 'Transações')} value={String(stats.transactions)} />
           <StatTile label={t('workspace.statCreatedAt', 'Criado em')} value={formatDate(current.created_at, localeForFormat)} />
         </div>
-      </section>
+      </SectionCard>
 
       {/* Details card — 4-column form */}
-      <section className="space-y-4 rounded-xl border bg-card p-6">
+      <SectionCard className="space-y-4 p-6 overflow-visible">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">{t('workspace.details')}</h2>
           {canManage && (
@@ -503,10 +508,10 @@ export default function WorkspaceSettingsPage() {
             </div>
           </div>
         </div>
-      </section>
+      </SectionCard>
 
       {/* Members card */}
-      <section className="space-y-4 rounded-xl border bg-card p-6">
+      <SectionCard className="space-y-4 p-6 overflow-visible">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -594,11 +599,13 @@ export default function WorkspaceSettingsPage() {
             })}
           </ul>
         )}
-      </section>
+      </SectionCard>
+
+      <CategorizationSettingsSection />
 
       {/* Danger zone — owners only */}
       {canManage && (
-        <section className="space-y-4 rounded-xl border bg-card p-6">
+        <SectionCard className="space-y-4 p-6 overflow-visible">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
@@ -629,7 +636,7 @@ export default function WorkspaceSettingsPage() {
               {t('workspace.archive', 'Arquivar')}
             </Button>
           </div>
-        </section>
+        </SectionCard>
       )}
 
       {/* Invite dialog */}
@@ -700,14 +707,12 @@ export default function WorkspaceSettingsPage() {
             <Button
               variant="outline"
               onClick={() => setInviteOpen(false)}
-              className="rounded-lg"
             >
               {t('common.cancel')}
             </Button>
             <Button
               onClick={() => inviteMutation.mutate()}
               disabled={inviteMutation.isPending || !inviteEmail.trim()}
-              className="rounded-lg"
             >
               {inviteMutation.isPending ? t('common.loading') : t('common.save')}
             </Button>
@@ -731,7 +736,6 @@ export default function WorkspaceSettingsPage() {
             <Button
               variant="outline"
               onClick={() => setRemoveTarget(null)}
-              className="rounded-lg"
             >
               {t('common.cancel')}
             </Button>
@@ -739,7 +743,6 @@ export default function WorkspaceSettingsPage() {
               variant="destructive"
               onClick={() => removeTarget && removeMutation.mutate(removeTarget)}
               disabled={removeMutation.isPending}
-              className="rounded-lg"
             >
               {removeMutation.isPending ? t('common.loading') : t('workspace.remove')}
             </Button>
@@ -766,7 +769,6 @@ export default function WorkspaceSettingsPage() {
             <Button
               variant="outline"
               onClick={() => setArchiveOpen(false)}
-              className="rounded-lg"
             >
               {t('common.cancel')}
             </Button>
@@ -774,7 +776,6 @@ export default function WorkspaceSettingsPage() {
               variant="destructive"
               onClick={() => archiveMutation.mutate()}
               disabled={archiveMutation.isPending}
-              className="rounded-lg"
             >
               <Archive className="mr-2 h-4 w-4" />
               {archiveMutation.isPending ? t('common.loading') : t('workspace.archive', 'Arquivar')}

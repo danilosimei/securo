@@ -1,8 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
+import { SEARCH_BAR_CLASS } from '@/components/ui/search-bar'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
-import { startOfMonth, startOfYear, subDays } from 'date-fns'
 import {
   ArrowUpDown,
   Calendar as CalendarIcon,
@@ -13,6 +13,7 @@ import {
   ListChecks,
   ListFilter,
   Search,
+  Sparkles,
   Store,
   Tag,
   Users,
@@ -38,11 +39,12 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
+import { DateRangePanel } from '@/components/ui/date-range-picker'
+import { REPORT_PERIODS, reportPeriodRange } from '@/lib/report-period'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { localDateString } from '@/lib/date-utils'
-import { formatDateRange } from '@/lib/date-range-format'
+import { CATEGORY_SOURCE_OPTIONS } from '@/lib/category-source-options'
+import { formatDateShort } from '@/lib/date-input'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import { CategoryFilterContent } from '@/components/category-filter-content'
 import {
@@ -70,6 +72,9 @@ interface TransactionsFilterBarProps {
   onTypeChange: (value: string) => void
   filterStatus: string
   onStatusChange: (value: string) => void
+  /** Who chose the category (ai, memory, rule, user, provider, none). */
+  filterCategorySource?: string[]
+  onCategorySourceChange?: (value: string[]) => void
   hideIgnored: boolean
   onHideIgnoredChange: (value: boolean) => void
   filterFrom: string
@@ -113,6 +118,8 @@ export function TransactionsFilterBar({
   onTypeChange,
   filterStatus,
   onStatusChange,
+  filterCategorySource = [],
+  onCategorySourceChange,
   hideIgnored,
   onHideIgnoredChange,
   filterFrom,
@@ -139,8 +146,6 @@ export function TransactionsFilterBar({
   const keepAccountSubOpenRef = useRef(false)
   const keepCategorySubOpenRef = useRef(false)
   const [dateCustomOpen, setDateCustomOpen] = useState(false)
-  const [draftFrom, setDraftFrom] = useState<string>(filterFrom)
-  const [draftTo, setDraftTo] = useState<string>(filterTo)
   const [amountSubOpen, setAmountSubOpen] = useState(false)
   const [draftMinAmount, setDraftMinAmount] = useState<string>(filterMinAmount)
   const [draftMaxAmount, setDraftMaxAmount] = useState<string>(filterMaxAmount)
@@ -209,6 +214,7 @@ export function TransactionsFilterBar({
     !!filterGroupId ||
     !!filterType ||
     !!filterStatus ||
+    filterCategorySource.length > 0 ||
     hideIgnored ||
     !!filterFrom ||
     !!filterTo ||
@@ -232,10 +238,23 @@ export function TransactionsFilterBar({
         ? t('transactions.statusPosted')
         : ''
 
+  const categorySourceLabel = filterCategorySource
+    .map((value) => {
+      const option = CATEGORY_SOURCE_OPTIONS.find((o) => o.value === value)
+      return option ? t(option.labelKey) : ''
+    })
+    .filter(Boolean)
+    .join(', ')
+
   const dateLabel = useMemo(() => {
     if (!filterFrom && !filterTo) return null
-    return formatDateRange(filterFrom, filterTo, dateLocale, { compact: true })
-  }, [filterFrom, filterTo, dateLocale])
+    const from = formatDateShort(filterFrom, dateLocale)
+    const to = formatDateShort(filterTo, dateLocale)
+    if (from && to) return `${from} – ${to}`
+    return from
+      ? t('transactions.filtersBar.since', { date: from })
+      : t('transactions.filtersBar.until', { date: to })
+  }, [filterFrom, filterTo, dateLocale, t])
 
   const amountLabel = useMemo(() => {
     if (!filterMinAmount && !filterMaxAmount) return null
@@ -280,51 +299,16 @@ export function TransactionsFilterBar({
     setAmountSubOpen(open)
   }
 
+  // The same shortcuts, labels and dates as the Reports period.
   const datePresets = useMemo(() => {
     const today = new Date()
-    return [
-      {
-        key: 'today',
-        label: t('transactions.filtersBar.datePresets.today'),
-        from: localDateString(today),
-        to: localDateString(today),
-      },
-      {
-        key: 'last7',
-        label: t('transactions.filtersBar.datePresets.last7'),
-        from: localDateString(subDays(today, 6)),
-        to: localDateString(today),
-      },
-      {
-        key: 'last30',
-        label: t('transactions.filtersBar.datePresets.last30'),
-        from: localDateString(subDays(today, 29)),
-        to: localDateString(today),
-      },
-      {
-        key: 'thisMonth',
-        label: t('transactions.filtersBar.datePresets.thisMonth'),
-        from: localDateString(startOfMonth(today)),
-        to: localDateString(today),
-      },
-      {
-        key: 'last90',
-        label: t('transactions.filtersBar.datePresets.last90'),
-        from: localDateString(subDays(today, 89)),
-        to: localDateString(today),
-      },
-      {
-        key: 'thisYear',
-        label: t('transactions.filtersBar.datePresets.thisYear'),
-        from: localDateString(startOfYear(today)),
-        to: localDateString(today),
-      },
-    ]
+    return REPORT_PERIODS.filter((p) => p !== 'custom').flatMap((p) => {
+      const range = reportPeriodRange(p, today)
+      return range ? [{ key: p, label: t(`reports.explore.period.${p}`), from: range.from, to: range.to }] : []
+    })
   }, [t])
 
   const openCustomRange = () => {
-    setDraftFrom(filterFrom)
-    setDraftTo(filterTo)
     setMenuOpen(false)
     // Wait for the dropdown to finish closing before showing the popover
     // so focus and portal state settle correctly.
@@ -351,12 +335,7 @@ export function TransactionsFilterBar({
     <div className="mb-4">
       <Popover open={dateCustomOpen} onOpenChange={setDateCustomOpen} modal={true}>
       <PopoverAnchor asChild>
-      <div
-        className={cn(
-          'group/filterbar rounded-xl border border-border bg-card shadow-sm transition-colors',
-          'focus-within:border-primary/40 focus-within:ring-[3px] focus-within:ring-primary/10',
-        )}
-      >
+      <div className={SEARCH_BAR_CLASS}>
         {/* Top row: search input + controls */}
         <div className="flex items-center gap-1.5 px-2 py-1.5">
         {/* Search input — splits committed `#tag` tokens into inline chips,
@@ -434,6 +413,7 @@ export function TransactionsFilterBar({
                   group: selectedGroup?.name,
                   type: typeLabel,
                   status: statusLabel,
+                  categorySource: categorySourceLabel,
                   ignored: hideIgnored ? t('transactions.ignoredHide') : undefined,
                   date: dateLabel,
                   amount: amountLabel,
@@ -447,13 +427,14 @@ export function TransactionsFilterBar({
                 onGroupIdChange={onGroupIdChange}
                 onTypeChange={onTypeChange}
                 status={filterStatus}
+                categorySources={filterCategorySource}
+                onCategorySourceChange={onCategorySourceChange}
                 onStatusChange={onStatusChange}
                 hideIgnored={hideIgnored}
                 onHideIgnoredChange={onHideIgnoredChange}
                 onDateRangeChange={onDateRangeChange}
                 onAmountRangeChange={onAmountRangeChange}
                 onApplyAmountRange={applyAmountRange}
-                onOpenCustomRange={openCustomRange}
                 onClearAll={onClearAll}
               />
 
@@ -808,6 +789,38 @@ export function TransactionsFilterBar({
                   </DropdownMenuPortal>
                 </DropdownMenuSub>
 
+                {/* Origin of the category (multi-select) */}
+                {onCategorySourceChange && (
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="gap-2 text-[13px]">
+                      <Sparkles size={14} className="text-muted-foreground" />
+                      <span className="flex-1">{t('categorization.origin.filter')}</span>
+                      {categorySourceLabel && (
+                        <span className="max-w-[90px] truncate text-[11px] text-muted-foreground">
+                          {categorySourceLabel}
+                        </span>
+                      )}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuPortal>
+                      <DropdownMenuSubContent sideOffset={8} className="w-[200px] p-1">
+                        {CATEGORY_SOURCE_OPTIONS.map((opt) => (
+                          <DropdownMenuCheckboxItem
+                            key={opt.value}
+                            checked={filterCategorySource.includes(opt.value)}
+                            onSelect={(e) => e.preventDefault()}
+                            onCheckedChange={() =>
+                              onCategorySourceChange(toggleInArray(filterCategorySource, opt.value))
+                            }
+                            className="text-[13px]"
+                          >
+                            {t(opt.labelKey)}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuPortal>
+                  </DropdownMenuSub>
+                )}
+
                 {/* Ignored rows: a visibility switch rather than a filter
                     value, so it reads as one line instead of a submenu. */}
                 <DropdownMenuItem
@@ -855,6 +868,16 @@ export function TransactionsFilterBar({
                           <Check size={13} className="text-primary" />
                         )}
                       </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={openCustomRange}
+                        className="justify-between rounded-sm px-2 py-1.5 text-[13px]"
+                      >
+                        <span>{t('transactions.filtersBar.customRange')}</span>
+                        <ChevronRight
+                          size={13}
+                          className="text-muted-foreground/60"
+                        />
+                      </DropdownMenuItem>
                       <div className="my-1 h-px bg-border/60" />
                       {datePresets.map((preset) => {
                         const active =
@@ -878,17 +901,6 @@ export function TransactionsFilterBar({
                           </DropdownMenuItem>
                         )
                       })}
-                      <div className="my-1 h-px bg-border/60" />
-                      <DropdownMenuItem
-                        onSelect={openCustomRange}
-                        className="justify-between rounded-sm px-2 py-1.5 text-[13px]"
-                      >
-                        <span>{t('transactions.filtersBar.customRange')}</span>
-                        <ChevronRight
-                          size={13}
-                          className="text-muted-foreground/60"
-                        />
-                      </DropdownMenuItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuPortal>
                 </DropdownMenuSub>
@@ -1017,6 +1029,7 @@ export function TransactionsFilterBar({
           !!selectedPayee ||
           !!typeLabel ||
           !!statusLabel ||
+          !!categorySourceLabel ||
           !!dateLabel ||
           !!amountLabel) && (
           <div className="flex flex-wrap items-center gap-1 border-t border-border/60 px-2 py-1.5">
@@ -1085,6 +1098,14 @@ export function TransactionsFilterBar({
                 onRemove={() => onStatusChange('')}
               />
             )}
+            {categorySourceLabel && onCategorySourceChange && (
+              <FilterChip
+                icon={<Sparkles size={12} />}
+                label={t('categorization.origin.filter')}
+                value={categorySourceLabel}
+                onRemove={() => onCategorySourceChange([])}
+              />
+            )}
             {hideIgnored && (
               <FilterChip
                 icon={<EyeClosed size={12} />}
@@ -1121,88 +1142,20 @@ export function TransactionsFilterBar({
           className="w-auto p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <div className="border-b border-border/70 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              {t('transactions.filtersBar.customRange')}
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-              {draftFrom || draftTo
-                ? formatDateRange(draftFrom, draftTo, dateLocale)
-                : t('transactions.filtersBar.pickRange')}
-            </p>
-          </div>
-          <div className="flex flex-col gap-4 p-3 sm:flex-row sm:gap-0">
-            <div className="sm:border-r sm:border-border/60 sm:pr-2">
-              <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-                {t('transactions.filtersBar.fromLabel')}
-              </p>
-              <Calendar
-                selected={draftFrom ? new Date(draftFrom + 'T00:00:00') : undefined}
-                defaultMonth={
-                  draftFrom ? new Date(draftFrom + 'T00:00:00') : new Date()
-                }
-                locale={dateFnsLocale}
-                onSelect={(d) => setDraftFrom(d ? localDateString(d) : '')}
-              />
-            </div>
-            <div className="sm:pl-2">
-              <p className="px-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/80">
-                {t('transactions.filtersBar.toLabel')}
-              </p>
-              <Calendar
-                selected={draftTo ? new Date(draftTo + 'T00:00:00') : undefined}
-                defaultMonth={
-                  draftTo
-                    ? new Date(draftTo + 'T00:00:00')
-                    : draftFrom
-                      ? new Date(draftFrom + 'T00:00:00')
-                      : new Date()
-                }
-                locale={dateFnsLocale}
-                onSelect={(d) => setDraftTo(d ? localDateString(d) : '')}
-              />
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-2 border-t border-border/70 px-3 py-2">
-            <button
-              type="button"
-              onClick={() => {
-                setDraftFrom('')
-                setDraftTo('')
-              }}
-              className="text-[12px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {t('transactions.filtersBar.reset')}
-            </button>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setDateCustomOpen(false)}
-              >
-                {t('transactions.filtersBar.cancel')}
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={!draftFrom && !draftTo}
-                onClick={() => {
-                  // Normalize: if user only picked one of the two, mirror it.
-                  const from = draftFrom || draftTo
-                  const to = draftTo || draftFrom
-                  if (from && to && from > to) {
-                    onDateRangeChange(to, from)
-                  } else {
-                    onDateRangeChange(from, to)
-                  }
-                  setDateCustomOpen(false)
-                }}
-              >
-                {t('transactions.filtersBar.apply')}
-              </Button>
-            </div>
-          </div>
+          {/* One side may stay open ("from" / "until"); the typed fields already block To < From. */}
+          <DateRangePanel
+            initialFrom={filterFrom}
+            initialTo={filterTo}
+            label={t('transactions.filtersBar.customRange')}
+            hint={t('transactions.filtersBar.pickRange')}
+            mode="filter"
+            locale={dateFnsLocale}
+            onApply={(from, to) => {
+              onDateRangeChange(from, to)
+              setDateCustomOpen(false)
+            }}
+            onCancel={() => setDateCustomOpen(false)}
+          />
         </PopoverContent>
       </Popover>
     </div>

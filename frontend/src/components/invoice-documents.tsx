@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { FileText, Image as ImageIcon, Plus, Star, Trash2 } from 'lucide-react'
@@ -72,6 +73,7 @@ export function InvoiceDocumentBrowser({
   const fileInput = useRef<HTMLInputElement>(null)
   const [kind, setKind] = useState<InvoiceAttachmentKind>('bill')
   const [error, setError] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<InvoiceAttachment | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
 
   const { data: attachments = [] } = useQuery({
@@ -133,6 +135,7 @@ export function InvoiceDocumentBrowser({
     mutationFn: (id: string) => invoicesApi.attachments.remove(invoiceId, id),
     onSuccess: (_data, id) => {
       if (selected === id) setSelected(null)
+      setRemoving(null)
       refresh()
     },
   })
@@ -158,6 +161,15 @@ export function InvoiceDocumentBrowser({
 
   return (
     <SectionCard>
+      <DeleteConfirmationDialog
+        open={removing !== null}
+        title={t('invoices.documents.confirmRemoveTitle')}
+        description={t('invoices.documents.confirmRemoveDescription', { name: removing?.filename })}
+        confirmLabel={t('common.remove')}
+        isPending={removeMutation.isPending}
+        onClose={() => setRemoving(null)}
+        onConfirm={() => removing && removeMutation.mutate(removing.id)}
+      />
       <div className="flex flex-col lg:flex-row">
         {/* The shelf */}
         <div className="lg:w-72 xl:w-80 shrink-0 border-b lg:border-b-0 lg:border-r border-border flex flex-col">
@@ -273,7 +285,7 @@ export function InvoiceDocumentBrowser({
                           </IconAction>
                         )}
                         <IconAction
-                          onClick={() => removeMutation.mutate(attachment.id)}
+                          onClick={() => setRemoving(attachment)}
                           label={t('invoices.documents.remove')}
                           destructive
                         >

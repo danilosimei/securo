@@ -47,7 +47,7 @@ export function BulkAddToGroupDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         {/* DialogContent only renders while open, so the form below
             mounts fresh on every open and unmounts on close — no
             reset effects needed. */}
@@ -426,7 +426,7 @@ function BulkAddToGroupForm({
       <DialogFooter>
         {showCreateGroupForm ? (
           <>
-            <Button variant="ghost" onClick={() => setIsCreatingGroup(false)} disabled={createGroupMutation.isPending}>
+            <Button variant="outline" onClick={() => setIsCreatingGroup(false)} disabled={createGroupMutation.isPending}>
               {t('common.cancel', 'Cancel')}
             </Button>
             <Button
@@ -438,7 +438,7 @@ function BulkAddToGroupForm({
           </>
         ) : showCreateMemberForm ? (
           <>
-            <Button variant="ghost" onClick={() => setIsAddingMember(false)} disabled={createMemberMutation.isPending}>
+            <Button variant="outline" onClick={() => setIsAddingMember(false)} disabled={createMemberMutation.isPending}>
               {t('common.cancel', 'Cancel')}
             </Button>
             <Button
@@ -450,7 +450,7 @@ function BulkAddToGroupForm({
           </>
         ) : (
           <>
-            <Button variant="ghost" onClick={onCancel} disabled={isPending}>
+            <Button variant="outline" onClick={onCancel} disabled={isPending}>
               {t('common.cancel', 'Cancel')}
             </Button>
             <Button

@@ -6,7 +6,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
-  ArrowLeft,
   ArrowRight,
   ChevronDown,
   Link2,
@@ -36,6 +35,7 @@ import { localDateString } from '@/lib/date-utils'
 import { MemberForm } from '@/components/member-form'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -52,36 +52,7 @@ import { DatePickerInput } from '@/components/ui/date-picker-input'
 import { PageHeader } from '@/components/page-header'
 import type { GroupMember, GroupSettlement, Transaction } from '@/types'
 import { formatCurrency } from '@/lib/format'
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {children}
-    </div>
-  )
-}
-
-function SectionHeader({
-  title,
-  description,
-  action,
-}: {
-  title: string
-  description?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-        )}
-      </div>
-      {action}
-    </div>
-  )
-}
+import { SectionCard, SectionHeader } from '@/components/ui/section-card'
 
 interface KpiBreakdownItem {
   name: string
@@ -231,6 +202,8 @@ export default function GroupDetailPage() {
     },
   })
 
+  // What waits for a yes before it is deleted.
+  const [confirmDelete, setConfirmDelete] = useState<{ kind: 'settlement'; id: string } | { kind: 'member'; id: string; name: string } | null>(null)
   const deleteMemberMutation = useMutation({
     mutationFn: (memberId: string) => groupsApi.members.delete(groupId, memberId),
     onSuccess: () => {
@@ -562,20 +535,15 @@ export default function GroupDetailPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        section={t('splitGroups.section')}
+        back={{ to: '/groups', label: t('nav.splitGroups') }}
+        section={t('nav.groupOrganization')}
         title={group.name}
         action={
-          <div className="flex items-center gap-2">
-            {!isOwner && (
-              <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
-                {t('splitGroups.sharedWithYou')}
-              </span>
-            )}
-            <Button variant="outline" onClick={() => navigate('/groups')}>
-              <ArrowLeft size={14} className="mr-1" />
-              {t('common.back')}
-            </Button>
-          </div>
+          !isOwner ? (
+            <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+              {t('splitGroups.sharedWithYou')}
+            </span>
+          ) : undefined
         }
       />
 
@@ -833,7 +801,7 @@ export default function GroupDetailPage() {
                 variant="ghost"
                 size="sm"
                 className="gap-1 h-8 text-xs"
-                onClick={() => navigate(`/transactions?group_id=${groupId}`)}
+                onClick={() => navigate(`/transactions?group_id=${groupId}&from_screen=group`)}
               >
                 {t('splitGroups.viewAllTransactions')}
                 <ArrowRight size={12} />
@@ -857,7 +825,7 @@ export default function GroupDetailPage() {
               <li
                 key={tx.id}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-muted cursor-pointer transition-colors"
-                onClick={() => navigate(`/transactions?group_id=${groupId}&highlight=${tx.id}`)}
+                onClick={() => navigate(`/transactions?group_id=${groupId}&highlight=${tx.id}&from_screen=group`)}
               >
                 <CategoryIcon
                   icon={tx.category?.icon}
@@ -929,7 +897,7 @@ export default function GroupDetailPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => deleteSettlementMutation.mutate(s.id)}
+                      onClick={() => setConfirmDelete({ kind: 'settlement', id: s.id })}
                       title={t('common.delete')}
                       aria-label={t('common.delete')}
                     >
@@ -950,7 +918,7 @@ export default function GroupDetailPage() {
 
       {/* Member dialog */}
       <Dialog open={memberDialogOpen} onOpenChange={setMemberDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {editingMember ? t('splitGroups.editMember') : t('splitGroups.addMember')}
@@ -970,7 +938,7 @@ export default function GroupDetailPage() {
             {editingMember && (
               <Button
                 variant="destructive"
-                onClick={() => deleteMemberMutation.mutate(editingMember.id)}
+                onClick={() => setConfirmDelete({ kind: 'member', id: editingMember.id, name: editingMember.name })}
                 disabled={deleteMemberMutation.isPending}
               >
                 <Trash2 size={14} className="mr-1" />
@@ -994,7 +962,7 @@ export default function GroupDetailPage() {
 
       {/* Settle dialog */}
       <Dialog open={settleOpen} onOpenChange={setSettleOpen}>
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent size="sm" className="overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('splitGroups.recordSettlement')}</DialogTitle>
           </DialogHeader>
@@ -1200,6 +1168,25 @@ export default function GroupDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DeleteConfirmationDialog
+        open={confirmDelete !== null}
+        title={confirmDelete?.kind === 'member' ? t('splitGroups.confirmDeleteMemberTitle') : t('splitGroups.confirmDeleteSettlementTitle')}
+        description={
+          confirmDelete?.kind === 'member'
+            ? t('splitGroups.confirmDeleteMemberDescription', { name: confirmDelete.name })
+            : t('splitGroups.confirmDeleteSettlementDescription')
+        }
+        isPending={deleteMemberMutation.isPending || deleteSettlementMutation.isPending}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (confirmDelete?.kind === 'member') {
+            deleteMemberMutation.mutate(confirmDelete.id, { onSettled: () => setConfirmDelete(null) })
+          } else if (confirmDelete) {
+            deleteSettlementMutation.mutate(confirmDelete.id, { onSettled: () => setConfirmDelete(null) })
+          }
+        }}
+      />
     </div>
   )
 }

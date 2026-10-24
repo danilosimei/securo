@@ -1,14 +1,17 @@
 import { useMemo, useRef, useState } from 'react'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { useUrlTab } from '@/hooks/use-url-tab'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Ban, Check, CheckCircle2, CircleSlash, Copy, Download, FileText, Link2,
+  Ban, Check, CheckCircle2, CircleSlash, Copy, Download, FileText, Link2,
   MinusCircle, MoreHorizontal, Pencil, Repeat, RotateCcw, Send, Share2, Trash2, Unlink,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { FadePanel } from '@/components/ui/fade-panel'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -104,7 +107,7 @@ export default function InvoiceDetailPage() {
   const [editOpen, setEditOpen] = useState(false)
   const [recurringOpen, setRecurringOpen] = useState(false)
   const [deductionOpen, setDeductionOpen] = useState(false)
-  const [tab, setTab] = useState<Tab>('details')
+  const [tab, setTab] = useUrlTab(['details', 'document'] as const)
   const [copied, setCopied] = useState(false)
 
   const { data: invoice, isLoading } = useQuery({
@@ -169,6 +172,8 @@ export default function InvoiceDetailPage() {
     decision(() => invoicesApi.writeOff(id), 'invoices.writtenOff'),
   )
   const reopenMutation = useMutation(decision(() => invoicesApi.reopen(id), 'invoices.reopened'))
+  // What waits for a yes before it is deleted.
+  const [confirming, setConfirming] = useState<{ kind: 'invoice' } | { kind: 'deduction'; id: string } | null>(null)
   const deleteMutation = useMutation({
     mutationFn: () => invoicesApi.remove(id),
     onSuccess: () => {
@@ -306,15 +311,8 @@ export default function InvoiceDetailPage() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/invoices')}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        {t('invoices.backToList')}
-      </button>
-
       <PageHeader
+        back={{ to: '/invoices', label: t('nav.invoices') }}
         section={
           invoice.payee?.name ??
           t(invoice.direction === 'payable' ? 'invoices.noSupplier' : 'invoices.noClient')
@@ -499,7 +497,7 @@ export default function InvoiceDetailPage() {
                     )}
                     {actions.canDelete && (
                       <DropdownMenuItem
-                        onClick={() => deleteMutation.mutate()}
+                        onClick={() => setConfirming({ kind: 'invoice' })}
                         data-testid="invoice-delete"
                         className="gap-2 text-sm text-destructive focus:text-destructive"
                       >
@@ -534,6 +532,7 @@ export default function InvoiceDetailPage() {
         <SchedulePeriodChip invoice={invoice} />
       </div>
 
+      <FadePanel panelKey={tab}>
       {tab === 'document' ? (
         <div className="space-y-4">
           {offerStatement && (
@@ -808,7 +807,7 @@ export default function InvoiceDetailPage() {
                       <td className="py-3 pr-4 sm:pr-5 text-right w-16">
                         {canWrite && invoice.status === 'open' && (
                           <IconAction
-                            onClick={() => undeductMutation.mutate(deduction.id)}
+                            onClick={() => setConfirming({ kind: 'deduction', id: deduction.id })}
                             label={t('common.delete')}
                             destructive
                           >
@@ -883,6 +882,7 @@ export default function InvoiceDetailPage() {
           </SectionCard>
         </div>
       )}
+      </FadePanel>
 
       <EditDraftDialog
         open={editOpen}
@@ -936,6 +936,17 @@ export default function InvoiceDetailPage() {
         balance={invoice.balance}
         currency={currency}
         onRecorded={refresh}
+      />
+      <DeleteConfirmationDialog
+        open={confirming !== null}
+        title={confirming?.kind === 'deduction' ? t('invoices.deductions.confirmDeleteTitle') : t('invoices.confirmDeleteTitle')}
+        description={confirming?.kind === 'deduction' ? t('invoices.deductions.confirmDeleteDescription') : t('invoices.confirmDeleteDescription')}
+        isPending={deleteMutation.isPending || undeductMutation.isPending}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => {
+          if (confirming?.kind === 'invoice') deleteMutation.mutate()
+          else if (confirming) undeductMutation.mutate(confirming.id, { onSettled: () => setConfirming(null) })
+        }}
       />
     </div>
   )
@@ -992,7 +1003,7 @@ function RecordDeductionDialog({
   })
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('invoices.deductions.title')}</DialogTitle>
           <DialogDescription>{t('invoices.deductions.description')}</DialogDescription>
@@ -1030,7 +1041,7 @@ function RecordDeductionDialog({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={!(Number(amount) > 0) || mutation.isPending} data-testid="deduction-submit">
             {t('invoices.deductions.action')}
           </Button>
@@ -1148,7 +1159,7 @@ export function LinkPaymentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('invoices.action.markPaid')}</DialogTitle>
           <DialogDescription>{t('invoices.linkDescription')}</DialogDescription>
@@ -1323,12 +1334,7 @@ function EditDraftDialog({
       {/* Same rule as the create dialog: the line-item table needs the
           room, and without it the row overflows and the remove button
           falls off the right edge. */}
-      <DialogContent
-        className={cn(
-          'flex flex-col max-h-[calc(100dvh-2rem)]',
-          lines.length ? 'sm:max-w-3xl' : 'sm:max-w-lg',
-        )}
-      >
+      <DialogContent size={lines.length ? 'lg' : 'md'} className="flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('invoices.editDraft')}</DialogTitle>
           <DialogDescription>{t('invoices.editDraftDescription')}</DialogDescription>
@@ -1472,7 +1478,7 @@ function MakeRecurringDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.action.makeRecurring')}</DialogTitle>
           <DialogDescription>
@@ -1534,7 +1540,7 @@ function MakeRecurringDialog({
           />
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('common.cancel')}
           </Button>
           <Button onClick={() => mutation.mutate()} disabled={!ready || mutation.isPending} data-testid="recurring-submit">

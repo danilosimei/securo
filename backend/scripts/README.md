@@ -93,3 +93,31 @@ docker compose exec backend python scripts/seed_perf.py --no-reset
 ## Reproducibility
 
 The script uses a fixed RNG seed (`random.Random(42)`), so the same arguments always produce the same data distribution. The only variable is `--start-date` relative to the current date, which determines the date range.
+
+# rekey_merchant_keys.py
+
+Rewrites the store keys (`merchant_key`) written under the v1 rule to the v2 rule (an acquirer prefix such as `Mlp*`, `Ebn *`, `Dl*` no longer becomes the store: `Mlp*Netshoes` is `NETSHOES`, not `MLP`). Runs **once per deploy that ships the v2 rule, after `alembic upgrade head`**, inside the backend container. Idempotent: running it again changes nothing.
+
+```bash
+# 1. See what would change (writes nothing)
+docker exec <backend> python scripts/rekey_merchant_keys.py --dry-run
+
+# 2. Apply
+docker exec <backend> python scripts/rekey_merchant_keys.py
+
+# Only one workspace
+docker exec <backend> python scripts/rekey_merchant_keys.py --workspace <uuid>
+```
+
+What it does, per workspace (one transaction and one commit each), over the transactions the pipeline considers (posted, not a transfer pair, not an opening balance, not ignored):
+
+- **Suggestions** (pending, accepted and dismissed, on any transaction) keyed with the old key of their transaction, with a key that no longer exists, or with a key the re-key touches, take the transaction's new key; one under another key (a payee's `P:...`) stays where its pick is.
+- **Pending organizer proposals** (`organize` runs not yet decided) that name a store by a key that no longer exists take the key most of the store's rows now have.
+- **Store memory**: a key that turns into one store is **merged** into it; a key that mixed several stores (like `MLP`) is **split**. Every key involved (the old one and all its new stores, and nothing else) is **recomputed from the person's own categorizations** of all its rows (ignored ones included): one pick per decision (rows filed together in one go count once; categories inherited by later parcels of a purchase and category merges are not new decisions), the latest decision as the last choice, exactly one event per decision marked as carrying its pick (so undoing a decision later takes back exactly that pick), and the cached AI decision dropped when the row changes. Picks no row shows any more are not kept. A merge keeps the newest note; a split never copies notes to the new stores (a note about the mixed store would mislead the AI). Every dropped note is printed with its text.
+- While any workspace has a classification or redistribution in progress, the real run is **refused** before writing anything (`recusado: <id> <kind> <status> <run id>, criada há …`, exit code 2); the dry run still runs and shows that workspace as skipped (`[pulado: busy (…)]`). Run the script again once the run finishes, or once the beat expires an abandoned run. A run that starts between the check and the workspace lock still makes that workspace skipped.
+
+Output: first, **every recomputed store that falls below 2 picks** while it had at least 2 (`ATENÇÃO: N lojas ficam abaixo de 2 escolhas …`, then `<workspace> SPOTIFY: 5 → 1 escolhas`, or `nova (MLP tinha 4) → 1` for a store split out of a mixed key; otherwise `nenhuma loja fica abaixo de 2 escolhas`). The recount is one pick per decision: rows filed in one go (a bulk edit) are one decision, so a store bulk-filed once drops to 1 pick and the memory stops filing it alone until the person decides again. Read this list before the real run. Then one line per workspace (`<id> sugestões=… fundidas=… divididas=… semeadas=… propostas=… marcadas=… desmarcadas=…`), followed by its 20 largest merges/splits (`fundir EBN (3 escolhas) → SPOTIFY`, `dividir MLP (5 escolhas) → KABUM, NETSHOES`), every recomputed store with its picks before and after (`recontar NETSHOES: 5 → 2 escolhas`, biggest losses first; picks no row shows any more are dropped), **every** dropped note with its text (`nota descartada de MLP: '…'`, keep the output to re-add it on the right store if needed), and a total.
+
+**Close every browser tab of Securo before the real run** (and make sure no sync is about to start): accepting, choosing or saving a note in the app does not take the workspace lock, so one made while the script runs can land under a key that no longer exists and lose its pick. Take a database dump first: `alembic downgrade` does not bring the v1 keys back.
+
+Details: `app/services/categorization/rekey.py`.

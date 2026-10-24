@@ -11,6 +11,9 @@
  *  the rules?*, so that distinction is what the row leads with, and the
  *  rest is detail behind it.
  */
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
@@ -68,12 +71,13 @@ export function ReconciliationHistory() {
   const { user } = useAuth()
   const displayCurrency = user?.preferences?.currency_display ?? 'USD'
 
-  const { data: events } = useQuery<ReconciliationHistoryEvent[]>({
+  const { data: events, isError, error, refetch } = useQuery<ReconciliationHistoryEvent[]>({
     queryKey: ['reconciliation-history'],
     queryFn: () => reconciliationApi.history(),
   })
 
-  if (!events) return null
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
+  if (!events) return <SectionCard><ListSkeleton /></SectionCard>
 
   const shown = expanded ? events : events.slice(0, SHOWN_AT_FIRST)
   // The event's own currency, never a guess: a workspace keeping invoices
@@ -104,9 +108,7 @@ export function ReconciliationHistory() {
         // An empty state rather than nothing: as a card in a stack,
         // rendering nothing was right. As a tab somebody clicked, a blank
         // page reads as broken.
-        <p className="text-sm text-muted-foreground text-center py-10">
-          {t('reconciliation.history.empty')}
-        </p>
+        <EmptyState icon={Clock} title={t('reconciliation.history.empty')} />
       ) : (
       <div className="divide-y divide-border">
         {shown.map((event) => {

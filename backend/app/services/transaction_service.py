@@ -1,10 +1,11 @@
+import logging
 import re
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
-from typing import Optional, cast
+from typing import Optional
 
-from sqlalchemy import CursorResult, case, delete, select, func, or_, not_, update
+from sqlalchemy import case, delete, select, func, or_, not_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,6 +25,17 @@ from app.schemas.transaction import (
 )
 from app.schemas.transaction_split import TransactionSplitInput, TransactionSplitsInput
 from app.services import reconciliation_service, split_service
+from app.services.categorization import memory as categorization_memory
+from app.services.categorization.events import (
+    StagedChange,
+    record_change,
+    record_changes_bulk,
+    mark_latest_picks,
+    run_clear_hooks,
+    run_user_hooks,
+    stage_change,
+    write_staged,
+)
 from app.services.credit_card_service import apply_effective_date
 from app.services.rule_service import apply_rules_to_transaction
 from app.services.fx_rate_service import stamp_primary_amount, convert as fx_convert
@@ -35,6 +47,8 @@ from app.services._query_filters import (
     reporting_date_col,
 )
 from app.services.recurring_transaction_service import _advance_date
+
+logger = logging.getLogger(__name__)
 
 
 async def _ensure_category_in_workspace(
@@ -132,6 +146,8 @@ async def get_transactions(
     include_summary: bool = False,
     user_pnl_only: bool = False,
     exclude_ignored: bool = False,
+    category_sources: Optional[list[str]] = None,
+    merchant_key: Optional[str] = None,
 ) -> tuple[list[Transaction], int, Optional[dict]]:
     """List transactions for a workspace.
 
@@ -257,6 +273,10 @@ async def get_transactions(
         base_query = base_query.where(Transaction.category_id == category_id)
     if payee_id:
         base_query = base_query.where(Transaction.payee_id == payee_id)
+    if category_sources:
+        base_query = base_query.where(Transaction.category_source.in_(category_sources))
+    if merchant_key is not None:
+        base_query = base_query.where(Transaction.merchant_key == merchant_key)
     if uncategorized:
         base_query = base_query.where(
             Transaction.category_id == None,
@@ -728,7 +748,9 @@ async def create_transaction(
         user_id=user_id,
         workspace_id=workspace_id,
         account_id=data.account_id,
-        category_id=data.category_id,  # use provided category if given
+        # A provided category is written below, through provenance, once the
+        # row has an id.
+        category_id=None,
         payee_id=data.payee_id,
         external_id=data.external_id,
         description=data.description,
@@ -755,7 +777,12 @@ async def create_transaction(
     await session.flush()  # get ID without committing
 
     # Apply rules only if no explicit category provided
-    if not data.category_id:
+    if data.category_id:
+        await record_change(
+            session, transaction, source="user",
+            new_category_id=data.category_id, user_id=user_id,
+        )
+    else:
         await apply_rules_to_transaction(session, user_id, transaction)
 
     # Stamp primary currency amount (manual override or auto)
@@ -837,7 +864,7 @@ async def create_installment_series(
             user_id=user_id,
             workspace_id=workspace_id,
             account_id=base.account_id,
-            category_id=base.category_id,
+            category_id=None,  # written below, through provenance
             payee_id=base.payee_id,
             description=base.description,
             amount=base.amount,
@@ -862,10 +889,20 @@ async def create_installment_series(
         created.append(tx)
 
     # Rules, FX stamping and splits run after every row has an ID so each
-    # parcel is finalized exactly like a single manual transaction.
+    # parcel is finalized exactly like a single manual transaction. The
+    # category events of the whole series are written in one batch; only
+    # the first parcel counts as a new choice for the user-choice hooks.
+    staged: list[StagedChange] = []
     for tx in created:
-        if not base.category_id:
-            await apply_rules_to_transaction(session, user_id, tx)
+        if base.category_id:
+            change = stage_change(
+                tx, source="user", new_category_id=base.category_id,
+                user_id=user_id, derived=tx is not created[0],
+            )
+            if change is not None:
+                staged.append(change)
+        else:
+            await apply_rules_to_transaction(session, user_id, tx, staged=staged)
         if base.fx_rate_used is not None:
             _apply_fx_override(tx, tx.amount, None, base.fx_rate_used)
         elif base.amount_primary is not None:
@@ -875,6 +912,7 @@ async def create_installment_series(
         if base.splits is not None:
             await split_service.replace_splits(session, tx, base.splits, user_id)
 
+    await write_staged(session, staged)
     await session.commit()
     for tx in created:
         await session.refresh(tx, ["category", "splits"])
@@ -1405,8 +1443,13 @@ async def _apply_update_to_row(
     update_data: dict,
     apply_to_transfer_pair: bool,
     splits_payload: Optional[TransactionSplitsInput],
+    derived: bool = False,
 ) -> None:
     """Apply a parsed TransactionUpdate payload to a single row.
+
+    `derived` marks a row that only follows the edit of another one (a
+    sibling installment): its category change is noted as the person's, but
+    is not a new choice for the user-choice hooks.
 
     Shared by single-row edits and installment-series scoped edits so both
     paths behave identically (FX restamp, bill re-link, transfer cascade,
@@ -1425,6 +1468,18 @@ async def _apply_update_to_row(
         )
     )
 
+    # A clear is noted before the other fields land: the memory takes the
+    # pick back from the store the row was in, not the one it is renamed to.
+    if (
+        "category_id" in update_data
+        and update_data["category_id"] is None
+        and tx.category_id is not None
+    ):
+        await record_change(
+            session, tx, source="user", new_category_id=None, user_id=user_id,
+            derived=derived,
+        )
+
     description_changed = (
         "description" in update_data
         and update_data["description"] != tx.description
@@ -1435,9 +1490,17 @@ async def _apply_update_to_row(
 
     fx_keys = {"amount_primary", "fx_rate_used"}
     for key, value in update_data.items():
-        if key in fx_keys:
+        if key in fx_keys or key == "category_id":
             continue
         setattr(tx, key, value)
+    # Only an actual change is a person's choice: saving the form with the
+    # category it already showed leaves its origin alone.
+    if "category_id" in update_data and update_data["category_id"] != tx.category_id:
+        await record_change(
+            session, tx, source="user",
+            new_category_id=update_data["category_id"], user_id=user_id,
+            derived=derived,
+        )
 
     restamp_fields = {"amount", "currency", "date"}
     needs_restamp = bool(restamp_fields & update_data.keys())
@@ -1478,8 +1541,14 @@ async def _apply_update_to_row(
         )
         paired_tx = paired.scalar_one_or_none()
         if paired_tx:
-            if should_cascade_category:
-                paired_tx.category_id = tx.category_id
+            if should_cascade_category and paired_tx.category_id != tx.category_id:
+                # The person asked for the pair to follow, so the copy is
+                # theirs; a pair already in that category keeps its origin.
+                await record_change(
+                    session, paired_tx, source="user",
+                    new_category_id=tx.category_id, user_id=user_id,
+                    derived=True,
+                )
             # When the user typed both amounts, neither is a conversion of the
             # other: correcting one leg leaves the amount that actually landed
             # on the other account untouched. Re-converting here would throw
@@ -1602,6 +1671,20 @@ async def update_transaction(
         scoped_update = {
             k: v for k, v in update_data.items() if k in installment_scoped_fields
         }
+    anchor_changes = (
+        "category_id" in update_data and update_data["category_id"] != transaction.category_id
+    )
+    categories_before = {row.id: row.category_id for row in rows}
+    # The anchor is already empty and only its siblings lose the category:
+    # the siblings are derived, so the clear is taken back here, once per
+    # store and category, from the rows as they are before the edit. Their
+    # events do not exist yet: the ones a pick was taken for are marked below.
+    took_picks: list[uuid.UUID] = []
+    started = datetime.now(timezone.utc)
+    if not anchor_changes and "category_id" in update_data and update_data["category_id"] is None:
+        took_picks = await _person_hooks_once_per_store(
+            session, [(row, row.category_id) for row in rows if row.category_id is not None], None,
+        )
 
     for row in rows:
         # The edited transaction itself reflects the full form payload; the
@@ -1624,7 +1707,18 @@ async def update_transaction(
             row_update,
             apply_to_transfer_pair,
             row_splits,
+            derived=not is_anchor,
         )
+
+    # The anchor already had the category and only its siblings moved: the
+    # siblings are derived, so the choice is taught once, from the anchor,
+    # and marked on the first sibling that moved (the anchor wrote no event).
+    moved = [row for row in rows if row.category_id != categories_before[row.id]]
+    if not anchor_changes and update_data.get("category_id") is not None and moved:
+        if await run_user_hooks(session, transaction, transaction.category_id):
+            took_picks = [moved[0].id]
+    if took_picks:
+        await mark_latest_picks(session, took_picks, since=started)
 
     # A changed parcel amount makes the stored series total stale, whatever
     # the scope was: "this" reprices one parcel, "future"/"all" reprice
@@ -1638,23 +1732,83 @@ async def update_transaction(
     return transaction
 
 
+async def _person_hooks_once_per_store(
+    session: AsyncSession,
+    changes: list[tuple[Transaction, Optional[uuid.UUID]]],
+    new_category_id: Optional[uuid.UUID],
+) -> list[uuid.UUID]:
+    """Run a person's hooks for rows they changed together (`(tx, previous
+    category)` each) once per store, not once per row: the user-choice hooks
+    for a pick, the user-clear hooks (once per store and category the rows
+    held) for a clear. The rows' own writes are `derived`, so their hooks
+    do not run as well.
+
+    Returns the rows a hook moved a pick for: the caller marks their events
+    (`events.mark_latest_picks`), so undoing one of them reverses that pick.
+    """
+    if not changes:
+        return []
+    try:
+        firsts = await categorization_memory.one_per_store(
+            session, changes, by_previous=new_category_id is None
+        )
+    except Exception:
+        # Same posture as the hooks: the memory is a hint, the edit stands.
+        logger.exception("could not group %d edited rows by store", len(changes))
+        return []
+    moved: list[uuid.UUID] = []
+    for tx, previous in firsts:
+        if new_category_id is not None:
+            if await run_user_hooks(session, tx, new_category_id):
+                moved.append(tx.id)
+        elif previous is not None:
+            if await run_clear_hooks(session, tx, previous):
+                moved.append(tx.id)
+    return moved
+
+
 async def bulk_update_category(
     session: AsyncSession,
     workspace_id: uuid.UUID,
     transaction_ids: list[uuid.UUID],
     category_id: Optional[uuid.UUID] = None,
+    *,
+    user_id: Optional[uuid.UUID] = None,
 ) -> int:
+    """Give the selected transactions one category, as a person's choice.
+
+    Returns how many transactions matched (in the workspace), whether or not
+    their category actually changed. The memory learns (or, for a clear,
+    unlearns) once per store, not once per row.
+    """
     await _ensure_category_in_workspace(session, workspace_id, category_id)
-    result = await session.execute(
-        update(Transaction)
-        .where(
-            Transaction.id.in_(transaction_ids),
-            Transaction.workspace_id == workspace_id,
-        )
-        .values(category_id=category_id)
+    rows = list(
+        (
+            await session.execute(
+                select(Transaction).where(
+                    Transaction.id.in_(transaction_ids),
+                    Transaction.workspace_id == workspace_id,
+                )
+            )
+        ).scalars().all()
     )
+    # What the write below changes: a new category, or a guess at the same
+    # one that becomes the person's (a pick, as in `record_change`).
+    changed = [
+        (tx, tx.category_id)
+        for tx in rows
+        if tx.category_id != category_id
+        or (category_id is not None and tx.category_source != "user")
+    ]
+    started = datetime.now(timezone.utc)
+    await record_changes_bulk(
+        session, workspace_id, [(tx, category_id, "user") for tx in rows],
+        user_id=user_id, derived=True,
+    )
+    moved = await _person_hooks_once_per_store(session, changed, category_id)
+    await mark_latest_picks(session, moved, since=started)
     await session.commit()
-    return cast(CursorResult, result).rowcount
+    return len(rows)
 
 
 _TAG_CHAR_CLASS = r"[\wÀ-ž-]"

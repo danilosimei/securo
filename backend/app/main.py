@@ -11,6 +11,7 @@ from app.api.budgets import router as budgets_router
 from app.api.goals import router as goals_router
 from app.api.groups import router as groups_router
 from app.api.categories import router as categories_router
+from app.api.categorization import router as categorization_router
 from app.api.category_groups import router as category_groups_router
 from app.api.connections import router as connections_router
 from app.api.custom_auth import router as custom_auth_router
@@ -27,6 +28,7 @@ from app.api.assets import router as assets_router
 from app.api.asset_groups import router as asset_groups_router
 from app.api.collections import router as collections_router
 from app.api.reports import router as reports_router
+from app.api.reports_breakdown import router as reports_breakdown_router
 from app.api.search import router as search_router
 from app.api.setup import router as setup_router
 from app.api.currencies import router as currencies_router
@@ -171,6 +173,7 @@ app.include_router(
 
 # Domain routes
 app.include_router(categories_router)
+app.include_router(categorization_router)
 app.include_router(category_groups_router)
 app.include_router(rules_router)
 app.include_router(reconciliation_router)
@@ -188,6 +191,7 @@ app.include_router(asset_groups_router)
 app.include_router(collections_router)
 app.include_router(dashboard_router)
 app.include_router(reports_router)
+app.include_router(reports_breakdown_router)
 app.include_router(search_router)
 app.include_router(setup_router)
 app.include_router(currencies_router)

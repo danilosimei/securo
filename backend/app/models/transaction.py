@@ -3,11 +3,24 @@ from datetime import date as _date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional, cast
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, JSON, Numeric, SmallInteger, String, event
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    SmallInteger,
+    String,
+    event,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.categorization import CATEGORY_SOURCES, in_clause
 
 if TYPE_CHECKING:
     from app.models.account import Account
@@ -22,6 +35,13 @@ if TYPE_CHECKING:
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        Index("ix_transactions_workspace_category_source", "workspace_id", "category_source"),
+        Index("ix_transactions_ws_merchant", "workspace_id", "merchant_key"),
+        CheckConstraint(
+            in_clause("category_source", CATEGORY_SOURCES), name="ck_transaction_category_source"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
@@ -30,8 +50,15 @@ class Transaction(Base):
     )
     account_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
     category_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=True)
+    # Who set `category_id`: none, user, rule, memory, ai, provider,
+    # installment, import, recurring or legacy. The categorization pipeline
+    # only revisits none/provider/memory/ai; user and legacy are protected.
+    category_source: Mapped[str] = mapped_column(String(16), default="none", server_default="none")
     external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Provider's transaction ID
     description: Mapped[str] = mapped_column(String(500))
+    # Store key of the categorization (`merchant_key`, as the memory stores it),
+    # kept in step by the `_refresh_merchant_key` hook below.
+    merchant_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     original_description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     description_is_rule_managed: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
@@ -155,3 +182,59 @@ def _default_effective_date(mapper, connection, target):
 def _default_effective_date_on_update(mapper, connection, target):
     if target.effective_date is None:
         target.effective_date = target.date
+
+
+def _payee_of(target, connection) -> tuple[Optional[str], Optional[str]]:
+    """(name, source) of the row's payee, with no extra query when the payee
+    is already loaded. The hook runs inside the flush, so a lookup goes
+    through the flush's own connection."""
+    if target.payee_id is None:
+        return None, None
+    from sqlalchemy import inspect as sa_inspect, select as sa_select
+
+    from app.models.payee import Payee
+
+    state = sa_inspect(target)
+    if "payee_entity" in state.dict and target.payee_entity is not None:
+        return target.payee_entity.name, target.payee_entity.source
+    session = state.session
+    if session is not None:
+        loaded = session.identity_map.get(sa_inspect(Payee).identity_key_from_primary_key((target.payee_id,)))
+        if loaded is not None:
+            return loaded.name, loaded.source
+    row = connection.execute(
+        sa_select(Payee.name, Payee.source).where(Payee.id == target.payee_id)
+    ).first()
+    return (row[0], row[1]) if row is not None else (None, None)
+
+
+def _refresh_merchant_key(mapper, connection, target):
+    """Keep `merchant_key` equal to the categorization's key for the row.
+
+    Recomputed on insert and when `description` or `payee_id` changed. Not
+    covered: a Payee renamed (or re-sourced) afterwards, and Core `update()`
+    statements that bypass the unit of work. `payee_service` refreshes the
+    keys of the transactions it touches (rename, delete, merge) through
+    `key_backfill.refresh_keys`; the backfill script
+    (`scripts/backfill_merchant_keys.py`) repairs anything else.
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    state = sa_inspect(target)
+    if (
+        target.merchant_key is not None
+        and not state.attrs.description.history.has_changes()
+        and not state.attrs.payee_id.history.has_changes()
+    ):
+        return
+    from app.services.categorization.memory import stored_key
+    from app.services.categorization.merchant_key import merchant_key
+
+    name, source = _payee_of(target, connection)
+    target.merchant_key = stored_key(
+        merchant_key(target.description, payee_name=name, payee_source=source)
+    )
+
+
+event.listens_for(Transaction, "before_insert")(_refresh_merchant_key)
+event.listens_for(Transaction, "before_update")(_refresh_merchant_key)

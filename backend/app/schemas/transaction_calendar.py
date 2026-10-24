@@ -30,6 +30,12 @@ class TransactionCalendarItem(BaseModel):
     #: balance, so the row needs its own marker: without one the day card
     #: shows 0/0 while its ending balance jumps, and nothing explains why.
     exclude_from_pnl: bool = False
+    #: Who decided the category, for rows that are real transactions (actual,
+    #: or projected because still pending or dated ahead): the lists' origin
+    #: seal. Recurring projections have no row, hence no origin.
+    category_source: Optional[str] = None
+    #: A categorization suggestion for this row waits for review.
+    categorization_pending: bool = False
 
 
 class TransactionCalendarDay(BaseModel):

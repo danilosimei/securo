@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { SectionCard } from '@/components/ui/section-card'
+import { useUrlTab } from '@/hooks/use-url-tab'
+import { Segmented } from '@/components/invoice-ui'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
@@ -356,7 +358,7 @@ function TransactionImportPanel() {
 
       {/* Review section */}
       {previewData && (
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <SectionCard>
           {/* Header */}
           <div className="px-5 py-4 border-b border-border">
             <div className="flex items-center justify-between">
@@ -588,14 +590,14 @@ function TransactionImportPanel() {
                 : t('import.importButton', { count: includedCount })}
             </Button>
           </div>
-        </div>
+        </SectionCard>
       )}
 
       <ImportHistory entity="transactions" />
 
       {/* Unparsed CSV rows dialog */}
       <Dialog open={isFailedRowsOpen} onOpenChange={setIsFailedRowsOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-6">
+        <DialogContent size="lg" className="flex flex-col p-6">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold">{t('import.failedRowsTitle')}</DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground mt-1">
@@ -639,39 +641,26 @@ function TransactionImportPanel() {
     should not have to know first whether it holds transactions or orders. */
 export default function ImportPage() {
   const { t } = useTranslation()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const tab = searchParams.get('tab') === 'investments' ? 'investments' : 'transactions'
-
-  function selectTab(next: 'transactions' | 'investments') {
-    const params = new URLSearchParams(searchParams)
-    if (next === 'transactions') params.delete('tab')
-    else params.set('tab', next)
-    setSearchParams(params, { replace: true })
-  }
+  const [tab, selectTab] = useUrlTab(['transactions', 'investments'] as const)
 
   return (
     <div className="space-y-6">
       {/* The title follows the tab: "Bank statement" is about the file you
           are uploading, and an order file is not one. */}
       <PageHeader
-        section={t('import.title')}
-        title={tab === 'investments' ? t('assetImport.title') : t('import.subtitle')}
+        section={t('nav.groupDaily')}
+        title={t('nav.import')}
       />
 
-      <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
-        {(['transactions', 'investments'] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => selectTab(value)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              tab === value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t(value === 'transactions' ? 'import.tabTransactions' : 'import.tabInvestments')}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        value={tab}
+        onChange={selectTab}
+        testIdPrefix="import-tab"
+        options={[
+          { value: 'transactions', label: t('import.tabTransactions') },
+          { value: 'investments', label: t('import.tabInvestments') },
+        ]}
+      />
 
       {tab === 'investments' ? <AssetImportPanel /> : <TransactionImportPanel />}
     </div>

@@ -1,26 +1,18 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { Pagination } from '@/components/ui/pagination'
 import { getAccountLabel, getAccountName, sortAccountsByAbsoluteBalance, sumAccountBalances } from '@/lib/account-utils'
 import { currentMonth, shiftMonth, monthLastDay, monthLabel, monthRange } from '@/lib/month-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { dashboard, transactions, budgets, categories as categoriesApi, categoryGroups as categoryGroupsApi, accounts as accountsApi, goals as goalsApi, groups as groupsApi, payees as payeesApi, rules as rulesApi } from '@/lib/api'
+import { dashboard, transactions, budgets, categories as categoriesApi, categoryGroups as categoryGroupsApi, accounts as accountsApi, goals as goalsApi, groups as groupsApi, payees as payeesApi } from '@/lib/api'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
 import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Button } from '@/components/ui/button'
 import { ProjectedTransactionBadge } from '@/components/projected-transaction-badge'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { MonthPicker } from '@/components/ui/monthpicker'
+import { useMonthParam } from '@/hooks/use-month-param'
+import { MonthPeriodSelector } from '@/components/reports/period-selector'
 import {
   Table,
   TableBody,
@@ -38,7 +30,7 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from 'recharts'
-import { CheckCircle2, CalendarIcon, Clock, Paperclip, Target, ArrowUpDown, HelpCircle, EyeClosed, AlertCircle } from 'lucide-react'
+import { Clock, Paperclip, Target, ArrowUpDown, HelpCircle, EyeClosed } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ICON_MAP } from '@/lib/category-icons'
 import { PageHeader } from '@/components/page-header'
@@ -49,13 +41,15 @@ import { TransactionDialog, type TransactionSavePayload } from '@/components/tra
 import { extractApiError } from '@/lib/api-errors'
 import { TransactionCalendarView } from '@/components/transaction-calendar-view'
 import { TransactionsViewSwitcher, type TransactionsViewMode } from '@/components/transactions-view-switcher'
-import { RuleDialog, type RuleDialogInitialData } from '@/components/rule-dialog'
+import { RuleDialog } from '@/components/rule-dialog'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
+import { CategorizationCard } from '@/components/categorization/categorization-card'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
+import { categoryChanged, withUndoneCategory, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
-import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
-import type { Rule, Transaction } from '@/types'
+import type { Transaction } from '@/types'
 import { formatCurrency } from '@/lib/format'
 import { shouldShowPendingBadge } from '@/lib/transaction-status'
 
@@ -69,27 +63,6 @@ function parseHashtags(notes: string | null): string[] {
   return matches ?? []
 }
 
-const MONTH_REGEX = /^\d{4}-\d{2}$/
-const MONTH_STRING_LENGTH = 7
-
-function parseMonthFromParams(params: URLSearchParams): string | null {
-  const monthParam = params.get('month')
-  if (monthParam && MONTH_REGEX.test(monthParam)) {
-    return monthParam
-  }
-
-  const fromParam = params.get('from')
-  if (fromParam && fromParam.length >= MONTH_STRING_LENGTH) {
-    const parsedMonth = fromParam.substring(0, MONTH_STRING_LENGTH)
-    if (MONTH_REGEX.test(parsedMonth)) {
-      return parsedMonth
-    }
-  }
-
-  return null
-}
-
-
 export default function DashboardPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -97,77 +70,45 @@ export default function DashboardPage() {
   const isMobile = useIsMobile()
   const { user } = useAuth()
   const userCurrency = user?.preferences?.currency_display ?? 'USD'
-  const displayName = user?.preferences?.display_name || ''
   const locale = useDisplayLocale()
   const dateLocale = useDateLocale()
 
-  const greeting = (() => {
-    const hour = new Date().getHours()
-    const key = hour < 12 ? 'greetingMorning' : hour < 18 ? 'greetingAfternoon' : 'greetingEvening'
-    const base = t(`dashboard.${key}`)
-    return displayName ? `${base}, ${displayName}` : base
-  })()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    return parseMonthFromParams(searchParams) ?? currentMonth()
-  })
+  // The month is shared with Budgets and Transactions (see useMonthParam).
+  const [selectedMonth, setSelectedMonth] = useMonthParam()
   const [drillDown, setDrillDown] = useState<DrillDownFilter | null>(null)
   // Transactions section view, mirroring the transactions page: the choice
   // lives in the URL so the section can be refreshed, bookmarked or shared.
-  const [txViewMode, setTxViewMode] = useState<TransactionsViewMode>(() => (
-    searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
-  ))
-  const [calendarSelectedDate, setCalendarSelectedDate] = useState<string>(() => searchParams.get('day') ?? '')
-
-  const prevSearchRef = useRef<string | null>(null)
-
-  // Sync state from URL when navigating (e.g. back/forward button)
-  useEffect(() => {
-    const search = searchParams.toString()
-    if (prevSearchRef.current === search) return
-    const isInitial = prevSearchRef.current === null
-    prevSearchRef.current = search
-
-    const parsedMonth = parseMonthFromParams(searchParams)
-    if (parsedMonth) {
-      setSelectedMonth(parsedMonth)
-    } else if (!isInitial) {
-      setSelectedMonth(currentMonth())
-    }
-    setTxViewMode(searchParams.get('view') === 'calendar' ? 'calendar' : 'list')
-    setCalendarSelectedDate(searchParams.get('day') ?? '')
-  }, [searchParams])
-
-  // Sync selectedMonth and the transactions view back to URL
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (selectedMonth) {
-      params.set('month', selectedMonth)
-      params.delete('from')
-      params.delete('to')
-    } else {
-      params.delete('month')
-    }
-
-    if (txViewMode === 'calendar') {
-      params.set('view', 'calendar')
-      if (calendarSelectedDate) params.set('day', calendarSelectedDate)
-      else params.delete('day')
-    } else {
-      params.delete('view')
-      params.delete('day')
-    }
-
-    setSearchParams(params, { replace: true })
-  }, [selectedMonth, txViewMode, calendarSelectedDate, setSearchParams])
+  const txViewMode: TransactionsViewMode = searchParams.get('view') === 'calendar' ? 'calendar' : 'list'
+  const calendarSelectedDate = searchParams.get('day') ?? ''
+  const setTxViewMode = (mode: TransactionsViewMode) =>
+    setSearchParams(
+      (previous) => {
+        const params = new URLSearchParams(previous)
+        if (mode === 'calendar') params.set('view', 'calendar')
+        else {
+          params.delete('view')
+          params.delete('day')
+        }
+        return params
+      },
+      { replace: true },
+    )
+  const setCalendarSelectedDate = (day: string) =>
+    setSearchParams(
+      (previous) => {
+        const params = new URLSearchParams(previous)
+        if (day) params.set('day', day)
+        else params.delete('day')
+        return params
+      },
+      { replace: true },
+    )
   const [editingTx, setEditingTx] = useState<Transaction | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [createRuleOpen, setCreateRuleOpen] = useState(false)
-  const [createRuleInitialData, setCreateRuleInitialData] = useState<RuleDialogInitialData | undefined>(undefined)
+  const { openRuleDialog, ruleDialogKey, ruleDialogProps } = useCreateRuleDialog()
   const queryClient = useQueryClient()
-  const [headerCalOpen, setHeaderCalOpen] = useState(false)
   const [hoveredDay, setHoveredDay] = useState<number | null>(null)
-  const dateFnsLocale = resolveDateFnsLocale(i18n.resolvedLanguage ?? i18n.language)
   const { from: monthStart, to: monthEnd } = monthRange(selectedMonth)
   const monthParam = monthStart
   const uiLocale = i18n.resolvedLanguage ?? i18n.language
@@ -277,13 +218,18 @@ export default function DashboardPage() {
     queryFn: () => goalsApi.summary(3),
   })
 
+  // After a category fix: "apply to the similar ones" / "create rule".
+  const { notifyCorrection } = useCategoryCorrectionToast({ onCreateRule: openRuleDialog })
+
   const updateMutation = useMutation({
     mutationFn: ({ id, ...data }: TransactionSavePayload & { id: string }) =>
       transactions.update(id, data),
-    onSuccess: () => {
+    onSuccess: (_updated, { id, ...payload }) => {
+      const corrected = editingTx?.id === id && categoryChanged(editingTx, payload)
       invalidateFinancialQueries(queryClient)
       setDialogOpen(false)
       setEditingTx(null)
+      if (corrected) void notifyCorrection({ id })
     },
   })
 
@@ -305,31 +251,6 @@ export default function DashboardPage() {
     },
   })
 
-  const createRuleMutation = useMutation({
-    mutationFn: (data: Omit<Rule, 'id' | 'user_id'>) => rulesApi.create(data),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['rules'] })
-      setCreateRuleOpen(false)
-      setCreateRuleInitialData(undefined)
-      const applied = result.applied_count ?? 0
-      if (applied > 0) {
-        invalidateFinancialQueries(queryClient)
-        queryClient.invalidateQueries({ queryKey: ['payees'] })
-        toast.success(t('rules.createdAndApplied', { count: applied }))
-      } else {
-        toast.success(t('rules.created'))
-      }
-    },
-    onError: (error: unknown) => {
-      const err = error as { response?: { status?: number } }
-      if (err?.response?.status === 409) {
-        toast.error(t('rules.duplicateName'))
-      } else {
-        toast.error(t('common.error'))
-      }
-    },
-  })
-
   const handleCreateRuleFromTransaction = (tx: Transaction) => {
     const conditions = [
       { field: 'description', op: 'contains', value: tx.description },
@@ -344,8 +265,7 @@ export default function DashboardPage() {
     if (tags.length > 0) {
       actions.push({ op: 'append_notes', value: tags.join(' ') })
     }
-    setCreateRuleInitialData({ conditions, actions })
-    setCreateRuleOpen(true)
+    openRuleDialog({ conditions, actions })
   }
 
   // Calendar rows carry only an id, so the full transaction is fetched before
@@ -597,7 +517,6 @@ export default function DashboardPage() {
     return rows
   }, [currentMonthTxs, projectedTxs, txSortDesc, groupNameById])
 
-  const txTotalPages = Math.ceil(allDisplayRows.length / txPerPage)
   const pagedRows = allDisplayRows.slice((txPage - 1) * txPerPage, txPage * txPerPage)
   const txListLoading = currentTxLoading || projectedTxLoading
 
@@ -618,43 +537,8 @@ export default function DashboardPage() {
     <div>
       {/* Header */}
       <PageHeader
-        section={greeting}
-        title={monthLabel(selectedMonth, uiLocale).replace(/^\w/, c => c.toUpperCase())}
-        action={
-          <div className="flex items-center gap-1">
-            <button
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all text-base"
-              onClick={() => handleMonthChange(shiftMonth(selectedMonth, -1))}
-            >&#8249;</button>
-            <Popover open={headerCalOpen} onOpenChange={setHeaderCalOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center gap-2 border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground hover:bg-muted/50 transition-all cursor-pointer min-w-[180px]"
-                >
-                  <CalendarIcon className="size-3.5 text-muted-foreground" />
-                  {monthLabel(selectedMonth, uiLocale).replace(/^\w/, c => c.toUpperCase())}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="center" className="w-auto p-0">
-                <MonthPicker
-                  locale={dateFnsLocale}
-                  selectedMonth={new Date(`${selectedMonth}-01T00:00:00`)}
-                  onMonthSelect={(date) => {
-                    if (!date) return
-                    const newMonth = format(date, 'yyyy-MM')
-                    setSelectedMonth(newMonth)
-                    setHeaderCalOpen(false)
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
-            <button
-              className="h-8 w-8 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:border-border hover:text-foreground transition-all text-base"
-              onClick={() => handleMonthChange(shiftMonth(selectedMonth, 1))}
-            >&#8250;</button>
-          </div>
-        }
+        title={t('nav.dashboard')}
+        period={<MonthPeriodSelector value={selectedMonth} onChange={handleMonthChange} locale={uiLocale} />}
       />
 
       {/* Hero Card: Available Balance + secondary indicators */}
@@ -857,6 +741,12 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {(summary?.unconverted_count ?? 0) > 0 && (
+          <p className="text-xs text-amber-700 dark:text-amber-400" data-testid="dashboard-unconverted">
+            {t('reports.explore.unconverted', { n: summary?.unconverted_count })}
+          </p>
+        )}
+
         {/* Spending projection */}
         {projectedSpend !== null && !summaryLoading && (
           <p className="text-xs text-muted-foreground mt-3">
@@ -865,43 +755,16 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Uncategorized banner */}
-      {!summaryLoading && (
-        uncategorizedCount > 0 ? (
-          <button
-            type="button"
-            className="w-full flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-4 py-2.5 mb-5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors"
-            onClick={() => setDrillDown({
-              title: t('dashboard.drillDownUncategorized'),
-              uncategorized: true,
-            })}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              {/* An icon, not the count: the sentence beside it already states
-                  the number, and a fixed 24px circle clipped it from four
-                  digits on. Severity still reads through the tint. */}
-              <AlertCircle
-                size={16}
-                className={`shrink-0 ${uncategorizedCount >= 20 ? 'text-amber-600 dark:text-amber-400' : 'text-amber-500 dark:text-amber-500'}`}
-              />
-              <span className="text-sm text-amber-900 dark:text-amber-200 truncate">
-                {t('dashboard.uncategorizedCta', { count: uncategorizedCount })}
-                {uncategorizedAmount > 0 && (
-                  <span className="text-amber-700/70 dark:text-amber-300/70"> · {mask(formatCurrency(uncategorizedAmount, userCurrency, locale))}</span>
-                )}
-              </span>
-            </div>
-            <span className="shrink-0 text-sm font-semibold text-amber-600 dark:text-amber-400 hover:underline">
-              {t('dashboard.categorizeNow')} &rarr;
-            </span>
-          </button>
-        ) : (
-          <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-4 py-2.5 mb-5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-            <span className="text-sm text-emerald-900 dark:text-emerald-200">{t('dashboard.allCategorized')}</span>
-          </div>
-        )
-      )}
+      {/* Categorization card (falls back to the uncategorized banner when AI is off) */}
+      <CategorizationCard
+        loading={summaryLoading}
+        uncategorizedCount={uncategorizedCount}
+        uncategorizedAmountLabel={uncategorizedAmount > 0 ? mask(formatCurrency(uncategorizedAmount, userCurrency, locale)) : null}
+        onOpenUncategorized={() => setDrillDown({
+          title: t('dashboard.drillDownUncategorized'),
+          uncategorized: true,
+        })}
+      />
 
       {/* Charts: Category Spending Bars + Balance Evolution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5" style={{ gridAutoRows: 'minmax(380px, auto)' }}>
@@ -1488,63 +1351,20 @@ export default function DashboardPage() {
                 </TableBody>
               </Table>
               )}
-              {allDisplayRows.length > 10 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-5 py-4 border-t border-border">
-                  <div className="hidden sm:block w-32" />
-                  {txTotalPages > 1 ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={txPage <= 1}
-                        onClick={() => setTxPage(txPage - 1)}
-                      >
-                        {t('dashboard.previous')}
-                      </Button>
-                      <span className="text-sm text-muted-foreground">
-                        {txPage} / {txTotalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={txPage >= txTotalPages}
-                        onClick={() => setTxPage(txPage + 1)}
-                      >
-                        {t('dashboard.next')}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="hidden sm:block" />
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{t('common.rowsPerPage', 'Rows per page')}</span>
-                    <Select
-                      value={String(txPerPage)}
-                      onValueChange={(val) => {
-                        const nextLimit = Number(val)
-                        setTxPerPage(nextLimit)
-                        setTxPage(1)
-                        try {
-                          localStorage.setItem('securo.dashboard.pageSize', String(nextLimit))
-                        } catch {
-                          // ignored
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="w-[70px] h-8 text-xs">
-                        <SelectValue placeholder={txPerPage} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="10">10</SelectItem>
-                        <SelectItem value="20">20</SelectItem>
-                        <SelectItem value="50">50</SelectItem>
-                        <SelectItem value="100">100</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
+              <Pagination
+                page={txPage}
+                pageSize={txPerPage}
+                total={allDisplayRows.length}
+                onPageChange={setTxPage}
+                onPageSizeChange={(nextLimit) => {
+                  setTxPerPage(nextLimit)
+                  try {
+                    localStorage.setItem('securo.dashboard.pageSize', String(nextLimit))
+                  } catch {
+                    // ignored
+                  }
+                }}
+              />
             </>
           ) : (
             <p className="text-muted-foreground text-sm text-center py-8">{t('dashboard.noTransactions')}</p>
@@ -1570,6 +1390,9 @@ export default function DashboardPage() {
       />
 
       <TransactionDialog
+        onCategoryUndone={(txId, categoryId, source) =>
+          setEditingTx((prev) => withUndoneCategory(prev, txId, categoryId, source))
+        }
         open={dialogOpen}
         onClose={() => { setDialogOpen(false); setEditingTx(null) }}
         transaction={editingTx}
@@ -1594,17 +1417,12 @@ export default function DashboardPage() {
       />
 
       <RuleDialog
-        key={createRuleOpen ? 'rule-open' : 'rule-closed'}
-        open={createRuleOpen}
-        onClose={() => { setCreateRuleOpen(false); setCreateRuleInitialData(undefined) }}
-        rule={null}
+        key={ruleDialogKey}
+        {...ruleDialogProps}
         categories={categoriesList ?? []}
         categoryGroups={categoryGroupsList ?? []}
         accounts={(accountsList ?? []).map((a: { id: string; name: string; display_name?: string | null }) => ({ id: a.id, name: getAccountName(a) }))}
         payees={payeesList ?? []}
-        onSave={(data) => createRuleMutation.mutate(data as Omit<Rule, 'id' | 'user_id'>)}
-        loading={createRuleMutation.isPending}
-        initialData={createRuleInitialData}
       />
     </div>
   )

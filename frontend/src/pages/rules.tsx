@@ -1,5 +1,7 @@
 import { useRef, useState, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { categories as categoriesApi, categoryGroups as categoryGroupsApi, rules as rulesApi, accounts as accountsApi, payees as payeesApi } from '@/lib/api'
@@ -7,6 +9,7 @@ import { extractApiError } from '@/lib/api-errors'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { FadePanel } from '@/components/ui/fade-panel'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { Label } from '@/components/ui/label'
 import {
@@ -18,8 +21,14 @@ import {
 import type { Category, Payee, Rule, RuleAction, RuleCondition, RuleConditionNode, RuleExportPayload } from '@/types'
 import { isConditionGroup } from '@/lib/rule-conditions'
 import { normalizeRuleMatchValue, ruleSearchText } from '@/lib/rule-match-utils'
-import { Trash2, Plus, RefreshCw, Package, Check, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Search, Power } from 'lucide-react'
+import { Plus, RefreshCw, Package, Check, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Power, Search, ListChecks } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { SearchBar } from '@/components/ui/search-bar'
+import { useUrlTab } from '@/hooks/use-url-tab'
+import { useUrlSearch } from '@/hooks/use-url-search'
+import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
+import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { RuleDialog } from '@/components/rule-dialog'
@@ -29,38 +38,7 @@ import { ReconciliationHistory } from '@/components/reconciliation-history'
 import { Segmented } from '@/components/invoice-ui'
 import { reconciliation as reconciliationApi } from '@/lib/api'
 import { findCategoryReference, getRuleCategoryName } from '@/lib/category-reference-utils'
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {children}
-    </div>
-  )
-}
-
-function SectionHeader({
-  title,
-  hint,
-  action,
-}: {
-  title: string
-  /** One line saying what this list of rules decides. The matching card
-   *  carried one and this one did not, so the two cards answered
-   *  different questions: one told you what it was for, the other
-   *  assumed you knew. */
-  hint?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-start justify-between gap-2">
-      <div>
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {hint && <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>}
-      </div>
-      {action}
-    </div>
-  )
-}
+import { SectionCard, SectionHeader } from '@/components/ui/section-card'
 
 const CONDITION_FIELDS = [
   { value: 'description', label: 'rules.fieldDescription' },
@@ -168,6 +146,7 @@ export default function RulesPage() {
   const { canWrite } = useWorkspace()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [packsDialogOpen, setPacksDialogOpen] = useState(false)
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [pendingImport, setPendingImport] = useState<RuleExportPayload | null>(null)
   const [pendingImportName, setPendingImportName] = useState('')
@@ -190,7 +169,7 @@ export default function RulesPage() {
     setDialogOpen(true)
   }
 
-  const { data: rulesList } = useQuery({
+  const { data: rulesList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['rules'],
     queryFn: rulesApi.list,
   })
@@ -362,7 +341,7 @@ export default function RulesPage() {
 
   const [sortBy, setSortBy] = useState<'priority' | 'name' | 'category'>('priority')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlSearch()
   const [filterCategory, setFilterCategory] = useState('')
   const [filterStatus, setFilterStatus] = useState<'' | 'active' | 'inactive'>('')
   const [filterAction, setFilterAction] = useState('')
@@ -422,16 +401,7 @@ export default function RulesPage() {
   // Addressable, because the queue is now linked to from elsewhere: a
   // badge on a transaction row is a promise to land on the question, and
   // landing on the rules list instead would break it.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const requested = searchParams.get('tab')
-  const asked =
-    requested === 'queue' || requested === 'history' ? requested : 'rules'
-  const tab: 'rules' | 'queue' | 'history' = asked
-  const setTab = (next: 'rules' | 'queue' | 'history') => {
-    // `replace`, so the back button leaves the page rather than walking
-    // back through tabs somebody clicked on the way.
-    setSearchParams(next === 'rules' ? {} : { tab: next }, { replace: true })
-  }
+  const [tab, setTab] = useUrlTab(['rules', 'queue', 'history'] as const)
 
   // Fetched here rather than inside the queue so the count can sit on the
   // tab: a queue nobody can see is not a queue.
@@ -442,7 +412,43 @@ export default function RulesPage() {
 
   return (
     <div>
-      <PageHeader section={t('rules.section')} title={t('nav.rules')} />
+      <PageHeader
+        section={t('nav.groupOrganization')}
+        title={t('nav.rules')}
+        action={
+          canWrite && tab === 'rules' ? (
+            <PageActions
+              primary={
+                <Button onClick={openCreate}>
+                  <Plus /> {t('rules.add')}
+                </Button>
+              }
+              items={[
+                { label: t('rules.export'), icon: Download, onSelect: () => exportMutation.mutate(), disabled: exportMutation.isPending },
+                { label: t('rules.import'), icon: Upload, onSelect: () => importInputRef.current?.click(), disabled: importMutation.isPending },
+                { label: t('rules.packs'), icon: Package, onSelect: () => setPacksDialogOpen(true) },
+                {
+                  label: t('rules.resetAndReapplyAll'),
+                  icon: RefreshCw,
+                  onSelect: () => setResetConfirmOpen(true),
+                  disabled: applyAllMutation.isPending,
+                },
+              ]}
+            />
+          ) : undefined
+        }
+      />
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) void handleImportFile(file)
+        }}
+      />
 
       <div className="mb-4">
         <Segmented
@@ -475,88 +481,31 @@ export default function RulesPage() {
         />
       </div>
 
-      {tab === 'queue' && <ReconciliationQueue canWrite={canWrite} />}
-      {tab === 'history' && <ReconciliationHistory />}
+      {tab !== 'rules' && (
+        <FadePanel panelKey={tab}>
+          {tab === 'queue' && <ReconciliationQueue canWrite={canWrite} />}
+          {tab === 'history' && <ReconciliationHistory />}
+        </FadePanel>
+      )}
 
-      <div className={tab === 'rules' ? '' : 'hidden'}>
+      {/* Kept mounted (its state survives a tab trip) and only hidden: the
+          animation replays each time it shows again. */}
+      <div className={tab === 'rules' ? 'motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-200' : 'hidden'}>
+      <SearchBar
+        className="mb-4"
+        value={search}
+        onChange={setSearch}
+        placeholder={t('rules.searchPlaceholder')}
+      />
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         <SectionHeader
           title={t('rules.sectionTitle')}
-          hint={t('rules.sectionHint')}
-          action={
-            canWrite ? (
-              <div className="flex gap-2">
-                <input
-                  ref={importInputRef}
-                  type="file"
-                  accept="application/json,.json"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file) void handleImportFile(file)
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => exportMutation.mutate()}
-                  disabled={exportMutation.isPending}
-                >
-                  <Download size={12} />
-                  <span className="hidden sm:inline">{t('rules.export')}</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => importInputRef.current?.click()}
-                  disabled={importMutation.isPending}
-                >
-                  <Upload size={12} />
-                  <span className="hidden sm:inline">{t('rules.import')}</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => setPacksDialogOpen(true)}
-                >
-                  <Package size={12} />
-                  <span className="hidden sm:inline">{t('rules.packs')}</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => {
-                    if (window.confirm(t('rules.confirmResetAndReapplyAll', 'Reset matching transaction categories, notes, and rule-managed descriptions, then reapply all active rules?'))) {
-                      applyAllMutation.mutate()
-                    }
-                  }}
-                  disabled={applyAllMutation.isPending}
-                >
-                  <RefreshCw size={12} />
-                  <span className="hidden sm:inline">{t('rules.resetAndReapplyAll', 'Reset and reapply')}</span>
-                </Button>
-                <Button size="sm" className="gap-1.5 h-8" onClick={openCreate}>
-                  <Plus size={13} /> <span className="hidden sm:inline">{t('rules.add')}</span>
-                </Button>
-              </div>
-            ) : undefined
-          }
+          description={t('rules.sectionHint')}
         />
         <div className="px-4 sm:px-5 py-2 bg-muted/50 border-b border-border flex flex-wrap items-center gap-2">
-          <div className="flex min-w-[10rem] flex-1 items-center gap-1.5">
-            <Search size={14} className="pointer-events-none shrink-0 text-muted-foreground/70" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t('rules.searchPlaceholder')}
-              className="w-full min-w-0 rounded-sm bg-transparent text-xs text-foreground focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px] placeholder:text-muted-foreground/75"
-            />
-          </div>
           <select
             className={FILTER_CONTROL_CLASS}
             value={filterCategory}
@@ -619,16 +568,15 @@ export default function RulesPage() {
             </button>
           ))}
         </div>
-        {sortedRules.length > 0 ? (
+        {isLoading ? (
+          <ListSkeleton />
+        ) : sortedRules.length > 0 ? (
           <div className="divide-y divide-border">
             {sortedRules.map((rule) => (
               <div
                 key={rule.id}
-                className={cn(
-                  'px-4 sm:px-5 py-3 hover:bg-muted transition-colors',
-                  canWrite && 'cursor-pointer',
-                )}
-                onClick={() => { if (canWrite) openEdit(rule) }}
+                {...clickableRow(canWrite ? () => openEdit(rule) : undefined)}
+                className={cn('px-4 sm:px-5 py-3 hover:bg-muted transition-colors', canWrite && CLICKABLE_ROW_CLASS)}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
@@ -651,36 +599,21 @@ export default function RulesPage() {
                     </p>
                   </div>
                   {canWrite && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      {/* Stopping a rule and deleting it are different
-                          decisions, and only one of them was reachable
-                          from here. The other was a checkbox inside the
-                          editor, so switching a rule off meant opening
-                          it, finding the box, and saving a form you did
-                          not want to change. It lives on the row now, in
-                          the same place and the same shape as on a
-                          matching rule below. */}
-                      <button
-                        className={cn(
-                          'p-1.5 rounded-md transition-colors hover:bg-background',
-                          rule.is_active
-                            ? 'text-emerald-600 hover:text-emerald-700'
-                            : 'text-muted-foreground hover:text-foreground',
-                        )}
-                        onClick={(e) => { e.stopPropagation(); toggleMutation.mutate(rule) }}
-                        disabled={toggleMutation.isPending}
-                        title={t(rule.is_active ? 'rules.turnOff' : 'rules.turnOn')}
-                      >
-                        <Power size={13} />
-                      </button>
-                      <button
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                        onClick={(e) => { e.stopPropagation(); setDeletingRule(rule) }}
-                        disabled={deleteMutation.isPending}
-                        title={t('common.delete')}
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    <div className="shrink-0">
+                      <RowActions
+                        label={rule.name}
+                        onEdit={() => openEdit(rule)}
+                        onDelete={() => setDeletingRule(rule)}
+                        deleteDisabled={deleteMutation.isPending}
+                        extra={[
+                          {
+                            label: t(rule.is_active ? 'rules.turnOff' : 'rules.turnOn'),
+                            icon: Power,
+                            onSelect: () => toggleMutation.mutate(rule),
+                            disabled: toggleMutation.isPending,
+                          },
+                        ]}
+                      />
                     </div>
                   )}
                 </div>
@@ -688,11 +621,20 @@ export default function RulesPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-10">
-            {hasFilters ? t('rules.noFilterResults') : t('rules.empty')}
-          </p>
+          <EmptyState
+            icon={hasFilters ? Search : ListChecks}
+            title={hasFilters ? t('rules.noFilterResults') : t('rules.empty')}
+            action={
+              canWrite && !hasFilters ? (
+                <Button onClick={openCreate}>
+                  <Plus /> {t('rules.add')}
+                </Button>
+              ) : undefined
+            }
+          />
         )}
       </SectionCard>
+      )}
 
       {/* Matching rules below categorization rules, because they are the
           same promise made twice: the software decides things about your
@@ -703,6 +645,17 @@ export default function RulesPage() {
         <ReconciliationRules canWrite={canWrite} />
       </div>
       </div>
+
+      <DeleteConfirmationDialog
+        open={resetConfirmOpen}
+        title={t('rules.confirmResetAndReapplyTitle')}
+        description={t('rules.confirmResetAndReapplyAll')}
+        confirmLabel={t('rules.resetAndReapplyAll')}
+        confirmIcon={RefreshCw}
+        isPending={applyAllMutation.isPending}
+        onClose={() => setResetConfirmOpen(false)}
+        onConfirm={() => applyAllMutation.mutate(undefined, { onSettled: () => setResetConfirmOpen(false) })}
+      />
 
       <DeleteConfirmationDialog
         open={!!deletingRule}
@@ -719,7 +672,7 @@ export default function RulesPage() {
       />
 
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('rules.importConfirmTitle')}</DialogTitle>
           </DialogHeader>
@@ -812,7 +765,7 @@ function RulePacksDialog({ open, onClose }: { open: boolean; onClose: () => void
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('rules.packs')}</DialogTitle>
         </DialogHeader>

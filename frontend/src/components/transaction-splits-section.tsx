@@ -280,7 +280,7 @@ export function TransactionSplitsSection({
   }
 
   return (
-    <div className="space-y-3 pt-2 border-t border-border">
+    <div className="space-y-3">
       <label className="text-sm font-medium inline-flex items-center gap-2 cursor-pointer">
         <input
           type="checkbox"
@@ -502,7 +502,7 @@ export function TransactionSplitsSection({
       )}
 
       <Dialog open={isCreatingGroup} onOpenChange={setIsCreatingGroup}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('splitGroups.add')}</DialogTitle>
           </DialogHeader>
@@ -539,7 +539,7 @@ export function TransactionSplitsSection({
       </Dialog>
 
       <Dialog open={isAddingMember} onOpenChange={setIsAddingMember}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('splitGroups.addMember')}</DialogTitle>
           </DialogHeader>

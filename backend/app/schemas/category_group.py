@@ -8,7 +8,7 @@ from app.schemas.category import CategoryRead
 
 class CategoryGroupBase(BaseModel):
     name: str
-    icon: str = "folder"
+    icon: str = "circle-help"
     color: str = "#6B7280"
     position: int = 0
 

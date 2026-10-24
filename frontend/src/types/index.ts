@@ -89,6 +89,9 @@ export interface UserPreferences {
   onboarding_completed?: boolean
 }
 
+/** How reports read a category: spending as usual, earned money, or an offset of spending. */
+export type ReportKind = 'normal' | 'income' | 'refund'
+
 export interface Category {
   id: string
   user_id: string
@@ -100,6 +103,9 @@ export interface Category {
   is_hidden: boolean
   treat_as_transfer: boolean
   is_ignored: boolean
+  report_kind?: ReportKind
+  /** What belongs in the category, in the person's words (at most 300 characters). */
+  description?: string | null
 }
 
 /** Active rules that assign a category, used when retiring one. */
@@ -264,6 +270,10 @@ export interface Transaction {
   date: string
   type: 'debit' | 'credit'
   source: string
+  /** Who decided the category: the pipeline or the user. */
+  category_source?: CategorySource
+  /** A categorization suggestion for this row waits for review. */
+  categorization_pending?: boolean
   status: 'posted' | 'pending'
   payee: string | null
   payee_id: string | null
@@ -666,6 +676,10 @@ export interface TransactionCalendarItem {
   is_transfer: boolean
   is_ignored: boolean
   exclude_from_pnl: boolean
+  /** Who decided the category; null for a recurring projection (no row). */
+  category_source?: CategorySource | null
+  /** A categorization suggestion for this row waits for review. */
+  categorization_pending?: boolean
 }
 
 export interface TransactionCalendarDay {
@@ -721,6 +735,8 @@ export interface DashboardSummary {
   // Negative = net liability, positive = net receivable. Already
   // accounts for partial settlements.
   pending_shares_net: number
+  /** Rows in another currency with no rate this month, left out of the totals. */
+  unconverted_count?: number
 }
 
 export interface SpendingByCategory {
@@ -1777,4 +1793,407 @@ export interface ReconciliationHistoryEvent {
   user_id?: string | null
   transaction_id?: string | null
   transaction_description?: string | null
+}
+
+// Automatic categorization (mirrors backend/app/schemas/categorization.py).
+export type CategorySource =
+  | 'none'
+  | 'user'
+  | 'rule'
+  | 'memory'
+  | 'ai'
+  | 'provider'
+  | 'installment'
+  | 'import'
+  | 'recurring'
+  | 'legacy'
+
+export type CategorizationRunStatus =
+  | 'queued'
+  | 'running'
+  | 'processing_batch'
+  | 'completed'
+  | 'done'
+  | 'capped'
+  | 'failed'
+  | (string & {})
+
+export interface CategorizationLastRun {
+  id: string
+  status: CategorizationRunStatus
+  finished_at: string | null
+  stats: Record<string, number | string | null>
+}
+
+export interface CategorizationSummary {
+  pending_groups: number
+  pending_transactions: number
+  applied_last_7d: number
+  last_run: CategorizationLastRun | null
+  ai_available: boolean
+  /** The workspace's "categorize with AI" switch. */
+  ai_enabled: boolean
+  month_cost_usd: number | string
+  monthly_cap_usd: number | string
+}
+
+export interface CategorizationRun {
+  id: string
+  kind: string
+  trigger: string
+  status: CategorizationRunStatus
+  stats: Record<string, unknown>
+  cost_usd: number | string
+  error: string | null
+  created_at: string | null
+  finished_at: string | null
+}
+
+export interface ReviewSuggestion {
+  category_id: string | null
+  alt_category_id: string | null
+  confidence: number | null
+  reason: string | null
+}
+
+export interface ReviewNewCategory {
+  group: string
+  name: string
+}
+
+/** One of a store's first rows, carried by the review queue. */
+export interface ReviewTransaction {
+  id: string
+  date: string
+  description: string
+  original_description: string | null
+  /** Unmasked: mask it with `mask(formatCurrency(...))`. */
+  amount: number | string
+  currency: string
+  type: 'debit' | 'credit'
+}
+
+export interface ReviewGroup {
+  merchant_key: string
+  clean_name: string | null
+  count: number
+  /** Sum of absolute amounts, unmasked: mask it with `mask(formatCurrency(...))`. */
+  total: number | string
+  samples: string[]
+  suggestion: ReviewSuggestion | null
+  new_category: ReviewNewCategory | null
+  is_person: boolean
+  /** The note the person left on this store, if any. */
+  note: string | null
+  transaction_ids: string[]
+  /** The first rows of `transaction_ids`; the rest are only counted. */
+  transactions: ReviewTransaction[]
+}
+
+export interface NewCategoryProposal {
+  group: string
+  name: string
+  merchant_keys: string[]
+  count: number
+  total: number | string
+}
+
+export interface ReviewQueue {
+  groups: ReviewGroup[]
+  total: number
+  new_category_proposals: NewCategoryProposal[]
+}
+
+export interface AcceptRequest {
+  merchant_key: string
+  category_id: string
+  transaction_ids?: string[]
+}
+
+export interface AppliedResult {
+  applied: number
+  /** Undo goes through these ids (`event_run_id` is always null). */
+  event_ids: string[]
+  event_run_id: string | null
+  /** The rows that actually changed, in the order given. */
+  transaction_ids: string[]
+}
+
+/** "Apply to the N similar": also the shown rows left as they were, since
+ *  they changed after being shown. */
+export interface SimilarAppliedResult extends AppliedResult {
+  skipped: string[]
+}
+
+export interface CreateCategoryRequest {
+  group: string
+  name: string
+  merchant_keys?: string[]
+}
+
+export interface CreateCategoryResult {
+  category_id: string
+  applied: number
+  event_ids: string[]
+  /** The rows that actually changed. */
+  transaction_ids: string[]
+}
+
+/** A category to create on the spot; the group is created too when no
+ *  group has that name. Names are matched without case or accents. */
+export interface NewCategoryDraft {
+  group: string
+  name: string
+}
+
+/** One choice for a store: exactly one of `category_id` and `new_category`.
+ *  Without `transaction_ids`, the store's pending rows (Review); with them,
+ *  exactly those rows. `note` left out keeps the store's note; null clears it. */
+export interface ChooseRequest {
+  merchant_key: string
+  category_id?: string
+  new_category?: NewCategoryDraft
+  transaction_ids?: string[]
+  note?: string | null
+}
+
+export interface ChooseResult {
+  category_id: string
+  created_group: boolean
+  created_category: boolean
+  applied: number
+  /** The events written, for undo. */
+  event_ids: string[]
+  /** The rows that actually changed, in the order given (a row categorized
+   *  by hand meanwhile is left out). */
+  transaction_ids: string[]
+}
+
+/** One turn of the conversation about a store, as the API takes it. */
+export interface AskMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+/** The whole conversation so far (kept by the client), ending with the
+ *  person's message. Without `transaction_ids`, about the store's pending
+ *  rows (Review); with them, about exactly those rows (Applied). */
+export interface AskRequest {
+  merchant_key: string
+  transaction_ids?: string[]
+  messages: AskMessage[]
+}
+
+/** A category the AI proposes: an existing one, or one to create on Accept. */
+export interface AskSuggestion {
+  category_id: string | null
+  new_category: NewCategoryDraft | null
+  /** Whether the group of `new_category` already exists. */
+  group_exists: boolean
+  confidence: number
+  /** Rows an Accept would file. */
+  applies_to: number
+}
+
+export interface AskResponse {
+  reply: string
+  suggestion: AskSuggestion | null
+  /** The store's whole note, updated; null leaves the saved one as it is. */
+  note: string | null
+  /** Send it back as the next `assistant` message. */
+  assistant_turn: string
+  person_messages_left: number
+}
+
+export interface AppliedTransaction {
+  id: string
+  date: string
+  description: string
+  amount: number | string
+  currency: string
+}
+
+export interface AppliedEvent {
+  /** Null for a row listed by origin with no standing event: no undo. */
+  event_id: string | null
+  run_id: string | null
+  transaction: AppliedTransaction
+  source: CategorySource
+  previous_category_id: string | null
+  new_category_id: string | null
+  confidence: number | null
+  reason: string | null
+  /** The event taught (or took back) one of the store's picks: undoing it
+   *  changes the memory even when the category stayed (a person confirming
+   *  a guess). */
+  memory_pick: boolean
+  created_at: string
+  /** Grouping id of the store; never shown. */
+  merchant_key: string
+  /** What to call the store on screen. */
+  store_name: string
+}
+
+export interface AppliedPage {
+  items: AppliedEvent[]
+  total: number
+}
+
+/** Aplicadas views that stand alone: confirmations, and rows by origin
+ *  (the person's, and the bank, imports and series). */
+export type AppliedView = 'confirmed' | 'user' | 'other'
+
+export interface AppliedFilters {
+  /** Comma-separated subset of ai, memory, rule; or one `AppliedView` alone
+   *  (`user` and `other` ignore confidence and `since`). */
+  source?: 'ai' | 'memory' | 'rule' | AppliedView | (string & {})
+  min_confidence?: number
+  max_confidence?: number
+  since?: string
+  limit?: number
+  offset?: number
+}
+
+/** Categorizable rows (posted, no transfer pair, no opening balance, not
+ *  ignored); `decided + to_review + waiting == total`. */
+export interface Scoreboard {
+  total: number
+  /** With a category and nothing pending to review. */
+  decided: number
+  /** With a pending suggestion Review shows. */
+  to_review: number
+  /** No category and nothing to review yet. */
+  waiting: number
+}
+
+export interface UndoRequest {
+  event_ids?: string[]
+  run_id?: string
+}
+
+export interface UndoResult {
+  restored: number
+  skipped: number
+}
+
+export interface ProvenanceEvent {
+  id: string
+  run_id: string | null
+  source: CategorySource
+  previous_source: CategorySource | null
+  previous_category_id: string | null
+  new_category_id: string | null
+  confidence: number | null
+  reason: string | null
+  model: string | null
+  user_id: string | null
+  created_at: string
+  undone_at: string | null
+}
+
+export interface NoteRead {
+  merchant_key: string
+  note: string | null
+}
+
+export interface Provenance {
+  current_source: CategorySource
+  original_description: string | null
+  events: ProvenanceEvent[]
+  store_note: NoteRead | null
+}
+
+/** One of a store's other rows that a choice could also file. */
+export interface SimilarTransaction {
+  id: string
+  date: string
+  description: string
+  /** Unmasked: mask it with `mask(formatCurrency(...))`. */
+  amount: number | string
+  currency: string
+  type: 'debit' | 'credit'
+  category_id: string | null
+  category_source: CategorySource
+}
+
+export interface SimilarResult {
+  merchant_key: string
+  count: number
+  transaction_ids: string[]
+  /** The same rows, in the same order as `transaction_ids`. */
+  transactions: SimilarTransaction[]
+}
+
+export interface RuleDraft {
+  name: string
+  conditions: { field: string; op: string; value: string }[]
+  actions: { op: string; value: string }[]
+}
+
+export interface CategorizationSettings {
+  enabled: boolean
+  auto_apply_threshold: number
+  monthly_cap_usd: number | string
+  llm_connection_id: string | null
+  owner_user_id: string | null
+  last_run_at: string | null
+}
+
+export interface CategorizationSettingsUpdate {
+  enabled?: boolean
+  auto_apply_threshold?: number
+  monthly_cap_usd?: number | string
+  llm_connection_id?: string | null
+}
+
+export type OrganizerOpKind =
+  | 'create_group'
+  | 'create_category'
+  | 'rename'
+  | 'move_category'
+  | 'merge'
+  | 'split_category'
+
+/** Readable names for an op's short ids (`c1`, `g2`, store ids). */
+export interface OrganizerOpLabels {
+  target?: string | null
+  group?: string | null
+  into?: string | null
+  /** Store names for `create_category`, child names for `split_category`. */
+  children?: string[]
+}
+
+/** One proposed change to the category tree (mirrors `OrganizerOp`). */
+export interface OrganizerOp {
+  id: string
+  op: OrganizerOpKind | (string & {})
+  /** Short id of a category (`c1`) or group (`g2`). */
+  target: string | null
+  /** Short id of an existing group, or the name of a new one. */
+  group: string | null
+  name: string | null
+  children: string[]
+  into: string | null
+  why: string
+  /** Last 12 months; `total` is unmasked: mask it with `mask(formatCurrency(...))`. */
+  impact: { tx: number; total: number }
+  labels: OrganizerOpLabels
+  status: 'pending' | 'applied' | 'rejected'
+  decided_at: string | null
+  result: Record<string, unknown> | null
+  /** An applied split's redistribution run (GET only). */
+  redistribution?: CategorizationRun | null
+}
+
+export interface OrganizerView {
+  run: CategorizationRun | null
+  ops: OrganizerOp[]
+  /** Why the run has no proposal (failed, capped…), in the person's words. */
+  message: string | null
+}
+
+export interface OrganizerApplyResult {
+  op: OrganizerOp
+  /** The redistribution a split queued, to follow by polling. */
+  redistribute_run: CategorizationRun | null
 }

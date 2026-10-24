@@ -1,4 +1,8 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
 import { formatAccountMask, getAccountLabel, getAccountName } from '@/lib/account-utils'
 import { getConnectionName } from '@/lib/connection-utils'
 import { Link, useNavigate } from 'react-router-dom'
@@ -22,12 +26,12 @@ import {
 } from '@/components/ui/dialog'
 import { DatePickerInput } from '@/components/ui/date-picker-input'
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
 import type { Account, BankConnection } from '@/types'
-import { RefreshCw, TriangleAlert, Unlink, Settings } from 'lucide-react'
+import { Landmark, Plus, RefreshCw, TriangleAlert, Unlink, Settings, Wallet } from 'lucide-react'
 import { AccountIcon, ConnectionLogo } from '@/components/account-icon'
 import { getAccountTypeConfig } from '@/lib/account-type-config'
 import { AccountPageActions } from '@/components/account-page-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { AccountRowActions } from '@/components/account-row-actions'
 import { PageHeader } from '@/components/page-header'
 import { BankConnectDialog } from '@/components/bank-connect-dialog'
@@ -87,12 +91,12 @@ export default function AccountsPage() {
   const [reconnectItemId, setReconnectItemId] = useState<string | null>(null)
   const [tokenReconnectConnection, setTokenReconnectConnection] = useState<BankConnection | null>(null)
 
-  const { data: accountsList, isLoading: accountsLoading } = useQuery({
+  const { data: accountsList, isLoading: accountsLoading, isError: accountsError, error: accountsErr, refetch: refetchAccounts } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => accounts.list(),
   })
 
-  const { data: connectionsList, isLoading: connectionsLoading } = useQuery({
+  const { data: connectionsList, isLoading: connectionsLoading, isError: connectionsError, error: connectionsErr, refetch: refetchConnections } = useQuery({
     queryKey: ['connections'],
     queryFn: connections.list,
   })
@@ -230,7 +234,7 @@ export default function AccountsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        section={t('accounts.title')}
+        section={t('nav.groupDaily')}
         title={t('accounts.title')}
         action={
           <AccountPageActions
@@ -242,14 +246,17 @@ export default function AccountsPage() {
         }
       />
 
-      {isLoading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
-        </div>
+      {accountsError || connectionsError ? (
+        <ErrorState
+          error={accountsErr ?? connectionsErr}
+          onRetry={() => { void refetchAccounts(); void refetchConnections() }}
+        />
+      ) : isLoading ? (
+        <SectionCard><ListSkeleton /></SectionCard>
       ) : (
         <div className="space-y-6">
           {/* Manual Accounts */}
-          <div className="bg-card rounded-xl border border-border shadow-sm">
+          <SectionCard className="overflow-visible">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
               <h2 className="text-sm font-medium text-muted-foreground">{t('accounts.manualAccounts')}</h2>
             </div>
@@ -268,7 +275,7 @@ export default function AccountsPage() {
                   const dueClass = dueIn != null && dueIn <= 3 ? 'text-amber-600' : 'text-muted-foreground'
                   const accountMask = formatAccountMask(acc)
                   return (
-                    <div key={acc.id} className="group flex items-center px-5 py-3 hover:bg-muted/50 transition-colors">
+                    <div key={acc.id} className="group flex items-center px-4 sm:px-5 py-3 hover:bg-muted/50 transition-colors">
                       <Link to={`/accounts/${acc.id}`} className="flex items-center gap-3 flex-1 min-w-0">
                         <AccountIcon account={acc} />
                         <div className="min-w-0 flex-1">
@@ -309,13 +316,19 @@ export default function AccountsPage() {
                 })}
               </div>
             ) : (
-              <div className="px-5 py-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  {t(activeAccountIds ? 'accounts.emptyFiltered' : 'accounts.noManualAccounts')}
-                </p>
-              </div>
+              <EmptyState
+                icon={Wallet}
+                title={t(activeAccountIds ? 'accounts.emptyFiltered' : 'accounts.noManualAccounts')}
+                action={
+                  canWrite && !activeAccountIds ? (
+                    <Button onClick={() => { setEditingAccount(null); setDialogOpen(true) }}>
+                      <Plus /> {t('accounts.addManual')}
+                    </Button>
+                  ) : undefined
+                }
+              />
             )}
-          </div>
+          </SectionCard>
 
           {/* Bank Connections */}
           {connectionsList && connectionsList.length > 0 ? (
@@ -325,7 +338,7 @@ export default function AccountsPage() {
                 const needsReconnect = conn.status !== 'active'
                 const syncPending = syncMutation.isPending && syncMutation.variables === conn.id
                 return (
-                  <div key={conn.id} className="bg-card rounded-xl border border-border shadow-sm">
+                  <SectionCard key={conn.id} className="overflow-visible">
                     {/* Connection header */}
                     <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                       <div className="flex items-center gap-3">
@@ -418,7 +431,7 @@ export default function AccountsPage() {
                           const dueClass = dueIn != null && dueIn <= 3 ? 'text-amber-600' : 'text-muted-foreground'
                           const accountMask = formatAccountMask(acc)
                           return (
-                            <div key={acc.id} className="group flex items-center px-5 py-3 hover:bg-muted/50 transition-colors">
+                            <div key={acc.id} className="group flex items-center px-4 sm:px-5 py-3 hover:bg-muted/50 transition-colors">
                               <Link to={`/accounts/${acc.id}`} className="flex items-center gap-3 flex-1 min-w-0">
                                 <AccountIcon account={acc} />
                                 <div className="min-w-0 flex-1">
@@ -464,19 +477,29 @@ export default function AccountsPage() {
                         </p>
                       </div>
                     )}
-                  </div>
+                  </SectionCard>
                 )
               })}
             </div>
           ) : (
-            <div className="bg-card rounded-xl border border-dashed border-border p-8 text-center">
-              <p className="text-sm text-muted-foreground">{t('accounts.noBankConnections')}</p>
-            </div>
+            <SectionCard>
+              <EmptyState
+                icon={Landmark}
+                title={t('accounts.noBankConnections')}
+                action={
+                  canWrite ? (
+                    <Button variant="outline" onClick={() => setConnectorSelectOpen(true)}>
+                      <Plus /> {t('accounts.connectBank')}
+                    </Button>
+                  ) : undefined
+                }
+              />
+            </SectionCard>
           )}
 
           {/* Closed Accounts */}
           {closedAccounts.length > 0 && (
-            <div className="bg-card rounded-xl border border-border shadow-sm opacity-60">
+            <SectionCard className="opacity-60 overflow-visible">
               <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
                 <h2 className="text-sm font-medium text-muted-foreground">{t('accounts.closedAccounts')}</h2>
               </div>
@@ -506,34 +529,20 @@ export default function AccountsPage() {
                   )
                 })}
               </div>
-            </div>
+            </SectionCard>
           )}
         </div>
       )}
 
       {/* Confirm delete dialog */}
-      <Dialog open={!!deletingId} onOpenChange={() => setDeletingId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('accounts.confirmDeleteTitle')}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {t('accounts.confirmDeleteDesc')}
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingId(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => deletingId && deleteMutation.mutate(deletingId)}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? t('common.loading') : t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deletingId}
+        title={t('accounts.confirmDeleteTitle')}
+        description={t('accounts.confirmDeleteDesc')}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeletingId(null)}
+        onConfirm={() => deletingId && deleteMutation.mutate(deletingId)}
+      />
 
       {/* Confirm disconnect dialog */}
       <Dialog open={!!disconnectingConnection} onOpenChange={() => setDisconnectingConnection(null)}>

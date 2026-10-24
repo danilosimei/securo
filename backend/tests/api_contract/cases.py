@@ -51,6 +51,7 @@ STATIC_PARAMS = {
     "node": reconciliation_policy.MATCH_RECURRING["node"],
     "provider": "pluggy",
     "key": "registration_enabled",
+    "merchant_key": "NETFLIX",
 }
 
 # Parameters that identify a row, so the unknown_id variant swaps them out.

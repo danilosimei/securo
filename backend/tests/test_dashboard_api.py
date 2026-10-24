@@ -6,7 +6,20 @@ from decimal import Decimal
 
 import pytest
 
+from app.models.category import Category
 from app.models.transaction import Transaction
+
+
+async def _convert_to_primary(session, transactions):
+    """Make the fixture rows countable by the report rules: they are USD with no
+    converted value (kept out of the sums, they would mix currencies) and the
+    salary sits in a category that is not `income` (it would ease spending)."""
+    for txn in transactions:
+        txn.amount_primary = txn.amount
+        if txn.type == "credit" and txn.category_id is not None:
+            category = await session.get(Category, txn.category_id)
+            category.report_kind = "income"
+    await session.commit()
 
 
 def _current_month_str() -> str:
@@ -41,8 +54,9 @@ def _future_month_str(months_ahead: int) -> str:
 
 
 @pytest.mark.asyncio
-async def test_spending_by_category(client, auth_headers, test_transactions):
+async def test_spending_by_category(client, auth_headers, session, test_transactions):
     """Spending by category returns numeric totals (not strings) for chart rendering."""
+    await _convert_to_primary(session, test_transactions)
     response = await client.get("/api/dashboard/spending-by-category", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
@@ -61,8 +75,9 @@ async def test_spending_by_category(client, auth_headers, test_transactions):
 
 
 @pytest.mark.asyncio
-async def test_spending_by_category_with_month(client, auth_headers, test_transactions):
+async def test_spending_by_category_with_month(client, auth_headers, session, test_transactions):
     """Spending by category filters by month correctly."""
+    await _convert_to_primary(session, test_transactions)
     # Current month — when test transactions exist
     response = await client.get(
         "/api/dashboard/spending-by-category",

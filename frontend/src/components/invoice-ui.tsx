@@ -11,50 +11,7 @@ import type { InvoiceState } from '@/types'
  * the product is the thing to avoid.
  */
 
-/** The card every section sits in. Same shell as `recurring`. */
-export function SectionCard({
-  children,
-  className = '',
-}: {
-  children: React.ReactNode
-  className?: string
-}) {
-  return (
-    <div
-      className={cn(
-        'bg-card rounded-xl border border-border shadow-sm overflow-hidden',
-        className,
-      )}
-    >
-      {children}
-    </div>
-  )
-}
-
-export function SectionHeader({
-  title,
-  description,
-  action,
-}: {
-  title: string
-  /** One line under the title, for a section whose rule is not obvious
-   *  from its rows (what a "term" is, say). */
-  description?: string
-  action?: React.ReactNode
-}) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
-      </div>
-      {action}
-    </div>
-  )
-}
-
-/** Table header cell. Byte-identical to the constant in `recurring`. */
-export const TH = 'text-xs font-medium text-muted-foreground py-3'
+export { SectionCard, SectionHeader, TH } from '@/components/ui/section-card'
 
 /**
  * State pill, in the app's badge shape.
@@ -99,23 +56,26 @@ export function Segmented<T extends string>({
   onChange,
   options,
   testIdPrefix,
+  disabled,
 }: {
   value: T
   onChange: (value: T) => void
   options: { value: T; label: React.ReactNode; count?: number }[]
   testIdPrefix: string
+  disabled?: boolean
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-border bg-muted p-0.5 text-xs font-medium">
+    <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-border bg-muted p-0.5 text-xs font-medium [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {options.map((option) => {
         const active = value === option.value
         return (
           <button
             key={option.value}
             onClick={() => onChange(option.value)}
+            disabled={disabled}
             data-testid={`${testIdPrefix}-${option.value}`}
             className={cn(
-              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap',
+              'inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60',
               active
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',

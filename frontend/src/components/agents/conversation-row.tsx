@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Check, MessageSquare, Pencil, Trash2, X } from 'lucide-react'
+import { Check, MessageSquare, Pencil, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { agents } from '@/lib/api'
 import type { AgentConversation } from '@/lib/api'
 import { formatRelative } from '@/lib/relative-time'
 import { cn } from '@/lib/utils'
+import { RowActions } from '@/components/ui/row-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 
 interface Props {
   conv: AgentConversation
@@ -20,6 +22,7 @@ export function ConversationRow({ conv, agentId, active, onPick, onDeleted }: Pr
   const { t } = useTranslation()
   const qc = useQueryClient()
   const [editing, setEditing] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [draft, setDraft] = useState(conv.title || '')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -120,37 +123,24 @@ export function ConversationRow({ conv, agentId, active, onPick, onDeleted }: Pr
       >
         <MessageSquare className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="flex-1 min-w-0 truncate">{conv.title || t('agents.detail.untitled')}</span>
-        <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums group-hover:opacity-0 transition-opacity">
+        <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
           {formatRelative(conv.updated_at)}
         </span>
       </button>
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            setEditing(true)
-          }}
-          className="p-1 rounded hover:bg-background text-muted-foreground"
-          title={t('agents.conversation.rename')}
-        >
-          <Pencil className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            if (confirm(t('agents.conversation.deleteConfirm', { name: conv.title || t('agents.detail.untitled') }))) {
-              deleteMut.mutate()
-            }
-          }}
-          className="p-1 rounded hover:bg-background text-rose-500"
-          title={t('agents.conversation.delete')}
-          disabled={deleteMut.isPending}
-        >
-          <Trash2 className="h-3 w-3" />
-        </button>
-      </div>
+      <RowActions
+        label={conv.title || t('agents.detail.untitled')}
+        onDelete={() => setConfirmingDelete(true)}
+        deleteDisabled={deleteMut.isPending}
+        extra={[{ label: t('agents.conversation.rename'), icon: Pencil, onSelect: () => setEditing(true) }]}
+      />
+      <DeleteConfirmationDialog
+        open={confirmingDelete}
+        title={t('agents.conversation.delete')}
+        description={t('agents.conversation.deleteConfirm', { name: conv.title || t('agents.detail.untitled') })}
+        isPending={deleteMut.isPending}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => deleteMut.mutate(undefined, { onSettled: () => setConfirmingDelete(false) })}
+      />
     </div>
   )
 }

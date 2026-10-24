@@ -1,12 +1,16 @@
 import { useState } from 'react'
+import { BackLink } from '@/components/page-header'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Edit2, Trash2, Plus, MessageSquare } from 'lucide-react'
+import { Plus, MessageSquare } from 'lucide-react'
 import { ConversationRow } from '@/components/agents/conversation-row'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { RowActions } from '@/components/ui/row-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { Segmented } from '@/components/invoice-ui'
+import { useUrlTab } from '@/hooks/use-url-tab'
 import { agents } from '@/lib/api'
 import { AgentFormDialog } from '@/components/agents/agent-form-dialog'
 import { ChatPanel } from '@/components/agents/chat-panel'
@@ -21,6 +25,8 @@ export default function AgentDetailPage() {
   const qc = useQueryClient()
   const { canWrite } = useWorkspace()
   const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [tab, setTab] = useUrlTab(['chat', 'knowledge', 'tools'] as const)
   const [conversationId, setConversationId] = useState<string | null>(null)
   // Increments on every sidebar click so the chat input refocuses even
   // when the conversation id didn't actually change (e.g. clicking "+"
@@ -76,10 +82,10 @@ export default function AgentDetailPage() {
     // and the user has to scroll the whole page — which they don't want.
     // overflow-hidden ensures only the messages div inside ChatPanel scrolls.
     <div className="flex flex-col h-[calc(100dvh-6.5rem)] lg:h-[calc(100dvh-3rem)] overflow-hidden">
-      <div className="border-b px-4 py-3 flex items-center gap-3">
-        <Button size="icon" variant="ghost" onClick={() => navigate('/agents')} title={t('common.back')} aria-label={t('common.back')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
+      <div className="px-4 pt-3 shrink-0">
+        <BackLink to="/agents" label={t('agents.title')} />
+      </div>
+      <div className="border-b px-4 pb-3 flex items-center gap-3">
         <div
           className="h-9 w-9 rounded-md flex items-center justify-center text-white shrink-0"
           style={{ backgroundColor: agent.color }}
@@ -89,39 +95,34 @@ export default function AgentDetailPage() {
         <div className="min-w-0 flex-1">
           <div className="font-semibold truncate">{agent.name}</div>
           <div className="text-xs text-muted-foreground truncate">
-            {providerLabel} · {modelLabel} · temp {agent.temperature}
+            {providerLabel} · {modelLabel} · {t('agents.form.temperature')} {agent.temperature}
           </div>
         </div>
         {canWrite && (
-          <>
-            <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
-              <Edit2 className="h-3.5 w-3.5 mr-1.5" /> {t('agents.detail.edit')}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (confirm(t('agents.detail.deleteConfirm'))) {
-                  removeMut.mutate()
-                }
-              }}
-            >
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" /> {t('agents.detail.delete')}
-            </Button>
-          </>
+          <RowActions
+            label={agent.name}
+            onEdit={() => setEditOpen(true)}
+            onDelete={() => setDeleteOpen(true)}
+          />
         )}
       </div>
 
-      <Tabs defaultValue="chat" className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="px-4 pt-3">
-          <TabsList>
-            <TabsTrigger value="chat">{t('agents.detail.tabs.chat')}</TabsTrigger>
-            <TabsTrigger value="knowledge">{t('agents.detail.tabs.knowledge')}</TabsTrigger>
-            <TabsTrigger value="tools">{t('agents.detail.tabs.tools')}</TabsTrigger>
-          </TabsList>
+          <Segmented
+            value={tab}
+            onChange={setTab}
+            testIdPrefix="agent-tab"
+            options={[
+              { value: 'chat', label: t('agents.detail.tabs.chat') },
+              { value: 'knowledge', label: t('agents.detail.tabs.knowledge') },
+              { value: 'tools', label: t('agents.detail.tabs.tools') },
+            ]}
+          />
         </div>
 
-        <TabsContent value="chat" className="flex-1 flex min-h-0 mt-3">
+        {tab === 'chat' && (
+        <div className="flex-1 flex min-h-0 mt-3">
           <aside className="hidden md:flex md:w-64 border-r flex-col min-h-0">
             <div className="px-3 pt-2 pb-1 flex items-center justify-between shrink-0">
               <span className="text-xs uppercase tracking-wider text-muted-foreground">{t('agents.detail.conversations')}</span>
@@ -168,16 +169,30 @@ export default function AgentDetailPage() {
               }}
             />
           </div>
-        </TabsContent>
+        </div>
+        )}
 
-        <TabsContent value="knowledge" className="flex-1 overflow-y-auto px-4 py-3">
-          <KnowledgeSection agentId={id} />
-        </TabsContent>
+        {tab === 'knowledge' && (
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            <KnowledgeSection agentId={id} />
+          </div>
+        )}
 
-        <TabsContent value="tools" className="flex-1 overflow-y-auto px-4 py-3">
-          <ToolsSection agentId={id} />
-        </TabsContent>
-      </Tabs>
+        {tab === 'tools' && (
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            <ToolsSection agentId={id} />
+          </div>
+        )}
+      </div>
+
+      <DeleteConfirmationDialog
+        open={deleteOpen}
+        title={t('agents.detail.delete')}
+        description={t('agents.detail.deleteConfirm')}
+        isPending={removeMut.isPending}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => removeMut.mutate()}
+      />
 
       <AgentFormDialog open={editOpen} onOpenChange={setEditOpen} agent={agent} providers={info?.providers ?? []} />
     </div>

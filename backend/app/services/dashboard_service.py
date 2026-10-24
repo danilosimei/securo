@@ -616,6 +616,30 @@ async def get_summary(
         )
     )
 
+    # Income and expenses of the month follow the shared report rules (primary
+    # currency, refunds ease the spending, `income` categories are the income).
+    # The forecast each projected field already carried stays on top of them.
+    from app.services.reports.dashboard_rules import month_income_expenses
+
+    rules_income, rules_expenses, unconverted_count = await month_income_expenses(
+        session,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        primary_currency=primary_currency,
+        month=month,
+        today=today,
+        account_ids=account_ids,
+    )
+    rules_income, rules_expenses = float(rules_income), float(rules_expenses)
+    projected_monthly_income += rules_income - real_monthly_income
+    projected_monthly_expenses += rules_expenses - abs(real_monthly_expenses)
+    projected_income_primary += rules_income - monthly_income_primary
+    projected_expenses_primary += rules_expenses - monthly_expenses_primary
+    real_monthly_income = rules_income
+    real_monthly_expenses = rules_expenses
+    monthly_income_primary = rules_income
+    monthly_expenses_primary = rules_expenses
+
     return DashboardSummary(
         total_balance=total_balance,
         total_balance_primary=round(total_balance_primary, 2),
@@ -637,6 +661,7 @@ async def get_summary(
         assets_value_primary=round(assets_value_primary, 2),
         primary_currency=primary_currency,
         pending_shares_net=round(pending_shares_net, 2),
+        unconverted_count=unconverted_count,
     )
 
 

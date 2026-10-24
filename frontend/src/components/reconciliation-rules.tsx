@@ -12,6 +12,7 @@
  *  you see is what we ship with whatever you changed applied over it, so a
  *  rule you never touched keeps improving when we improve it.
  */
+import { RowActions } from '@/components/ui/row-actions'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -39,7 +40,7 @@ import type {
   ReconciliationPolicyFile,
   ReconciliationRule,
 } from '@/types'
-import { Plus, RotateCcw, Trash2, Zap, HelpCircle, ChevronUp, ChevronDown, Power, Download, Upload } from 'lucide-react'
+import { Plus, RotateCcw, Zap, HelpCircle, ChevronUp, ChevronDown, Power, Download, Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ACCOUNT_TYPE_CONFIG } from '@/lib/account-type-config'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
@@ -541,7 +542,7 @@ function RuleEditor({ open, node, rule, onClose }: EditorProps) {
           A rule with every section open is taller than a laptop viewport,
           and a dialog whose Save button is below the fold with nothing to
           scroll is a dialog you cannot save from. */}
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className="flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {creating
@@ -1396,59 +1397,35 @@ export function ReconciliationRules({ canWrite }: { canWrite: boolean }) {
                   </div>
 
                   {canWrite && (
-                    <div
-                      className="flex items-center gap-1 shrink-0"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {/* Two slots, in this order, on every rule in both
-                          lists: stop it, then get rid of it. The same
-                          icons in the same places, because a
-                          categorization rule and a matching rule are the
-                          same promise made twice and reading as two
-                          unrelated features was the whole complaint. */}
-                      <button
-                        className={cn(
-                          'p-1.5 rounded-md transition-colors hover:bg-background',
-                          rule.enabled
-                            ? 'text-emerald-600 hover:text-emerald-700'
-                            : 'text-muted-foreground hover:text-foreground',
-                        )}
-                        title={t(rule.enabled ? 'rules.turnOff' : 'rules.turnOn')}
-                        onClick={() => toggle.mutate({ node: group.node, rule })}
-                        disabled={toggle.isPending}
-                      >
-                        <Power size={13} />
-                      </button>
-                      {/* Only where there is something to undo. Putting
-                          a rule back the way we ship it and getting rid
-                          of it are different wishes, and one icon for
-                          both meant a workspace could restore our
-                          version of a rule or keep it, and nothing
-                          else. */}
-                      {rule.customised && rule.origin === 'default' && (
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-background transition-colors"
-                          title={t('reconciliation.restore')}
-                          onClick={() => reset.mutate({ node: group.node, id: rule.id })}
-                          disabled={reset.isPending}
-                        >
-                          <RotateCcw size={13} />
-                        </button>
-                      )}
-                      {/* No rule we refuse to remove, ours included. A
-                          matching policy decides what happens to
-                          somebody's money, and a default we happen to
-                          believe in is not a reason to make them keep
-                          it. What we keep is the name, so the list below
+                    <div className="shrink-0">
+                      {/* Stop it, bring our version back, or get rid of it:
+                          the same menu on every rule in both lists, because a
+                          categorization rule and a matching rule are the same
+                          promise made twice. No rule is refused removal, ours
+                          included; what we keep is the name, so the list below
                           can offer it back. */}
-                      <button
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950 transition-colors"
-                        title={t('common.delete')}
-                        onClick={() => setDeleting({ node: group.node, rule })}
-                        disabled={remove.isPending}
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      <RowActions
+                        label={rule.name || t(SHIPPED_NAME[rule.id] ?? 'reconciliation.rule.unknown')}
+                        onEdit={() => setEditing({ node: group.node, rule })}
+                        onDelete={() => setDeleting({ node: group.node, rule })}
+                        deleteDisabled={remove.isPending}
+                        extra={[
+                          {
+                            label: t(rule.enabled ? 'rules.turnOff' : 'rules.turnOn'),
+                            icon: Power,
+                            onSelect: () => toggle.mutate({ node: group.node, rule }),
+                            disabled: toggle.isPending,
+                          },
+                          ...(rule.customised && rule.origin === 'default'
+                            ? [{
+                                label: t('reconciliation.restore'),
+                                icon: RotateCcw,
+                                onSelect: () => reset.mutate({ node: group.node, id: rule.id }),
+                                disabled: reset.isPending,
+                              }]
+                            : []),
+                        ]}
+                      />
                     </div>
                   )}
                 </div>
@@ -1524,7 +1501,7 @@ export function ReconciliationRules({ canWrite }: { canWrite: boolean }) {
           is no correct way to interleave two orderings), so a policy
           somebody tuned is not something to overwrite on a mis-click. */}
       <Dialog open={pending !== null} onOpenChange={(open) => { if (!open) setPending(null) }}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('reconciliation.importConfirmTitle')}</DialogTitle>
           </DialogHeader>

@@ -1,4 +1,11 @@
 import { createElement, useState } from 'react'
+import { FormDialogFooter } from '@/components/form-dialog-footer'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { useUrlTab } from '@/hooks/use-url-tab'
+import { Segmented } from '@/components/invoice-ui'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
@@ -14,7 +21,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog'
 import {
   Popover,
@@ -23,16 +29,19 @@ import {
 } from '@/components/ui/popover'
 import type { Account, Asset, AssetGroup, Goal } from '@/types'
 import {
-  Pencil, Trash2, Plus, Pause, Play, CheckCircle2, Archive, ArchiveRestore, Target,
+  Plus, Pause, Play, CheckCircle2, Archive, ArchiveRestore, Target,
   ChevronDown,
 } from 'lucide-react'
 import { ICON_MAP } from '@/lib/category-icons'
 import { IconPicker } from '@/components/icon-picker'
+import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { PageHeader } from '@/components/page-header'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { formatCurrency } from '@/lib/format'
+import { SectionCard, SectionHeader } from '@/components/ui/section-card'
 
 function getGoalIcon(iconKey: string | null) {
   return (iconKey && ICON_MAP[iconKey]) || Target
@@ -74,22 +83,6 @@ function LinkedResourceSelect<T extends { id: string }>({
         ))}
       </select>
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
-  )
-}
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {children}
-    </div>
-  )
-}
-function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-      <p className="text-sm font-semibold text-foreground">{title}</p>
-      {action}
     </div>
   )
 }
@@ -145,13 +138,14 @@ export default function GoalsPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Goal | null>(null)
   const [trackingType, setTrackingType] = useState('manual')
-  const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [tab, setTab] = useUrlTab(['active', 'completed', 'paused', 'archived', 'all'] as const)
+  const statusFilter = tab === 'all' ? '' : tab
   const [deletingGoal, setDeletingGoal] = useState<Goal | null>(null)
   const [selectedIcon, setSelectedIcon] = useState('target')
   const [selectedColor, setSelectedColor] = useState('#3B82F6')
   const [targetDate, setTargetDate] = useState('')
 
-  const { data: goalsList } = useQuery({
+  const { data: goalsList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['goals', statusFilter],
     queryFn: () => goalsApi.list(statusFilter || undefined),
   })
@@ -237,39 +231,40 @@ export default function GoalsPage() {
   return (
     <div>
       <PageHeader
-        section={t('goals.title')}
+        section={t('nav.groupPlanning')}
         title={t('goals.title')}
+        action={
+          canWrite ? (
+            <Button onClick={openCreateDialog}>
+              <Plus /> {t('goals.add')}
+            </Button>
+          ) : undefined
+        }
       />
 
-      {/* Status filter */}
-      <div className="flex items-center gap-2 mb-4">
-        {['active', 'completed', 'paused', 'archived', ''].map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              statusFilter === s
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {s ? t(`goals.status${s.charAt(0).toUpperCase() + s.slice(1)}`) : t('transactions.all')}
-          </button>
-        ))}
+      <div className="mb-4">
+        <Segmented
+          value={tab}
+          onChange={setTab}
+          testIdPrefix="goals-tab"
+          options={(['active', 'completed', 'paused', 'archived', 'all'] as const).map((value) => ({
+            value,
+            label:
+              value === 'all'
+                ? t('transactions.all')
+                : t(`goals.status${value.charAt(0).toUpperCase() + value.slice(1)}`),
+          }))}
+        />
       </div>
 
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
-        <SectionHeader
-          title={t('goals.title')}
-          action={
-            canWrite ? (
-              <Button size="sm" className="gap-1.5 h-8" onClick={openCreateDialog}>
-                <Plus size={13} /> {t('goals.add')}
-              </Button>
-            ) : undefined
-          }
-        />
-        {goalsList && goalsList.length > 0 ? (
+        <SectionHeader title={t('goals.title')} />
+        {isLoading ? (
+          <ListSkeleton />
+        ) : goalsList && goalsList.length > 0 ? (
           <div className="divide-y divide-border">
             {goalsList.map((goal) => {
               const days = goal.target_date ? daysUntil(goal.target_date) : null
@@ -283,7 +278,11 @@ export default function GoalsPage() {
 
               const GoalIcon = getGoalIcon(goal.icon)
               return (
-                <div key={goal.id} className="px-4 sm:px-5 py-4 hover:bg-muted/50 transition-colors">
+                <div
+                  key={goal.id}
+                  {...clickableRow(canWrite ? () => openEditDialog(goal) : undefined)}
+                  className={`px-4 sm:px-5 py-4 hover:bg-muted/50 transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''}`}
+                >
                   <div className="flex items-start gap-4">
                     {/* Icon */}
                     <div
@@ -350,67 +349,28 @@ export default function GoalsPage() {
 
                     {/* Actions */}
                     {canWrite && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        {goal.status === 'active' && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'paused' })}
-                            title={t('goals.pause')}
-                          >
-                            <Pause size={13} />
-                          </button>
-                        )}
-                        {goal.status === 'paused' && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'active' })}
-                            title={t('goals.resume')}
-                          >
-                            <Play size={13} />
-                          </button>
-                        )}
-                        {(goal.status === 'active' || goal.status === 'paused') && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'completed' })}
-                            title={t('goals.complete')}
-                          >
-                            <CheckCircle2 size={13} />
-                          </button>
-                        )}
-                        {goal.status !== 'archived' && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-muted-foreground/80 hover:bg-muted transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'archived' })}
-                            title={t('goals.archive')}
-                          >
-                            <Archive size={13} />
-                          </button>
-                        )}
-                        {(goal.status === 'completed' || goal.status === 'archived') && (
-                          <button
-                            className="p-1.5 rounded-md text-muted-foreground hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
-                            onClick={() => statusMutation.mutate({ id: goal.id, status: 'active' })}
-                            title={t('goals.reactivate')}
-                          >
-                            <ArchiveRestore size={13} />
-                          </button>
-                        )}
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                          onClick={() => openEditDialog(goal)}
-                          title={t('common.edit')}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
-                          onClick={() => setDeletingGoal(goal)}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
+                      <RowActions
+                        label={goal.name}
+                        onEdit={() => openEditDialog(goal)}
+                        onDelete={() => setDeletingGoal(goal)}
+                        extra={[
+                          ...(goal.status === 'active'
+                            ? [{ label: t('goals.pause'), icon: Pause, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'paused' }) }]
+                            : []),
+                          ...(goal.status === 'paused'
+                            ? [{ label: t('goals.resume'), icon: Play, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'active' }) }]
+                            : []),
+                          ...(goal.status === 'active' || goal.status === 'paused'
+                            ? [{ label: t('goals.complete'), icon: CheckCircle2, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'completed' }) }]
+                            : []),
+                          ...(goal.status !== 'archived'
+                            ? [{ label: t('goals.archive'), icon: Archive, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'archived' }) }]
+                            : []),
+                          ...(goal.status === 'completed' || goal.status === 'archived'
+                            ? [{ label: t('goals.reactivate'), icon: ArchiveRestore, onSelect: () => statusMutation.mutate({ id: goal.id, status: 'active' }) }]
+                            : []),
+                        ]}
+                      />
                     )}
                   </div>
                 </div>
@@ -418,9 +378,20 @@ export default function GoalsPage() {
             })}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-10">{t('goals.empty')}</p>
+          <EmptyState
+            icon={Target}
+            title={t('goals.empty')}
+            action={
+              canWrite ? (
+                <Button onClick={openCreateDialog}>
+                  <Plus /> {t('goals.add')}
+                </Button>
+              ) : undefined
+            }
+          />
         )}
       </SectionCard>
+      )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={() => { setDialogOpen(false); setEditing(null) }}>
@@ -616,41 +587,23 @@ export default function GoalsPage() {
               </Popover>
             </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setDialogOpen(false); setEditing(null) }}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
-                {t('common.save')}
-              </Button>
-            </DialogFooter>
+            <FormDialogFooter
+              onCancel={() => { setDialogOpen(false); setEditing(null) }}
+              saveDisabled={createMutation.isPending || updateMutation.isPending}
+              onDelete={editing ? () => { setDeletingGoal(editing); setDialogOpen(false); setEditing(null) } : undefined}
+            />
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* Confirm delete dialog */}
-      <Dialog open={!!deletingGoal} onOpenChange={() => setDeletingGoal(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('goals.confirmDeleteTitle')}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {t('goals.confirmDeleteDesc', { name: deletingGoal?.name })}
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingGoal(null)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => deletingGoal && deleteMutation.mutate(deletingGoal.id)}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? t('common.loading') : t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deletingGoal}
+        title={t('goals.confirmDeleteTitle')}
+        description={t('goals.confirmDeleteDesc', { name: deletingGoal?.name })}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeletingGoal(null)}
+        onConfirm={() => deletingGoal && deleteMutation.mutate(deletingGoal.id)}
+      />
     </div>
   )
 }

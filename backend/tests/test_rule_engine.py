@@ -745,3 +745,110 @@ def test_an_empty_list_of_assignable_categories_blocks_every_categorization():
         is False
     )
     assert tx.category_id is None
+
+
+# --- mojibake: U+FFFD in the transaction text --------------------------------------
+# Production descriptions lost their accented letters to U+FFFD on the way
+# in; each one stands for exactly one letter of the rule value.
+
+_DEPOSITO = "Dep\ufffdsito de Confian\ufffda de IOF"
+_REMUNERACAO = "Taxa de Remunera\ufffd\ufffdo BTC"
+
+
+@pytest.mark.parametrize(
+    ("op", "value", "description"),
+    [
+        ("contains", "Depósito de Confiança", _DEPOSITO),
+        ("contains", "Remuneração", _REMUNERACAO),
+        ("equals", "Depósito de Confiança de IOF", _DEPOSITO),
+        ("equals", "Taxa de Remuneração BTC", _REMUNERACAO),
+        ("starts_with", "Depósito", _DEPOSITO),
+        ("ends_with", "Remuneração BTC", _REMUNERACAO),
+        # The rule may be typed without accents, too.
+        ("contains", "remuneracao", _REMUNERACAO),
+        ("regex", "Remunera..o", _REMUNERACAO),
+        ("regex", "^Dep[oó]sito de Confian[cç]a", _DEPOSITO),
+        ("regex", "remunera(ção|cao)\\s+btc", _REMUNERACAO),
+        ("regex", "(?i:dep)ósito", _DEPOSITO),
+        ("regex", "\\u0044ep\u00f3sito", _DEPOSITO),
+    ],
+)
+def test_replacement_character_matches_one_letter_of_the_rule(op, value, description):
+    conditions = [{"field": "description", "op": op, "value": value}]
+    assert evaluate_conditions("and", conditions, make_tx(description=description)) is True
+
+
+@pytest.mark.parametrize(
+    ("op", "value", "description"),
+    [
+        # One U+FFFD is one letter: "çã" needs two.
+        ("contains", "Remuneração", "Taxa de Remunera\ufffdo BTC"),
+        # Never a digit, a space or punctuation.
+        ("contains", "IOF 1", "IOF \ufffd"),
+        ("contains", "A B", "A\ufffdB"),
+        ("equals", "Depósito de Confiança", _DEPOSITO),
+        ("starts_with", "Confiança", _DEPOSITO),
+        ("regex", "Remuneração\\d", _REMUNERACAO),
+        ("regex", "Dep[0-9]sito", _DEPOSITO),
+    ],
+)
+def test_replacement_character_never_matches_more_than_a_letter(op, value, description):
+    conditions = [{"field": "description", "op": op, "value": value}]
+    assert evaluate_conditions("and", conditions, make_tx(description=description)) is False
+
+
+def test_negated_operators_see_the_replacement_character_as_a_letter():
+    tx = make_tx(description=_REMUNERACAO)
+    assert evaluate_conditions(
+        "and", [{"field": "description", "op": "not_contains", "value": "Remuneração"}], tx
+    ) is False
+    assert evaluate_conditions(
+        "and", [{"field": "description", "op": "not_equals", "value": "Taxa de Remuneração BTC"}], tx
+    ) is False
+    assert evaluate_conditions(
+        "and", [{"field": "description", "op": "not_contains", "value": "Rendimento"}], tx
+    ) is True
+
+
+def test_word_class_keeps_digits_when_the_text_has_the_replacement_character():
+    """The lenient pattern relaxes `\\w`, never narrows it: digits and `_`
+    still match it, and U+FFFD matches it too."""
+    conditions = [{"field": "description", "op": "regex", "value": r"ID\w\w Remunera(ç|c)(ã|a)o"}]
+    tx = make_tx(description="ID12 Remunera\ufffd\ufffdo")
+    assert evaluate_conditions("and", conditions, tx) is True
+    word = [{"field": "description", "op": "regex", "value": r"Dep\wsito"}]
+    assert evaluate_conditions("and", word, make_tx(description=_DEPOSITO)) is True
+
+
+@pytest.mark.parametrize("pattern", [r"IOF[\n]X", r"IOF[\t]X", r"IOF[\x41]X"])
+def test_escapes_inside_a_class_are_not_letters(pattern):
+    conditions = [{"field": "description", "op": "regex", "value": pattern}]
+    assert evaluate_conditions("and", conditions, make_tx(description="IOF\ufffdX")) is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # A U+FFFD was an accented letter: in a regex it stands only for a
+        # letter the pattern writes accented (literal, or in a class).
+        ("Remuneração", True),
+        ("Remunera[çc][ãa]o", True),
+        ("Remuneracao", False),
+        ("Remunera[a-z][a-z]o", False),
+        ("Remunera[a-zç][a-zã]o", True),
+        ("Remunera..o", True),
+        (r"Remunera\w\wo", True),
+        ("Remuneraç[a-z]o", False),
+        ("TAXA DE REMUNERA", True),
+        # Decomposed accents are accented letters too.
+        ("Remunerac\u0327a\u0303o", True),
+    ],
+)
+def test_lenient_regex_relaxes_only_accented_letters(value, expected):
+    conditions = [{"field": "description", "op": "regex", "value": value}]
+    assert evaluate_conditions("and", conditions, make_tx(description=_REMUNERACAO)) is expected
+
+
+def test_lenient_regex_ascii_letters_never_match_the_replacement_character():
+    conditions = [{"field": "description", "op": "regex", "value": "IOF"}]
+    assert evaluate_conditions("and", conditions, make_tx(description="I\ufffdF")) is False

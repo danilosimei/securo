@@ -1,6 +1,32 @@
 import axios from 'axios'
 import type { NumberFormat, DateFormat } from '@/lib/format'
 import type {
+  AcceptRequest,
+  AskRequest,
+  AskResponse,
+  ChooseRequest,
+  ChooseResult,
+  AppliedFilters,
+  AppliedPage,
+  Scoreboard,
+  SimilarAppliedResult,
+  AppliedResult,
+  CategorizationRun,
+  CategorizationSettings,
+  CategorizationSettingsUpdate,
+  CategorizationSummary,
+  CreateCategoryRequest,
+  CreateCategoryResult,
+  OrganizerApplyResult,
+  OrganizerOp,
+  OrganizerView,
+  NoteRead,
+  Provenance,
+  ReviewQueue,
+  RuleDraft,
+  SimilarResult,
+  UndoRequest,
+  UndoResult,
   User,
   AdminUser,
   AdminUserList,
@@ -509,6 +535,8 @@ export const transactions = {
     category_id?: string
     category_ids?: string[]
     payee_id?: string
+    /** Store key from Reports > Explore. */
+    merchant_key?: string
     uncategorized?: boolean
     type?: string
     status?: string
@@ -529,6 +557,8 @@ export const transactions = {
     max_amount?: number
     sort_by?: string
     sort_dir?: 'asc' | 'desc'
+    /** Comma-separated origins: ai,memory,rule,user,provider,none. */
+    category_source?: string
   }): Promise<PaginatedTransactions> => {
     const { data } = await api.get('/transactions', {
       params,
@@ -1478,6 +1508,275 @@ export const collections = {
   },
 }
 
+// Reports breakdown (Explore tab)
+export type BreakdownLevel = 'group' | 'category' | 'merchant' | 'account'
+/** What a period is compared with: the stretch right before it, the same
+ *  dates a year earlier, or a range of choice (`compare_from`/`compare_to`). */
+export type BreakdownCompare = 'previous' | 'year_ago' | 'custom'
+export type ReportPeriod =
+  | 'this_month'
+  | 'last_month'
+  | 'last_3m'
+  | 'last_6m'
+  | 'last_12m'
+  | 'ytd'
+  | 'custom'
+
+export interface BreakdownParams {
+  level: BreakdownLevel
+  period: ReportPeriod
+  /** Required by the backend when `period` is `custom` (YYYY-MM-DD). */
+  from?: string
+  to?: string
+  group_id?: string
+  /** A category uuid, 'none', or 'all' (store level: every store at once). */
+  category_id?: string
+  /** Only the movements of this account, at any level. */
+  account_id?: string
+  compare?: BreakdownCompare
+  compare_from?: string
+  compare_to?: string
+}
+
+export interface BreakdownRow {
+  /** Null on the "no group" / "no category" row. */
+  id: string | null
+  label: string
+  kind: BreakdownLevel
+  /** Decimal string; negative for refund categories. */
+  total: string
+  share: number
+  previous_total: string
+  change: number | null
+  count: number
+  /** 12 decimal strings, oldest month first. */
+  sparkline: string[]
+  /** Only on `level=category&group_id=all`: the group the category sits in. */
+  group_label?: string | null
+  /** Only on `level=merchant&category_id=all`: the category where the store
+   *  weighs most (null = no category). */
+  category_id?: string | null
+  category_label?: string | null
+}
+
+export interface BreakdownResponse {
+  period: {
+    from: string
+    to: string
+    partial: boolean
+    previous_from: string
+    previous_to: string
+  }
+  currency: string
+  total: string
+  previous_total: string | null
+  rows: BreakdownRow[]
+  unconverted_count: number
+}
+
+/** `period`, plus `from`/`to` (YYYY-MM-DD) when it is `custom`. */
+export interface ReportPeriodParams {
+  period: ReportPeriod
+  from?: string
+  to?: string
+}
+
+export type ReportPeriodInfo = BreakdownResponse['period']
+
+export type HighlightRule =
+  | 'month_pace'
+  | 'spike'
+  | 'what_changed'
+  | 'recurring_changed'
+  | 'recurring_expensive'
+  | 'small_purchases'
+  | 'heavy_group'
+  | 'frequent_spot'
+  | 'to_review'
+
+export type HighlightTone = 'alert' | 'opportunity' | 'info'
+
+/** `tab`, `period` and the filters that apply, or `path` for a page
+ *  outside Reports. */
+export type HighlightLink = Record<string, string>
+
+export interface HighlightDriver {
+  label: string
+  /** Money as a decimal string (signed where it is a change). */
+  value: string
+  link: HighlightLink | null
+}
+
+export interface HighlightAction {
+  kind: 'explore' | 'review' | 'recurring' | 'month'
+  label: string
+  link: HighlightLink
+}
+
+/** Monthly averages over the period; shares are 0..1, null without a base. */
+export interface OverviewKpis {
+  spending: string
+  income: string
+  left: string
+  left_share: number | null
+  fixed_share: number | null
+}
+
+export interface OverviewChange {
+  kind: 'group' | 'category'
+  id: string | null
+  label: string
+  change: number | null
+  delta: string
+}
+
+export interface OverviewHighlight {
+  rule: HighlightRule
+  title: string
+  /** Money as a decimal string; a plain count on `to_review`. */
+  value: string
+  compare: string
+  /** The main action's link. */
+  link: HighlightLink
+  tone: HighlightTone
+  /** 12 decimal strings, oldest month first; null when it does not apply. */
+  sparkline: string[] | null
+  /** Up to 3. On `month_pace`, always: normal by today, the projection, a
+   *  whole normal month. */
+  drivers: HighlightDriver[]
+  /** The first one is the main one. */
+  actions: HighlightAction[]
+}
+
+export interface OverviewMonth {
+  /** YYYY-MM */
+  month: string
+  spending: string
+  income: string
+  median_spending: string
+}
+
+export interface MoneyMapNode {
+  id: string | null
+  label: string
+  value: string
+}
+
+export interface MoneyMapGroup extends MoneyMapNode {
+  categories: MoneyMapNode[]
+}
+
+/** Totals of the period. `left` is negative when spending beat income. */
+export interface MoneyMap {
+  income: MoneyMapNode[]
+  groups: MoneyMapGroup[]
+  refunds: string
+  left: string
+}
+
+/** A store bought from several times a month ("O que se repete"). */
+export interface OverviewRepeat {
+  merchant: string
+  label: string
+  category_id: string | null
+  category: string
+  group_id: string | null
+  /** Purchases in the period, and in how many different months. */
+  times: number
+  months: number
+  /** Purchases per month of the period. */
+  per_month: number
+  month_total: string
+  year_total: string
+  avg_purchase: string
+  /** 12 decimal strings, oldest month first. */
+  sparkline: string[]
+}
+
+export interface OverviewRepeatCategory {
+  category_id: string
+  category: string
+  group_id: string | null
+  times: number
+  per_month: number
+  month_total: string
+}
+
+export interface OverviewResponse {
+  period: ReportPeriodInfo
+  currency?: string
+  kpis: OverviewKpis
+  /** The same numbers over the comparison period; null while the period is still open. */
+  kpis_previous?: OverviewKpis | null
+  /** Rows in another currency with no rate, left out of every total. */
+  unconverted_count?: number
+  changes: OverviewChange[]
+  highlights: OverviewHighlight[]
+  /** Up to 8 stores, biggest spending per month first. */
+  repeats?: OverviewRepeat[]
+  /** Up to 3 categories, bought from most often first. */
+  repeat_categories?: OverviewRepeatCategory[]
+  monthly: OverviewMonth[]
+  money_map: MoneyMap
+}
+
+export type RecurringStatus = 'new' | 'up' | 'stopped' | 'steady'
+
+export interface RecurringRow {
+  merchant_key: string
+  label: string
+  /** Category name. */
+  category: string
+  /** Most common category of the charges; null = uncategorized. */
+  category_id: string | null
+  amount_month: string
+  amount_year: string
+  status: RecurringStatus
+  last_date: string
+  months_seen: number
+  /** The day the person marked it as over ("Já acabou"); null otherwise. */
+  ended_on?: string | null
+}
+
+export interface HabitsMerchant {
+  /** Store key. */
+  id: string
+  /** Most common category of the store; null when uncategorized. */
+  category_id: string | null
+  label: string
+  count: number
+  per_month: number
+  avg_ticket: string
+  total: string
+  /** Category name. */
+  category: string
+}
+
+export interface HabitsWeekday {
+  /** 0 = Monday … 6 = Sunday. */
+  weekday: number
+  label: string
+  total: string
+  count: number
+}
+
+export interface HabitsBand {
+  label: string
+  min: string
+  /** Null on the open-ended last band. */
+  max: string | null
+  count: number
+  total: string
+}
+
+export interface HabitsResponse {
+  period: ReportPeriodInfo
+  merchants: HabitsMerchant[]
+  weekdays: HabitsWeekday[]
+  bands: HabitsBand[]
+  days: { date: string; total: string }[]
+}
+
 // Reports
 export const reports = {
   netWorth: async (
@@ -1485,7 +1784,7 @@ export const reports = {
     interval = 'monthly',
     accountIds?: string[],
     assetGroupIds?: string[],
-    period?: 'ytd',
+    period?: string,
     startDate?: string,
     endDate?: string,
   ): Promise<ReportResponse> => {
@@ -1501,33 +1800,34 @@ export const reports = {
     })
     return data
   },
-  // `days` requests an exact rolling window ending today, instead of the
-  // month-aligned window `months` produces. `startDate`/`endDate` (both
-  // required together) pin the window to an explicit calendar range and
-  // override the preset selectors on the backend.
-  incomeExpenses: async (
-    months = 12,
-    interval = 'monthly',
-    accountIds?: string[],
-    period?: 'ytd',
-    days?: number,
-    startDate?: string,
-    endDate?: string,
-  ): Promise<ReportResponse> => {
-    const extra = acctIdsParam(accountIds)
-    const { data } = await api.get('/reports/income-expenses', {
-      params: {
-        months, interval, period, days,
-        ...(startDate && endDate ? { start_date: startDate, end_date: endDate } : {}),
-        ...(extra.params ?? {}),
-      },
-      ...(extra.paramsSerializer ? { paramsSerializer: extra.paramsSerializer } : {}),
-    })
-    return data
-  },
   cashFlow: async (months = 6, interval = 'daily', baseline = false, accountIds?: string[]): Promise<ReportResponse> => {
     const extra = acctIdsParam(accountIds)
     const { data } = await api.get('/reports/cash-flow', { params: { months, interval, baseline, ...(extra.params ?? {}) }, ...(extra.paramsSerializer ? { paramsSerializer: extra.paramsSerializer } : {}) })
+    return data
+  },
+  breakdown: async (params: BreakdownParams): Promise<BreakdownResponse> => {
+    const { data } = await api.get('/reports/breakdown', { params })
+    return data
+  },
+  overview: async (params: ReportPeriodParams): Promise<OverviewResponse> => {
+    const { data } = await api.get('/reports/overview', { params })
+    return data
+  },
+  recurring: async (params: ReportPeriodParams): Promise<RecurringRow[]> => {
+    const { data } = await api.get('/reports/recurring', { params })
+    return data
+  },
+  habits: async (params: ReportPeriodParams): Promise<HabitsResponse> => {
+    const { data } = await api.get('/reports/habits', { params })
+    return data
+  },
+  /** Mark a fixed cost as over today (or undo it). */
+  endRecurring: async (merchantKey: string): Promise<{ merchant_key: string; ended_on: string | null }> => {
+    const { data } = await api.post(`/reports/recurring/${encodeURIComponent(merchantKey)}/end`)
+    return data
+  },
+  undoEndRecurring: async (merchantKey: string): Promise<{ merchant_key: string; ended_on: string | null }> => {
+    const { data } = await api.delete(`/reports/recurring/${encodeURIComponent(merchantKey)}/end`)
     return data
   },
 }
@@ -2279,4 +2579,141 @@ export const publicInvoices = {
     return data
   },
   pdfUrl: (token: string): string => `/api/public/invoices/${token}/pdf`,
+}
+
+// Automatic categorization: review queue, audit list, undo, settings, runs.
+// Nothing here calls the model but `ask`; runs are queued for the worker.
+export const categorization = {
+  summary: async (): Promise<CategorizationSummary> => {
+    const { data } = await api.get('/categorization/summary')
+    return data
+  },
+  review: async (params: { limit?: number; offset?: number } = {}): Promise<ReviewQueue> => {
+    const { data } = await api.get('/categorization/review', { params })
+    return data
+  },
+  accept: async (payload: AcceptRequest): Promise<AppliedResult> => {
+    const { data } = await api.post('/categorization/review/accept', payload)
+    return data
+  },
+  /** `keepalive`: sent through fetch so it outlives a closing tab (the
+   *  interceptors still add the auth and workspace headers). */
+  dismiss: async (
+    merchantKey: string,
+    { keepalive = false }: { keepalive?: boolean } = {},
+  ): Promise<{ dismissed: number }> => {
+    const { data } = await api.post(
+      '/categorization/review/dismiss',
+      { merchant_key: merchantKey },
+      keepalive ? { adapter: 'fetch', fetchOptions: { keepalive: true } } : undefined,
+    )
+    return data
+  },
+  createCategory: async (payload: CreateCategoryRequest): Promise<CreateCategoryResult> => {
+    const { data } = await api.post('/categorization/review/create-category', payload)
+    return data
+  },
+  /** Choose an existing category or create one (and its group) for a store. */
+  choose: async (payload: ChooseRequest): Promise<ChooseResult> => {
+    const { data } = await api.post('/categorization/choose', payload)
+    return data
+  },
+  /** One message of the conversation about a store (the one route that
+   *  calls the model while the person waits). Errors carry `detail.code`. */
+  ask: async (payload: AskRequest): Promise<AskResponse> => {
+    const { data } = await api.post('/categorization/ask', payload)
+    return data
+  },
+  applied: async (filters: AppliedFilters = {}): Promise<AppliedPage> => {
+    const { data } = await api.get('/categorization/applied', { params: filters })
+    return data
+  },
+  /** How far categorization got: query key `['categorization', 'scoreboard']`. */
+  scoreboard: async (): Promise<Scoreboard> => {
+    const { data } = await api.get('/categorization/scoreboard')
+    return data
+  },
+  undo: async (payload: UndoRequest): Promise<UndoResult> => {
+    const { data } = await api.post('/categorization/undo', payload)
+    return data
+  },
+  provenance: async (txId: string): Promise<Provenance> => {
+    const { data } = await api.get(`/categorization/transactions/${txId}/provenance`)
+    return data
+  },
+  setNote: async (payload: NoteRead): Promise<NoteRead> => {
+    const { data } = await api.put('/categorization/notes', payload)
+    return data
+  },
+  /** The store's other rows with a different category. `excludeRule`
+   *  (the Categorization section) also leaves out the rows a rule filed. */
+  similar: async (
+    transactionId: string,
+    opts: { excludeRule?: boolean } = {},
+  ): Promise<SimilarResult> => {
+    const { data } = await api.post('/categorization/similar', {
+      transaction_id: transactionId,
+      exclude_rule: opts.excludeRule ?? false,
+    })
+    return data
+  },
+  /** With `transactionIds`, exactly those rows (the ones the person was shown). */
+  applySimilar: async (
+    transactionId: string,
+    opts: { excludeRule?: boolean; transactionIds?: string[] } = {},
+  ): Promise<SimilarAppliedResult> => {
+    const { data } = await api.post('/categorization/similar/apply', {
+      transaction_id: transactionId,
+      exclude_rule: opts.excludeRule ?? false,
+      ...(opts.transactionIds ? { transaction_ids: opts.transactionIds } : {}),
+    })
+    return data
+  },
+  ruleDraft: async (txId: string): Promise<RuleDraft> => {
+    const { data } = await api.get(`/categorization/rule-draft/${txId}`)
+    return data
+  },
+  getSettings: async (): Promise<CategorizationSettings> => {
+    const { data } = await api.get('/categorization/settings')
+    return data
+  },
+  updateSettings: async (payload: CategorizationSettingsUpdate): Promise<CategorizationSettings> => {
+    const { data } = await api.put('/categorization/settings', payload)
+    return data
+  },
+  /** 202 with the new run, 200 with the run already busy, 503 when the queue is down. */
+  run: async (payload: { scope: 'backlog' } = { scope: 'backlog' }): Promise<CategorizationRun> => {
+    const { data } = await api.post('/categorization/run', payload)
+    return data
+  },
+  /** The latest organize run with its proposed ops. */
+  organizer: async (): Promise<OrganizerView> => {
+    const { data } = await api.get('/categorization/organizer')
+    return data
+  },
+  /** 202 with the new run, 200 with the run already busy, 503 when the queue is down. */
+  runOrganizer: async (): Promise<CategorizationRun> => {
+    const { data } = await api.post('/categorization/organizer/run')
+    return data
+  },
+  /** 409 when the tree changed since the proposal (the detail says why). */
+  applyOrganizerOp: async (opId: string, runId?: string): Promise<OrganizerApplyResult> => {
+    const { data } = await api.post(`/categorization/organizer/ops/${encodeURIComponent(opId)}/apply`, null, {
+      params: runId ? { run_id: runId } : undefined,
+    })
+    return data
+  },
+  rejectOrganizerOp: async (opId: string, runId?: string): Promise<OrganizerOp> => {
+    const { data } = await api.post(`/categorization/organizer/ops/${encodeURIComponent(opId)}/reject`, null, {
+      params: runId ? { run_id: runId } : undefined,
+    })
+    return data
+  },
+  /** Queue again a split's redistribution that failed. */
+  retryOrganizerOp: async (opId: string, runId?: string): Promise<OrganizerApplyResult> => {
+    const { data } = await api.post(`/categorization/organizer/ops/${encodeURIComponent(opId)}/retry`, null, {
+      params: runId ? { run_id: runId } : undefined,
+    })
+    return data
+  },
 }

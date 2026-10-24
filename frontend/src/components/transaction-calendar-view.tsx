@@ -6,6 +6,7 @@ import type { Account, TransactionCalendarDay, TransactionCalendarItem, Transact
 import { Skeleton } from '@/components/ui/skeleton'
 import { AccountIcon } from '@/components/account-icon'
 import { CategoryIcon } from '@/components/category-icon'
+import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
 import { ProjectedTransactionBadge } from '@/components/projected-transaction-badge'
 import { getAccountName } from '@/lib/account-utils'
 import { activityChartData, dayActivity, isCalendarItemInteractive } from '@/lib/calendar-activity'
@@ -1260,6 +1261,13 @@ function CalendarItemRow({
               <Clock size={12} className="text-amber-500" role="img" aria-label={t('transactions.pending')} />
             </span>
           )}
+          {/* The row is a button: the seal cannot be a link inside it. */}
+          <CategorizationOriginBadge
+            source={item.category_source ?? undefined}
+            pending={!!item.categorization_pending}
+            compact
+            link={false}
+          />
         </div>
         {(account || item.account_name) && (
           <div className="flex items-center gap-1.5 mt-0.5">

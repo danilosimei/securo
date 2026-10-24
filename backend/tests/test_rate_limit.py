@@ -134,3 +134,43 @@ async def test_totp_verify_rate_limit(client: AsyncClient):
     )
     assert response.status_code == 429
     assert "Retry-After" in response.headers
+
+
+async def test_ask_rate_limit_per_workspace(
+    client: AsyncClient, auth_headers, test_workspace, monkeypatch, _override_redis_with_counter
+):
+    """20 messages a minute per workspace: the 21st is 429, counted under the workspace."""
+    from app.services.categorization import ask
+
+    async def fake_ask(session, workspace_id, **kwargs):
+        return ask.AskAnswer(
+            reply="Ok.", suggestion=None, note=None,
+            assistant_turn='{"reply":"Ok.","suggestion":null,"note":null}',
+            person_messages_left=29,
+        )
+
+    monkeypatch.setattr(ask, "ask", fake_ask)
+    body = {"merchant_key": "PADARIA", "messages": [{"role": "user", "content": "oi"}]}
+    for i in range(20):
+        response = await client.post("/api/categorization/ask", headers=auth_headers, json=body)
+        assert response.status_code == 200, f"Request {i + 1} got {response.status_code}"
+
+    response = await client.post("/api/categorization/ask", headers=auth_headers, json=body)
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "rate_limited"
+    assert "Retry-After" in response.headers
+    keys = [key for key in _override_redis_with_counter if "categorization-ask" in key]
+    assert keys == [f"rate_limit:categorization-ask:{test_workspace.id}"]
+    assert _override_redis_with_counter[keys[0]] == 21
+
+
+async def test_ask_body_errors_spend_no_rate_limit_slot(
+    client: AsyncClient, auth_headers, test_workspace, _override_redis_with_counter
+):
+    """A request FastAPI rejects (422) never reached the model: it must not
+    count against the workspace's messages a minute."""
+    bad = {"merchant_key": "PADARIA", "messages": []}
+    for _ in range(25):
+        response = await client.post("/api/categorization/ask", headers=auth_headers, json=bad)
+        assert response.status_code == 422
+    assert not [key for key in _override_redis_with_counter if "categorization-ask" in key]

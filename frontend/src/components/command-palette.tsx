@@ -32,6 +32,7 @@ import {
   ArrowUpRight,
   Zap,
   Compass,
+  Sparkles,
 } from 'lucide-react'
 
 import { search as searchApi, type SearchHit, type SearchHitType } from '@/lib/api'
@@ -57,6 +58,7 @@ type StaticItem = {
 const NAV_ITEMS: StaticItem[] = [
   { id: 'nav-dashboard', labelKey: 'nav.dashboard', icon: LayoutDashboard, path: '/', keywords: ['home', 'inicio', 'início'] },
   { id: 'nav-transactions', labelKey: 'nav.transactions', icon: ArrowLeftRight, path: '/transactions', keywords: ['tx', 'transacoes', 'transações'], module: 'transactions' },
+  { id: 'nav-categorization', labelKey: 'nav.categorization', icon: Sparkles, path: '/categorization', keywords: ['categorizar', 'revisar', 'ia', 'ai', 'categorize', 'review'], module: 'categories' },
   { id: 'nav-invoices', labelKey: 'nav.invoices', icon: Receipt, path: '/invoices', keywords: ['cobrancas', 'cobranças', 'faturas', 'clientes', 'recebimentos'], module: 'invoices' },
   { id: 'nav-accounts', labelKey: 'nav.accounts', icon: Building2, path: '/accounts', keywords: ['contas'], module: 'accounts' },
   { id: 'nav-import', labelKey: 'nav.import', icon: Upload, path: '/import', keywords: ['csv', 'ofx', 'importar'], module: 'import' },

@@ -5,7 +5,7 @@ import re
 import uuid
 import warnings
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from bs4 import XMLParsedAsHTMLWarning
@@ -23,6 +23,12 @@ from app.schemas.transaction import TransactionImport, FailedRow
 from app.services import reconciliation_service, recurring_match_service
 from app.services.credit_card_service import apply_effective_date
 from app.services.category_service import get_assignable_category_ids
+from app.services.categorization.events import (
+    StagedChange,
+    is_protected,
+    stage_change,
+    write_staged,
+)
 from app.services.rule_engine import apply_rule_actions, evaluate_conditions, merge_notes
 from app.services.rule_service import apply_rules_to_transaction, preview_rules_for_transaction
 from app.services.fx_rate_service import stamp_primary_amount
@@ -868,6 +874,29 @@ async def import_transactions(
     imported = 0
     landed: list[Transaction] = []
     skipped = 0
+    # Category changes of the whole import; their events go in one batch.
+    staged: list[StagedChange] = []
+
+    def _stage(
+        tx: Transaction, new_category_id: uuid.UUID, category_source: str
+    ) -> None:
+        change = stage_change(
+            tx, source=category_source, new_category_id=new_category_id,
+            user_id=user_id if category_source == "user" else None,
+        )
+        if change is not None:
+            staged.append(change)
+
+    def _leave_uncategorized(tx: Transaction) -> None:
+        # "Leave uncategorized" is the person's choice (R27): noted as their
+        # clear, so the pipeline only ever suggests a category. No category
+        # changes, so `stage_change` would note nothing.
+        staged.append(StagedChange(
+            tx=tx, source="none", previous_category_id=None,
+            previous_source=tx.category_source or "none", new_category_id=None,
+            created_at=datetime.now(timezone.utc), user_id=user_id,
+        ))
+        tx.category_source = "none"
     matched_existing_ids: set[uuid.UUID] = set()
     effective_format = (detected_format or source or "").lower()
     should_detect_duplicates = detect_duplicates if effective_format == "csv" else True
@@ -949,6 +978,14 @@ async def import_transactions(
             if txn_data.force_uncategorized
             else user_category_id or suggested_category_id
         )
+        # Who chose it: the person in the review table, or the preview's
+        # suggestion (the CSV's own column, or a rule).
+        if user_category_id:
+            category_source = "user"
+        elif suggested_category_id and suggested_category_id == csv_category_id:
+            category_source = "import"
+        else:
+            category_source = "rule"
 
         incoming = Transaction(
             user_id=user_id,
@@ -976,8 +1013,14 @@ async def import_transactions(
             incoming,
             skip_category_rules=txn_data.force_uncategorized,
         )
-        if preview.category_id is None and not txn_data.force_uncategorized:
-            preview.category_id = csv_category_id
+        if category_id is not None:
+            preview_source = category_source
+        elif preview.category_id is not None:
+            preview_source = "rule"
+        else:
+            preview_source = "import"
+            if not txn_data.force_uncategorized:
+                preview.category_id = csv_category_id
 
         # Normalize a detached candidate before either recurring match. If a
         # generated placeholder already represents this occurrence, upgrade it
@@ -1004,8 +1047,14 @@ async def import_transactions(
             # wins, the charge only fills what is still empty, and only its
             # provenance is recorded outright.
             placeholder.original_description = txn_data.description
-            if placeholder.category_id is None:
-                placeholder.category_id = preview.category_id
+            if (
+                placeholder.category_id is None
+                and preview.category_id is not None
+                and (preview_source == "user" or not is_protected(placeholder))
+            ):
+                _stage(placeholder, preview.category_id, preview_source)
+            elif placeholder.category_id is None and txn_data.force_uncategorized:
+                _leave_uncategorized(placeholder)
             if import_payee_raw and not placeholder.payee:
                 placeholder.payee = import_payee_raw
             if placeholder.payee_id is None:
@@ -1033,8 +1082,15 @@ async def import_transactions(
             incoming.fx_rate_used = txn_data.fx_rate
             incoming.amount_primary = txn_data.amount * txn_data.fx_rate
 
+        # The chosen category is written through provenance once the row has
+        # an id; until then it only had to steer the rule preview above.
+        incoming.category_id = None
         session.add(incoming)
         await session.flush()
+        if category_id is not None:
+            _stage(incoming, category_id, category_source)
+        elif txn_data.force_uncategorized:
+            _leave_uncategorized(incoming)
         if should_detect_duplicates and not txn_data.external_id:
             matched_existing_ids.add(incoming.id)
         if recurring_link is not None:
@@ -1045,9 +1101,14 @@ async def import_transactions(
             user_id,
             incoming,
             skip_category_rules=txn_data.force_uncategorized,
+            staged=staged,
         )
-        if incoming.category_id is None and not txn_data.force_uncategorized:
-            incoming.category_id = csv_category_id
+        if (
+            incoming.category_id is None
+            and csv_category_id is not None
+            and not txn_data.force_uncategorized
+        ):
+            _stage(incoming, csv_category_id, "import")
 
         if not txn_data.fx_rate:
             await stamp_primary_amount(session, user_id, incoming)
@@ -1057,6 +1118,7 @@ async def import_transactions(
 
     # Update import log with actual imported count
     import_log.transaction_count = imported
+    await write_staged(session, staged)
 
     # Invoices last, and as one batch. Unlike the recurring match above:
     # which upgrades a placeholder in place and so must happen before the
@@ -1065,6 +1127,11 @@ async def import_transactions(
     await reconciliation_service.match_incoming(session, workspace_id, landed)
 
     await session.commit()
+    if imported:
+        # Categorize what just landed, off the request; never raises.
+        from app.tasks.categorization_tasks import enqueue_categorization
+
+        enqueue_categorization(workspace_id, "ingest")
     return imported, skipped, excluded_count, import_log.id
 
 # Currency symbols and ISO codes around a number ("R$", "$", "NGN ", " EUR").

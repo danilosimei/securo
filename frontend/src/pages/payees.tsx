@@ -1,4 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { Pagination } from '@/components/ui/pagination'
+import { SectionCard } from '@/components/ui/section-card'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { useQuery, useMutation, useQueryClient, type Query } from '@tanstack/react-query'
@@ -12,7 +17,6 @@ import { fiscal as fiscalApi, type PayeeWritePayload } from '@/lib/api'
 import { applyMask, formatTaxId } from '@/lib/tax-id'
 import { TaxIdKindPicker } from '@/components/tax-id-kind-picker'
 import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -42,17 +46,13 @@ import {
   DropdownMenuPortal,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { SearchBar } from '@/components/ui/search-bar'
+import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { PageHeader } from '@/components/page-header'
 import { calculateRangeSelection } from '@/lib/selection-utils'
 import { PayeeDetailDialog } from '@/components/payee-detail-dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Search, Star, Merge, Trash2, ListFilter, X, Check, Pencil, Plus, ArrowDown, ArrowUp } from 'lucide-react'
+import { Star, Merge, Trash2, ListFilter, X, Check, Plus, ArrowDown, ArrowUp, Users } from 'lucide-react'
 import { useWorkspace } from '@/contexts/workspace-context'
 import type { Payee } from '@/types'
 import { payeeErrorMessage } from '@/lib/payee-error-message'
@@ -217,7 +217,7 @@ export default function PayeesPage() {
   const localKinds = allKinds.filter((k) => k.offered)
   const usedKinds = new Set(taxIdRows.map((r) => r.kind))
 
-  const { data: payeesList, isLoading } = useQuery({
+  const { data: payeesList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['payees', searchQuery, filterType, filterFavorites],
     queryFn: () => payeesApi.list({
       q: searchQuery || undefined,
@@ -461,7 +461,7 @@ export default function PayeesPage() {
   return (
     <div>
       <PageHeader
-        section={t('payees.section')}
+        section={t('nav.groupOrganization')}
         title={t('payees.title')}
         action={
           canWrite ? (
@@ -481,9 +481,9 @@ export default function PayeesPage() {
                   </Button>
                 </>
               )}
-              <Button size="sm" className="h-8 gap-1.5" onClick={openCreate}>
-                <Plus size={13} />
-                <span>{t('payees.add')}</span>
+              <Button onClick={openCreate}>
+                <Plus />
+                {t('payees.add')}
               </Button>
             </div>
           ) : undefined
@@ -491,26 +491,52 @@ export default function PayeesPage() {
       />
 
       {/* Search & Filters */}
-      <div
-        className={cn(
-          'group/filterbar rounded-xl border border-border bg-card shadow-sm transition-colors mb-4',
-          'focus-within:border-primary/40 focus-within:ring-[3px] focus-within:ring-primary/10',
-        )}
-      >
-        {/* Top row: search input + controls */}
-        <div className="flex items-center gap-1.5 px-2 py-1.5">
-          <div className="relative flex min-w-0 flex-1 items-center gap-1 px-2.5 py-1 min-h-9">
-            <Search size={15} className="pointer-events-none shrink-0 text-muted-foreground/70" />
-            <input
-              type="text"
-              placeholder={t('payees.searchPlaceholder')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 bg-transparent px-1.5 text-[13.5px] outline-none placeholder:text-muted-foreground/75"
-            />
-          </div>
+      <SearchBar
+        className="mb-4"
+        value={search}
+        onChange={(value) => { setSearch(value); if (!value) setSearchQuery('') }}
+        placeholder={t('payees.searchPlaceholder')}
+        footer={
+          filterType || filterFavorites ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+            {filterType && (
+              <button
+                type="button"
+                onClick={() => setFilterType('')}
+                className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 pl-2 pr-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
+              >
+                <span className="flex items-center text-muted-foreground group-hover:text-destructive">
+                  <ListFilter size={12} />
+                </span>
+                <span className="text-muted-foreground">{t('payees.type')}:</span>
+                <span className="max-w-[140px] truncate font-medium text-foreground">
+                  {typeLabels[filterType]}
+                </span>
+                <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
+                  <X size={11} />
+                </span>
+              </button>
+            )}
 
-          <div className="ml-auto flex shrink-0 items-center gap-1 pl-1">
+            {filterFavorites && (
+              <button
+                type="button"
+                onClick={() => setFilterFavorites(false)}
+                className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 pl-2 pr-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
+              >
+                <span className="flex items-center text-amber-400 group-hover:text-destructive">
+                  <Star size={12} className="fill-amber-400" />
+                </span>
+                <span className="text-muted-foreground">{t('payees.favoritesOnly')}</span>
+                <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
+                  <X size={11} />
+                </span>
+              </button>
+            )}
+            </div>
+          ) : undefined
+        }
+      >
             {(search || filterType || filterFavorites) && (
               <button
                 type="button"
@@ -608,58 +634,15 @@ export default function PayeesPage() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-        </div>
-
-        {/* Bottom row: active filter chips */}
-        {(filterType || filterFavorites) && (
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 px-2 py-1.5">
-            {filterType && (
-              <button
-                type="button"
-                onClick={() => setFilterType('')}
-                className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 pl-2 pr-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
-              >
-                <span className="flex items-center text-muted-foreground group-hover:text-destructive">
-                  <ListFilter size={12} />
-                </span>
-                <span className="text-muted-foreground">{t('payees.type')}:</span>
-                <span className="max-w-[140px] truncate font-medium text-foreground">
-                  {typeLabels[filterType]}
-                </span>
-                <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
-                  <X size={11} />
-                </span>
-              </button>
-            )}
-
-            {filterFavorites && (
-              <button
-                type="button"
-                onClick={() => setFilterFavorites(false)}
-                className="group inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/80 bg-muted/50 pl-2 pr-1.5 text-[11.5px] text-foreground transition-colors hover:border-destructive/40 hover:bg-destructive/5"
-              >
-                <span className="flex items-center text-amber-400 group-hover:text-destructive">
-                  <Star size={12} className="fill-amber-400" />
-                </span>
-                <span className="text-muted-foreground">{t('payees.favoritesOnly')}</span>
-                <span className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground/70 group-hover:text-destructive">
-                  <X size={11} />
-                </span>
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      </SearchBar>
 
       {/* Table */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
+      <SectionCard className="mb-4">
         {isLoading ? (
-          <div className="p-6 space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
+          <ListSkeleton rows={5} />
         ) : (
           <>
           <Table>
@@ -726,12 +709,10 @@ export default function PayeesPage() {
               {pageItems.map((payee) => (
                 <TableRow
                   key={payee.id}
-                  className={`cursor-pointer hover:bg-muted border-b border-border last:border-0 ${
+                  {...clickableRow(() => setSummaryPayee(summaryPayee === payee.id ? null : payee.id), { inTable: true })}
+                  className={`${CLICKABLE_ROW_CLASS} hover:bg-muted border-b border-border last:border-0 ${
                     summaryPayee === payee.id ? 'bg-muted/80 font-medium' : selectedIds.has(payee.id) ? 'bg-primary/5' : ''
                   }`}
-                  onClick={() => {
-                    setSummaryPayee(summaryPayee === payee.id ? null : payee.id)
-                  }}
                 >
                   {canWrite && (
                     <TableCell className="py-2.5 pl-4 pr-0 w-[40px]">
@@ -785,95 +766,48 @@ export default function PayeesPage() {
                   </TableCell>
                   {canWrite && (
                     <TableCell className="py-2.5 pr-4 sm:pr-5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                          onClick={(e) => { e.stopPropagation(); openEdit(payee) }}
-                          title={t('common.edit')}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
+                      <div className="flex items-center justify-end">
+                        <RowActions
+                          label={payee.name}
+                          onEdit={() => openEdit(payee)}
+                          onDelete={() => {
                             setPayeesToDelete([payee.id])
                             setDeleteDialogOpen(true)
                           }}
-                          disabled={deleteMutation.isPending || bulkDeleteMutation.isPending}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                          deleteDisabled={deleteMutation.isPending || bulkDeleteMutation.isPending}
+                        />
                       </div>
                     </TableCell>
                   )}
                 </TableRow>
               ))}
-              {sortedPayees.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={canWrite ? 6 : 4} className="text-center py-16 text-muted-foreground">
-                    {t('payees.empty')}
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
-
-          {/* Pagination. Inside the card so the strip reads as part of the
-              table rather than as loose controls under it. */}
-          {sortedPayees.length > 10 && (
-            <div className="px-5 py-3 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-              {totalPages > 1 ? (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={safePage <= 1}
-                    onClick={() => setPage(safePage - 1)}
-                  >
-                    {t('common.previous')}
+          {sortedPayees.length === 0 && (
+            <EmptyState
+              icon={Users}
+              title={t('payees.empty')}
+              action={
+                canWrite ? (
+                  <Button onClick={openCreate}>
+                    <Plus /> {t('payees.add')}
                   </Button>
-                  <span className="text-sm text-muted-foreground tabular-nums">
-                    {safePage} / {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={safePage >= totalPages}
-                    onClick={() => setPage(safePage + 1)}
-                  >
-                    {t('common.next')}
-                  </Button>
-                </div>
-              ) : (
-                <div className="hidden sm:block" />
-              )}
-
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">{t('common.rowsPerPage')}</span>
-                <Select
-                  value={String(pageSize)}
-                  onValueChange={(value) => {
-                    setPageSize(Number(value))
-                    setPage(1)
-                  }}
-                >
-                  <SelectTrigger className="w-[70px] h-8 text-xs">
-                    <SelectValue placeholder={pageSize} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAGE_SIZES.map((value) => (
-                      <SelectItem key={value} value={String(value)}>{value}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                ) : undefined
+              }
+            />
           )}
+
+          <Pagination
+            page={safePage}
+            pageSize={pageSize}
+            total={sortedPayees.length}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
           </>
         )}
-      </div>
+      </SectionCard>
+      )}
 
       {/* Payee detail. Edit and Delete open on top of it rather than replacing
           it, so cancelling either lands back on the payee instead of the
@@ -895,7 +829,7 @@ export default function PayeesPage() {
             jurisdiction's worth of document fields this form is taller than a
             laptop viewport, and a Save button below the fold is a Save button
             nobody can reach. Mirrors transaction-dialog. */}
-        <DialogContent className="sm:max-w-md flex flex-col max-h-[calc(100dvh-2rem)]">
+        <DialogContent size="sm" className="flex flex-col">
           <DialogHeader>
             <DialogTitle>{editingPayee ? t('payees.edit') : t('payees.add')}</DialogTitle>
           </DialogHeader>
@@ -1067,7 +1001,7 @@ export default function PayeesPage() {
 
       {/* Merge Dialog */}
       <Dialog open={mergeDialogOpen} onOpenChange={setMergeDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('payees.mergeTitle')}</DialogTitle>
           </DialogHeader>
@@ -1115,7 +1049,7 @@ export default function PayeesPage() {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {payeesToDelete.length > 1 ? t('payees.deleteMultipleTitle') : t('payees.deleteTitle')}

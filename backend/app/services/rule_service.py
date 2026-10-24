@@ -3,6 +3,7 @@ import uuid
 from typing import Any, Optional, cast
 
 from sqlalchemy import delete, select
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
@@ -25,6 +26,13 @@ from app.services.category_defaults import (
     DEFAULT_GROUPS,
     localized_name,
     name_variants,
+)
+from app.services.categorization.events import (
+    StagedChange,
+    is_protected,
+    record_change,
+    stage_change,
+    write_staged,
 )
 from app.services.category_service import get_assignable_category_ids
 from app.services.rule_engine import (
@@ -794,6 +802,7 @@ async def _ensure_categories_for_keys(
             is_system=True,
             group_id=target_group.id if target_group else None,
             treat_as_transfer=data.get("treat_as_transfer", False),
+            report_kind="income" if CATEGORY_TO_GROUP.get(key) == "income" else "normal",
         )
         session.add(cat)
     await session.commit()
@@ -1117,6 +1126,7 @@ _PREVIEW_COLUMNS = (
     Transaction.workspace_id,
     Transaction.account_id,
     Transaction.category_id,
+    Transaction.category_source,
     Transaction.description,
     Transaction.original_description,
     Transaction.description_is_rule_managed,
@@ -1140,6 +1150,8 @@ def _rule_preview(transaction: Transaction) -> Transaction:
         workspace_id=transaction.workspace_id,
         account_id=transaction.account_id,
         category_id=transaction.category_id,
+        # Carried so a preview honours the same protection the real run does.
+        category_source=transaction.category_source,
         description=transaction.description,
         original_description=transaction.original_description,
         description_is_rule_managed=bool(transaction.description_is_rule_managed),
@@ -1170,6 +1182,35 @@ def _has_manual_description(transaction: Transaction) -> bool:
     )
 
 
+async def _record_rule_category(
+    session: AsyncSession,
+    tx: Transaction,
+    previous_category_id: Optional[uuid.UUID],
+    source: str = "rule",
+    staged: Optional[list[StagedChange]] = None,
+) -> None:
+    """Route the category `apply_rule_actions` wrote in place through provenance.
+
+    The engine sets `tx.category_id` directly; this puts the previous value
+    back and lets the events service apply the new one, so the origin and
+    the event are written together: right away, or, with `staged`, queued
+    for the caller's single `write_staged` at the end of its loop. A row
+    outside the session (a rule preview) has no history: it only gets the
+    origin stamped, for callers that fold the preview into a real row.
+    """
+    new_category_id = tx.category_id
+    if not sa_inspect(tx).persistent:
+        tx.category_source = source
+        return
+    tx.category_id = previous_category_id
+    if staged is None:
+        await record_change(session, tx, source=source, new_category_id=new_category_id)
+        return
+    change = stage_change(tx, source=source, new_category_id=new_category_id)
+    if change is not None:
+        staged.append(change)
+
+
 async def preview_rules_for_transaction(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -1190,8 +1231,12 @@ async def preview_rules_for_transaction(
 async def apply_rules_to_transaction(
     session: AsyncSession, user_id: uuid.UUID, transaction: Transaction,
     skip_category_rules: bool = False,
+    staged: Optional[list[StagedChange]] = None,
 ) -> None:
     """Apply all active rules to a transaction, modifying it in-place. Commits nothing.
+
+    A category a rule sets is noted as a categorization event; with `staged`
+    the event is queued there for the caller to write in one batch.
 
     `user_id` is kept for backwards-compatibility with sync/import callers that
     haven't been migrated to pass workspace_id directly; rules are scoped by
@@ -1208,7 +1253,12 @@ async def apply_rules_to_transaction(
     )
     rules = result.scalars().all()
 
-    category_set = transaction.category_id is not None or skip_category_rules
+    previous_category_id = transaction.category_id
+    category_set = (
+        transaction.category_id is not None
+        or skip_category_rules
+        or is_protected(transaction)
+    )
     # None means "do not filter": a transaction with no workspace at hand
     # has no category list to check against.
     assignable_categories = (
@@ -1227,6 +1277,10 @@ async def apply_rules_to_transaction(
                 category_set,
                 assignable_category_ids=assignable_categories,
             )
+    if transaction.category_id != previous_category_id:
+        await _record_rule_category(
+            session, transaction, previous_category_id, staged=staged
+        )
 
 
 def _rule_effect_state(tx: Transaction) -> tuple:
@@ -1333,8 +1387,9 @@ async def preview_rule(
             apply_rule_actions(
                 action_dicts,
                 draft,
-                category_already_set=tx.category_id is not None
-                and not overwrite_existing_categories,
+                # Same protection as `apply_single_rule`.
+                category_already_set=is_protected(tx)
+                or (tx.category_id is not None and not overwrite_existing_categories),
                 skip_description=_has_manual_description(tx),
                 assignable_category_ids=assignable_categories,
             )
@@ -1401,6 +1456,7 @@ async def apply_single_rule(
 
     assignable_categories = await get_assignable_category_ids(session, workspace_id)
     count = 0
+    staged: list[StagedChange] = []
     for tx in transactions:
         matches = evaluate_conditions(rule.conditions_op, conditions, tx)
         if not matches and tx.original_description is not None:
@@ -1421,14 +1477,19 @@ async def apply_single_rule(
             tx.notes,
             tx.is_ignored,
         )
+        previous_category_id = tx.category_id
         apply_rule_actions(
             actions,
             tx,
-            category_already_set=tx.category_id is not None
-            and not overwrite_existing_categories,
+            # A person's category is never replaced, overwrite or not; the
+            # rule's other actions still apply.
+            category_already_set=is_protected(tx)
+            or (tx.category_id is not None and not overwrite_existing_categories),
             skip_description=_has_manual_description(tx),
             assignable_category_ids=assignable_categories,
         )
+        if tx.category_id != previous_category_id:
+            await _record_rule_category(session, tx, previous_category_id, staged=staged)
         after = (
             tx.category_id,
             tx.payee_id,
@@ -1441,12 +1502,17 @@ async def apply_single_rule(
         if before != after:
             count += 1
 
+    await write_staged(session, staged)
     await session.commit()
     return count
 
 
 async def apply_all_rules(session: AsyncSession, workspace_id: uuid.UUID) -> int:
-    """Reset rule-managed fields and reapply active rules in priority order."""
+    """Reset rule-managed fields and reapply active rules in priority order.
+
+    A protected transaction (a person's category) keeps its category and its
+    notes; the rules' other actions still apply to it.
+    """
     result = await session.execute(
         select(Transaction).where(
             Transaction.workspace_id == workspace_id,
@@ -1464,8 +1530,11 @@ async def apply_all_rules(session: AsyncSession, workspace_id: uuid.UUID) -> int
 
     assignable_categories = await get_assignable_category_ids(session, workspace_id)
     count = 0
+    staged: list[StagedChange] = []
     for tx in transactions:
         preserve_manual_description = _has_manual_description(tx)
+        protected = is_protected(tx)
+        previous_category_id = tx.category_id
         before = (
             tx.category_id,
             tx.payee_id,
@@ -1480,14 +1549,15 @@ async def apply_all_rules(session: AsyncSession, workspace_id: uuid.UUID) -> int
                 tx.description = tx.original_description
             tx.description_is_rule_managed = False
         matched = False
-        category_set = False
+        category_set = protected
         for rule in rules:
             conditions = rule.conditions or []
             actions = rule.actions or []
             if evaluate_conditions(rule.conditions_op, conditions, tx):
                 if not matched:
-                    tx.category_id = None
-                    tx.notes = None
+                    if not protected:
+                        tx.category_id = None
+                        tx.notes = None
                     matched = True
                 category_set = apply_rule_actions(
                     actions,
@@ -1496,6 +1566,14 @@ async def apply_all_rules(session: AsyncSession, workspace_id: uuid.UUID) -> int
                     skip_description=preserve_manual_description,
                     assignable_category_ids=assignable_categories,
                 )
+        if matched and not protected:
+            # The reset cleared the category; whatever is there now came from
+            # a rule, or nothing did.
+            await _record_rule_category(
+                session, tx, previous_category_id,
+                source="rule" if category_set else "none",
+                staged=staged,
+            )
 
         after = (
             tx.category_id,
@@ -1509,5 +1587,6 @@ async def apply_all_rules(session: AsyncSession, workspace_id: uuid.UUID) -> int
         if matched or before != after:
             count += 1
 
+    await write_staged(session, staged)
     await session.commit()
     return count

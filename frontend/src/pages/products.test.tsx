@@ -101,11 +101,15 @@ describe('ProductsPage', () => {
   })
 
   it('offers archive to a named product and delete only to an unnamed one', async () => {
-    renderWithProviders(<ProductsPage />, { route: '/invoices/products' })
+    const setup = renderWithProviders(<ProductsPage />, { route: '/invoices/products' })
     const rows = await screen.findAllByTestId('product-row')
-    expect(within(rows[0]).getByLabelText(t('invoices.products.action.archive'))).toBeInTheDocument()
-    expect(within(rows[0]).queryByLabelText(t('common.delete'))).not.toBeInTheDocument()
-    expect(within(rows[1]).getByLabelText(t('common.delete'))).toBeInTheDocument()
+    const { user } = setup
+    await user.click(within(rows[0]).getByRole('button', { name: /More actions/ }))
+    expect(await screen.findByRole('menuitem', { name: t('invoices.products.action.archive') })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: t('common.delete') })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(within(rows[1]).getByRole('button', { name: /More actions/ }))
+    expect(await screen.findByRole('menuitem', { name: t('common.delete') })).toBeInTheDocument()
   })
 
   it('switches to the archived list through the server', async () => {
@@ -113,6 +117,17 @@ describe('ProductsPage', () => {
     await screen.findAllByTestId('product-row')
     await user.click(screen.getByTestId('product-filter-archived'))
     expect(api.products.list).toHaveBeenLastCalledWith({ active: false })
+  })
+
+  it('keeps the current list on screen, marked busy, while the other filter loads', async () => {
+    const { user } = renderWithProviders(<ProductsPage />, { route: '/invoices/products' })
+    await screen.findAllByTestId('product-row')
+    api.products.list.mockReturnValue(new Promise(() => {}))
+    await user.click(screen.getByTestId('product-filter-archived'))
+
+    expect(screen.getAllByTestId('product-row')).toHaveLength(2)
+    expect(screen.getByTestId('products-list')).toHaveAttribute('aria-busy', 'true')
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
   })
 
   it('hides every write from a viewer', async () => {
@@ -159,7 +174,8 @@ describe('ProductsPage editing', () => {
   it('archives an existing price instead of deleting it, and never deletes from the dialog', async () => {
     const { user } = renderWithProviders(<ProductsPage />, { route: '/invoices/products' })
     const [row] = await screen.findAllByTestId('product-row')
-    await user.click(within(row).getByLabelText(t('common.edit')))
+    await user.click(within(row).getByRole('button', { name: /More actions/ }))
+    await user.click(await screen.findByRole('menuitem', { name: t('common.edit') }))
     await screen.findByTestId('product-name-input')
     await user.click(screen.getByTestId('price-archive-1'))
     expect(screen.getByTestId('price-restore-1')).toBeInTheDocument()
@@ -180,7 +196,8 @@ describe('ProductsPage editing', () => {
     api.products.updatePrice.mockRejectedValueOnce({ response: { data: { detail: { code: 'negative_price' } } } })
     const { user } = renderWithProviders(<ProductsPage />, { route: '/invoices/products' })
     const [row] = await screen.findAllByTestId('product-row')
-    await user.click(within(row).getByLabelText(t('common.edit')))
+    await user.click(within(row).getByRole('button', { name: /More actions/ }))
+    await user.click(await screen.findByRole('menuitem', { name: t('common.edit') }))
     const nameInput = await screen.findByTestId('product-name-input')
     await user.clear(nameInput)
     await user.type(nameInput, updated.name)

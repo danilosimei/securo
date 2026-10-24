@@ -1,10 +1,12 @@
 import { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent } from '@/components/ui/card'
 import { ShellLogo } from '@/components/shell-logo'
 
 export default function OIDCCallbackPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { loginWithToken } = useAuth()
   const accessToken = useMemo(() => {
@@ -27,9 +29,9 @@ export default function OIDCCallbackPage() {
             <ShellLogo size={22} className="text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">Signing you in…</h1>
+            <h1 className="text-xl font-semibold tracking-tight">{t('auth.oidc.signingIn')}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {accessToken ? 'Completing secure OIDC login.' : 'OIDC login did not return an access token.'}
+              {accessToken ? t('auth.oidc.completing') : t('auth.oidc.noToken')}
             </p>
           </div>
         </CardContent>

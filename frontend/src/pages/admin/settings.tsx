@@ -1,3 +1,11 @@
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
+import { SearchBar } from '@/components/ui/search-bar'
+import { useUrlSearch } from '@/hooks/use-url-search'
+import { RowActions } from '@/components/ui/row-actions'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
@@ -32,7 +40,7 @@ import { PageHeader } from '@/components/page-header'
 import { TimezoneSettings } from '@/components/timezone-settings'
 import { setThemeBasedOnSystem } from '@/lib/theme-utils'
 import { useLocalAuthEnabled } from '@/hooks/use-local-auth'
-import { Search, Plus, Trash2, Shield, ShieldOff, UserCog, Users, Scale, Tag, Palette, Save, Hash, CalendarDays } from 'lucide-react'
+import { Plus, Shield, ShieldOff, UserCog, Users, Scale, Tag, Palette, Save, Hash, CalendarDays } from 'lucide-react'
 import type { AdminUser } from '@/types'
 
 export default function AdminSettingsPage() {
@@ -41,7 +49,7 @@ export default function AdminSettingsPage() {
   const queryClient = useQueryClient()
   const { resolvedTheme } = useTheme()
 
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlSearch()
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState<AdminUser | null>(null)
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null)
@@ -63,7 +71,7 @@ export default function AdminSettingsPage() {
   const [localLight, setLocalLight] = useState<string>('#6366F1')
   const [localDark, setLocalDark] = useState<string>('#818CF8')
 
-  const { data: usersData, isLoading: usersLoading } = useQuery({
+  const { data: usersData, isLoading: usersLoading, isError: usersError, error: usersErr, refetch: refetchUsers } = useQuery({
     queryKey: ['admin', 'users', search],
     queryFn: () => adminApi.listUsers({ search: search || undefined }),
   })
@@ -294,35 +302,29 @@ export default function AdminSettingsPage() {
         }
       />
 
-      {/* Search */}
-      <div className="relative max-w-md mb-5">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('admin.users.searchPlaceholder')}
-          className="pl-9 h-10 bg-card border-border/60 rounded-xl"
-        />
-      </div>
+      <SearchBar
+        className="mb-5"
+        value={search}
+        onChange={setSearch}
+        placeholder={t('admin.users.searchPlaceholder')}
+      />
 
       {/* User list */}
-      <div className="rounded-xl border border-border/60 bg-card overflow-hidden mb-8">
+      {usersError ? (
+        <ErrorState error={usersErr} onRetry={() => refetchUsers()} />
+      ) : (
+      <SectionCard className="mb-8">
         {usersLoading ? (
-          <div className="p-4 space-y-3">
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
-          </div>
+          <ListSkeleton />
         ) : filteredUsers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <Users size={32} className="mb-3 opacity-40" />
-            <p className="text-sm">{t('admin.users.empty')}</p>
-          </div>
+          <EmptyState icon={Users} title={t('admin.users.empty')} />
         ) : (
           <div className="divide-y divide-border/40">
             {filteredUsers.map((u) => (
+              <div key={u.id} className="flex items-center gap-2 pr-3 hover:bg-muted/40 transition-colors">
               <button
-                key={u.id}
                 onClick={() => openEdit(u)}
-                className="flex items-center gap-4 w-full px-5 py-3.5 text-left hover:bg-muted/40 transition-colors"
+                className="flex min-w-0 flex-1 items-center gap-4 pl-5 pr-2 py-3.5 text-left"
               >
                 <Avatar className="h-9 w-9 shrink-0">
                   <AvatarFallback className={u.is_superuser ? 'bg-primary/15 text-primary text-xs font-semibold' : 'bg-muted text-muted-foreground text-xs font-semibold'}>
@@ -353,28 +355,23 @@ export default function AdminSettingsPage() {
                   {u.is_superuser && (
                     <Shield size={14} className="text-primary" />
                   )}
-                  {!isSelf(u) && (
-                    <span
-                      role="button"
-                      onClick={(e) => { e.stopPropagation(); setDeleteUser(u) }}
-                      className="p-1.5 rounded-md text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      title={t('common.delete')}
-                    >
-                      <Trash2 size={14} />
-                    </span>
-                  )}
                 </div>
               </button>
+              {!isSelf(u) && (
+                <RowActions label={u.email} onEdit={() => openEdit(u)} onDelete={() => setDeleteUser(u)} />
+              )}
+              </div>
             ))}
           </div>
         )}
-      </div>
+      </SectionCard>
+      )}
 
       <TimezoneSettings />
 
       {/* Theme and Customization Section */}
       <div className="grid grid-cols-1 gap-6 mb-8">
-        <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+        <SectionCard>
           <div className="px-5 py-4 border-b border-border/40 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Palette size={15} className="text-muted-foreground" />
@@ -427,11 +424,11 @@ export default function AdminSettingsPage() {
               </div>
             </div>
           </div>
-        </div>
+        </SectionCard>
       </div>
 
       {/* Accounting section */}
-      <div className="rounded-xl border border-border/60 bg-card overflow-hidden mb-8">
+      <SectionCard className="mb-8">
         <div className="px-5 py-4 border-b border-border/40">
           <div className="flex items-center gap-2 mb-0.5">
             <Scale size={15} className="text-muted-foreground" />
@@ -469,10 +466,10 @@ export default function AdminSettingsPage() {
             </div>
           </button>
         </div>
-      </div>
+      </SectionCard>
 
       {/* Provider categories toggle */}
-      <div className="rounded-xl border border-border/60 bg-card overflow-hidden mb-8">
+      <SectionCard className="mb-8">
         <div className="px-5 py-4 border-b border-border/40">
           <div className="flex items-center gap-2 mb-0.5">
             <Tag size={15} className="text-muted-foreground" />
@@ -495,7 +492,7 @@ export default function AdminSettingsPage() {
             />
           </button>
         </div>
-      </div>
+      </SectionCard>
 
       {/* Number / date format */}
       <div className="rounded-xl border border-border/60 bg-card overflow-hidden mb-8">
@@ -629,7 +626,7 @@ export default function AdminSettingsPage() {
 
       {/* Create User Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('admin.users.add')}</DialogTitle>
             <DialogDescription>{t('admin.users.addDesc')}</DialogDescription>
@@ -694,10 +691,10 @@ export default function AdminSettingsPage() {
               </button>
             </div>
             <DialogFooter className="mt-4">
-              <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} className="rounded-lg">
+              <Button variant="outline" type="button" onClick={() => setCreateOpen(false)}>
                 {t('common.cancel')}
               </Button>
-              <Button type="submit" disabled={createMutation.isPending} className="rounded-lg">
+              <Button type="submit" disabled={createMutation.isPending}>
                 {createMutation.isPending ? t('common.loading') : t('common.save')}
               </Button>
             </DialogFooter>
@@ -707,7 +704,7 @@ export default function AdminSettingsPage() {
 
       {/* Edit User Dialog */}
       <Dialog open={!!editUser} onOpenChange={(open) => !open && setEditUser(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('admin.users.edit')}</DialogTitle>
           </DialogHeader>
@@ -793,10 +790,10 @@ export default function AdminSettingsPage() {
                 </div>
               </div>
               <DialogFooter className="mt-4">
-                <Button variant="outline" type="button" onClick={() => setEditUser(null)} className="rounded-lg">
+                <Button variant="outline" type="button" onClick={() => setEditUser(null)}>
                   {t('common.cancel')}
                 </Button>
-                <Button type="submit" disabled={updateMutation.isPending} className="rounded-lg">
+                <Button type="submit" disabled={updateMutation.isPending}>
                   {updateMutation.isPending ? t('common.loading') : t('common.save')}
                 </Button>
               </DialogFooter>
@@ -806,29 +803,14 @@ export default function AdminSettingsPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t('admin.users.confirmDeleteTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('admin.users.confirmDeleteDesc', { email: deleteUser?.email })}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-2">
-            <Button variant="outline" onClick={() => setDeleteUser(null)} className="rounded-lg">
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteUser && deleteMutation.mutate(deleteUser.id)}
-              className="rounded-lg"
-            >
-              {deleteMutation.isPending ? t('common.loading') : t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deleteUser}
+        title={t('admin.users.confirmDeleteTitle')}
+        description={t('admin.users.confirmDeleteDesc', { email: deleteUser?.email })}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeleteUser(null)}
+        onConfirm={() => deleteUser && deleteMutation.mutate(deleteUser.id)}
+      />
     </div>
   )
 }

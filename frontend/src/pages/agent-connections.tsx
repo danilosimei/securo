@@ -1,11 +1,17 @@
 import { useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, CheckCircle2, Edit2, Plug, Plus, Star, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, Plug, Plus, Star, XCircle, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { RowActions } from '@/components/ui/row-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { PageHeader } from '@/components/page-header'
 import { agents } from '@/lib/api'
 import type { LlmConnection } from '@/lib/api'
@@ -18,10 +24,11 @@ export default function AgentConnectionsPage() {
   const qc = useQueryClient()
   const { canWrite } = useWorkspace()
   const [editing, setEditing] = useState<LlmConnection | null>(null)
+  const [deleting, setDeleting] = useState<LlmConnection | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; detail: string }>>({})
 
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['agent-connections'],
     queryFn: () => agents.connections.list(),
   })
@@ -31,6 +38,7 @@ export default function AgentConnectionsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['agent-connections'] })
       toast.success(t('agents.connections.deleted'))
+      setDeleting(null)
     },
   })
 
@@ -43,14 +51,8 @@ export default function AgentConnectionsPage() {
 
   return (
     <div>
-      <Link
-        to="/agents"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mb-2 transition-colors"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> {t('agents.title')}
-      </Link>
-
       <PageHeader
+        back={{ to: '/agents', label: t('agents.title') }}
         section={t('agents.title')}
         title={t('agents.connections.title')}
         action={
@@ -64,34 +66,35 @@ export default function AgentConnectionsPage() {
 
       <p className="text-sm text-muted-foreground mb-6 max-w-2xl">{t('agents.connections.subtitle')}</p>
 
-      {isLoading ? (
-        <div className="bg-card rounded-xl border border-border shadow-sm p-6 text-sm text-muted-foreground">
-          {t('agents.loading')}
-        </div>
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <SectionCard><ListSkeleton /></SectionCard>
       ) : (list?.length ?? 0) === 0 ? (
-        <div className="bg-card rounded-xl border border-border shadow-sm p-10 text-center">
-          <div className="h-12 w-12 mx-auto rounded-full bg-muted flex items-center justify-center mb-3">
-            <Plug className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <h2 className="text-base font-semibold">{t('agents.connections.empty.title')}</h2>
-          <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-            {t('agents.connections.empty.subtitle')}
-          </p>
-          {canWrite && (
-            <Button size="sm" className="gap-1.5 h-8 mt-4" onClick={() => setCreateOpen(true)}>
-              <Plus size={13} /> {t('agents.connections.add')}
-            </Button>
-          )}
-        </div>
+        <SectionCard>
+          <EmptyState
+            icon={Plug}
+            title={t('agents.connections.empty.title')}
+            hint={t('agents.connections.empty.subtitle')}
+            action={
+              canWrite ? (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus /> {t('agents.connections.add')}
+                </Button>
+              ) : undefined
+            }
+          />
+        </SectionCard>
       ) : (
-        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+        <SectionCard>
           <div className="divide-y divide-border">
             {list?.map((c) => {
               const tested = testResults[c.id]
               return (
                 <div
                   key={c.id}
-                  className="flex items-start gap-3 px-4 sm:px-5 py-4 hover:bg-muted/50 transition-colors"
+                  {...clickableRow(canWrite ? () => setEditing(c) : undefined)}
+                  className={`flex items-start gap-3 px-4 sm:px-5 py-4 hover:bg-muted/50 transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''}`}
                 >
                   <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center shrink-0">
                     <Plug className="h-5 w-5 text-muted-foreground" />
@@ -124,46 +127,35 @@ export default function AgentConnectionsPage() {
                     )}
                   </div>
                   {canWrite && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs"
-                        onClick={() => testMut.mutate(c.id)}
-                        disabled={testMut.isPending}
-                      >
-                        {t('agents.connections.test')}
-                      </Button>
-                      <button
-                        type="button"
-                        onClick={() => setEditing(c)}
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                        title={t('common.edit')}
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (confirm(t('agents.connections.deleteConfirm', { name: c.name }))) {
-                            removeMut.mutate(c.id)
-                          }
-                        }}
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-                        title={t('common.delete')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                    <RowActions
+                      label={c.name}
+                      onEdit={() => setEditing(c)}
+                      onDelete={() => setDeleting(c)}
+                      extra={[{
+                        label: t('agents.connections.test'),
+                        icon: Zap,
+                        onSelect: () => testMut.mutate(c.id),
+                        disabled: testMut.isPending,
+                      }]}
+                    />
                   )}
                 </div>
               )
             })}
           </div>
-        </div>
+        </SectionCard>
       )}
 
       <McpExternalPanel />
+
+      <DeleteConfirmationDialog
+        open={!!deleting}
+        title={t('common.delete')}
+        description={t('agents.connections.deleteConfirm', { name: deleting?.name })}
+        isPending={removeMut.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && removeMut.mutate(deleting.id)}
+      />
 
       <ConnectionFormDialog open={createOpen} onOpenChange={setCreateOpen} />
       <ConnectionFormDialog

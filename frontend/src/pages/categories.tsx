@@ -1,5 +1,10 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { FormDialogFooter } from '@/components/form-dialog-footer'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { categories as categoriesApi, categoryGroups as groupsApi } from '@/lib/api'
@@ -17,47 +22,42 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import type { Category, CategoryGroup, CategoryUsage } from '@/types'
-import { Pencil, Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff } from 'lucide-react'
+import type { Category, CategoryGroup, CategoryUsage, ReportKind } from '@/types'
+import { Tags, Trash2, Plus, ChevronDown, ChevronRight, ChevronsUpDown, Eye, EyeOff, WandSparkles } from 'lucide-react'
+import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
+import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { invalidateCategoryQueries } from '@/lib/invalidate-queries'
 import { CategoryIcon } from '@/components/category-icon'
 import { CategorySelect } from '@/components/category-select'
 import { IconPicker } from '@/components/icon-picker'
 import { useWorkspace } from '@/contexts/workspace-context'
+import { SectionCard, SectionHeader } from '@/components/ui/section-card'
 
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {children}
-    </div>
-  )
-}
-function SectionHeader({ title, titleExtra, action }: { title: string; titleExtra?: React.ReactNode; action?: React.ReactNode }) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-      <div className="flex items-center gap-3">
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-        {titleExtra}
-      </div>
-      {action}
-    </div>
-  )
-}
+const DESCRIPTION_MAX = 300
+const REPORT_KINDS: { value: ReportKind; label: string; help: string }[] = [
+  { value: 'normal', label: 'categories.reportKindNormal', help: 'categories.reportKindNormalHelp' },
+  { value: 'income', label: 'categories.reportKindIncome', help: 'categories.reportKindIncomeHelp' },
+  { value: 'refund', label: 'categories.reportKindRefund', help: 'categories.reportKindRefundHelp' },
+]
 
 export default function CategoriesPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { canWrite } = useWorkspace()
+  const navigate = useNavigate()
   const [catDialogOpen, setCatDialogOpen] = useState(false)
   const [editingCat, setEditingCat] = useState<Category | null>(null)
   const [formIcon, setFormIcon] = useState('circle-help')
   const [formColor, setFormColor] = useState('#6366f1')
   const [formTreatAsTransfer, setFormTreatAsTransfer] = useState(false)
   const [formIgnoreTransfer, setFormIgnoreTransfer] = useState(false)
+  const [formReportKind, setFormReportKind] = useState<ReportKind>('normal')
+  const [formDescription, setFormDescription] = useState('')
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<CategoryGroup | null>(null)
-  const [groupFormIcon, setGroupFormIcon] = useState('folder')
+  const [groupFormIcon, setGroupFormIcon] = useState('circle-help')
   const [groupFormColor, setGroupFormColor] = useState('#6B7280')
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null)
@@ -72,7 +72,7 @@ export default function CategoriesPage() {
   >(null)
   const [transferTargetId, setTransferTargetId] = useState('')
 
-  const { data: groups } = useQuery({
+  const { data: groups, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['category-groups', 'management'],
     queryFn: groupsApi.listIncludingHidden,
   })
@@ -237,12 +237,14 @@ export default function CategoriesPage() {
     setFormColor(cat?.color ?? '#6366f1')
     setFormTreatAsTransfer(cat?.treat_as_transfer ?? false)
     setFormIgnoreTransfer(cat?.is_ignored ?? false)
+    setFormReportKind(cat?.report_kind ?? 'normal')
+    setFormDescription(cat?.description ?? '')
     setCatDialogOpen(true)
   }
 
   const openGroupDialog = (group: CategoryGroup | null) => {
     setEditingGroup(group)
-    setGroupFormIcon(group?.icon ?? 'folder')
+    setGroupFormIcon(group?.icon ?? 'circle-help')
     setGroupFormColor(group?.color ?? '#6B7280')
     setGroupDialogOpen(true)
   }
@@ -254,7 +256,11 @@ export default function CategoriesPage() {
   )
 
   const renderCategoryItem = (cat: Category) => (
-    <div key={cat.id} className={`flex items-center gap-3 px-4 sm:px-5 pl-6 sm:pl-12 py-2.5 border-b border-border last:border-0 hover:bg-muted transition-colors ${cat.is_hidden ? 'opacity-60' : ''}`}>
+    <div
+      key={cat.id}
+      {...clickableRow(canWrite ? () => openCatDialog(cat) : undefined)}
+      className={`flex items-center gap-3 px-4 sm:px-5 pl-6 sm:pl-12 py-2.5 border-b border-border last:border-0 hover:bg-muted transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''} ${cat.is_hidden ? 'opacity-60' : ''}`}
+    >
       <CategoryIcon icon={cat.icon} color={cat.color} size="md" />
       <div className="flex-1 min-w-0 flex items-center gap-2">
         <span className="text-sm font-medium text-foreground truncate">{cat.name}</span>
@@ -281,32 +287,23 @@ export default function CategoriesPage() {
         <span className="text-xs text-muted-foreground font-mono">{cat.color}</span>
       </div>
       {canWrite && (
-        <div className="flex items-center gap-1 shrink-0 ml-2">
-          <button
-            className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-            onClick={() => openCatDialog(cat)}
-            title={t('common.edit')}
-          >
-            <Pencil size={13} />
-          </button>
-          {cat.is_system && (
-            <button
-              className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-              onClick={() => handleToggleHidden(cat)}
-              disabled={updateCatMutation.isPending || hideCatMutation.isPending}
-              title={cat.is_hidden ? t('categories.showDefault') : t('categories.hideDefault')}
-            >
-              {cat.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}
-            </button>
-          )}
-          <button
-            className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-            onClick={() => handleDeleteCategory(cat)}
-            disabled={deleteCatMutation.isPending}
-            title={t('common.delete')}
-          >
-            <Trash2 size={13} />
-          </button>
+        <div className="shrink-0 ml-2">
+          <RowActions
+            label={cat.name}
+            onEdit={() => openCatDialog(cat)}
+            onDelete={() => handleDeleteCategory(cat)}
+            deleteDisabled={deleteCatMutation.isPending}
+            extra={
+              cat.is_system
+                ? [{
+                    label: cat.is_hidden ? t('categories.showDefault') : t('categories.hideDefault'),
+                    icon: cat.is_hidden ? Eye : EyeOff,
+                    onSelect: () => handleToggleHidden(cat),
+                    disabled: updateCatMutation.isPending || hideCatMutation.isPending,
+                  }]
+                : []
+            }
+          />
         </div>
       )}
     </div>
@@ -314,12 +311,33 @@ export default function CategoriesPage() {
 
   return (
     <div>
-      <PageHeader section={t('categories.title')} title={t('categories.title')} />
+      <PageHeader
+        section={t('nav.groupOrganization')}
+        title={t('categories.title')}
+        action={
+          <PageActions
+            primary={
+              canWrite ? (
+                <Button onClick={() => openCatDialog(null)}>
+                  <Plus /> {t('categories.addCategory')}
+                </Button>
+              ) : undefined
+            }
+            items={[
+              { label: t('categories.organizeWithAi'), icon: WandSparkles, onSelect: () => navigate('/categorization?tab=organize') },
+              ...(canWrite ? [{ label: t('groups.add'), icon: Plus, onSelect: () => openGroupDialog(null) }] : []),
+            ]}
+          />
+        }
+      />
 
       <p className="mb-4 text-sm text-muted-foreground">
         {t('categories.hiddenScopeDescription')}
       </p>
 
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         <SectionHeader
           title={t('categories.title')}
@@ -340,19 +358,22 @@ export default function CategoriesPage() {
               {groups && groups.every((g) => collapsedGroups.has(g.id)) ? t('categories.expandAll') : t('categories.collapseAll')}
             </button>
           }
-          action={
-            canWrite ? (
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => openGroupDialog(null)}>
-                  <Plus size={13} /> <span className="hidden sm:inline">{t('groups.add')}</span>
-                </Button>
-                <Button size="sm" className="gap-1.5 h-8" onClick={() => openCatDialog(null)}>
-                  <Plus size={13} /> <span className="hidden sm:inline">{t('categories.addCategory')}</span>
-                </Button>
-              </div>
-            ) : undefined
-          }
         />
+        {isLoading ? (
+          <ListSkeleton />
+        ) : (groups?.length ?? 0) === 0 && ungrouped.length === 0 ? (
+          <EmptyState
+            icon={Tags}
+            title={t('categories.empty')}
+            action={
+              canWrite ? (
+                <Button onClick={() => openCatDialog(null)}>
+                  <Plus /> {t('categories.addCategory')}
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
         <div>
           {groups?.map((group) => {
             const isCollapsed = collapsedGroups.has(group.id)
@@ -370,32 +391,23 @@ export default function CategoriesPage() {
                     <span className="text-xs text-muted-foreground">({group.categories.length})</span>
                   </button>
                   {canWrite && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                        onClick={() => openGroupDialog(group)}
-                        title={t('common.edit')}
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      {group.is_system && (
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                          onClick={() => updateGroupMutation.mutate({ id: group.id, is_hidden: !group.is_hidden })}
-                          disabled={updateGroupMutation.isPending}
-                          title={group.is_hidden ? t('groups.showDefault') : t('groups.hideDefault')}
-                        >
-                          {group.is_hidden ? <Eye size={13} /> : <EyeOff size={13} />}
-                        </button>
-                      )}
-                      <button
-                        className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                        onClick={() => setDeletingGroup(group)}
-                        disabled={deleteGroupMutation.isPending}
-                        title={t('common.delete')}
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    <div className="shrink-0">
+                      <RowActions
+                        label={group.name}
+                        onEdit={() => openGroupDialog(group)}
+                        onDelete={() => setDeletingGroup(group)}
+                        deleteDisabled={deleteGroupMutation.isPending}
+                        extra={
+                          group.is_system
+                            ? [{
+                                label: group.is_hidden ? t('groups.showDefault') : t('groups.hideDefault'),
+                                icon: group.is_hidden ? Eye : EyeOff,
+                                onSelect: () => updateGroupMutation.mutate({ id: group.id, is_hidden: !group.is_hidden }),
+                                disabled: updateGroupMutation.isPending,
+                              }]
+                            : []
+                        }
+                      />
                     </div>
                   )}
                 </div>
@@ -412,11 +424,13 @@ export default function CategoriesPage() {
             </div>
           )}
         </div>
+        )}
       </SectionCard>
+      )}
 
       {/* Category Dialog */}
       <Dialog open={catDialogOpen} onOpenChange={() => { setCatDialogOpen(false); setEditingCat(null) }}>
-        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden">
+        <DialogContent className="flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>{editingCat ? t('categories.editCategory') : t('categories.newCategory')}</DialogTitle>
           </DialogHeader>
@@ -431,7 +445,9 @@ export default function CategoriesPage() {
                 color: formData.get('color') as string,
                 group_id: (formData.get('group_id') as string) || null,
                 treat_as_transfer: formTreatAsTransfer,
-                is_ignored: formIgnoreTransfer
+                is_ignored: formIgnoreTransfer,
+                report_kind: formReportKind,
+                description: formDescription.trim() || null
               }
               if (editingCat) {
                 updateCatMutation.mutate({ id: editingCat.id, ...data })
@@ -470,6 +486,39 @@ export default function CategoriesPage() {
                 <IconPicker value={formIcon} color={formColor} onChange={setFormIcon} />
                 <input type="hidden" name="icon" value={formIcon} />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="category-report-kind">{t('categories.reportKind')}</Label>
+                <select
+                  id="category-report-kind"
+                  value={formReportKind}
+                  onChange={(e) => setFormReportKind(e.target.value as ReportKind)}
+                  className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {REPORT_KINDS.map((kind) => (
+                    <option key={kind.value} value={kind.value}>{t(kind.label)}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {t(REPORT_KINDS.find((kind) => kind.value === formReportKind)!.help)}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="category-description">{t('categories.descriptionLabel')}</Label>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {formDescription.length}/{DESCRIPTION_MAX}
+                  </span>
+                </div>
+                <textarea
+                  id="category-description"
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  maxLength={DESCRIPTION_MAX}
+                  rows={3}
+                  placeholder={t('categories.descriptionPlaceholder')}
+                  className="w-full resize-y border border-border rounded-lg px-3 py-2 text-sm bg-card text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
               <div className="pt-2 border-t border-border">
                 <label className="flex items-start gap-3 cursor-pointer">
                   <input
@@ -497,12 +546,20 @@ export default function CategoriesPage() {
                 </label>
               </div>
             </div>
-            <DialogFooter className="mt-2 shrink-0 border-t pt-4">
-              <Button type="button" variant="outline" onClick={() => { setCatDialogOpen(false); setEditingCat(null) }}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit">{t('common.save')}</Button>
-            </DialogFooter>
+            <FormDialogFooter
+              className="mt-2 shrink-0 border-t pt-4"
+              onCancel={() => { setCatDialogOpen(false); setEditingCat(null) }}
+              onDelete={
+                editingCat
+                  ? () => {
+                      const category = editingCat
+                      setCatDialogOpen(false)
+                      setEditingCat(null)
+                      handleDeleteCategory(category)
+                    }
+                  : undefined
+              }
+            />
           </form>
         </DialogContent>
       </Dialog>
@@ -549,12 +606,19 @@ export default function CategoriesPage() {
               <IconPicker value={groupFormIcon} color={groupFormColor} onChange={setGroupFormIcon} />
               <input type="hidden" name="icon" value={groupFormIcon} />
             </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setGroupDialogOpen(false); setEditingGroup(null) }}>
-                {t('common.cancel')}
-              </Button>
-              <Button type="submit">{t('common.save')}</Button>
-            </DialogFooter>
+            <FormDialogFooter
+              onCancel={() => { setGroupDialogOpen(false); setEditingGroup(null) }}
+              onDelete={
+                editingGroup
+                  ? () => {
+                      const group = editingGroup
+                      setGroupDialogOpen(false)
+                      setEditingGroup(null)
+                      setDeletingGroup(group)
+                    }
+                  : undefined
+              }
+            />
           </form>
         </DialogContent>
       </Dialog>
@@ -585,7 +649,7 @@ export default function CategoriesPage() {
           if (!open && !deleteCatMutation.isPending) setTransferringCategory(null)
         }}
       >
-        <DialogContent className="sm:max-w-md" showCloseButton={!deleteCatMutation.isPending}>
+        <DialogContent size="sm" showCloseButton={!deleteCatMutation.isPending}>
           <DialogHeader>
             <DialogTitle>
               {t('categories.deleteInUseTitle', { name: transferringCategory?.category.name })}
@@ -648,7 +712,7 @@ export default function CategoriesPage() {
       </Dialog>
 
       <Dialog open={!!hidingCategory} onOpenChange={(open) => !open && setHidingCategory(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {t('categories.hideWithRulesTitle', { name: hidingCategory?.category.name })}
@@ -668,7 +732,7 @@ export default function CategoriesPage() {
           </div>
           <DialogFooter className="gap-2 sm:justify-between">
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={() => setHidingCategory(null)}
               disabled={hideCatMutation.isPending}
             >

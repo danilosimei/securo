@@ -1,23 +1,32 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { cleanup, screen, waitFor } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 
 import ReportsPage from '@/pages/reports'
 import { renderWithProviders, t } from '@/test/utils'
+import { expectPeriod, pickPeriod } from '@/test/report-period-actions'
 import type { ReportResponse } from '@/types'
+import { overviewFixture } from '@/test/reports-fixtures'
+
+// The range-driven tabs; the page opens on the Overview without `?tab=`.
+const NET_WORTH = '/reports?tab=net_worth'
 
 const api = vi.hoisted(() => ({
   reports: {
     netWorth: vi.fn(),
-    incomeExpenses: vi.fn(),
     cashFlow: vi.fn(),
+    overview: vi.fn(),
+    breakdown: vi.fn(),
+    recurring: vi.fn(),
+    habits: vi.fn(),
   },
+  categoryGroups: { list: vi.fn() },
   // The page reads the workspace timezone to tell a balance that is already
   // negative from one that crosses later. Unresolved here, which lands on the
   // browser's own day.
   timezones: { list: vi.fn().mockResolvedValue({ timezones: [], default: null }) },
 }))
 
-vi.mock('@/lib/api', () => ({ reports: api.reports, timezones: api.timezones }))
+vi.mock('@/lib/api', () => ({ reports: api.reports, timezones: api.timezones, categoryGroups: api.categoryGroups }))
 
 vi.mock('@/hooks/use-display-locale', () => ({
   useDisplayLocale: () => 'en-US',
@@ -51,15 +60,25 @@ beforeEach(() => {
   vi.setSystemTime(new Date(2026, 8, 12, 12))
   vi.clearAllMocks()
   api.reports.netWorth.mockResolvedValue(emptyReport('net_worth'))
-  api.reports.incomeExpenses.mockResolvedValue(emptyReport('income_expenses'))
   api.reports.cashFlow.mockResolvedValue(emptyReport('cash_flow'))
+  api.reports.overview.mockResolvedValue(overviewFixture())
+  api.reports.breakdown.mockResolvedValue({
+    period: { from: '2026-08-01', to: '2026-08-31', partial: false, previous_from: '2026-07-01', previous_to: '2026-07-31' },
+    currency: 'BRL', total: '0.00', previous_total: null, rows: [], unconverted_count: 0,
+  })
+  api.categoryGroups.list.mockResolvedValue([])
+  api.reports.recurring.mockResolvedValue([])
+  api.reports.habits.mockResolvedValue({
+    period: { from: '2025-09-01', to: '2026-08-31', partial: false, previous_from: '2024-09-01', previous_to: '2025-08-31' },
+    merchants: [], weekdays: [], bands: [], days: [],
+  })
 })
 
 afterEach(() => vi.useRealTimers())
 
 describe('Reports page — Custom range segment', () => {
-  it('loads the Net Worth tab with the 1Y preset by default', async () => {
-    renderWithProviders(<ReportsPage />)
+  it('loads the Net Worth tab with the 1Y preset', async () => {
+    renderWithProviders(<ReportsPage />, { route: NET_WORTH })
 
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalled())
     const [, , , , , startDate, endDate] = api.reports.netWorth.mock.calls[0]
@@ -68,13 +87,13 @@ describe('Reports page — Custom range segment', () => {
   })
 
   it('opening Custom waits for Apply before querying January 1 through today', async () => {
-    const { user } = renderWithProviders(<ReportsPage />)
+    const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalledTimes(1))
 
     await user.click(screen.getByRole('button', { name: t('reports.customRange') }))
 
     expect(api.reports.netWorth).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('button', { name: t('reports.range1y') })).toHaveClass('bg-primary')
+    expectPeriod(t('reports.range1y'))
     await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
     const year = 2026
     await waitFor(() => {
@@ -97,7 +116,7 @@ describe('Reports page — Custom range segment', () => {
   })
 
   it('is not offered on the Cash Flow tab', async () => {
-    const { user } = renderWithProviders(<ReportsPage />)
+    const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalled())
 
     await user.click(screen.getByRole('button', { name: t('reports.cashFlow') }))
@@ -110,10 +129,9 @@ describe('Reports page — Custom range segment', () => {
 
 it.each(['Cancel', 'Escape', 'outside'] as const)(
   '6M → Custom → %s leaves the preset and query unchanged', async (dismiss) => {
-    const { user } = renderWithProviders(<ReportsPage />)
+    const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalledTimes(1))
-    const preset = screen.getByRole('button', { name: t('reports.range6m') })
-    await user.click(preset)
+    await pickPeriod(user, t('reports.range6m'))
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalledTimes(2))
     await user.click(screen.getByRole('button', { name: t('reports.customRange') }))
     if (dismiss === 'Cancel') {
@@ -123,7 +141,7 @@ it.each(['Cancel', 'Escape', 'outside'] as const)(
     } else {
       await user.click(document.body)
     }
-    expect(preset).toHaveClass('bg-primary')
+    expectPeriod(t('reports.range6m'))
     expect(api.reports.netWorth).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: t('reports.customRange') }))
@@ -133,71 +151,119 @@ it.each(['Cancel', 'Escape', 'outside'] as const)(
   },
 )
 
-it.each([
-  ['reports.netWorth', 'reports.range1y', 12],
-  ['reports.incomeExpenses', 'reports.range1y', 12],
-  ['reports.moneyMap', 'reports.range3m', 3],
-] as const)('Reset then Apply restores the fallback for %s', async (tab, fallback, months) => {
-  const { user } = renderWithProviders(<ReportsPage />)
-  if (tab !== 'reports.netWorth') {
-    await user.click(screen.getByRole('button', { name: t(tab) }))
-  }
+it('Reset then Apply restores the fallback for Net Worth', async () => {
+  const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
   const custom = screen.getByRole('button', { name: t('reports.customRange') })
   await user.click(custom)
   await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
-  const reportApi = tab === 'reports.netWorth' ? api.reports.netWorth : api.reports.incomeExpenses
-  await waitFor(() => expect(reportApi.mock.calls.at(-1)?.slice(-2)).toEqual([
+  await waitFor(() => expect(api.reports.netWorth.mock.calls.at(-1)?.slice(-2)).toEqual([
     '2026-01-01', '2026-09-12',
   ]))
   await user.click(custom)
   await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.reset') }))
   await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
   await waitFor(() => {
-    expect(screen.getByRole('button', { name: t(fallback) })).toHaveClass('bg-primary')
-    expect(reportApi.mock.calls.at(-1)?.[0]).toBe(months)
-    expect(reportApi.mock.calls.at(-1)?.slice(-2)).toEqual([undefined, undefined])
+    expectPeriod(t('reports.range1y'))
+    expect(api.reports.netWorth.mock.calls.at(-1)?.[0]).toBe(12)
+    expect(api.reports.netWorth.mock.calls.at(-1)?.slice(-2)).toEqual([undefined, undefined])
   })
   expect(custom).toHaveTextContent(t('reports.customRange'))
 })
 
-it('preserves saved custom dates across supported tabs and preset dismissal', async () => {
-  const { user } = renderWithProviders(<ReportsPage />)
-  const custom = screen.getByRole('button', { name: t('reports.customRange') })
-  await user.click(custom)
-  await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
-  for (const tab of ['reports.incomeExpenses', 'reports.moneyMap']) {
-    await user.click(screen.getByRole('button', { name: t(tab) }))
-    await waitFor(() => expect(api.reports.incomeExpenses.mock.calls.at(-1)?.slice(-2))
-      .toEqual(['2026-01-01', '2026-09-12']))
-    expect(custom).toHaveClass('bg-primary')
-  }
-  await user.click(screen.getByRole('button', { name: t('reports.range6m') }))
-  await waitFor(() => expect(api.reports.incomeExpenses.mock.calls.at(-1)?.slice(-2))
-    .toEqual([undefined, undefined]))
-  const count = api.reports.incomeExpenses.mock.calls.length
-  await user.click(custom)
-  await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.reset') }))
-  await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.cancel') }))
-  expect(api.reports.incomeExpenses).toHaveBeenCalledTimes(count)
-  expect(screen.getByRole('button', { name: t('reports.range6m') })).toHaveClass('bg-primary')
-  await user.click(custom)
-  await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
-  await waitFor(() => expect(api.reports.incomeExpenses.mock.calls.at(-1)?.slice(-2))
-    .toEqual(['2026-01-01', '2026-09-12']))
-  await user.click(screen.getByRole('button', { name: t('reports.cashFlow') }))
-  await waitFor(() => expect(api.reports.cashFlow).toHaveBeenCalled())
-  expect(screen.queryByRole('button', { name: t('reports.customRange') })).not.toBeInTheDocument()
-  expect(api.reports.cashFlow.mock.calls.at(-1)?.[0]).toBe(6)
-  await user.click(screen.getByRole('button', { name: t('reports.netWorth') }))
-  await user.click(screen.getByRole('button', { name: t('reports.customRange') }))
-  await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
-  await waitFor(() => expect(api.reports.netWorth.mock.calls.at(-1)?.slice(-2))
-    .toEqual(['2026-01-01', '2026-09-12']))
+const tabButtons = () => screen.getAllByRole('button').filter((b) => b.className.includes('px-4 py-2.5'))
+
+describe('Reports page, tabs', () => {
+  it('opens on the Overview, first of the tabs, without asking for the old reports', async () => {
+    renderWithProviders(<ReportsPage />, { route: '/reports' })
+
+    expect(await screen.findByTestId('overview-tab')).toBeInTheDocument()
+    expect(api.reports.overview).toHaveBeenCalledWith({ period: 'last_12m' })
+    expect(api.reports.netWorth).not.toHaveBeenCalled()
+    expect(tabButtons().map((b) => b.textContent)).toEqual([
+      t('reports.overview.tab'),
+      t('reports.explore.tab'),
+      t('reports.trends.tab'),
+      t('reports.recurring.tab'),
+      t('reports.habits.tab'),
+      t('reports.cashFlow'),
+      t('reports.netWorth'),
+    ])
+    expect(tabButtons()[0]).toHaveAttribute('aria-current', 'page')
+  })
+
+  it.each(['income_expenses', 'money_map'])('an old link to ?tab=%s lands on the Overview', async (tab) => {
+    renderWithProviders(<ReportsPage />, { route: `/reports?tab=${tab}&period=last_3m` })
+
+    expect(await screen.findByTestId('overview-tab')).toBeInTheDocument()
+    expect(api.reports.overview).toHaveBeenCalledWith({ period: 'last_3m' })
+    expect(tabButtons()).toHaveLength(7)
+  })
+
+  it('the period follows a switch between the views on closed periods', async () => {
+    const { user } = renderWithProviders(<ReportsPage />, { route: '/reports?tab=overview&period=last_3m' })
+    await screen.findByTestId('overview-tab')
+
+    await user.click(screen.getByRole('button', { name: t('reports.explore.tab') }))
+
+    await waitFor(() => expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', period: 'last_3m' }))
+    expectPeriod(t('reports.explore.period.last_3m'))
+  })
+
+  it('a chart click that changes the URL switches the tab', async () => {
+    const { user } = renderWithProviders(<ReportsPage />, { route: '/reports?tab=overview&period=last_month' })
+
+    const card = await screen.findByTestId('highlight-heavy_group')
+    await user.click(within(card).getByTestId('highlight-action-explore'))
+
+    await waitFor(() =>
+      expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'category', group_id: 'g-car', period: 'last_month' }),
+    )
+    expect(tabButtons()[1]).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('shows the period in one place, the same for every tab', async () => {
+    const { user } = renderWithProviders(<ReportsPage />, { route: '/reports' })
+    await screen.findByTestId('overview-tab')
+    const groupName = t('reports.explore.periodGroup')
+
+    for (const tab of ['overview', 'explore', 'trends', 'recurring', 'habits', 'cashFlow', 'netWorth']) {
+      const label = tab === 'cashFlow' || tab === 'netWorth' ? t(`reports.${tab}`) : t(`reports.${tab}.tab`)
+      await user.click(screen.getByRole('button', { name: label }))
+      const slots = screen.getAllByTestId('reports-period')
+      expect(slots).toHaveLength(1)
+      if (tab === 'recurring') {
+        expect(within(slots[0]).getByText(t('reports.recurring.fixedWindow'))).toBeInTheDocument()
+        expect(screen.queryByRole('group', { name: groupName })).not.toBeInTheDocument()
+      } else {
+        // One picker, and it is the one in the slot.
+        const pickers = screen.getAllByRole('group', { name: groupName })
+        expect(pickers).toHaveLength(1)
+        expect(slots[0]).toContainElement(pickers[0])
+      }
+    }
+  })
+
+  it('keeps custom dates on Net Worth; Cash Flow has none', async () => {
+    const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
+    await user.click(screen.getByRole('button', { name: t('reports.customRange') }))
+    await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
+    await waitFor(() => expect(api.reports.netWorth.mock.calls.at(-1)?.slice(-2)).toEqual(['2026-01-01', '2026-09-12']))
+
+    await user.click(screen.getByRole('button', { name: t('reports.cashFlow') }))
+    await waitFor(() => expect(api.reports.cashFlow).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: t('reports.customRange') })).not.toBeInTheDocument()
+    expect(api.reports.cashFlow.mock.calls.at(-1)?.[0]).toBe(6)
+
+    await user.click(screen.getByRole('button', { name: t('reports.netWorth') }))
+    await user.click(screen.getByRole('button', { name: t('reports.customRange') }))
+    await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
+    await waitFor(() => expect(api.reports.netWorth.mock.calls.at(-1)?.slice(-2)).toEqual(['2026-01-01', '2026-09-12']))
+  })
 })
 
 describe('Reports page — query failure', () => {
   it('surfaces a rejected custom range instead of showing stale numbers', async () => {
-    const { user } = renderWithProviders(<ReportsPage />)
+    const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalledTimes(1))
 
     api.reports.netWorth.mockRejectedValueOnce({
@@ -210,15 +276,15 @@ describe('Reports page — query failure', () => {
     // The prior successful report must not linger under the error.
     expect(screen.queryByText(t('reports.trend'), { exact: false })).not.toBeInTheDocument()
     // Tabs and range controls stay usable so the user can correct the request.
-    expect(screen.getByRole('button', { name: t('reports.range1y') })).toBeInTheDocument()
+    expect(screen.getByTestId('period-menu')).toBeInTheDocument()
   })
 
   it('shows a generic fallback for a network failure and recovers via Retry', async () => {
-    const { user } = renderWithProviders(<ReportsPage />)
+    const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalledTimes(1))
 
     api.reports.netWorth.mockRejectedValueOnce(new Error('network error'))
-    await user.click(screen.getByRole('button', { name: t('reports.range6m') }))
+    await pickPeriod(user, t('reports.range6m'))
 
     expect(await screen.findByText(t('reports.loadError'))).toBeInTheDocument()
 
@@ -229,7 +295,7 @@ describe('Reports page — query failure', () => {
   })
 
   it('recovers by changing the range after a rejected selection', async () => {
-    const { user } = renderWithProviders(<ReportsPage />)
+    const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalledTimes(1))
 
     api.reports.netWorth.mockRejectedValueOnce({ response: { data: { detail: 'end_date must be on or before today' } } })
@@ -237,9 +303,9 @@ describe('Reports page — query failure', () => {
     await user.click(screen.getByRole('button', { name: t('transactions.filtersBar.apply') }))
     expect(await screen.findByText('end_date must be on or before today')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: t('reports.range6m') }))
+    await pickPeriod(user, t('reports.range6m'))
     await waitFor(() => expect(screen.queryByText('end_date must be on or before today')).not.toBeInTheDocument())
-    expect(screen.getByRole('button', { name: t('reports.range6m') })).toHaveClass('bg-primary')
+    expectPeriod(t('reports.range6m'))
   })
 })
 
@@ -247,7 +313,7 @@ describe('Reports page, cash-flow runway', () => {
   async function openCashFlow(meta: Partial<ReportResponse['meta']>) {
     const report = emptyReport('cash_flow')
     api.reports.cashFlow.mockResolvedValue({ ...report, meta: { ...report.meta, ...meta } })
-    const { user } = renderWithProviders(<ReportsPage />)
+    const { user } = renderWithProviders(<ReportsPage />, { route: NET_WORTH })
     await waitFor(() => expect(api.reports.netWorth).toHaveBeenCalled())
     await user.click(screen.getByRole('button', { name: t('reports.cashFlow') }))
     return screen.findByTestId('cash-flow-runway')
@@ -328,7 +394,7 @@ describe('Reports page, cash-flow runway', () => {
       ...emptyReport('net_worth'),
       meta: { ...emptyReport('net_worth').meta, lowest_balance: 1, lowest_balance_date: '2026-10-01' },
     })
-    renderWithProviders(<ReportsPage />)
+    renderWithProviders(<ReportsPage />, { route: NET_WORTH })
     await screen.findAllByText('$1,000.00')
 
     expect(screen.queryByTestId('cash-flow-runway')).not.toBeInTheDocument()

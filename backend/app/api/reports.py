@@ -9,6 +9,8 @@ from app.core.database import get_async_session
 from app.core.workspace_context import WorkspaceContext, current_workspace
 from app.schemas.report import ReportResponse
 from app.services import report_service
+from app.services.reports import income_expenses
+from app.services.reports.periods import PERIODS
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -114,18 +116,23 @@ async def get_income_expenses(
     months: int = Query(12, ge=1, le=24),
     interval: str = Query("monthly", pattern="^(daily|weekly|monthly|yearly)$"),
     account_ids: Optional[list[uuid.UUID]] = Query(None),
-    period: str | None = Query(None, pattern="^ytd$"),
+    period: str | None = Query(None, pattern=f"^({'|'.join(PERIODS)})$"),
     days: Optional[int] = Query(None, ge=1, le=730),
     start_date: date | None = Query(None),
     end_date: date | None = Query(None),
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    """`days` overrides `months` with an exact rolling window ending today.
+    """Income and expenses by the shared report rules (refunds ease the
+    spending, `income` categories are the income, nothing is projected).
 
-    Alternatively `start_date`/`end_date` (both required together) pin the
-    window to an explicit historical calendar range, overriding `months`,
-    `period`, and `days`. Custom ranges include actuals only, without estimates.
+    The window, by precedence: `start_date`/`end_date` (both required
+    together, actuals up to today), `period` (closed list: closed months, or
+    the month/year so far for `this_month`/`ytd`), `days` (rolling window
+    ending today, partial), `months`. Without `period`, `months` 3/6/12 mean
+    `last_3m`/`last_6m`/`last_12m` and any other N is N closed months ending
+    last month. `change_percent` compares the net of the window with the net
+    of the previous window of the same size.
     """
     financial_year_start_month = _financial_year_start_month(ctx.workspace.tax_jurisdiction)
     custom_start, custom_end = _resolve_custom_range(start_date, end_date)
@@ -133,7 +140,7 @@ async def get_income_expenses(
     _reject_unsupported_fiscal_year_report(
         effective_period, interval, financial_year_start_month
     )
-    return await report_service.get_income_expenses_report(
+    return await income_expenses.get_income_expenses_report(
         session, ctx.workspace.id, ctx.user_id, months, interval, ctx.user.primary_currency,
         account_ids=account_ids, period=effective_period, days=days,
         financial_year_start_month=financial_year_start_month,

@@ -73,7 +73,7 @@ export function TransferDialog({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('transactions.transferTitle')}</DialogTitle>
         </DialogHeader>

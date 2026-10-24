@@ -66,7 +66,7 @@ export function ChangePasswordDialog({ open, onClose }: ChangePasswordDialogProp
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('auth.changePassword')}</DialogTitle>
         </DialogHeader>

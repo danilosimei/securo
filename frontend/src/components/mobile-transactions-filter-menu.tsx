@@ -1,4 +1,4 @@
-import type { ComponentType, Dispatch, SetStateAction } from 'react'
+import { useState, type ComponentType, type Dispatch, type SetStateAction } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowUpDown,
@@ -9,6 +9,7 @@ import {
   Coins,
   EyeClosed,
   ListChecks,
+  Sparkles,
   Store,
   Tag,
   Users,
@@ -16,6 +17,8 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DateRangeCalendars, DateRangeFields } from '@/components/ui/date-range-picker'
+import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import { CategoryFilterContent } from '@/components/category-filter-content'
 import {
   DropdownMenuCheckboxItem,
@@ -25,6 +28,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { getAccountName } from '@/lib/account-utils'
 import { cn } from '@/lib/utils'
+import { CATEGORY_SOURCE_OPTIONS } from '@/lib/category-source-options'
 import type { Account, Category, CategoryGroup, Group, Payee } from '@/types'
 
 export type MobileFilterView =
@@ -35,6 +39,7 @@ export type MobileFilterView =
   | 'group'
   | 'type'
   | 'status'
+  | 'categorySource'
   | 'ignored'
   | 'date'
   | 'amount'
@@ -62,6 +67,8 @@ interface MobileTransactionsFilterMenuProps {
   groupId: string
   type: string
   status: string
+  categorySources?: string[]
+  onCategorySourceChange?: (value: string[]) => void
   hideIgnored: boolean
   from: string
   to: string
@@ -71,7 +78,7 @@ interface MobileTransactionsFilterMenuProps {
   appliedMaxAmount: string
   setMinAmount: (value: string) => void
   setMaxAmount: (value: string) => void
-  summaries: Record<Exclude<MobileFilterView, 'root'>, string | null | undefined>
+  summaries: Partial<Record<Exclude<MobileFilterView, 'root'>, string | null | undefined>>
   datePresets: MobileDatePreset[]
   hasAnyFilter: boolean
   onAccountIdsChange: (value: string[]) => void
@@ -85,7 +92,6 @@ interface MobileTransactionsFilterMenuProps {
   onDateRangeChange: (from: string, to: string) => void
   onAmountRangeChange: (min: string, max: string) => void
   onApplyAmountRange: () => void
-  onOpenCustomRange: () => void
   onClearAll: () => void
 }
 
@@ -231,6 +237,43 @@ function MobileAccountOption({
   )
 }
 
+export function MobileCategorySourceView({
+  selected,
+  onChange,
+}: {
+  selected: string[]
+  onChange: (value: string[]) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <>
+      {CATEGORY_SOURCE_OPTIONS.map((option) => (
+        <DropdownMenuCheckboxItem
+          key={option.value}
+          checked={selected.includes(option.value)}
+          onSelect={(event) => event.preventDefault()}
+          onCheckedChange={() => onChange(toggleSelection(selected, option.value))}
+          className="text-[13px]"
+        >
+          {t(option.labelKey)}
+        </DropdownMenuCheckboxItem>
+      ))}
+      {selected.length > 0 && (
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault()
+            onChange([])
+          }}
+          className="mt-1 gap-2 border-t border-border/60 text-xs text-muted-foreground"
+        >
+          <X size={12} />
+          {t('transactions.filtersBar.clearSelection')}
+        </DropdownMenuItem>
+      )}
+    </>
+  )
+}
+
 function MobileAccountView({
   accounts,
   selectedIds,
@@ -306,42 +349,114 @@ function MobileSelectionView({
   ))
 }
 
-function MobileDateView({
+export function MobileDateView({
   from,
   to,
   presets,
   onChange,
-  onOpenCustomRange,
 }: {
   from: string
   to: string
   presets: MobileDatePreset[]
   onChange: (from: string, to: string) => void
-  onOpenCustomRange: () => void
 }) {
-  const { t } = useTranslation()
-  const options = [
-    { value: '|', label: t('transactions.all') },
-    ...presets.map((preset) => ({
-      value: `${preset.from}|${preset.to}`,
-      label: preset.label,
-    })),
-  ]
+  const { t, i18n } = useTranslation()
+  const dateFnsLocale = resolveDateFnsLocale(i18n.resolvedLanguage ?? i18n.language)
+  const [calendar, setCalendar] = useState<'from' | 'to'>('from')
+  const isPreset = presets.some((preset) => preset.from === from && preset.to === to)
+  const isCustom = (!!from || !!to) && !isPreset
+  const [betweenOpen, setBetweenOpen] = useState(isCustom)
+  const [draftFrom, setDraftFrom] = useState(from)
+  const [draftTo, setDraftTo] = useState(to)
+  const [valid, setValid] = useState(true)
+  const canApply = valid && (!!draftFrom || !!draftTo)
+  const apply = () => {
+    if (canApply) onChange(draftFrom, draftTo)
+  }
+  const all = { value: '|', label: t('transactions.all') }
+  const presetOptions = presets.map((preset) => ({
+    value: `${preset.from}|${preset.to}`,
+    label: preset.label,
+  }))
+  const select = (value: string) => onChange(...splitDateRange(value))
   return (
     <>
       <MobileSelectionView
-        options={options}
+        options={[all]}
         selectedValue={`${from}|${to}`}
-        onChange={(value) => onChange(...splitDateRange(value))}
+        onChange={select}
       />
-      <DropdownMenuSeparator />
       <DropdownMenuItem
-        onSelect={onOpenCustomRange}
-        className="justify-between py-2 text-[13px]"
+        onSelect={(event) => {
+          event.preventDefault()
+          setBetweenOpen((open) => !open)
+        }}
+        aria-expanded={betweenOpen}
+        className={cn('justify-between py-2 text-[13px]', isCustom && 'bg-primary/5')}
       >
-        {t('transactions.filtersBar.customRange')}
-        <ChevronRight size={13} className="text-muted-foreground/60" />
+        <span className="min-w-0 flex-1 truncate">{t('transactions.filtersBar.customRange')}</span>
+        {isCustom ? (
+          <Check size={13} className="text-primary" />
+        ) : (
+          <ChevronRight
+            size={13}
+            className={cn('text-muted-foreground/60 transition-transform', betweenOpen && 'rotate-90')}
+          />
+        )}
       </DropdownMenuItem>
+      {betweenOpen && (
+        <div className="p-2">
+          <DateRangeFields
+            from={draftFrom}
+            to={draftTo}
+            onChange={(nextFrom, nextTo) => {
+              setDraftFrom(nextFrom)
+              setDraftTo(nextTo)
+            }}
+            onValidityChange={setValid}
+            onSubmit={apply}
+          />
+          <div className="mt-2 flex gap-1 rounded-lg bg-muted/60 p-0.5" role="group">
+            {(['from', 'to'] as const).map((side) => (
+              <button
+                key={side}
+                type="button"
+                aria-pressed={calendar === side}
+                onClick={() => setCalendar(side)}
+                className={cn(
+                  'h-7 flex-1 rounded-md text-[12px] font-medium text-muted-foreground transition-colors',
+                  calendar === side && 'bg-background text-foreground shadow-sm',
+                )}
+              >
+                {t(`transactions.filtersBar.${side}Label`)}
+              </button>
+            ))}
+          </div>
+          <DateRangeCalendars
+            only={calendar}
+            from={draftFrom}
+            to={draftTo}
+            onFromChange={(value) => {
+              setDraftFrom(value)
+              if (value) setCalendar('to')
+            }}
+            onToChange={setDraftTo}
+            locale={dateFnsLocale}
+            className="justify-center p-0 pt-2"
+          />
+          <div className="mt-2 flex justify-end">
+            <Button type="button" size="sm" disabled={!canApply} onClick={apply}>
+              {t('transactions.filtersBar.apply')}
+            </Button>
+          </div>
+        </div>
+      )}
+      <DropdownMenuSeparator />
+      <MobileSelectionView
+        options={presetOptions}
+        selectedValue={`${from}|${to}`}
+        onChange={select}
+      />
     </>
   )
 }
@@ -434,7 +549,11 @@ function MobileAmountView({
 function buildRootOptions(
   labels: Record<Exclude<MobileFilterView, 'root'>, string>,
   summaries: MobileTransactionsFilterMenuProps['summaries'],
+  menu: MobileTransactionsFilterMenuProps,
 ): RootOption[] {
+  const originOption: RootOption[] = menu.onCategorySourceChange
+    ? [{ view: 'categorySource', icon: Sparkles, label: labels.categorySource, summary: summaries.categorySource }]
+    : []
   return [
     { view: 'account', icon: Wallet, label: labels.account, summary: summaries.account },
     { view: 'category', icon: Tag, label: labels.category, summary: summaries.category },
@@ -442,6 +561,7 @@ function buildRootOptions(
     { view: 'group', icon: Users, label: labels.group, summary: summaries.group },
     { view: 'type', icon: ArrowUpDown, label: labels.type, summary: summaries.type },
     { view: 'status', icon: ListChecks, label: labels.status, summary: summaries.status },
+    ...originOption,
     { view: 'ignored', icon: EyeClosed, label: labels.ignored, summary: summaries.ignored },
     { view: 'date', icon: CalendarIcon, label: labels.date, summary: summaries.date },
     { view: 'amount', icon: Coins, label: labels.amount, summary: summaries.amount },
@@ -458,6 +578,7 @@ function buildLabels(
     group: t('splitGroups.group'),
     type: t('transactions.type'),
     status: t('transactions.status'),
+    categorySource: t('categorization.origin.filter'),
     ignored: t('transactions.ignoredRows'),
     date: t('transactions.filtersBar.date'),
     amount: t('transactions.filtersBar.amount'),
@@ -493,6 +614,14 @@ function MobileFilterDetail({
     const options = [allOption, { value: 'pending', label: t('transactions.statusPending') }, { value: 'posted', label: t('transactions.statusPosted') }]
     return <MobileSelectionView options={options} selectedValue={menu.status} onChange={menu.onStatusChange} />
   }
+  if (menu.view === 'categorySource') {
+    return (
+      <MobileCategorySourceView
+        selected={menu.categorySources ?? []}
+        onChange={menu.onCategorySourceChange ?? (() => undefined)}
+      />
+    )
+  }
   if (menu.view === 'ignored') {
     const options = [
       { value: 'show', label: t('transactions.ignoredShow') },
@@ -501,12 +630,12 @@ function MobileFilterDetail({
     return <MobileSelectionView options={options} selectedValue={menu.hideIgnored ? 'hide' : 'show'} onChange={(value) => menu.onHideIgnoredChange(value === 'hide')} />
   }
   if (menu.view === 'date') {
-    return <MobileDateView from={menu.from} to={menu.to} presets={menu.datePresets} onChange={menu.onDateRangeChange} onOpenCustomRange={menu.onOpenCustomRange} />
+    return <MobileDateView from={menu.from} to={menu.to} presets={menu.datePresets} onChange={menu.onDateRangeChange} />
   }
   if (menu.view === 'amount') {
     return <MobileAmountView minAmount={menu.minAmount} maxAmount={menu.maxAmount} setMinAmount={menu.setMinAmount} setMaxAmount={menu.setMaxAmount} onReset={() => resetAmount(menu)} onApply={menu.onApplyAmountRange} />
   }
-  return <MobileFilterRoot options={buildRootOptions(labels, menu.summaries)} hasAnyFilter={menu.hasAnyFilter} onSelect={(view) => openDetail(menu, view)} onClear={() => clearAll(menu)} />
+  return <MobileFilterRoot options={buildRootOptions(labels, menu.summaries, menu)} hasAnyFilter={menu.hasAnyFilter} onSelect={(view) => openDetail(menu, view)} onClear={() => clearAll(menu)} />
 }
 
 function openDetail(

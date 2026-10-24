@@ -1,3 +1,10 @@
+import { SearchBar } from '@/components/ui/search-bar'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
+import { Segmented } from '@/components/invoice-ui'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -9,7 +16,6 @@ import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { Button } from '@/components/ui/button'
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -19,7 +25,8 @@ import {
 } from '@/components/ui/dialog'
 import { GroupForm } from '@/components/group-form'
 import { PageHeader } from '@/components/page-header'
-import { Archive, ChevronRight, Plus, Search, Trash2, Users, X } from 'lucide-react'
+import { RowActions } from '@/components/ui/row-actions'
+import { Archive, ChevronRight, Plus, Trash2, Users } from 'lucide-react'
 import type { Group, GroupKind } from '@/types'
 
 type StatusFilter = 'active' | 'archived' | 'all'
@@ -62,7 +69,7 @@ export default function GroupsPage() {
   const [notes, setNotes] = useState('')
 
 
-  const { data: list = [], isLoading } = useQuery({
+  const { data: list = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['groups', { q: searchQuery, status: statusFilter }],
     queryFn: () => groupsApi.list(statusFilter !== 'active', { q: searchQuery || undefined, status: statusFilter }),
   })
@@ -149,80 +156,65 @@ export default function GroupsPage() {
   return (
     <div>
       <PageHeader
-        section={t('splitGroups.section')}
+        section={t('nav.groupOrganization')}
         title={t('splitGroups.title')}
         action={
           canWrite ? (
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-              <Button size="sm" className="h-8 gap-1.5" onClick={openCreate}>
-                <Plus size={13} />
-                <span>{t('splitGroups.add')}</span>
+              <Button onClick={openCreate}>
+                <Plus />
+                {t('splitGroups.add')}
               </Button>
             </div>
           ) : undefined
         }
       />
 
-      {/* Status filter — pill buttons matching goals.tsx */}
-      <div className="flex items-center gap-2 mb-4">
-        {(['active', 'archived', 'all'] as StatusFilter[]).map((s) => (
-          <button
-            key={s}
-            onClick={() => updateFilter('status', s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              statusFilter === s
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t(`splitGroups.filter.${s}`)}
-          </button>
-        ))}
+      <div className="mb-4">
+        <Segmented<StatusFilter>
+          value={statusFilter}
+          onChange={(value) => updateFilter('status', value)}
+          testIdPrefix="groups-status"
+          options={(['active', 'archived', 'all'] as StatusFilter[]).map((value) => ({
+            value,
+            label: t(`splitGroups.filter.${value}`),
+          }))}
+        />
       </div>
 
-      <div className="rounded-xl border border-border bg-card shadow-sm transition-colors mb-4 focus-within:border-primary/40 focus-within:ring-[3px] focus-within:ring-primary/10">
-        <div className="flex items-center gap-1.5 px-2 py-1.5">
-          <div className="relative flex min-w-0 flex-1 items-center gap-1 px-2.5 py-1 min-h-9">
-            <Search size={15} className="pointer-events-none shrink-0 text-muted-foreground/70" />
-            <input
-              type="search"
-              aria-label={t('splitGroups.searchPlaceholder')}
-              placeholder={t('splitGroups.searchPlaceholder')}
-              value={search}
-              onChange={(e) => updateFilter('q', e.target.value)}
-              className="min-w-0 flex-1 bg-transparent px-1.5 text-[13.5px] outline-none placeholder:text-muted-foreground/75"
-            />
-          </div>
-          {search && (
-            <Button variant="ghost" size="icon-sm" aria-label={t('splitGroups.clearSearch')} onClick={() => updateFilter('q', '')}>
-              <X size={15} />
-            </Button>
-          )}
-        </div>
-      </div>
+      <SearchBar
+        className="mb-4"
+        value={search}
+        onChange={(value) => updateFilter('q', value)}
+        placeholder={t('splitGroups.searchPlaceholder')}
+      />
 
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden mb-4">
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
+      <SectionCard className="mb-4">
         {isLoading ? (
-          <div className="p-6 space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
-            ))}
-          </div>
+          <ListSkeleton />
         ) : list.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <Users size={32} className="mx-auto mb-2 opacity-50" />
-            <p>{t(searchQuery ? 'common.noResults' : 'splitGroups.empty')}</p>
-            {!searchQuery && (
-              <p className="text-xs mt-1">{t('splitGroups.emptyHint')}</p>
-            )}
-          </div>
+          <EmptyState
+            icon={Users}
+            title={t(searchQuery ? 'common.noResults' : 'splitGroups.empty')}
+            hint={searchQuery ? undefined : t('splitGroups.emptyHint')}
+            action={
+              canWrite && !searchQuery ? (
+                <Button onClick={openCreate}>
+                  <Plus /> {t('splitGroups.add')}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
           <ul className="divide-y divide-border">
             {list.map((group) => (
               <li
                 key={group.id}
-                className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted cursor-pointer transition-colors"
-                onClick={() => navigate(`/groups/${group.id}`)}
+                {...clickableRow(() => navigate(`/groups/${group.id}`))}
+                className={`flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-muted transition-colors ${CLICKABLE_ROW_CLASS}`}
               >
                 {/* Avatar circle — colored using the group's `color` field */}
                 <div
@@ -254,27 +246,17 @@ export default function GroupsPage() {
                     {t('splitGroups.memberCount', { count: group.members.length })} · {group.default_currency}
                   </p>
                 </div>
-                {group.is_owner && canWrite && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      openEdit(group)
-                    }}
-                  >
-                    {t('common.edit')}
-                  </Button>
-                )}
+                {group.is_owner && canWrite && <RowActions label={group.name} onEdit={() => openEdit(group)} />}
                 <ChevronRight size={16} className="text-muted-foreground shrink-0" />
               </li>
             ))}
           </ul>
         )}
-      </div>
+      </SectionCard>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{editing ? t('splitGroups.edit') : t('splitGroups.add')}</DialogTitle>
           </DialogHeader>

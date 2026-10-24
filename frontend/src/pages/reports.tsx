@@ -3,6 +3,7 @@ import { loadReportsRange, saveReportsRange, type ReportsRange } from '@/lib/rem
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import {
   AreaChart,
   Area,
@@ -24,13 +25,20 @@ import { reports } from '@/lib/api'
 import { extractApiError } from '@/lib/api-errors'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { PeriodSegments, PeriodSlot } from '@/components/reports/period-selector'
+import { ClosedPeriodBar, FixedWindowNote, ReportRangeProvider } from '@/components/reports/period-bar'
 import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { PageHeader } from '@/components/page-header'
-import { CashflowSankey } from '@/components/reports/CashflowSankey'
+import { ExploreTab } from '@/components/reports/explore/explore-tab'
+import { OverviewTab } from '@/components/reports/overview/overview-tab'
+import { TrendsTab } from '@/components/reports/trends/trends-tab'
+import { RecurringTab } from '@/components/reports/recurring/recurring-tab'
+import { HabitsTab } from '@/components/reports/habits/habits-tab'
+import { FadePanel } from '@/components/ui/fade-panel'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
-import type { ReportResponse, CategoryTrendItem } from '@/types'
+import type { ReportResponse } from '@/types'
 import { formatCurrency } from '@/lib/format'
 import { localDateString, todayInTimezone } from '@/lib/date-utils'
 import { useEffectiveTimezone } from '@/hooks/use-timezone'
@@ -66,9 +74,7 @@ function formatCompact(value: number, currency = 'USD', locale = 'en-US') {
 
 
 
-// `days` (when set) asks for an exact rolling window ending today rather than
-// the month-aligned window `months` produces.
-type RangeOption = { key: string; months: number; period?: 'ytd'; days?: number }
+type RangeOption = { key: string; months: number; period?: string }
 
 const HISTORICAL_RANGE_OPTIONS: readonly RangeOption[] = [
   { key: '6m', months: 6 },
@@ -81,16 +87,6 @@ const FORWARD_RANGE_OPTIONS: readonly RangeOption[] = [
   { key: '3m', months: 3 },
   { key: '6m', months: 6 },
   { key: '12m', months: 12 },
-]
-
-// The Money Map answers "where did my money go lately", so it leans on recent
-// windows (down to 30 days) and drops the 2Y trend view the other tabs keep.
-const MONEY_MAP_RANGE_OPTIONS: readonly RangeOption[] = [
-  { key: '30d', months: 1, days: 30 },
-  { key: '3m', months: 3 },
-  { key: '6m', months: 6 },
-  { key: 'ytd', months: 12, period: 'ytd' },
-  { key: '1y', months: 12 },
 ]
 
 const HISTORICAL_INTERVAL_OPTIONS = [
@@ -114,7 +110,6 @@ const INTERVAL_LABELS: Record<string, string> = {
 }
 
 const RANGE_LABELS: Record<string, string> = {
-  '30d': 'range30d',
   '3m': 'range3m',
   '6m': 'range6m',
   '1y': 'range1y',
@@ -147,6 +142,9 @@ interface ReportTab {
   enabled: boolean
   rangeOptions: readonly RangeOption[]
   intervalOptions: readonly { key: string; value: string }[]
+  /** Renders its own view, period selector and URL state (Explore and the
+   *  views built on the closed periods); the page's range plumbing is off. */
+  selfManaged?: boolean
   /** Cash flow is a forward-only forecast, so it's the only tab that can't offer a past-only calendar range. */
   supportsCustomRange: boolean
   /** Preset selected when switching to this tab drops the current preset, or when Reset+Apply clears a custom range on it. */
@@ -154,28 +152,44 @@ interface ReportTab {
   fallbackInterval: string
 }
 
+// Tabs that bring their own view; the range fields only keep the shared tab
+// shape valid.
+const selfManagedTab = (key: string, labelKey: string): ReportTab => ({
+  key, labelKey, enabled: true, selfManaged: true,
+  rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+  supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
+})
+
 const REPORT_TABS: ReportTab[] = [
-  {
-    key: 'net_worth', labelKey: 'reports.netWorth', enabled: true,
-    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
-    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
-  },
-  {
-    key: 'income_expenses', labelKey: 'reports.incomeExpenses', enabled: true,
-    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
-    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
-  },
+  selfManagedTab('overview', 'reports.overview.tab'),
+  selfManagedTab('explore', 'reports.explore.tab'),
+  selfManagedTab('trends', 'reports.trends.tab'),
+  selfManagedTab('recurring', 'reports.recurring.tab'),
+  selfManagedTab('habits', 'reports.habits.tab'),
   {
     key: 'cash_flow', labelKey: 'reports.cashFlow', enabled: true,
     rangeOptions: FORWARD_RANGE_OPTIONS, intervalOptions: CASH_FLOW_INTERVAL_OPTIONS,
     supportsCustomRange: false, fallbackRangeKey: '6m', fallbackInterval: 'daily',
   },
   {
-    key: 'money_map', labelKey: 'reports.moneyMap', enabled: true,
-    rangeOptions: MONEY_MAP_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
-    supportsCustomRange: true, fallbackRangeKey: '3m', fallbackInterval: 'monthly',
+    key: 'net_worth', labelKey: 'reports.netWorth', enabled: true,
+    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
   },
 ]
+
+/** The tab the page opens on when the URL does not ask for another. */
+const DEFAULT_TAB = REPORT_TABS[0]
+/** Tabs folded into the Overview: old links land there. */
+const RETIRED_TABS = new Set(['income_expenses', 'money_map'])
+
+function tabFromUrl(key: string | null): ReportTab {
+  if (key && RETIRED_TABS.has(key)) return DEFAULT_TAB
+  return REPORT_TABS.find((tab) => tab.key === key) ?? DEFAULT_TAB
+}
+
+/** The range-driven tab whose stored range seeds the page's range state. */
+const RANGE_SEED_TAB = REPORT_TABS.find((tab) => tab.key === 'net_worth')!
 
 /** The range last used on `tab`, if it is still one the tab offers. */
 function storedReportsRange(tab: ReportTab): ReportsRange | null {
@@ -201,13 +215,19 @@ export default function ReportsPage() {
   const locale = useDisplayLocale()
 
   const customDefaults = defaultCustomRange()
-  // The page opens on the first tab with the range last used there (issue
-  // #1053), or that tab's defaults if what was stored doesn't apply to it.
-  const [initialRange] = useState<ReportsRange>(() => storedReportsRange(REPORT_TABS[0]) ?? {
-    rangeKey: REPORT_TABS[0].fallbackRangeKey,
-    from: '',
-    to: '',
-    interval: REPORT_TABS[0].fallbackInterval,
+  // `?tab=` picks the tab, so a link, a chart click or Back can switch it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlTab = tabFromUrl(searchParams.get('tab'))
+  // The page opens with the range last used on its tab (issue #1053), or that
+  // tab's defaults if what was stored doesn't apply to it.
+  const [initialRange] = useState<ReportsRange>(() => {
+    const seed = urlTab.selfManaged ? RANGE_SEED_TAB : urlTab
+    return storedReportsRange(seed) ?? {
+      rangeKey: seed.fallbackRangeKey,
+      from: '',
+      to: '',
+      interval: seed.fallbackInterval,
+    }
   })
   const [rangeKey, setRangeKey] = useState(initialRange.rangeKey)
   const [interval, setInterval] = useState(initialRange.interval)
@@ -217,15 +237,16 @@ export default function ReportsPage() {
   // selection while the user compares views.
   const [customFrom, setCustomFrom] = useState(initialRange.from)
   const [customTo, setCustomTo] = useState(initialRange.to)
-  const [activeTab, setActiveTab] = useState(REPORT_TABS[0].key)
+  const activeTab = urlTab.key
+  // Explore and the views on closed periods keep their own state in the URL.
+  const isSelfManaged = !!urlTab.selfManaged
   // Each tab keeps its own range: Cash Flow clamping to its forward presets
   // must not overwrite what Net Worth was showing.
   useEffect(() => {
+    if (isSelfManaged) return
     saveReportsRange(activeTab, { rangeKey, from: customFrom, to: customTo, interval })
-  }, [activeTab, rangeKey, customFrom, customTo, interval])
+  }, [activeTab, isSelfManaged, rangeKey, customFrom, customTo, interval])
   const [compositionView, setCompositionView] = useState<string>('netWorth')
-  const [sparklineView, setSparklineView] = useState<'byExpenses' | 'byIncome'>('byExpenses')
-  const [sparklinePage, setSparklinePage] = useState(0)
   const [cashFlowBaseline, setCashFlowBaseline] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   // Active Collection filter (issue #105): scope all report tabs to its
@@ -233,21 +254,17 @@ export default function ReportsPage() {
   const { activeAccountIds, activeWalletIds } = useCollectionFilter()
   const acctIds = activeAccountIds ?? undefined
   const walletIds = activeWalletIds ?? undefined
-  // Wallet-only collection (active, zero accounts): the account-based reports
-  // (income/expenses, cash flow) have no data — only net worth (which includes
+  // Wallet-only collection (active, zero accounts): the account-based report
+  // (cash flow) has no data — only net worth (which includes
   // the wallets' assets) is meaningful.
   const noAccounts = activeAccountIds !== null && activeAccountIds.length === 0
 
   const currentTab = REPORT_TABS.find((tab) => tab.key === activeTab) ?? REPORT_TABS[0]
 
   const isCashFlow = activeTab === 'cash_flow'
-  // The Money Map (Sankey) tab is driven by the same income/expenses
-  // composition, aggregated over the selected historical range.
-  const isMoneyMap = activeTab === 'money_map'
   const rangeOptions = currentTab.rangeOptions
   // Cash flow's forecast presets don't make sense with a past-only calendar
-  // range, so custom is only offered for the historical tabs (Net Worth,
-  // Income vs Expenses, Money Map).
+  // range, so custom is only offered for Net Worth.
   const supportsCustomRange = currentTab.supportsCustomRange
   const intervalOptions = currentTab.intervalOptions
   const isCustomRange = supportsCustomRange && rangeKey === CUSTOM_RANGE_KEY
@@ -270,16 +287,23 @@ export default function ReportsPage() {
       )
     : selectedRange.months
   const months = isCustomRange ? customMonths : selectedRange.months
+  // A custom window is sent as its dates.
   const period = isCustomRange ? undefined : selectedRange.period
-  const days = isCustomRange ? undefined : selectedRange.days
   const apiStart = hasCustomRange ? customFrom : undefined
   const apiEnd = hasCustomRange ? customTo : undefined
 
   const handleSelectTab = (key: string) => {
     const nextTab = REPORT_TABS.find((tab) => tab.key === key) ?? REPORT_TABS[0]
-    setActiveTab(key)
+    // The views on closed periods share the period: it follows the switch.
+    const next = new URLSearchParams({ tab: key })
+    if (nextTab.selfManaged && isSelfManaged) {
+      for (const param of ['period', 'from', 'to']) {
+        const value = searchParams.get(param)
+        if (value) next.set(param, value)
+      }
+    }
+    setSearchParams(next, { replace: true })
     setCompositionView(key === 'net_worth' ? 'netWorth' : 'net')
-    setSparklinePage(0)
     setSelectedDate(null)
     const remembered = storedReportsRange(nextTab)
     if (remembered) {
@@ -304,15 +328,13 @@ export default function ReportsPage() {
   }
 
   const { data, isLoading, isError, error, refetch } = useQuery<ReportResponse>({
-    queryKey: ['reports', activeTab, rangeKey, months, period ?? null, days ?? null, interval, isCashFlow ? cashFlowBaseline : false, activeAccountIds, activeWalletIds, apiStart ?? null, apiEnd ?? null],
+    queryKey: ['reports', activeTab, rangeKey, months, period ?? null, interval, isCashFlow ? cashFlowBaseline : false, activeAccountIds, activeWalletIds, apiStart ?? null, apiEnd ?? null],
     queryFn: () =>
       isCashFlow
         ? reports.cashFlow(months, interval, cashFlowBaseline, acctIds)
-        : activeTab === 'income_expenses' || isMoneyMap
-          ? reports.incomeExpenses(months, interval, acctIds, period, days, apiStart, apiEnd)
-          : reports.netWorth(months, interval, acctIds, walletIds, period, apiStart, apiEnd),
+        : reports.netWorth(months, interval, acctIds, walletIds, period, apiStart, apiEnd),
     // Only request a custom report with both committed endpoints.
-    enabled: currentTab.enabled && !(noAccounts && activeTab !== 'net_worth') && (!isCustomRange || hasCustomRange),
+    enabled: currentTab.enabled && !isSelfManaged && !(noAccounts && activeTab !== 'net_worth') && (!isCustomRange || hasCustomRange),
   })
 
   const summary = data?.summary
@@ -413,9 +435,7 @@ export default function ReportsPage() {
   // Composition toggle options per report type
   const compositionOptions = activeTab === 'net_worth'
     ? ['netWorth', 'assetsAndAccounts', 'liabilities'] as const
-    : activeTab === 'income_expenses' || activeTab === 'cash_flow'
-      ? ['net', 'byIncome', 'byExpenses'] as const
-      : ['summary', 'detailed'] as const
+    : ['net', 'byIncome', 'byExpenses'] as const
 
   // Which breakdown groups are visible in each toggle state. null = show all.
   const activeCompositionGroups: Set<string> | null = (() => {
@@ -587,111 +607,63 @@ export default function ReportsPage() {
     return result
   })()
 
+  const trendFirst = trend[0]?.date
+  const trendLast = trend[trend.length - 1]?.date
+  const shortDay = (iso: string) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: '2-digit' })
+  const periodControl = isSelfManaged ? (
+    activeTab === 'recurring' ? <FixedWindowNote /> : <ClosedPeriodBar />
+  ) : (
+    <PeriodSegments
+      options={rangeOptions.map((opt) => ({ key: opt.key, label: t(`reports.${RANGE_LABELS[opt.key]}`) }))}
+      value={isCustomRange ? null : rangeKey}
+      onSelect={(key) => { setRangeKey(key); setSelectedDate(null) }}
+      rangeText={trendFirst && trendLast ? t('reports.periodRange', { from: shortDay(trendFirst), to: shortDay(trendLast) }) : null}
+      custom={supportsCustomRange ? (
+        <DateRangePicker
+          variant="segment"
+          className="rounded-md"
+          active={isCustomRange}
+          from={customFrom}
+          to={customTo}
+          defaultFrom={customDefaults.from}
+          defaultTo={customDefaults.to}
+          disallowFuture
+          maxRangeYears={CUSTOM_RANGE_MAX_YEARS}
+          onChange={(f, to) => {
+            setCustomFrom(f)
+            setCustomTo(to)
+            setRangeKey(f && to ? CUSTOM_RANGE_KEY : currentTab.fallbackRangeKey)
+            setSelectedDate(null)
+          }}
+          label={t('reports.customRange')}
+          placeholder={t('reports.pickCustomRange')}
+        />
+      ) : undefined}
+    />
+  )
+
   return (
+    <ReportRangeProvider>
     <div>
       <PageHeader
-        section={t('reports.section')}
-        title={t(currentTab.labelKey)}
-        action={
-          <div className="flex items-center gap-2">
-            {isCashFlow && (
-              <div
-                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  cashFlowBaseline
-                    ? 'border-primary/40 bg-primary/10 text-primary'
-                    : 'border-border bg-card text-muted-foreground'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => setCashFlowBaseline((v) => !v)}
-                  className="flex items-center gap-2 hover:text-foreground transition-colors"
-                  aria-pressed={cashFlowBaseline}
-                >
-                  <span
-                    className={`relative inline-flex h-3.5 w-6 shrink-0 items-center rounded-full transition-colors ${
-                      cashFlowBaseline ? 'bg-primary' : 'bg-muted'
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
-                        cashFlowBaseline ? 'translate-x-3' : 'translate-x-0.5'
-                      }`}
-                    />
-                  </span>
-                  {t('reports.includeEstimate')}
-                </button>
-                <span
-                  title={t('reports.includeEstimateHelp')}
-                  aria-label={t('reports.includeEstimateHelp')}
-                  className="inline-flex cursor-help"
-                >
-                  <HelpCircle className="h-3.5 w-3.5 opacity-60" />
-                </span>
-              </div>
-            )}
-            <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
-              {rangeOptions.map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => { setRangeKey(opt.key); setSelectedDate(null) }}
-                  className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
-                    rangeKey === opt.key
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  {t(`reports.${RANGE_LABELS[opt.key]}`)}
-                </button>
-              ))}
-              {supportsCustomRange && (
-                <DateRangePicker
-                  variant="segment"
-                  active={isCustomRange}
-                  from={customFrom}
-                  to={customTo}
-                  defaultFrom={customDefaults.from}
-                  defaultTo={customDefaults.to}
-                  disallowFuture
-                  maxRangeYears={CUSTOM_RANGE_MAX_YEARS}
-                  onChange={(f, to) => {
-                    setCustomFrom(f)
-                    setCustomTo(to)
-                    setRangeKey(f && to ? CUSTOM_RANGE_KEY : currentTab.fallbackRangeKey)
-                    setSelectedDate(null)
-                  }}
-                  label={t('reports.customRange')}
-                  placeholder={t('reports.pickCustomRange')}
-                />
-              )}
-            </div>
-            <div className={`flex items-center rounded-lg border border-border bg-card overflow-hidden ${isMoneyMap ? 'hidden' : ''}`}>
-              {intervalOptions.map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => { setInterval(opt.value); setSelectedDate(null) }}
-                  className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${
-                    interval === opt.value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  {t(`reports.${INTERVAL_LABELS[opt.key]}`)}
-                </button>
-              ))}
-            </div>
-          </div>
-        }
+        section={t('nav.groupAnalysis')}
+        title={t('nav.reports')}
       />
 
-      {/* Tab Bar */}
-      <div className="flex items-center gap-1 mb-5 border-b border-border">
+      {/* Tabs and the period share one row on a desktop, the period at the
+          right; on smaller screens it sits right under the tabs (full width
+          on a phone). Rendered once, in the same place, for every tab. */}
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
+      {/* Tab Bar: scrolls on its own on a phone, never the page. */}
+      <div className="flex min-w-0 items-center gap-1 border-b border-border overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:flex-1">
         {REPORT_TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => { if (tab.enabled) handleSelectTab(tab.key) }}
             disabled={!tab.enabled}
-            className={`relative px-4 py-2.5 text-sm font-medium transition-colors ${
+            aria-current={activeTab === tab.key ? 'page' : undefined}
+            className={`relative px-4 py-2.5 shrink-0 whitespace-nowrap text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? 'text-foreground'
                 : tab.enabled
@@ -711,8 +683,25 @@ export default function ReportsPage() {
           </button>
         ))}
       </div>
+      {/* The same height on every tab (the line of dates under the picker
+          included, even where a tab has none), so the content below never
+          moves when switching tabs. */}
+      <div className="min-h-[54px] sm:ml-auto">
+        <PeriodSlot testId="reports-period">{periodControl}</PeriodSlot>
+      </div>
+      </div>
 
-      {isError && (
+      {isSelfManaged && (
+        <FadePanel panelKey={activeTab} className="min-h-[60vh]" data-testid="reports-content">
+          {activeTab === 'overview' && <OverviewTab />}
+          {activeTab === 'explore' && <ExploreTab />}
+          {activeTab === 'trends' && <TrendsTab />}
+          {activeTab === 'recurring' && <RecurringTab />}
+          {activeTab === 'habits' && <HabitsTab />}
+        </FadePanel>
+      )}
+
+      {!isSelfManaged && isError && (
         <div className="flex items-center justify-between gap-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-lg px-4 py-2.5 mb-5">
           <div className="flex items-center gap-2.5 min-w-0">
             <AlertCircle size={16} className="shrink-0 text-rose-600 dark:text-rose-400" />
@@ -730,7 +719,65 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {!isError && (
+      {/* Cash Flow and Net Worth controls sit with their content, so the
+          title and the tab row stay exactly the same on every tab. */}
+      {!isSelfManaged && (
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
+          {isCashFlow && (
+            <div
+              className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                cashFlowBaseline
+                  ? 'border-primary/40 bg-primary/10 text-primary'
+                  : 'border-border bg-card text-muted-foreground'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => setCashFlowBaseline((v) => !v)}
+                className="flex items-center gap-2 hover:text-foreground transition-colors"
+                aria-pressed={cashFlowBaseline}
+              >
+                <span
+                  className={`relative inline-flex h-3.5 w-6 shrink-0 items-center rounded-full transition-colors ${
+                    cashFlowBaseline ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
+                      cashFlowBaseline ? 'translate-x-3' : 'translate-x-0.5'
+                    }`}
+                  />
+                </span>
+                {t('reports.includeEstimate')}
+              </button>
+              <span
+                title={t('reports.includeEstimateHelp')}
+                aria-label={t('reports.includeEstimateHelp')}
+                className="inline-flex cursor-help"
+              >
+                <HelpCircle className="h-3.5 w-3.5 opacity-60" />
+              </span>
+            </div>
+          )}
+          <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
+            {intervalOptions.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => { setInterval(opt.value); setSelectedDate(null) }}
+                className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                  interval === opt.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                {t(`reports.${INTERVAL_LABELS[opt.key]}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isSelfManaged && !isError && (
       <>
       {/* Hero Card */}
       <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
@@ -820,44 +867,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Flow (Sankey) */}
-      {isMoneyMap && (
-        <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
-          <div className="px-5 pt-5 pb-2 flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">
-              {t('reports.moneyMap')}
-            </p>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#10B981' }} />
-                <span className="text-[11px] text-muted-foreground">{t('reports.income')}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F43F5E' }} />
-                <span className="text-[11px] text-muted-foreground">{t('reports.expenses')}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#0EA5E9' }} />
-                <span className="text-[11px] text-muted-foreground">{t('reports.investments')}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#F59E0B' }} />
-                <span className="text-[11px] text-muted-foreground">{t('reports.deficit')}</span>
-              </div>
-            </div>
-          </div>
-          <div className="px-3 pb-5">
-            {isLoading ? (
-              <div className="px-2"><Skeleton className="h-[360px] w-full" /></div>
-            ) : (
-              <CashflowSankey composition={composition} currency={userCurrency} locale={locale} />
-            )}
-          </div>
-        </div>
-      )}
-
-      {!isMoneyMap && (
-      <>
       {/* Main Trend Chart */}
       <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
         <div className="px-5 pt-5 pb-2 flex items-center justify-between">
@@ -885,14 +894,6 @@ export default function ReportsPage() {
                     </span>
                   </div>
                 ))
-              )}
-              {meta.type === 'income_expenses' && (
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-0 border-t-2 border-dashed" style={{ borderColor: '#6366F1' }} />
-                  <span className="text-[11px] text-muted-foreground">
-                    {t('reports.netIncome')}
-                  </span>
-                </div>
               )}
               {meta.type === 'cash_flow' && (
                 <div className="flex items-center gap-1.5">
@@ -1019,55 +1020,7 @@ export default function ReportsPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               )
-            })() : meta?.type === 'income_expenses' ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval="preserveStartEnd"
-                />
-                <YAxis
-                  tickFormatter={(v) => {
-                    if (privacyMode) return ''
-                    if (v === 0) return '0'
-                    return formatCompact(v, userCurrency, locale)
-                  }}
-                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={64}
-                  tickCount={5}
-                />
-                <Tooltip
-                  formatter={(value?: number, name?: string) => [
-                    privacyMode ? MASK : formatCurrency(value ?? 0, userCurrency, locale),
-                    name === 'value'
-                      ? t('reports.netIncome')
-                      : t(`reports.${name ?? ''}`, { defaultValue: name ?? '' }),
-                  ]}
-                  labelFormatter={(label) => label}
-                  contentStyle={tooltipStyle}
-                />
-                <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="3 3" />
-                  <Bar dataKey="income" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="expenses" fill="#F43F5E" radius={[4, 4, 0, 0]} maxBarSize={20} />
-                  <Bar dataKey="projectedIncome" fill="#34D399" radius={[4, 4, 0, 0]} maxBarSize={20} fillOpacity={0.65} />
-                  <Bar dataKey="projectedExpenses" fill="#FB7185" radius={[4, 4, 0, 0]} maxBarSize={20} fillOpacity={0.65} />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#6366F1"
-                  strokeWidth={2}
-                  strokeDasharray="6 3"
-                  dot={false}
-                  activeDot={{ r: 4, fill: '#6366F1' }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-            ) : (
+            })() : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <defs>
@@ -1280,7 +1233,6 @@ export default function ReportsPage() {
                                 ? t(isHistoricalSnapshot ? 'reports.youOwed' : 'reports.youOwe', { defaultValue: isHistoricalSnapshot ? 'You Owed' : 'You Owe' })
                                 : compositionView === 'byIncome' ? t('reports.income')
                                 : compositionView === 'byExpenses' ? t('reports.expenses')
-                                : meta?.type === 'income_expenses' ? t('reports.netIncome')
                                 : t(currentTab.labelKey)}
                           </span>
                           <span className="text-base font-bold text-foreground tabular-nums">
@@ -1370,16 +1322,12 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Evolution / Category Sparklines */}
-        <div className={`lg:col-span-2 rounded-xl border shadow-sm transition-colors ${selectedDate && meta?.type !== 'income_expenses' ? 'bg-primary/5 border-primary/50' : 'bg-card border-border'}`}>
+        {/* Evolution */}
+        <div className={`lg:col-span-2 rounded-xl border shadow-sm transition-colors ${selectedDate ? 'bg-primary/5 border-primary/50' : 'bg-card border-border'}`}>
           <div className="px-5 pt-5 pb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold text-foreground">
-                {meta?.type === 'income_expenses'
-                  ? t('reports.categoryTrends')
-                  : meta?.type === 'cash_flow'
-                    ? t('reports.inflowOutflow')
-                    : t('reports.evolution')}
+                {meta?.type === 'cash_flow' ? t('reports.inflowOutflow') : t('reports.evolution')}
               </p>
               {selectedDate && (
                 <button
@@ -1392,149 +1340,7 @@ export default function ReportsPage() {
                 </button>
               )}
             </div>
-            {meta?.type === 'income_expenses' && (() => {
-              const groupKey = sparklineView === 'byIncome' ? 'income' : 'expenses'
-              const allItems = (data?.category_trend ?? []).filter((c) => c.group === groupKey)
-              const totalPages = Math.ceil(allItems.length / 6)
-              const hasPagination = totalPages > 1
-              return (
-                <div className="flex items-center gap-2">
-                  {hasPagination && (
-                    <div className="flex items-center gap-0.5">
-                      <button
-                        onClick={() => setSparklinePage((p) => Math.max(0, p - 1))}
-                        disabled={sparklinePage === 0}
-                        aria-label={t('common.previous')}
-                        className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-                      </button>
-                      <button
-                        onClick={() => setSparklinePage((p) => Math.min(totalPages - 1, p + 1))}
-                        disabled={sparklinePage >= totalPages - 1}
-                        aria-label={t('common.next')}
-                        className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex items-center rounded-lg border border-border bg-muted/30 overflow-hidden">
-                    {(['byExpenses', 'byIncome'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        onClick={() => { setSparklineView(opt); setSparklinePage(0) }}
-                        className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                          sparklineView === opt
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                        }`}
-                      >
-                        {t(`reports.${opt}`)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )
-            })()}
           </div>
-          {meta?.type === 'income_expenses' ? (
-            <div className="pb-4 overflow-hidden">
-              {isLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-4">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : (() => {
-                const groupKey = sparklineView === 'byIncome' ? 'income' : 'expenses'
-                const allGroupItems: CategoryTrendItem[] = (data?.category_trend ?? []).filter(
-                  (c) => c.group === groupKey
-                )
-                if (allGroupItems.length === 0) {
-                  return (
-                    <p className="text-muted-foreground text-sm text-center py-16">
-                      {t('reports.noData')}
-                    </p>
-                  )
-                }
-                const totalPages = Math.ceil(allGroupItems.length / 6)
-                const pages = Array.from({ length: totalPages }, (_, i) =>
-                  allGroupItems.slice(i * 6, i * 6 + 6)
-                )
-                return (
-                  <div
-                    className="flex"
-                    style={{
-                      transform: `translateX(-${sparklinePage * 100}%)`,
-                      transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
-                    }}
-                  >
-                    {pages.map((pageItems, pageIdx) => (
-                      <div
-                        key={pageIdx}
-                        className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full shrink-0 px-4"
-                      >
-                        {pageItems.map((item) => {
-                          const sparkData = item.series.map((s) => ({ date: s.date, v: s.value }))
-                          const gradId = `grad-${item.key}-${item.group}-p${pageIdx}`
-                          return (
-                            <div
-                              key={`${item.key}-${item.group}`}
-                              className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
-                            >
-                              <div className="flex items-center gap-1.5 mb-0.5">
-                                <div
-                                  className="w-2 h-2 rounded-full shrink-0"
-                                  style={{ backgroundColor: item.color }}
-                                />
-                                <span className="text-[11px] text-muted-foreground truncate">
-                                  {item.key === 'uncategorized' ? t('reports.uncategorized') : item.key === 'other' ? t('reports.other') : item.label}
-                                </span>
-                              </div>
-                              <p className="text-xs font-bold tabular-nums text-foreground mb-1">
-                                {mask(formatCompact(item.total, userCurrency, locale))}
-                              </p>
-                              <div style={{ height: 48 }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <AreaChart data={sparkData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-                                    <defs>
-                                      <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor={item.color} stopOpacity={0.3} />
-                                        <stop offset="95%" stopColor={item.color} stopOpacity={0.02} />
-                                      </linearGradient>
-                                    </defs>
-                                    <XAxis dataKey="date" hide />
-                                    <Tooltip
-                                      formatter={(value?: number) => [
-                                        privacyMode ? MASK : formatCurrency(value ?? 0, userCurrency, locale),
-                                        item.label,
-                                      ]}
-                                      labelFormatter={(label) => label}
-                                      contentStyle={{ ...tooltipStyle, padding: '4px 8px' }}
-                                    />
-                                    <Area
-                                      type="monotone"
-                                      dataKey="v"
-                                      stroke={item.color}
-                                      strokeWidth={1.5}
-                                      fill={`url(#${gradId})`}
-                                      dot={false}
-                                      activeDot={{ r: 2, fill: item.color }}
-                                    />
-                                  </AreaChart>
-                                </ResponsiveContainer>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()}
-            </div>
-          ) : (
           <div className="px-1 pb-4" style={{ height: 280 }}>
             {isLoading ? (
               <div className="px-4">
@@ -1660,13 +1466,11 @@ export default function ReportsPage() {
               </p>
             )}
           </div>
-          )}
         </div>
       </div>
       </>
       )}
-      </>
-      )}
     </div>
+    </ReportRangeProvider>
   )
 }

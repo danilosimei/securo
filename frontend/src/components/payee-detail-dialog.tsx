@@ -78,8 +78,7 @@ export function PayeeDetailDialog({
       {/* The figures below are the description; Radix warns when neither a
           DialogDescription nor this opt-out is present. Same call as
           global-chat-panel and rule-dialog. */}
-      <DialogContent
-        className="sm:max-w-lg flex flex-col max-h-[calc(100dvh-2rem)]"
+      <DialogContent className="flex flex-col"
         aria-describedby={undefined}
       >
         <DialogHeader>
@@ -159,7 +158,7 @@ export function PayeeDetailDialog({
                         // Close first: navigating out from inside the dialog
                         // leaves the scroll lock mounted over the next route.
                         onOpenChange(false)
-                        navigate(`/transactions?payee_id=${summaryData.payee.id}`)
+                        navigate(`/transactions?payee_id=${summaryData.payee.id}&from_screen=payee`)
                       }}
                     >
                       {t('payees.viewAllTransactions', { count: summaryData.transaction_count })}

@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Calendar as CalendarIcon,
   ChevronDown,
-  Package,
   Plus,
   Receipt,
   Repeat,
@@ -32,14 +33,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
+import { YearPeriodSelector } from '@/components/reports/period-selector'
+import { InvoiceTabs, INVOICE_TABS } from '@/components/invoice-tabs'
+import { useUrlTab } from '@/hooks/use-url-tab'
+import InvoiceSchedulesPage from '@/pages/invoice-schedules'
+import ProductsPage from '@/pages/products'
 import { SectionCard, Segmented, StateBadge, TH } from '@/components/invoice-ui'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { InvoiceLineEditor } from '@/components/invoice-line-editor'
 import { InvoiceInstallmentsEditor } from '@/components/invoice-installments-editor'
 import { displayDue, installmentsTotal } from '@/lib/installment-utils'
@@ -76,7 +78,9 @@ import type {
  * there.
  */
 
-type Filter = 'all' | 'open' | 'overdue' | 'paid' | 'draft'
+const FILTERS = ['all', 'open', 'overdue', 'paid', 'draft'] as const
+type Filter = (typeof FILTERS)[number]
+const DIRECTIONS = ['receivable', 'payable'] as const
 
 /** The three derived states where money is still expected. `open` in the
  *  filter bar means all of them, which is why it is not a server query. */
@@ -92,7 +96,16 @@ const BUCKETS = [
   { key: 'd90_plus', tone: 'bg-rose-700/80' },
 ] as const
 
+/** `/invoices` is three tabs (`?tab=`): the invoices, the recurring ones and
+ *  the products. Each is its own page; this picks the one to show. */
 export default function InvoicesPage() {
+  const [tab] = useUrlTab(INVOICE_TABS)
+  if (tab === 'schedules') return <InvoiceSchedulesPage />
+  if (tab === 'products') return <ProductsPage />
+  return <InvoicesTab />
+}
+
+function InvoicesTab() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const locale = useDisplayLocale()
@@ -107,9 +120,23 @@ export default function InvoicesPage() {
   // Which ledger is on screen. A bigger axis than the state filter — the
   // totals above the list change with it — so it sits above the summary
   // rather than among the filters.
-  const [direction, setDirection] = useState<InvoiceDirection>('receivable')
-  const [year, setYear] = useState<number | null>(() => new Date().getFullYear())
-  const [filter, setFilter] = useState<Filter>('all')
+  // Direction, state and year live in the URL (`?dir=`, `?state=`, `?year=`),
+  // so a link or a reload lands on the same list.
+  const [direction, setDirection] = useUrlTab(DIRECTIONS, 'dir')
+  const [filter, setFilter] = useUrlTab(FILTERS, 'state')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const yearParam = searchParams.get('year')
+  const year = yearParam === 'all' ? null : /^\d{4}$/.test(yearParam ?? '') ? Number(yearParam) : new Date().getFullYear()
+  const setYear = (next: number | null) =>
+    setSearchParams(
+      (previous) => {
+        const params = new URLSearchParams(previous)
+        if (next === new Date().getFullYear()) params.delete('year')
+        else params.set('year', next ? String(next) : 'all')
+        return params
+      },
+      { replace: true },
+    )
   const [createOpen, setCreateOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
@@ -117,15 +144,19 @@ export default function InvoicesPage() {
     queryKey: ['invoice-settings'],
     queryFn: invoicesApi.settings,
   })
-  const { data: summary, isLoading: summaryLoading } = useQuery({
+  // Switching direction, filter or year keeps what is on screen, dimmed,
+  // until the new numbers land: no skeleton flash in between.
+  const { data: summary, isLoading: summaryLoading, isPlaceholderData: summaryStale } = useQuery({
     queryKey: ['invoice-summary', direction],
     queryFn: () => invoicesApi.summary(direction),
+    placeholderData: keepPreviousData,
   })
   const { data: facets } = useQuery({
     queryKey: ['invoice-facets', year, direction],
     queryFn: () => invoicesApi.facets(year ?? undefined, direction),
+    placeholderData: keepPreviousData,
   })
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, isError, error, refetch, isPlaceholderData } = useQuery({
     queryKey: ['invoices', filter, year, direction],
     queryFn: () =>
       invoicesApi.list({
@@ -135,6 +166,7 @@ export default function InvoicesPage() {
         ...(filter === 'all' || filter === 'open' ? {} : { state: filter }),
         ...(year ? { year } : {}),
       }),
+    placeholderData: keepPreviousData,
   })
 
   const visible = useMemo(() => {
@@ -158,69 +190,56 @@ export default function InvoicesPage() {
   return (
     <div>
       <PageHeader
-        section={t('invoices.section')}
+        section={t('nav.groupDaily')}
         title={t('invoices.title')}
+        period={
+          <YearPeriodSelector
+            value={year}
+            years={facets?.years ?? []}
+            onChange={setYear}
+            yearLabel={(y) => t('invoices.fiscalYear', { year: y })}
+            allLabel={t('invoices.allYears')}
+          />
+        }
         action={
-          <div className="flex items-center gap-2">
-            {/* Only on the receivable side: an agreement is something we
-                bill, and the payable ledger has nothing to emit. */}
-            {direction === 'receivable' && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/invoices/products')}
-                  data-testid="invoice-products-button"
-                >
-                  <Package className="h-4 w-4 mr-1.5" />
-                  {t('invoices.products.title')}
+          <PageActions
+            primary={
+              canWrite ? (
+                <Button onClick={() => setCreateOpen(true)} data-testid="invoice-new-button">
+                  <Plus />
+                  {direction === 'payable' ? t('invoices.newPayable') : t('invoices.new')}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/invoices/schedules')}
-                  data-testid="invoice-schedules-button"
-                >
-                  <Repeat className="h-4 w-4 mr-1.5" />
-                  {t('invoices.schedules.title')}
-                </Button>
-              </>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSettingsOpen(true)}
-              data-testid="invoice-settings-button"
-            >
-              <Settings2 className="h-4 w-4 mr-1.5" />
-              {t('invoices.settings.title')}
-            </Button>
-            {canWrite && (
-              <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="invoice-new-button">
-                <Plus className="h-4 w-4 mr-1.5" />
-                {direction === 'payable' ? t('invoices.newPayable') : t('invoices.new')}
-              </Button>
-            )}
-          </div>
+              ) : undefined
+            }
+            items={[{ label: t('invoices.settings.title'), icon: Settings2, onSelect: () => setSettingsOpen(true) }]}
+          />
         }
       />
 
-      <div className="mb-4">
-        <Segmented<InvoiceDirection>
-          value={direction}
-          onChange={setDirection}
-          testIdPrefix="invoice-direction"
-          options={[
-            { value: 'receivable', label: t('invoices.direction.receivable') },
-            { value: 'payable', label: t('invoices.direction.payable') },
-          ]}
-        />
-      </div>
+      {/* Which ledger is on screen. A bigger axis than the state filter —
+          the totals below change with it — so it sits with the tabs. */}
+      <InvoiceTabs
+        tab="invoices"
+        trailing={
+          <Segmented<InvoiceDirection>
+            value={direction}
+            onChange={setDirection}
+            testIdPrefix="invoice-direction"
+            options={[
+              { value: 'receivable', label: t('invoices.direction.receivable') },
+              { value: 'payable', label: t('invoices.direction.payable') },
+            ]}
+          />
+        }
+      />
 
       {/* One block, in the dashboard's shape: a headline figure with its
           supporting numbers beside it, and the accountant's view of the
           same money to the right. Four identical stat cards say less. */}
-      <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
+      <div
+        aria-busy={summaryStale}
+        className={cn('bg-card rounded-xl border border-border shadow-sm mb-5 transition-opacity duration-200', summaryStale && 'opacity-60')}
+      >
         <div className="grid grid-cols-1 lg:grid-cols-3">
           <div className="lg:col-span-2 px-5 py-4">
             <p className="text-xs font-medium text-muted-foreground mb-0.5">
@@ -323,7 +342,7 @@ export default function InvoicesPage() {
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4">
         <Segmented<Filter>
           value={filter}
           onChange={setFilter}
@@ -334,90 +353,48 @@ export default function InvoicesPage() {
             count: facets?.counts[value],
           }))}
         />
-
-        {/* The year sits with the list's own controls, not with the
-            summary: it scopes what is listed, and the summary above
-            deliberately has no year — an unpaid 2024 invoice is still
-            owed today. */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            {/* Same trigger the dashboard uses for its period: a
-                dropdown rather than the dashboard's arrows because only
-                years that have a document are worth stepping to, and
-                arrows would walk into empty ones. */}
-            <button
-              type="button"
-              data-testid="invoice-year-trigger"
-              className="inline-flex items-center justify-center gap-2 border border-border rounded-lg px-3 py-1.5 text-sm bg-card text-foreground hover:bg-muted/50 transition-all cursor-pointer min-w-[180px]"
-            >
-              <CalendarIcon className="size-3.5 text-muted-foreground" />
-              {year ? t('invoices.fiscalYear', { year }) : t('invoices.allYears')}
-              <ChevronDown className="size-3.5 text-muted-foreground ml-auto" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-[180px] p-1 bg-card border border-border rounded-xl shadow-md"
-          >
-            <DropdownMenuItem
-              onClick={() => setYear(null)}
-              data-testid="invoice-year-all"
-              className="text-sm"
-            >
-              {t('invoices.allYears')}
-            </DropdownMenuItem>
-            {/* Only years that actually have an invoice. Offering an
-                empty year is offering a dead end. */}
-            {(facets?.years ?? []).map((option) => (
-              <DropdownMenuItem
-                key={option}
-                onClick={() => setYear(option)}
-                data-testid={`invoice-year-${option}`}
-                className="text-sm tabular-nums"
-              >
-                {t('invoices.fiscalYear', { year: option })}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
 
+      {/* Switching the filter or direction keeps this list up, dimmed, until the new one
+          lands, rather than dropping it for a skeleton in between. */}
+      <div
+        data-testid="invoices-list"
+        aria-busy={isPlaceholderData}
+        className={cn('transition-opacity duration-200', isPlaceholderData && 'opacity-60')}
+      >
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         {isLoading ? (
-          <div className="p-5 space-y-3">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
+          <ListSkeleton />
         ) : visible.length === 0 ? (
-          <div className="px-5 py-14 text-center" data-testid="invoices-empty">
-            <Receipt className="h-8 w-8 mx-auto text-muted-foreground/50" />
-            <p className="mt-3 text-sm text-muted-foreground max-w-sm mx-auto">
-              {filter !== 'all'
+          <EmptyState
+            icon={Receipt}
+            testId="invoices-empty"
+            title={
+              filter !== 'all'
                 ? t('invoices.emptyFiltered')
                 : year
                   ? t('invoices.emptyYear', { year: t('invoices.fiscalYear', { year }) })
-                  : t('invoices.empty')}
-            </p>
-            {/* When a year emptied the list, the useful next move is to
-                widen it — not to create an invoice in a year nobody is
-                looking at. */}
-            {filter === 'all' && year && facets && facets.years.length > 0 ? (
-              <Button size="sm" variant="outline" className="mt-4" onClick={() => setYear(null)}>
-                {t('invoices.showAllYears')}
-              </Button>
-            ) : (
-              filter === 'all' &&
-              canWrite && (
-                <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  {t('invoices.new')}
+                  : t('invoices.empty')
+            }
+            action={
+              // When a year emptied the list, the useful next move is to
+              // widen it, not to create an invoice in a year nobody is
+              // looking at.
+              filter === 'all' && year && facets && facets.years.length > 0 ? (
+                <Button variant="outline" onClick={() => setYear(null)}>
+                  {t('invoices.showAllYears')}
                 </Button>
-              )
-            )}
-          </div>
+              ) : filter === 'all' && canWrite ? (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus /> {t('invoices.new')}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
@@ -445,9 +422,9 @@ export default function InvoicesPage() {
                 {visible.map((invoice) => (
                   <tr
                     key={invoice.id}
-                    onClick={() => navigate(`/invoices/${invoice.id}`)}
+                    {...clickableRow(() => navigate(`/invoices/${invoice.id}`), { inTable: true })}
                     data-testid="invoice-row"
-                    className="border-b border-border last:border-0 hover:bg-muted transition-colors cursor-pointer"
+                    className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${CLICKABLE_ROW_CLASS}`}
                   >
                     <td className="py-3 pl-4 sm:pl-5">
                       <div className="flex items-center gap-1.5 text-sm font-medium text-foreground truncate">
@@ -514,9 +491,10 @@ export default function InvoicesPage() {
                 ))}
               </tbody>
             </table>
-          </div>
         )}
       </SectionCard>
+      )}
+      </div>
 
       <CreateInvoiceDialog
         open={createOpen}
@@ -633,10 +611,8 @@ function CreateInvoiceDialog({
           document preset opens with a line row already showing, so it
           starts wide. */}
       <DialogContent
-        className={cn(
-          'flex flex-col max-h-[calc(100dvh-2rem)]',
-          lines.length || settings?.document_required ? 'sm:max-w-3xl' : 'sm:max-w-lg',
-        )}
+        size={lines.length || settings?.document_required ? 'lg' : 'md'}
+        className="flex flex-col"
       >
         <DialogHeader>
           <DialogTitle>
@@ -767,7 +743,7 @@ function CreateInvoiceDialog({
         </div>
 
         <DialogFooter className="sm:justify-between gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('common.cancel')}
           </Button>
           <div className="flex gap-2">
@@ -833,7 +809,7 @@ function InvoiceSettingsDialog({
           in the app is: a modal taller than the viewport pushes its own
           close button off screen, which is how someone ends up trapped
           in it. Header and footer stay put; only the body moves. */}
-      <DialogContent className="sm:max-w-3xl flex flex-col max-h-[calc(100dvh-2rem)]">
+      <DialogContent size="lg" className="flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('invoices.settings.title')}</DialogTitle>
           <DialogDescription>{t('invoices.settings.description')}</DialogDescription>

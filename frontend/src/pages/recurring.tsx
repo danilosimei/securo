@@ -1,4 +1,8 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { FormDialogFooter } from '@/components/form-dialog-footer'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
 import { useTranslation } from 'react-i18next'
 import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
@@ -17,11 +21,13 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog'
 import type { Category, CategoryGroup, RecurringTransaction } from '@/types'
-import { Pencil, Trash2, Plus, RefreshCw, Info } from 'lucide-react'
+import { Plus, RefreshCw, Repeat, Info } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
+import { PageActions } from '@/components/page-actions'
 import { PageHeader } from '@/components/page-header'
 import { CategorySelect } from '@/components/category-select'
 import { DatePickerInput } from '@/components/ui/date-picker-input'
@@ -29,38 +35,9 @@ import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { formatCurrency } from '@/lib/format'
-
-const TH = 'text-xs font-medium text-muted-foreground py-3'
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      {children}
-    </div>
-  )
-}
-
-function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
-  return (
-    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
-      <p className="text-sm font-semibold text-foreground">{title}</p>
-      {action}
-    </div>
-  )
-}
+import { SectionCard, SectionHeader, TH } from '@/components/ui/section-card'
 
 export default function RecurringPage() {
-  const { t } = useTranslation()
-
-  return (
-    <div>
-      <PageHeader section={t('recurring.title')} title={t('recurring.title')} />
-      <RecurringTab />
-    </div>
-  )
-}
-
-function RecurringTab() {
   const { t } = useTranslation()
   const locale = useDisplayLocale()
   const dateLocale = useDateLocale()
@@ -73,7 +50,7 @@ function RecurringTab() {
   const [editing, setEditing] = useState<RecurringTransaction | null>(null)
   const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransaction | null>(null)
 
-  const { data: recurringList } = useQuery({
+  const { data: recurringList, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['recurring'],
     queryFn: recurringApi.list,
   })
@@ -159,31 +136,38 @@ function RecurringTab() {
   }
 
   return (
-    <>
+    <div>
+      <PageHeader
+        section={t('nav.groupPlanning')}
+        title={t('recurring.title')}
+        action={
+          canWrite ? (
+            <PageActions
+              primary={
+                <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+                  <Plus /> {t('recurring.add')}
+                </Button>
+              }
+              items={[
+                {
+                  label: t('recurring.generatePending'),
+                  icon: RefreshCw,
+                  onSelect: () => generateMutation.mutate(),
+                  disabled: generateMutation.isPending,
+                },
+              ]}
+            />
+          ) : undefined
+        }
+      />
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
-        <SectionHeader
-          title={t('recurring.title')}
-          action={
-            canWrite ? (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8"
-                  onClick={() => generateMutation.mutate()}
-                  disabled={generateMutation.isPending}
-                >
-                  <RefreshCw size={12} />
-                  <span className="hidden sm:inline">{t('recurring.generatePending')}</span>
-                </Button>
-                <Button size="sm" className="gap-1.5 h-8" onClick={() => { setEditing(null); setDialogOpen(true) }}>
-                  <Plus size={13} /> <span className="hidden sm:inline">{t('recurring.add')}</span>
-                </Button>
-              </div>
-            ) : undefined
-          }
-        />
-        {recurringList && recurringList.length > 0 ? (
+        <SectionHeader title={t('recurring.title')} />
+        {isLoading ? (
+          <ListSkeleton />
+        ) : recurringList && recurringList.length > 0 ? (
           <table className="w-full">
             <thead>
               <tr className="border-b border-border">
@@ -192,12 +176,16 @@ function RecurringTab() {
                 <th className={`${TH} text-left w-28 hidden md:table-cell`}>{t('recurring.frequency')}</th>
                 <th className={`${TH} text-left w-32 hidden md:table-cell`}>{t('recurring.nextOccurrence')}</th>
                 <th className={`${TH} text-left w-24 hidden sm:table-cell`}>{t('recurring.status')}</th>
-                {canWrite && <th className={`${TH} pr-4 sm:pr-5 text-right w-24`}>{t('recurring.actions')}</th>}
+                {canWrite && <th className={`${TH} pr-4 sm:pr-5 text-right w-16`}>{t('recurring.actions')}</th>}
               </tr>
             </thead>
             <tbody>
               {recurringList.map((rt) => (
-                <tr key={rt.id} className="border-b border-border last:border-0 hover:bg-muted transition-colors">
+                <tr
+                  key={rt.id}
+                  {...clickableRow(canWrite ? () => { setEditing(rt); setDialogOpen(true) } : undefined, { inTable: true })}
+                  className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''}`}
+                >
                   <td className="py-3 pl-4 sm:pl-5 text-sm font-medium text-foreground">{rt.description}</td>
                   <td className={`py-3 text-xs sm:text-sm font-bold tabular-nums ${rt.type === 'credit' ? 'text-emerald-600' : 'text-rose-500'}`}>
                     {mask(`${rt.type === 'credit' ? '+' : '−'}${formatCurrency(rt.amount, rt.currency, locale)}`)}
@@ -230,24 +218,13 @@ function RecurringTab() {
                   </td>
                   {canWrite && (
                     <td className="py-3 pr-4 sm:pr-5">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
-                          onClick={() => { setEditing(rt); setDialogOpen(true) }}
-                          aria-label={t('common.edit')}
-                          title={t('common.edit')}
-                        >
-                          <Pencil size={13} />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                          onClick={() => setDeletingRecurring(rt)}
-                          disabled={deleteMutation.isPending}
-                          aria-label={t('common.delete')}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                      <div className="flex items-center justify-end">
+                        <RowActions
+                          label={rt.description}
+                          onEdit={() => { setEditing(rt); setDialogOpen(true) }}
+                          onDelete={() => setDeletingRecurring(rt)}
+                          deleteDisabled={deleteMutation.isPending}
+                        />
                       </div>
                     </td>
                   )}
@@ -256,9 +233,20 @@ function RecurringTab() {
             </tbody>
           </table>
         ) : (
-          <p className="text-sm text-muted-foreground text-center py-10">{t('recurring.empty')}</p>
+          <EmptyState
+            icon={Repeat}
+            title={t('recurring.empty')}
+            action={
+              canWrite ? (
+                <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+                  <Plus /> {t('recurring.add')}
+                </Button>
+              ) : undefined
+            }
+          />
         )}
       </SectionCard>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={() => { setDialogOpen(false); setEditing(null) }}>
         <DialogContent>
@@ -282,6 +270,7 @@ function RecurringTab() {
               }
             }}
             onCancel={() => { setDialogOpen(false); setEditing(null) }}
+            onDelete={editing ? () => { setDeletingRecurring(editing); setDialogOpen(false); setEditing(null) } : undefined}
             loading={createMutation.isPending || updateMutation.isPending}
           />
         </DialogContent>
@@ -295,7 +284,7 @@ function RecurringTab() {
         onClose={() => setDeletingRecurring(null)}
         onConfirm={() => deletingRecurring && deleteMutation.mutate(deletingRecurring.id)}
       />
-    </>
+    </div>
   )
 }
 
@@ -307,6 +296,7 @@ function RecurringForm({
   accounts,
   onSave,
   onCancel,
+  onDelete,
   loading,
 }: {
   recurring: RecurringTransaction | null
@@ -316,6 +306,7 @@ function RecurringForm({
   accounts: { id: string; name: string; display_name?: string | null }[]
   onSave: (data: Partial<RecurringTransaction>) => void
   onCancel: () => void
+  onDelete?: () => void
   loading: boolean
 }) {
   const { t } = useTranslation()
@@ -484,12 +475,12 @@ function RecurringForm({
           <span className="text-sm text-foreground">{t('recurring.active')}</span>
         </label>
       )}
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>{t('common.cancel')}</Button>
-        <Button type="submit" disabled={loading}>
-          {loading ? t('common.loading') : t('common.save')}
-        </Button>
-      </DialogFooter>
+      <FormDialogFooter
+        onCancel={onCancel}
+        onDelete={onDelete}
+        saveDisabled={loading}
+        saveLabel={loading ? t('common.loading') : t('common.save')}
+      />
     </form>
   )
 }

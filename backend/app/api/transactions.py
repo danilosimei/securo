@@ -18,6 +18,7 @@ from app.core.workspace_context import (
 )
 from app.schemas.transaction import BulkAddToGroupRequest, BulkCategorizeRequest, DescriptionSuggestion, BulkTagsRequest, CreateCounterpartRequest, InstallmentSeriesCreate, LinkTransferRequest, TransactionBulkDeleteRequest, TransactionCreate, TransactionRead, TransactionUpdate, TransferCreate, TransferRead
 from app.schemas.transaction_calendar import TransactionCalendarResponse
+from app.models.categorization import CATEGORY_SOURCES
 from app.services import transaction_service
 from app.services.admin_service import get_credit_card_accounting_mode
 from app.services.transaction_calendar_service import get_transaction_calendar
@@ -52,6 +53,31 @@ async def _attach_invoice_links(session, ctx, items: list) -> None:
         item.invoice_links = [
             TransactionInvoiceLink(**link) for link in links.get(item.id, [])
         ]
+
+
+async def _attach_pending_categorization(session, ctx, items: list) -> None:
+    """Flag the rows of this page that have a suggestion waiting for review.
+
+    A single `IN` query for the whole page, never one per row.
+    """
+    if not items:
+        return
+    from sqlalchemy import select
+
+    from app.models.categorization import CategorizationSuggestion
+
+    rows = await session.execute(
+        select(CategorizationSuggestion.transaction_id)
+        .where(
+            CategorizationSuggestion.workspace_id == ctx.workspace.id,
+            CategorizationSuggestion.status == "pending",
+            CategorizationSuggestion.transaction_id.in_([item.id for item in items]),
+        )
+        .distinct()
+    )
+    pending = set(rows.scalars().all())
+    for item in items:
+        item.categorization_pending = item.id in pending
 
 
 def _tag_fx_fallback(tx: TransactionRead, primary_currency: str) -> TransactionRead:
@@ -107,6 +133,20 @@ def _merge_id_filters(
     return ids or None
 
 
+def _category_sources(raw: Optional[str]) -> Optional[list[str]]:
+    """Parse `?category_source=ai,memory`; unknown origins are a 422."""
+    if not raw:
+        return None
+    sources = list(dict.fromkeys(s.strip() for s in raw.split(",") if s.strip()))
+    unknown = [s for s in sources if s not in CATEGORY_SOURCES]
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unknown category_source: {', '.join(unknown)}",
+        )
+    return sources or None
+
+
 @router.get("", response_model=PaginatedTransactions)
 async def list_transactions(
     account_id: Optional[uuid.UUID] = Query(None),
@@ -134,6 +174,8 @@ async def list_transactions(
     max_amount: Optional[float] = Query(None, ge=0, description="Filter to transactions with absolute amount <= this value (primary currency)."),
     sort_by: Optional[str] = Query(None, description="Column to sort by (date|amount|description|payee|category|account|type|status). Default: date desc."),
     sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
+    category_source: Optional[str] = Query(None, description="Comma-separated category origins (ai, memory, rule, user, ...)."),
+    merchant_key: Optional[str] = Query(None, description="Exact store key (`transactions.merchant_key`)."),
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
@@ -157,11 +199,14 @@ async def list_transactions(
         sort_dir=sort_dir,
         min_amount=min_amount,
         max_amount=max_amount,
+        category_sources=_category_sources(category_source),
+        merchant_key=merchant_key,
         include_summary=True,
     )
     primary_currency = ctx.user.primary_currency
     items = [_tag_fx_fallback(TransactionRead.model_validate(tx, from_attributes=True), primary_currency) for tx in transactions]
     await _attach_invoice_links(session, ctx, items)
+    await _attach_pending_categorization(session, ctx, items)
     summary_out = (
         TransactionsSummary(**summary, currency=primary_currency)
         if summary is not None
@@ -178,13 +223,17 @@ async def transaction_calendar(
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    return await get_transaction_calendar(
+    calendar = await get_transaction_calendar(
         session,
         ctx.workspace.id,
         ctx.user_id,
         month,
         account_ids=_merge_id_filters(account_id, account_ids),
     )
+    await _attach_pending_categorization(
+        session, ctx, [item for day in calendar.days for item in day.items if item.id]
+    )
+    return calendar
 
 
 @router.get("/description-suggestions", response_model=list[DescriptionSuggestion])
@@ -278,7 +327,8 @@ async def bulk_categorize(
 ):
     try:
         count = await transaction_service.bulk_update_category(
-            session, ctx.workspace.id, data.transaction_ids, data.category_id
+            session, ctx.workspace.id, data.transaction_ids, data.category_id,
+            user_id=ctx.user_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

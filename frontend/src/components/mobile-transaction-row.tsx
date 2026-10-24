@@ -1,3 +1,4 @@
+import { CategorizationOriginBadge } from '@/components/categorization-origin-badge'
 import { getAccountName } from '@/lib/account-utils'
 import { AccountIcon } from '@/components/account-icon'
 import { CategoryIcon } from '@/components/category-icon'
@@ -150,6 +151,11 @@ export function MobileTransactionRow({
               <Clock size={12} className="text-amber-500" role="img" aria-label={t('transactions.pending')} />
             </span>
           )}
+          <CategorizationOriginBadge
+            source={tx.category_source}
+            pending={!!tx.categorization_pending}
+            compact
+          />
           {(tx.attachment_count ?? 0) > 0 && (
             <Paperclip size={11} className="text-muted-foreground shrink-0" />
           )}

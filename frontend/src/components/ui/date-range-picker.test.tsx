@@ -126,7 +126,7 @@ describe('DateRangePicker — segment variant', () => {
     expect(onOpen).toHaveBeenCalledTimes(1)
     // A range is already set, so the default seed must not clobber it.
     expect(onChange).not.toHaveBeenCalled()
-    expect(await screen.findByText(t('transactions.filtersBar.fromLabel'))).toBeInTheDocument()
+    expect(await screen.findByLabelText(t('transactions.filtersBar.fromLabel'))).toHaveValue('02/01/2026')
   })
 })
 

@@ -125,7 +125,7 @@ export function AgentFormDialog({ open, onOpenChange, agent }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? t('agents.form.editTitle') : t('agents.form.createTitle')}</DialogTitle>
         </DialogHeader>

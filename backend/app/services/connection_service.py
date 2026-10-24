@@ -18,7 +18,9 @@ from app.models.asset_group import AssetGroup
 from app.models.asset_value import AssetValue
 from app.models.bank_connection import BankConnection
 from app.models.account import Account
+from app.models.categorization import CategorizationSettings
 from app.models.category import Category
+from app.models.category_group import CategoryGroup
 from app.models.institution import Institution
 from app.models.goal import Goal
 from app.models.collection import collection_asset_groups
@@ -46,6 +48,12 @@ from app.services.account_service import (
 from app.services.asset_group_service import (
     _unique_default_name,
     ensure_group_for_connection,
+)
+from app.services.categorization.events import (
+    StagedChange,
+    is_protected,
+    stage_change,
+    write_staged,
 )
 from app.services.credit_card_service import apply_effective_date
 from app.services.rule_engine import merge_notes
@@ -818,6 +826,35 @@ async def _upsert_asset_value_for_today(
         )
 
 
+async def _mapped_provider_category(
+    session: AsyncSession, workspace_id: uuid.UUID, app_name: str
+) -> Optional[uuid.UUID]:
+    """The category id stored for `app_name` (`provider_category_map`), when it
+    is still an assignable category of this workspace; None otherwise."""
+    stored = await session.scalar(
+        select(CategorizationSettings.provider_category_map).where(
+            CategorizationSettings.workspace_id == workspace_id
+        )
+    )
+    raw = (stored or {}).get(app_name) if isinstance(stored, dict) else None
+    try:
+        category_id = uuid.UUID(str(raw)) if raw else None
+    except ValueError:
+        return None
+    if category_id is None:
+        return None
+    return await session.scalar(
+        select(Category.id)
+        .outerjoin(CategoryGroup, Category.group_id == CategoryGroup.id)
+        .where(
+            Category.id == category_id,
+            Category.workspace_id == workspace_id,
+            Category.is_hidden.is_(False),
+            or_(Category.group_id.is_(None), CategoryGroup.is_hidden.is_(False)),
+        )
+    )
+
+
 async def _match_pluggy_category(
     session: AsyncSession,
     workspace_id: uuid.UUID,
@@ -836,6 +873,11 @@ async def _match_pluggy_category(
         app_name = PLUGGY_CATEGORY_MAP.get(pluggy_category.split(" - ")[0])
     if not app_name:
         return None
+    # The organizer may rename or move categories: the id it resolved for
+    # this name comes first, so a renamed category keeps receiving it.
+    mapped = await _mapped_provider_category(session, workspace_id, app_name)
+    if mapped is not None:
+        return mapped
     # Scope to the connection's workspace: a user in multiple workspaces owns
     # the same default category names in each, so a user_id-only lookup returns
     # several rows. `.first()` is belt-and-suspenders — a category match must
@@ -852,8 +894,10 @@ async def _find_installment_category(
     session: AsyncSession,
     account_id: uuid.UUID,
     txn_data,
-) -> Optional[uuid.UUID]:
+) -> Optional[tuple[uuid.UUID, str]]:
     """Reuse the latest user-selected category from an earlier installment.
+
+    Returns the category and the origin it had on that installment.
 
     Pluggy gives every parcel the original purchase date, installment count,
     and total purchase amount. Together with the card account and transaction
@@ -873,7 +917,7 @@ async def _find_installment_category(
         return None
 
     result = await session.execute(
-        select(Transaction.category_id)
+        select(Transaction.category_id, Transaction.category_source)
         .where(
             Transaction.account_id == account_id,
             Transaction.source == "sync",
@@ -887,7 +931,50 @@ async def _find_installment_category(
         .order_by(Transaction.installment_number.desc(), Transaction.date.desc())
         .limit(1)
     )
-    return result.scalars().first()
+    row = result.first()
+    if row is None or row.category_id is None:
+        return None
+    return row.category_id, row.category_source
+
+
+async def _provider_side_category(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    account_id: uuid.UUID,
+    txn_data,
+    use_provider_categories: bool,
+) -> tuple[Optional[uuid.UUID], str]:
+    """The category a synced row falls back to when no rule set one, and its origin.
+
+    An earlier parcel of the same purchase wins (`installment`, or `user` when
+    a person chose it there, so the choice stays protected); otherwise the
+    provider's own category mapping (`provider`).
+    """
+    inherited = await _find_installment_category(session, account_id, txn_data)
+    if inherited is not None:
+        category_id, previous_source = inherited
+        return category_id, "user" if previous_source == "user" else "installment"
+    category_id = await _match_pluggy_category(
+        session, workspace_id, txn_data.pluggy_category, enabled=use_provider_categories
+    )
+    return category_id, "provider"
+
+
+def _fill_empty_category(
+    staged: list[StagedChange],
+    tx: Transaction,
+    category_id: Optional[uuid.UUID],
+    source: str,
+) -> None:
+    """Fill an empty, unprotected category, queueing the note of where it came from.
+
+    Derived: an inherited `user` category is a person's earlier choice, not
+    a new one, so it does not reach the user-choice hooks again.
+    """
+    if tx.category_id is None and category_id is not None and not is_protected(tx):
+        change = stage_change(tx, source=source, new_category_id=category_id, derived=True)
+        if change is not None:
+            staged.append(change)
 
 
 async def get_connections(session: AsyncSession, workspace_id: uuid.UUID) -> list[BankConnection]:
@@ -1108,6 +1195,9 @@ async def handle_oauth_callback(
     use_provider_cats = await admin_service.use_provider_categories(session)
 
     institution_cache: dict[str, Institution] = {}
+    # Category changes of the account being imported; their events are
+    # written once per account rather than once per row.
+    staged: list[StagedChange] = []
     for acc_data in connection_data.accounts:
         is_cc = acc_data.type == "credit_card"
         institution = await _resolve_institution(
@@ -1193,16 +1283,9 @@ async def handle_oauth_callback(
                     )
                 continue
 
-            category_id = await _find_installment_category(
-                session, account.id, txn_data
+            fallback_category_id, fallback_source = await _provider_side_category(
+                session, workspace_id, account.id, txn_data, use_provider_cats
             )
-            if category_id is None:
-                category_id = await _match_pluggy_category(
-                    session,
-                    workspace_id,
-                    txn_data.pluggy_category,
-                    enabled=use_provider_cats,
-                )
             # Resolve payee entity from raw payee text
             payee_id = None
             if txn_data.payee:
@@ -1245,9 +1328,8 @@ async def handle_oauth_callback(
             session.add(transaction)
             await session.flush()
             new_tx_ids.append(transaction.id)
-            await apply_rules_to_transaction(session, user_id, transaction)
-            if transaction.category_id is None:
-                transaction.category_id = category_id
+            await apply_rules_to_transaction(session, user_id, transaction, staged=staged)
+            _fill_empty_category(staged, transaction, fallback_category_id, fallback_source)
 
             # Prefer bank-provided conversion for international transactions
             acct_currency = acc_data.currency or user_currency
@@ -1266,6 +1348,8 @@ async def handle_oauth_callback(
         # that SUM(all transactions) matches the provider-reported balance. Any
         # history that falls outside the provider's lookback window gets
         # absorbed into this synthetic transaction.
+        await write_staged(session, staged)
+        staged.clear()
         await sync_opening_balance_for_connected_account(session, account)
 
     # Detect transfer pairs among newly synced transactions
@@ -1292,8 +1376,17 @@ async def handle_oauth_callback(
 
     connection.last_sync_at = datetime.now(timezone.utc)
     await session.commit()
+    if new_tx_ids:
+        _enqueue_categorization(workspace_id)
     await session.refresh(connection)
     return connection
+
+
+def _enqueue_categorization(workspace_id: uuid.UUID) -> None:
+    """Categorize what a sync just landed, off the request; never raises."""
+    from app.tasks.categorization_tasks import enqueue_categorization
+
+    enqueue_categorization(workspace_id, "ingest")
 
 
 def _normalized_account_name(name: str | None) -> str:
@@ -2009,6 +2102,9 @@ async def sync_connection(
         user_currency = user.primary_currency if user else get_settings().default_currency
         new_tx_ids: list[uuid.UUID] = []
         merged_count = 0
+        # Rows promoted from pending to posted become categorization
+        # candidates (only posted rows are), so they trigger a run too.
+        promoted_to_posted = False
         live_txn_external_ids: dict[uuid.UUID, set[str]] = {}
         accounts_data = await provider.get_accounts(credentials)
         incoming_external_ids = {acc.external_id for acc in accounts_data}
@@ -2018,6 +2114,10 @@ async def sync_connection(
             if acc.institution_external_id
         )
         institution_cache: dict[str, Institution] = {}
+        # Category changes of the account being synced; their events are
+        # written once per account (before phantom cleanup can delete a
+        # row) rather than once per row.
+        staged: list[StagedChange] = []
         for acc_data in accounts_data:
             institution = await _resolve_institution(
                 session, connection.id, institution_cache, acc_data
@@ -2191,6 +2291,7 @@ async def sync_connection(
                     _merge_sync_metadata(existing_tx, txn_data)
                     if existing_tx.status == "pending" and txn_data.status == "posted":
                         existing_tx.status = "posted"
+                        promoted_to_posted = True
                     # Self-heal bill linkage: a tx that pre-dates the bills
                     # feature (or whose bill we hadn't ingested last time)
                     # picks up bill_id + bank-truth effective_date on the
@@ -2238,6 +2339,7 @@ async def sync_connection(
                         # Posted truth wins: swap in the new id so subsequent
                         # syncs match by external_id and update raw_data.
                         synced_dup.status = "posted"
+                        promoted_to_posted = True
                         _merge_sync_metadata(
                             synced_dup,
                             txn_data,
@@ -2267,16 +2369,9 @@ async def sync_connection(
                 incoming_currency = (
                     txn_data.currency or acc_data.currency or user_currency
                 )
-                category_id = await _find_installment_category(
-                    session, account.id, txn_data
+                fallback_category_id, fallback_source = await _provider_side_category(
+                    session, workspace_id, account.id, txn_data, use_provider_cats
                 )
-                if category_id is None:
-                    category_id = await _match_pluggy_category(
-                        session,
-                        workspace_id,
-                        txn_data.pluggy_category,
-                        enabled=use_provider_cats,
-                    )
 
                 sync_payee_id = None
                 if txn_data.payee:
@@ -2354,8 +2449,12 @@ async def sync_connection(
                     # win, the charge fills the empty ones, and only its
                     # provenance is recorded outright.
                     placeholder.original_description = txn_data.description
-                    if placeholder.category_id is None:
-                        placeholder.category_id = preview.category_id or category_id
+                    if preview.category_id is not None:
+                        _fill_empty_category(staged, placeholder, preview.category_id, "rule")
+                    else:
+                        _fill_empty_category(
+                            staged, placeholder, fallback_category_id, fallback_source
+                        )
                     if txn_data.payee and not placeholder.payee:
                         placeholder.payee = txn_data.payee
                     if placeholder.payee_id is None:
@@ -2390,9 +2489,12 @@ async def sync_connection(
                         recurring_link, txn_data.date
                     )
                 new_tx_ids.append(transaction.id)
-                await apply_rules_to_transaction(session, user_id, transaction)
-                if transaction.category_id is None:
-                    transaction.category_id = category_id
+                await apply_rules_to_transaction(
+                    session, user_id, transaction, staged=staged
+                )
+                _fill_empty_category(
+                    staged, transaction, fallback_category_id, fallback_source
+                )
 
                 # Prefer bank-provided conversion for international transactions
                 acct_currency = acc_data.currency or user_currency
@@ -2409,6 +2511,8 @@ async def sync_connection(
 
             # Reconcile the opening balance after any new transactions land so
             # SUM(all txs) keeps matching account.balance from the provider.
+            await write_staged(session, staged)
+            staged.clear()
             await sync_opening_balance_for_connected_account(session, account)
 
         # Detect transfer pairs among newly synced transactions
@@ -2494,6 +2598,8 @@ async def sync_connection(
         else:
             connection.status = "active"
         await session.commit()
+        if new_tx_ids or promoted_to_posted:
+            _enqueue_categorization(workspace_id)
         await session.refresh(connection)
         return connection, merged_count
 

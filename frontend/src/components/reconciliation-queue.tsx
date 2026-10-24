@@ -13,6 +13,9 @@
  *  is not something a person can check, and a queue nobody can check is a
  *  queue they clear without reading.
  */
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -128,7 +131,7 @@ export function ReconciliationQueue({ canWrite }: { canWrite: boolean }) {
   const dateLocale = useDateLocale()
   const { mask } = usePrivacyMode()
 
-  const { data: suggestions } = useQuery<ReconciliationSuggestion[]>({
+  const { data: suggestions, isError, error, refetch } = useQuery<ReconciliationSuggestion[]>({
     queryKey: ['reconciliation-suggestions'],
     queryFn: reconciliationApi.suggestions,
   })
@@ -154,7 +157,8 @@ export function ReconciliationQueue({ canWrite }: { canWrite: boolean }) {
   const showDate = (iso: string) =>
     new Date(`${iso}T00:00:00`).toLocaleDateString(dateLocale)
 
-  if (!suggestions) return null
+  if (isError) return <ErrorState error={error} onRetry={() => refetch()} />
+  if (!suggestions) return <SectionCard><ListSkeleton /></SectionCard>
 
   return (
     <SectionCard>
@@ -173,10 +177,7 @@ export function ReconciliationQueue({ canWrite }: { canWrite: boolean }) {
       </div>
 
       {suggestions.length === 0 ? (
-        <div className="py-10 text-center">
-          <CircleCheck size={20} className="mx-auto text-emerald-500 mb-2" />
-          <p className="text-sm text-muted-foreground">{t('reconciliation.queue.empty')}</p>
-        </div>
+        <EmptyState icon={CircleCheck} title={t('reconciliation.queue.empty')} />
       ) : (
         <div className="divide-y divide-border">
           {suggestions.map((suggestion) => (

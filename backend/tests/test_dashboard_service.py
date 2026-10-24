@@ -18,11 +18,11 @@ from app.services.dashboard_service import (
     _account_balance_at,
     _total_balance_by_currency,
     get_balance_history,
-    get_monthly_trend,
     get_summary,
     get_spending_by_category,
     get_projected_transactions,
 )
+from app.services.reports import dashboard_rules
 from app.services.transaction_service import get_transactions
 
 
@@ -453,11 +453,11 @@ async def test_spending_and_trend_keep_closed_account_history(
     today = date.today()
     await _add_txn(session, test_user.id, closed_account.id, 60, "debit", today, category_id=cat.id)
 
-    spending = await get_spending_by_category(session, test_workspace.id, test_user.id)
+    spending = await dashboard_rules.get_spending_by_category(session, test_workspace.id, test_user.id)
     fees = next((s for s in spending if s.category_id == str(cat.id)), None)
     assert fees is not None and fees.total == pytest.approx(60.0)
 
-    trend = await get_monthly_trend(session, test_workspace.id, test_user.id, months=1)
+    trend = await dashboard_rules.get_monthly_trend(session, test_workspace.id, test_user.id, months=1)
     assert sum(point.expenses for point in trend) == pytest.approx(60.0)
 
 
@@ -1284,3 +1284,59 @@ async def test_balance_at_multi_currency(session, test_user, test_workspace):
 # ---------------------------------------------------------------------------
 # _total_balance_by_currency
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_spending_forecast_comes_from_recurring_and_pending(
+    session: AsyncSession, test_user, test_workspace
+):
+    """projected_total = actual + recurring projection + pending debit, per category."""
+    from datetime import datetime, timezone
+
+    cat_rec = await _make_category(session, test_user.id, "Aluguel")
+    cat_pend = await _make_category(session, test_user.id, "Mercado")
+    account = await _make_account(session, test_user.id, "Forecast Acc")
+    today = date.today()
+    month_start = today.replace(day=1)
+
+    await _add_txn(session, test_user.id, account.id, 40, "debit", today, category_id=cat_pend.id)
+    await _add_txn(
+        session, test_user.id, account.id, 30, "debit", today,
+        category_id=cat_pend.id, status="pending",
+    )
+    session.add(RecurringTransaction(
+        id=uuid.uuid4(), user_id=test_user.id, workspace_id=test_workspace.id,
+        description="Rent", amount=Decimal("2000"), currency="BRL", type="debit",
+        frequency="monthly", start_date=month_start, next_occurrence=month_start,
+        is_active=True, category_id=cat_rec.id,
+        created_at=datetime.now(timezone.utc),
+    ))
+    await session.commit()
+
+    spending = await dashboard_rules.get_spending_by_category(
+        session, test_workspace.id, test_user.id
+    )
+    rent = next(s for s in spending if s.category_id == str(cat_rec.id))
+    market = next(s for s in spending if s.category_id == str(cat_pend.id))
+    assert rent.total == pytest.approx(0.0)
+    assert rent.projected_total == pytest.approx(2000.0)
+    assert market.total == pytest.approx(40.0)
+    assert market.projected_total == pytest.approx(70.0)
+
+
+@pytest.mark.asyncio
+async def test_summary_counts_foreign_rows_without_a_rate(session, test_user, test_workspace):
+    account = await _make_account(session, test_user.id, "Fx Acc")
+    today = date.today()
+    await _add_txn(session, test_user.id, account.id, 80, "debit", today)
+
+    summary = await get_summary(session, test_workspace.id, test_user.id)
+    assert summary.unconverted_count == 0
+
+    foreign = await _add_txn(session, test_user.id, account.id, 20, "debit", today)
+    foreign.currency = "EUR"
+    await session.commit()
+
+    summary = await get_summary(session, test_workspace.id, test_user.id)
+    assert summary.unconverted_count == 1
+    assert summary.monthly_expenses_primary == pytest.approx(80.0)

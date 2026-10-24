@@ -1,8 +1,13 @@
 import { useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+import { SectionCard } from '@/components/ui/section-card'
+import { RowActions } from '@/components/ui/row-actions'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { History, Trash2 } from 'lucide-react'
+import { History, Undo2 } from 'lucide-react'
 
 import { importLogs as importLogsApi } from '@/lib/api'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
@@ -43,7 +48,7 @@ export function ImportHistory({ entity }: ImportHistoryProps) {
   const userCurrency = user?.preferences?.currency_display ?? 'USD'
   const [deleteTarget, setDeleteTarget] = useState<ImportLog | null>(null)
 
-  const { data: logs = [] } = useQuery({
+  const { data: logs = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['import-logs'],
     queryFn: importLogsApi.list,
   })
@@ -70,10 +75,12 @@ export function ImportHistory({ entity }: ImportHistoryProps) {
         <h2 className="text-lg font-semibold text-foreground">{t('import.history')}</h2>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card p-8 text-center text-muted-foreground">
-          {t('import.noHistory')}
-        </div>
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <SectionCard><ListSkeleton /></SectionCard>
+      ) : rows.length === 0 ? (
+        <SectionCard><EmptyState icon={History} title={t('import.noHistory')} /></SectionCard>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
           <table className="w-full text-sm">
@@ -125,14 +132,10 @@ export function ImportHistory({ entity }: ImportHistoryProps) {
                   )}
                   <td className="px-3 py-3 text-right sm:px-4">
                     {canWrite && (
-                      <button
-                        onClick={() => setDeleteTarget(log)}
-                        className="text-muted-foreground transition-colors hover:text-rose-500"
-                        aria-label={t('import.undoImport')}
-                        title={t('import.undoImport')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <RowActions
+                        label={log.filename || t('import.undoImport')}
+                        extra={[{ label: t('import.undoImport'), icon: Undo2, onSelect: () => setDeleteTarget(log) }]}
+                      />
                     )}
                   </td>
                 </tr>

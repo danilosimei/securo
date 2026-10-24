@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
 import { useWorkspace } from '@/contexts/workspace-context'
 import { useSidebarState } from '@/contexts/sidebar-state-context'
+import { SidebarNavLink } from '@/components/sidebar-nav-link'
 import { CollectionSelector } from '@/components/collection-selector'
 import { auth as authApi, admin as adminApi } from '@/lib/api'
 import { resolveSupportedLang } from '@/lib/i18n'
@@ -65,6 +66,9 @@ import { setThemeBasedOnSystem } from '@/lib/theme-utils'
 import { useLocalAuthEnabled } from '@/hooks/use-local-auth'
 import { formatCurrency } from '@/lib/format'
 
+/** Below this window height the menu starts with the account list closed. */
+const SHORT_SCREEN_HEIGHT = 1000
+
 const QuickAddTransaction = lazy(() => import('@/components/quick-add-transaction'))
 
 /** Placeholder rows shown while the workspace's module list is in flight. */
@@ -99,7 +103,9 @@ export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const { collapsed: desktopSidebarCollapsed, toggleCollapsed: toggleDesktopSidebar } = useSidebarState()
-  const [accountsExpanded, setAccountsExpanded] = useState(true)
+  // The account list is the part of the menu that can go: on a short screen
+  // it starts closed, so the navigation above it never gets cut.
+  const [accountsExpanded, setAccountsExpanded] = useState(() => window.innerHeight >= SHORT_SCREEN_HEIGHT)
   const [accountsShowAll, setAccountsShowAll] = useState(false)
   const { privacyMode, togglePrivacyMode, mask } = usePrivacyMode()
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
@@ -300,7 +306,7 @@ export function AppLayout() {
               so nothing the expanded header offers goes missing in the
               rail. */}
           <div className={cn(
-            'flex h-16 min-h-16 items-center justify-between px-5 border-b border-sidebar-border shrink-0',
+            'flex h-14 min-h-14 items-center justify-between px-5 [@media(max-height:999px)]:lg:h-12 [@media(max-height:999px)]:lg:min-h-12 border-b border-sidebar-border shrink-0',
             desktopSidebarCollapsed && 'lg:h-auto lg:min-h-0 lg:flex-col lg:justify-center lg:gap-2 lg:px-0 lg:py-3',
           )}>
             <Link
@@ -383,12 +389,12 @@ export function AppLayout() {
           </button>
 
           {/* Command palette trigger */}
-          <div className={cn('px-3 pt-3', desktopSidebarCollapsed && 'lg:px-2')}>
+          <div className={cn('px-3 pt-2', desktopSidebarCollapsed && 'lg:px-2')}>
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
               className={cn(
-                'group flex w-full items-center gap-2 rounded-lg border border-sidebar-border/80 bg-sidebar-accent/40 px-3 py-2',
+                'group flex w-full items-center gap-2 rounded-lg border border-sidebar-border/80 bg-sidebar-accent/40 px-3 py-1.5',
                 'text-[12.5px] text-sidebar-muted transition-all',
                 'hover:bg-sidebar-accent hover:text-sidebar-foreground hover:border-sidebar-border',
                 desktopSidebarCollapsed && 'lg:justify-center lg:px-0',
@@ -403,23 +409,21 @@ export function AppLayout() {
             </button>
           </div>
 
+          {/* Active collection (issue #105): one fixed place, under the search. */}
+          <CollectionSelector collapsed={desktopSidebarCollapsed} />
+
           <div className="flex-1 min-h-0 overflow-y-auto">
           {/* Nav */}
-          <nav className={cn('flex flex-col gap-0.5 px-3 pt-1 pb-3', desktopSidebarCollapsed && 'lg:items-center lg:gap-1 lg:px-0 lg:pt-3')} data-tour="sidebar">
+          <nav className={cn('flex flex-col gap-0.5 px-3 pt-1 pb-2', desktopSidebarCollapsed && 'lg:items-center lg:gap-1 lg:px-0 lg:pt-3')} data-tour="sidebar">
             {/* Which modules this workspace shows is resolved server-side,
                 so until the workspace list lands there is no honest answer
                 — a placeholder beats both an empty sidebar and a guess. */}
             {workspaceLoading && <NavSkeleton />}
             {!workspaceLoading && finalNavItems.map((item, idx) => {
               if (item.type === 'separator') {
-                // The first separator sits right below the search bar
-                // — without trimming the top padding it leaves a wide
-                // gap that makes the section header feel disconnected
-                // from the search trigger.
-                const isFirstSep = idx === 0
                 return (
                   <div key={`sep-${idx}`} className={cn(
-                    isFirstSep ? 'pt-1 pb-1 px-3' : 'pt-3 pb-1 px-3',
+                    'pt-2.5 pb-0.5 px-3 [@media(max-height:999px)]:lg:pt-1.5',
                     desktopSidebarCollapsed && 'lg:hidden',
                   )}>
                     <span className="text-[10px] uppercase tracking-[0.12em] font-semibold text-sidebar-muted/50">
@@ -433,34 +437,15 @@ export function AppLayout() {
                 item.path === '/'
                   ? location.pathname === '/'
                   : location.pathname.startsWith(item.path)
-              const Icon = item.icon
               const showQuickAdd = item.key === 'transactions' && canWrite
               const link = (
-                <Link
+                <SidebarNavLink
                   key={item.key}
-                  to={item.path}
-                  data-tour={`nav-${item.key}`}
-                  onClick={() => setSidebarOpen(false)}
-                  title={t(`nav.${item.key}`)}
-                  aria-label={t(`nav.${item.key}`)}
-                  className={cn(
-                    'flex items-center gap-3 text-[13px] font-medium transition-all rounded-lg px-3 py-2',
-                    isActive
-                      ? 'bg-primary/[0.08] text-primary border-l-[3px] border-primary pl-[9px]'
-                      : 'text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground',
-                    desktopSidebarCollapsed && 'lg:h-10 lg:w-10 lg:justify-center lg:border-l-0 lg:px-0 lg:pl-0',
-                  )}
-                >
-                  <Icon
-                    size={17}
-                    className={cn(
-                      'shrink-0',
-                      isActive ? 'text-primary' : 'text-sidebar-muted',
-                      desktopSidebarCollapsed && 'lg:h-5 lg:w-5',
-                    )}
-                  />
-                  <span className={cn(desktopSidebarCollapsed && 'lg:hidden')}>{t(`nav.${item.key}`)}</span>
-                </Link>
+                  item={item}
+                  isActive={isActive}
+                  collapsed={desktopSidebarCollapsed}
+                  onNavigate={() => setSidebarOpen(false)}
+                />
               )
               if (!showQuickAdd) return link
               return (
@@ -488,7 +473,7 @@ export function AppLayout() {
 
           {/* Account list in sidebar */}
           {allAccounts.length > 0 && (
-            <div className={cn('px-3 pb-2 mt-2', desktopSidebarCollapsed && 'lg:hidden')}>
+            <div className={cn('px-3 pb-2 mt-2 [@media(max-height:999px)]:lg:mt-1', desktopSidebarCollapsed && 'lg:hidden')}>
               <button
                 onClick={() => setAccountsExpanded(!accountsExpanded)}
                 className="flex items-center justify-between w-full px-3 py-2 hover:text-sidebar-foreground transition-colors"
@@ -599,10 +584,7 @@ export function AppLayout() {
           'flex-1 min-h-screen overflow-x-hidden transition-[margin] duration-300 ease-in-out motion-reduce:transition-none',
           desktopSidebarCollapsed ? 'lg:ml-16' : 'lg:ml-60',
         )}>
-          <div className="p-6 max-w-7xl mx-auto">
-            {/* Active-collection filter (issue #105): sticky bar above the
-                content so the scope is visible right where the data is. */}
-            <CollectionSelector variant="header" />
+          <div className="p-4 sm:p-6 max-w-7xl mx-auto">
             <Outlet />
           </div>
         </main>
@@ -742,7 +724,7 @@ function UserMenu({
             className="flex items-center gap-2"
           >
             <Sparkles size={14} />
-            {t('nav.aiAgents')}
+            {t('nav.agents')}
           </DropdownMenuItem>
         )}
         <DropdownMenuSub>

@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, ArchiveRestore, ArrowLeft, Package, Pencil, Plus, Trash2 } from 'lucide-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Archive, ArchiveRestore, Package, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -24,8 +25,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchBar } from '@/components/ui/search-bar'
+import { useUrlSearch } from '@/hooks/use-url-search'
+import { RowActions } from '@/components/ui/row-actions'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { PageHeader } from '@/components/page-header'
-import { IconAction, SectionCard, Segmented, TH } from '@/components/invoice-ui'
+import { InvoiceTabs } from '@/components/invoice-tabs'
+import { SectionCard, Segmented, TH } from '@/components/invoice-ui'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { CurrencySelect } from '@/components/currency-select'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
@@ -51,19 +58,20 @@ type Filter = 'active' | 'archived'
 
 export default function ProductsPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const locale = useDisplayLocale()
   const { mask } = usePrivacyMode()
   const { canWrite } = useWorkspace()
   const queryClient = useQueryClient()
 
   const [filter, setFilter] = useState<Filter>('active')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlSearch()
   const [editing, setEditing] = useState<Product | 'new' | null>(null)
+  const [deleting, setDeleting] = useState<Product | null>(null)
 
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, isError, error, refetch, isPlaceholderData } = useQuery({
     queryKey: ['products', filter],
     queryFn: () => productsApi.list({ active: filter === 'active' }),
+    placeholderData: keepPreviousData,
   })
 
   const visible = useMemo(() => {
@@ -94,6 +102,7 @@ export default function ProductsPage() {
     mutationFn: (id: string) => productsApi.remove(id),
     onSuccess: () => {
       toast.success(t('invoices.products.deleted'))
+      setDeleting(null)
       refresh()
     },
     onError,
@@ -114,27 +123,20 @@ export default function ProductsPage() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/invoices')}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-        data-testid="products-back"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        {t('invoices.backToList')}
-      </button>
-
       <PageHeader
-        section={t('invoices.title')}
-        title={t('invoices.products.title')}
+        section={t('nav.groupDaily')}
+        title={t('invoices.title')}
         action={
           canWrite ? (
-            <Button size="sm" onClick={() => setEditing('new')} data-testid="product-new-button">
-              <Plus className="h-4 w-4 mr-1.5" />
+            <Button onClick={() => setEditing('new')} data-testid="product-new-button">
+              <Plus />
               {t('invoices.products.new')}
             </Button>
           ) : undefined
         }
       />
+
+      <InvoiceTabs tab="products" />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Segmented<Filter>
@@ -146,41 +148,49 @@ export default function ProductsPage() {
             label: t(`invoices.products.filter.${value}`),
           }))}
         />
-        <Input
+        <SearchBar
+          className="w-full sm:w-72"
+          compact
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder={t('invoices.products.searchPlaceholder')}
-          className="h-9 w-full sm:w-64"
-          data-testid="product-search"
+          inputTestId="product-search"
         />
       </div>
 
+      {/* Switching the filter keeps this list up, dimmed, until the new one
+          lands, rather than dropping it for a skeleton in between. */}
+      <div
+        data-testid="products-list"
+        aria-busy={isPlaceholderData}
+        className={cn('transition-opacity duration-200', isPlaceholderData && 'opacity-60')}
+      >
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         {isLoading ? (
-          <div className="p-5 space-y-3">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
+          <ListSkeleton />
         ) : visible.length === 0 ? (
-          <div className="px-5 py-14 text-center" data-testid="products-empty">
-            <Package className="h-8 w-8 mx-auto text-muted-foreground/50" />
-            <p className="mt-3 text-sm text-muted-foreground max-w-sm mx-auto">
-              {search
+          <EmptyState
+            icon={Package}
+            testId="products-empty"
+            title={
+              search
                 ? t('invoices.products.noneFound')
                 : filter === 'archived'
                   ? t('invoices.products.emptyArchived')
-                  : t('invoices.products.empty')}
-            </p>
-            {!search && filter === 'active' && canWrite && (
-              <Button size="sm" className="mt-4" onClick={() => setEditing('new')}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                {t('invoices.products.new')}
-              </Button>
-            )}
-          </div>
+                  : t('invoices.products.empty')
+            }
+            action={
+              !search && filter === 'active' && canWrite ? (
+                <Button onClick={() => setEditing('new')}>
+                  <Plus /> {t('invoices.products.new')}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
@@ -199,7 +209,12 @@ export default function ProductsPage() {
                 {visible.map((product) => {
                   const actions = productActions(product)
                   return (
-                    <tr key={product.id} data-testid="product-row" className="border-b border-border last:border-0">
+                    <tr
+                      key={product.id}
+                      data-testid="product-row"
+                      {...clickableRow(canWrite ? () => setEditing(product) : undefined, { inTable: true })}
+                      className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${canWrite ? CLICKABLE_ROW_CLASS : ''}`}
+                    >
                       <td className="py-3 pl-4 sm:pl-5">
                         <div className="text-sm font-medium text-foreground truncate">{product.name}</div>
                         <div className="text-xs text-muted-foreground truncate">
@@ -217,31 +232,29 @@ export default function ProductsPage() {
                       </td>
                       {canWrite && (
                         <td className="py-3 pr-4 sm:pr-5">
-                          <div className="flex justify-end gap-1">
-                            <IconAction onClick={() => setEditing(product)} label={t('common.edit')}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </IconAction>
-                            {actions.canArchive && (
-                              <IconAction
-                                onClick={() => archiveMutation.mutate({ id: product.id, active: false })}
-                                label={t('invoices.products.action.archive')}
-                              >
-                                <Archive className="h-3.5 w-3.5" />
-                              </IconAction>
-                            )}
-                            {actions.canRestore && (
-                              <IconAction
-                                onClick={() => archiveMutation.mutate({ id: product.id, active: true })}
-                                label={t('invoices.products.action.restore')}
-                              >
-                                <ArchiveRestore className="h-3.5 w-3.5" />
-                              </IconAction>
-                            )}
-                            {actions.canDelete && (
-                              <IconAction onClick={() => deleteMutation.mutate(product.id)} label={t('common.delete')}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </IconAction>
-                            )}
+                          <div className="flex justify-end">
+                            <RowActions
+                              label={product.name}
+                              onEdit={() => setEditing(product)}
+                              onDelete={actions.canDelete ? () => setDeleting(product) : undefined}
+                              deleteDisabled={deleteMutation.isPending}
+                              extra={[
+                                ...(actions.canArchive
+                                  ? [{
+                                      label: t('invoices.products.action.archive'),
+                                      icon: Archive,
+                                      onSelect: () => archiveMutation.mutate({ id: product.id, active: false }),
+                                    }]
+                                  : []),
+                                ...(actions.canRestore
+                                  ? [{
+                                      label: t('invoices.products.action.restore'),
+                                      icon: ArchiveRestore,
+                                      onSelect: () => archiveMutation.mutate({ id: product.id, active: true }),
+                                    }]
+                                  : []),
+                              ]}
+                            />
                           </div>
                         </td>
                       )}
@@ -250,9 +263,19 @@ export default function ProductsPage() {
                 })}
               </tbody>
             </table>
-          </div>
         )}
       </SectionCard>
+      )}
+      </div>
+
+      <DeleteConfirmationDialog
+        open={!!deleting}
+        title={t('invoices.products.confirmDeleteTitle')}
+        description={t('invoices.products.confirmDeleteDescription', { name: deleting?.name })}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+      />
 
       <ProductDialog
         key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id}
@@ -408,7 +431,7 @@ export function ProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col max-h-[calc(100dvh-2rem)] sm:max-w-2xl">
+      <DialogContent size="lg" className="flex flex-col">
         <DialogHeader>
           <DialogTitle>{product ? t('invoices.products.editTitle') : t('invoices.products.new')}</DialogTitle>
           <DialogDescription>{t('invoices.products.newDescription')}</DialogDescription>
@@ -612,7 +635,7 @@ export function ProductDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={!ready || mutation.isPending} data-testid="product-save">
             {product ? t('common.save') : t('common.create')}
           </Button>

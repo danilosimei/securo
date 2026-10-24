@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.app_clock import app_today
 from app.services import dashboard_service, report_service
+from app.services.reports import income_expenses
 from mcp_server.auth import CallContext
 from mcp_server.registry import tool
 from mcp_server.tools._helpers import parse_date, resolve_workspace_id
@@ -71,7 +72,7 @@ async def get_income_expenses(
     interval: str = "monthly",
 ) -> dict[str, Any]:
     ws_id = await resolve_workspace_id(session, ctx)
-    rep = await report_service.get_income_expenses_report(
+    rep = await income_expenses.get_income_expenses_report(
         session, ws_id, ctx.user_id, months=int(months), interval=interval, currency=_pri_currency(ctx)
     )
     return _serialize_report(rep)

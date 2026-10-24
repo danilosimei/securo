@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Ban, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Receipt,
+  Ban, Link2, MoreHorizontal, Pause, Pencil, Play, Plus, Receipt,
   Repeat, Trash2, Zap,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -83,6 +84,7 @@ export default function InvoiceScheduleDetailPage() {
   const { canWrite } = useWorkspace()
 
   const [editOpen, setEditOpen] = useState(false)
+  const [confirming, setConfirming] = useState<{ kind: 'schedule' } | { kind: 'term'; id: string } | null>(null)
   const [endOpen, setEndOpen] = useState(false)
   const [linkOpen, setLinkOpen] = useState(false)
   const [termTarget, setTermTarget] = useState<InvoiceScheduleTerm | 'new' | null>(null)
@@ -141,7 +143,7 @@ export default function InvoiceScheduleDetailPage() {
     onSuccess: () => {
       toast.success(t('invoices.schedules.deleted'))
       refresh()
-      navigate('/invoices/schedules')
+      navigate('/invoices?tab=schedules')
     },
     onError,
   })
@@ -187,16 +189,8 @@ export default function InvoiceScheduleDetailPage() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/invoices/schedules')}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-        data-testid="schedule-back"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        {t('invoices.schedules.backToList')}
-      </button>
-
       <PageHeader
+        back={{ to: '/invoices?tab=schedules', label: t('invoices.schedules.title'), testId: 'schedule-back' }}
         section={schedule.payee?.name ?? t('invoices.noClient')}
         title={schedule.name}
         action={
@@ -257,7 +251,7 @@ export default function InvoiceScheduleDetailPage() {
                     </DropdownMenuItem>
                   )}
                   {actions.canDelete && (
-                    <DropdownMenuItem onClick={() => deleteMutation.mutate()} data-testid="schedule-delete" className="gap-2 text-sm text-destructive focus:text-destructive">
+                    <DropdownMenuItem onClick={() => setConfirming({ kind: 'schedule' })} data-testid="schedule-delete" className="gap-2 text-sm text-destructive focus:text-destructive">
                       <Trash2 className="h-4 w-4" />
                       {t('common.delete')}
                     </DropdownMenuItem>
@@ -375,7 +369,7 @@ export default function InvoiceScheduleDetailPage() {
                         <Pencil className="h-3.5 w-3.5" />
                       </IconAction>
                       {sortedTerms.length > 1 && (
-                        <IconAction onClick={() => removeTermMutation.mutate(term.id)} label={t('common.delete')}>
+                        <IconAction onClick={() => setConfirming({ kind: 'term', id: term.id })} label={t('common.delete')}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </IconAction>
                       )}
@@ -484,6 +478,17 @@ export default function InvoiceScheduleDetailPage() {
         schedule={schedule}
         onLinked={refresh}
       />
+      <DeleteConfirmationDialog
+        open={confirming !== null}
+        title={confirming?.kind === 'term' ? t('invoices.schedules.confirmRemoveTermTitle') : t('invoices.schedules.confirmDeleteTitle')}
+        description={confirming?.kind === 'term' ? t('invoices.schedules.confirmRemoveTermDescription') : t('invoices.schedules.confirmDeleteDescription')}
+        isPending={deleteMutation.isPending || removeTermMutation.isPending}
+        onClose={() => setConfirming(null)}
+        onConfirm={() => {
+          if (confirming?.kind === 'schedule') deleteMutation.mutate()
+          else if (confirming) removeTermMutation.mutate(confirming.id, { onSettled: () => setConfirming(null) })
+        }}
+      />
     </div>
   )
 }
@@ -549,7 +554,7 @@ function EditScheduleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.editTitle')}</DialogTitle>
           <DialogDescription>
@@ -610,7 +615,7 @@ function EditScheduleDialog({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={!name.trim() || mutation.isPending} data-testid="edit-schedule-save">
             {t('common.save')}
           </Button>
@@ -648,7 +653,7 @@ function EndScheduleDialog({
   })
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.endTitle')}</DialogTitle>
           {/* Why it ended is the one fact no invoice can record, and the
@@ -673,7 +678,7 @@ function EndScheduleDialog({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button variant="destructive" onClick={() => mutation.mutate()} disabled={mutation.isPending} data-testid="end-schedule-confirm">
             {t('invoices.schedules.action.end')}
           </Button>
@@ -733,7 +738,7 @@ function TermDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col max-h-[calc(100dvh-2rem)] sm:max-w-3xl">
+      <DialogContent size="lg" className="flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {term ? t('invoices.schedules.terms.editTitle') : t('invoices.schedules.action.changePrice')}
@@ -777,7 +782,7 @@ function TermDialog({
           </p>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={perPeriod <= 0 || !effectiveFrom || mutation.isPending} data-testid="term-save">
             {t('common.save')}
           </Button>
@@ -845,7 +850,7 @@ function LinkInvoiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.linkTitle')}</DialogTitle>
           <DialogDescription>{t('invoices.schedules.linkDescription')}</DialogDescription>
@@ -890,7 +895,7 @@ function LinkInvoiceDialog({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
           <Button onClick={() => mutation.mutate()} disabled={!invoiceId || !periodStart || mutation.isPending} data-testid="link-invoice-submit">
             <Plus className="h-4 w-4 mr-1.5" />
             {t('invoices.schedules.action.link')}

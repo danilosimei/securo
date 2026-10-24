@@ -103,7 +103,7 @@ export function BankConnectDialog({
   if (open && needsInitialOptions && !optionsConfirmed) {
     return (
       <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>{t('connections.initialSyncSettings')}</DialogTitle>
             <p className="text-sm text-muted-foreground">{t('connections.initialSyncSettingsDesc')}</p>

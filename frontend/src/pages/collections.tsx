@@ -1,4 +1,9 @@
 import { useMemo, useState } from 'react'
+import { FormDialogFooter } from '@/components/form-dialog-footer'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
+
 import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -8,16 +13,17 @@ import { PageHeader } from '@/components/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
-  DialogDescription,
 } from '@/components/ui/dialog'
-import { FolderOpen, Plus, Pencil, Trash2 } from 'lucide-react'
+import { FolderOpen, Plus } from 'lucide-react'
+import { RowActions } from '@/components/ui/row-actions'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
+import { SectionCard } from '@/components/ui/section-card'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
 import type { Collection } from '@/types'
 
 const SWATCHES = ['#6366F1', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#8B5CF6', '#64748B']
@@ -29,7 +35,7 @@ export default function CollectionsPage() {
   const [editing, setEditing] = useState<Collection | null>(null)
   const [deleting, setDeleting] = useState<Collection | null>(null)
 
-  const { data: collections, isLoading } = useQuery({
+  const { data: collections, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['collections'],
     queryFn: collectionsApi.list,
   })
@@ -71,29 +77,41 @@ export default function CollectionsPage() {
   return (
     <div>
       <PageHeader
-        section={t('nav.groupSetup')}
+        section={t('nav.groupOrganization')}
         title={t('collections.title')}
         action={
           <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
-            <Plus size={16} className="mr-1.5" />
+            <Plus />
             {t('collections.add')}
           </Button>
         }
       />
       <p className="text-sm text-muted-foreground mb-5 max-w-2xl">{t('collections.subtitle')}</p>
 
-      <div className="rounded-xl border border-border/60 bg-card overflow-hidden">
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
+      <SectionCard>
         {isLoading ? (
-          <div className="p-4 space-y-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
+          <ListSkeleton />
         ) : list.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <FolderOpen size={32} className="mb-3 opacity-40" />
-            <p className="text-sm">{t('collections.empty')}</p>
-          </div>
+          <EmptyState
+            icon={FolderOpen}
+            title={t('collections.empty')}
+            action={
+              <Button onClick={() => { setEditing(null); setDialogOpen(true) }}>
+                <Plus /> {t('collections.add')}
+              </Button>
+            }
+          />
         ) : (
-          <div className="divide-y divide-border/40">
+          <div className="divide-y divide-border">
             {list.map((c) => (
-              <div key={c.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-muted/30 transition-colors">
+              <div
+                key={c.id}
+                {...clickableRow(() => { setEditing(c); setDialogOpen(true) })}
+                className={`flex items-center gap-4 px-4 sm:px-5 py-3.5 hover:bg-muted/50 transition-colors ${CLICKABLE_ROW_CLASS}`}
+              >
                 <span className="h-8 w-8 shrink-0 rounded-lg" style={{ backgroundColor: `${c.color}22` }}>
                   <span className="flex h-full w-full items-center justify-center">
                     <FolderOpen size={16} style={{ color: c.color }} />
@@ -106,19 +124,17 @@ export default function CollectionsPage() {
                     {c.wallet_count > 0 && ` · ${t('collections.walletCount', { count: c.wallet_count })}`}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button variant="ghost" size="icon" onClick={() => { setEditing(c); setDialogOpen(true) }} aria-label={t('common.edit')}>
-                    <Pencil size={15} />
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setDeleting(c)} aria-label={t('common.delete')} className="text-muted-foreground/60 hover:text-destructive">
-                    <Trash2 size={15} />
-                  </Button>
-                </div>
+                <RowActions
+                  label={c.name}
+                  onEdit={() => { setEditing(c); setDialogOpen(true) }}
+                  onDelete={() => setDeleting(c)}
+                />
               </div>
             ))}
           </div>
         )}
-      </div>
+      </SectionCard>
+      )}
 
       <CollectionDialog
         open={dialogOpen}
@@ -127,32 +143,27 @@ export default function CollectionsPage() {
         accounts={sortAccountsByDisplayName(accounts ?? []).map((a) => ({ id: a.id, label: accountName.get(a.id) ?? a.name, currency: a.currency }))}
         wallets={(wallets ?? []).map((w) => ({ id: w.id, label: w.name }))}
         loading={createMutation.isPending || updateMutation.isPending}
+        onDelete={(item) => { setDialogOpen(false); setEditing(null); setDeleting(item) }}
         onSave={(payload) => {
           if (editing) updateMutation.mutate({ id: editing.id, ...payload })
           else createMutation.mutate(payload)
         }}
       />
 
-      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t('collections.confirmDeleteTitle')}</DialogTitle>
-            <DialogDescription>{t('collections.confirmDeleteDesc', { name: deleting?.name })}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-2">
-            <Button variant="outline" onClick={() => setDeleting(null)}>{t('common.cancel')}</Button>
-            <Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => deleting && deleteMutation.mutate(deleting.id)}>
-              {deleteMutation.isPending ? t('common.loading') : t('common.delete')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteConfirmationDialog
+        open={!!deleting}
+        title={t('collections.confirmDeleteTitle')}
+        description={t('collections.confirmDeleteDesc', { name: deleting?.name })}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+      />
     </div>
   )
 }
 
 function CollectionDialog({
-  open, onClose, collection, accounts, wallets, loading, onSave,
+  open, onClose, collection, accounts, wallets, loading, onSave, onDelete,
 }: {
   open: boolean
   onClose: () => void
@@ -161,6 +172,7 @@ function CollectionDialog({
   wallets: { id: string; label: string }[]
   loading: boolean
   onSave: (payload: { name: string; color: string; account_ids: string[]; wallet_ids: string[] }) => void
+  onDelete: (collection: Collection) => void
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
@@ -189,7 +201,7 @@ function CollectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>{collection ? t('collections.edit') : t('collections.add')}</DialogTitle>
         </DialogHeader>
@@ -265,12 +277,12 @@ function CollectionDialog({
             </div>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
-            <Button type="submit" disabled={loading || !name.trim()}>
-              {loading ? t('common.loading') : t('common.save')}
-            </Button>
-          </DialogFooter>
+          <FormDialogFooter
+            onCancel={onClose}
+            onDelete={collection ? () => onDelete(collection) : undefined}
+            saveDisabled={loading || !name.trim()}
+            saveLabel={loading ? t('common.loading') : t('common.save')}
+          />
         </form>
       </DialogContent>
     </Dialog>

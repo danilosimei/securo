@@ -5,8 +5,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transactions as transactionsApi, settings as settingsApi } from '@/lib/api'
 import { toast } from 'sonner'
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist'
-import { Paperclip, Upload, Download, Trash2, X, Loader2, FileText, Eye, Plus, Pencil, Check } from 'lucide-react'
+import { Paperclip, Download, Trash2, X, Loader2, FileText, Eye, Plus, Pencil, Check } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import type { Attachment } from '@/types'
 
 GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).href
@@ -354,147 +355,77 @@ export function TransactionAttachments({
   const atMaxAttachments = allItems.length >= maxAttachments
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Paperclip size={14} />
-        {t('transactions.attachments')}
-        {hasAttachments && (
-          <span className="text-xs text-muted-foreground font-normal">({attachments!.length})</span>
+    <div
+      className={cn('space-y-2 rounded-md transition-colors', dragOver && 'bg-primary/5 ring-2 ring-primary/40')}
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={handleDrop}
+    >
+      {/* One line: the title, how many, and the button that adds more. The
+          whole block also takes dropped files. */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-sm font-medium">
+          <Paperclip size={14} />
+          {t('transactions.attachments')}
+          {hasAttachments && (
+            <span className="text-xs text-muted-foreground font-normal">({attachments?.length ?? 0})</span>
+          )}
+        </div>
+        {!atMaxAttachments && (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 h-7 text-xs text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 hover:bg-muted/40 cursor-pointer transition-colors"
+            onClick={() => fileInputRef.current?.click()}
+            title={t('transactions.attachmentsUpload')}
+          >
+            <Plus size={12} />
+            {t('transactions.attachFile')}
+          </button>
         )}
       </div>
 
-      {/* Attachment grid */}
       {isLoading ? (
-        <div className="grid grid-cols-3 gap-2">
-          <Skeleton className="aspect-square w-full rounded-xl" />
-          <Skeleton className="aspect-square w-full rounded-xl" />
-        </div>
-      ) : hasAttachments ? (
-        <>
-        <div className="grid grid-cols-3 gap-2">
+        <Skeleton className="h-10 w-full rounded-md" />
+      ) : hasAttachments && (
+        <ul className="space-y-1">
           {allItems.map((att) => {
             const isUploading = att.isUploading
             const isActive = !isUploading && activePreviewId === att.id
             const isPdf = att.content_type === 'application/pdf'
-            const ext = getFileExtension(att.filename).toUpperCase()
             const isConfirming = confirmDeleteId === att.id
 
             return (
-              <div
+              <li
                 key={att.id}
-                className={`group relative rounded-xl overflow-hidden transition-all duration-200 ${
-                  isUploading
-                    ? 'ring-1 ring-border opacity-60'
-                    : isActive
-                      ? 'ring-2 ring-primary shadow-md shadow-primary/10 cursor-pointer'
-                      : 'ring-1 ring-border hover:ring-border/80 hover:shadow-md hover:shadow-black/5 cursor-pointer'
-                }`}
-                onClick={() => !isUploading && !isConfirming && handlePreview(att as Attachment)}
+                className={cn(
+                  'group flex items-center gap-2 rounded-md p-1 transition-colors',
+                  isUploading ? 'opacity-60' : 'hover:bg-muted/50',
+                  isActive && 'bg-primary/5 ring-1 ring-primary/40',
+                )}
               >
-                {/* Thumbnail */}
-                <div className="aspect-square bg-muted/50 flex items-center justify-center overflow-hidden relative">
+                {/* Small thumbnail: opens the preview. */}
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={() => handlePreview(att as Attachment)}
+                  title={t('common.preview')}
+                  className="relative size-10 shrink-0 overflow-hidden rounded bg-muted/60 ring-1 ring-border flex items-center justify-center cursor-pointer disabled:cursor-default"
+                >
                   {thumbnails[att.id] ? (
-                    <img
-                      src={thumbnails[att.id]}
-                      alt={att.filename}
-                      className={`w-full h-full object-cover transition-transform duration-300 ${isUploading ? '' : 'group-hover:scale-[1.03]'}`}
-                    />
+                    <img src={thumbnails[att.id]} alt={att.filename} className="size-full object-cover" />
                   ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <div className={`w-12 h-14 rounded-lg flex items-center justify-center ${
-                        isPdf ? 'bg-red-500/10' : 'bg-muted'
-                      }`}>
-                        <FileText size={24} className={isPdf ? 'text-red-500' : 'text-muted-foreground'} />
-                      </div>
-                      <span className="text-[10px] font-semibold tracking-widest text-muted-foreground/70 uppercase">
-                        {ext || 'FILE'}
-                      </span>
-                    </div>
+                    <FileText size={18} className={isPdf ? 'text-red-500' : 'text-muted-foreground'} />
                   )}
                   {isUploading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-background/40">
-                      <Loader2 size={20} className="animate-spin text-primary" />
-                    </div>
+                    <span className="absolute inset-0 flex items-center justify-center bg-background/50">
+                      <Loader2 size={14} className="animate-spin text-primary" />
+                    </span>
                   )}
-                </div>
+                </button>
 
-                {/* Hover action bar — floats over bottom of thumbnail */}
-                {!isUploading && (
-                <div className={`absolute left-0 right-0 bottom-[44px] flex items-center justify-center gap-1 px-2 py-1.5 transition-all duration-200 ${
-                  isConfirming
-                    ? 'opacity-100 translate-y-0'
-                    : 'opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0'
-                }`}>
-                  <div className="flex items-center gap-1 bg-background/90 dark:bg-card/90 backdrop-blur-sm rounded-lg ring-1 ring-border/50 shadow-lg shadow-black/10 px-1 py-0.5">
-                    {isConfirming ? (
-                      <>
-                        <button
-                          type="button"
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 cursor-pointer transition-colors"
-                          onClick={(e) => { e.stopPropagation(); handleDelete(att.id) }}
-                          disabled={deletingId === att.id}
-                        >
-                          {deletingId === att.id ? <Loader2 size={12} className="animate-spin" /> : t('common.delete')}
-                        </button>
-                        <button
-                          type="button"
-                          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
-                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null) }}
-                        >
-                          <X size={13} />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className={`p-1.5 rounded-md cursor-pointer transition-colors ${
-                            isActive
-                              ? 'text-primary bg-primary/10'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                          }`}
-                          onClick={(e) => { e.stopPropagation(); handlePreview(att as Attachment) }}
-                          title={t('common.preview')}
-                        >
-                          <Eye size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
-                          onClick={(e) => { e.stopPropagation(); startRename(att as Attachment) }}
-                          title={t('transactions.attachmentRename')}
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
-                          onClick={(e) => { e.stopPropagation(); handleDownload(att as Attachment) }}
-                          title={t('common.download')}
-                        >
-                          <Download size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
-                          onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(att.id) }}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                )}
-
-                {/* Info bar — always visible, clean */}
-                <div className="px-3 py-2.5 bg-card">
+                <div className="min-w-0 flex-1">
                   {!isUploading && renamingId === att.id ? (
-                    <div
-                      className="flex items-center gap-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <div className="flex items-center gap-1">
                       <input
                         ref={renameInputRef}
                         type="text"
@@ -506,76 +437,107 @@ export function TransactionAttachments({
                           if (e.key === 'Enter') { e.preventDefault(); submitRename(att.id) }
                           if (e.key === 'Escape') setRenamingId(null)
                         }}
-                        className="flex-1 min-w-0 text-[12px] font-medium bg-transparent border-b border-primary outline-none leading-tight py-0.5"
+                        className="flex-1 min-w-0 text-xs font-medium bg-transparent border-b border-primary outline-none leading-tight py-0.5"
                         autoFocus
                       />
                       <button
                         type="button"
                         className="p-0.5 text-primary hover:text-primary/80 cursor-pointer"
-                        onClick={(e) => { e.stopPropagation(); submitRename(att.id) }}
+                        onClick={() => submitRename(att.id)}
                       >
                         {renameMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                       </button>
                     </div>
                   ) : (
                     <p
-                      className={`text-[12px] font-medium truncate leading-tight ${!isUploading ? 'cursor-text hover:text-primary/80' : ''}`}
+                      className={cn('text-xs font-medium truncate leading-tight', !isUploading && 'cursor-text hover:text-primary/80')}
                       title={att.filename}
-                      onClick={(e) => { if (!isUploading) { e.stopPropagation(); startRename(att as Attachment) } }}
+                      onClick={() => { if (!isUploading) startRename(att as Attachment) }}
                     >
                       {att.filename}
                     </p>
                   )}
-                  <p className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
                     {isUploading
                       ? t('transactions.attachmentsUploading')
                       : `${formatFileSize(att.size)} · ${new Date((att as Attachment).created_at).toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}`
                     }
                   </p>
                 </div>
-              </div>
+
+                {!isUploading && (
+                  <div
+                    className={cn(
+                      'flex shrink-0 items-center gap-0.5',
+                      // On hover the actions take the name's place; touch
+                      // screens have no hover, so they stay there.
+                      !isConfirming && 'sm:hidden sm:group-hover:flex sm:group-focus-within:flex',
+                    )}
+                  >
+                    {isConfirming ? (
+                      <>
+                        <button
+                          type="button"
+                          className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 cursor-pointer transition-colors"
+                          onClick={() => handleDelete(att.id)}
+                          disabled={deletingId === att.id}
+                        >
+                          {deletingId === att.id ? <Loader2 size={12} className="animate-spin" /> : t('common.delete')}
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
+                          onClick={() => setConfirmDeleteId(null)}
+                          title={t('common.cancel')}
+                        >
+                          <X size={13} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className={cn(
+                            'p-1 rounded-md cursor-pointer transition-colors',
+                            isActive ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-accent',
+                          )}
+                          onClick={() => handlePreview(att as Attachment)}
+                          title={t('common.preview')}
+                        >
+                          <Eye size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
+                          onClick={() => startRename(att as Attachment)}
+                          title={t('transactions.attachmentRename')}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent cursor-pointer transition-colors"
+                          onClick={() => handleDownload(att as Attachment)}
+                          title={t('common.download')}
+                        >
+                          <Download size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
+                          onClick={() => setConfirmDeleteId(att.id)}
+                          title={t('common.delete')}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </li>
             )
           })}
-
-        </div>
-
-        {/* Add more button */}
-        {!atMaxAttachments && (
-        <button
-          type="button"
-          className={`w-full mt-2 rounded-lg border-2 border-dashed py-3 flex items-center justify-center gap-2 cursor-pointer transition-all duration-200 ${
-            dragOver
-              ? 'border-primary bg-primary/5'
-              : 'border-border hover:border-muted-foreground/40 hover:bg-muted/30'
-          }`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <Plus size={14} className="text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{t('transactions.attachmentsUpload')}</span>
-        </button>
-        )}
-        </>
-      ) : (
-        /* Empty state with drop zone */
-        <div
-          className={`rounded-xl border-2 border-dashed py-6 px-4 text-center transition-all cursor-pointer ${
-            dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
-          }`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-              <Upload size={14} className="text-muted-foreground" />
-            </div>
-            <span className="text-xs text-muted-foreground">{t('transactions.attachmentsUpload')}</span>
-          </div>
-        </div>
+        </ul>
       )}
 
       <input

@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { ListSkeleton } from '@/components/ui/list-skeleton'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Plus, Repeat } from 'lucide-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus, Repeat } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -25,7 +28,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { PageHeader } from '@/components/page-header'
+import { InvoiceTabs } from '@/components/invoice-tabs'
 import { SectionCard, Segmented, TH } from '@/components/invoice-ui'
+import { CLICKABLE_ROW_CLASS, clickableRow } from '@/components/ui/clickable-row'
 import { InvoiceLineEditor } from '@/components/invoice-line-editor'
 import { EndConditionFields, ScheduleBadge } from '@/components/invoice-schedule-ui'
 import { CurrencySelect } from '@/components/currency-select'
@@ -72,9 +77,10 @@ export default function InvoiceSchedulesPage() {
     queryKey: ['invoice-schedule-summary'],
     queryFn: schedulesApi.summary,
   })
-  const { data: list, isLoading } = useQuery({
+  const { data: list, isLoading, isError, error, refetch, isPlaceholderData } = useQuery({
     queryKey: ['invoice-schedules', filter],
     queryFn: () => schedulesApi.list(filter === 'all' ? undefined : { status: filter }),
+    placeholderData: keepPreviousData,
   })
 
   const money = (value: string | number | null | undefined, code: string) =>
@@ -96,27 +102,20 @@ export default function InvoiceSchedulesPage() {
 
   return (
     <div>
-      <button
-        onClick={() => navigate('/invoices')}
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-        data-testid="schedules-back"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        {t('invoices.backToList')}
-      </button>
-
       <PageHeader
-        section={t('invoices.title')}
-        title={t('invoices.schedules.title')}
+        section={t('nav.groupDaily')}
+        title={t('invoices.title')}
         action={
           canWrite ? (
-            <Button size="sm" onClick={() => setCreateOpen(true)} data-testid="schedule-new-button">
-              <Plus className="h-4 w-4 mr-1.5" />
+            <Button onClick={() => setCreateOpen(true)} data-testid="schedule-new-button">
+              <Plus />
               {t('invoices.schedules.new')}
             </Button>
           ) : undefined
         }
       />
+
+      <InvoiceTabs tab="schedules" />
 
       {/* One row per currency, in the invoices page's shape: the headline
           figure with what supports it beside it. An agreement in euros and
@@ -187,30 +186,33 @@ export default function InvoiceSchedulesPage() {
         />
       </div>
 
+      {/* Switching the filter keeps this list up, dimmed, until the new one
+          lands, rather than dropping it for a skeleton in between. */}
+      <div
+        data-testid="invoice-schedules-list"
+        aria-busy={isPlaceholderData}
+        className={cn('transition-opacity duration-200', isPlaceholderData && 'opacity-60')}
+      >
+      {isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : (
       <SectionCard>
         {isLoading ? (
-          <div className="p-5 space-y-3">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-9 w-full" />
-            ))}
-          </div>
+          <ListSkeleton />
         ) : !list || list.length === 0 ? (
-          <div className="px-5 py-14 text-center" data-testid="schedules-empty">
-            <Repeat className="h-8 w-8 mx-auto text-muted-foreground/50" />
-            <p className="mt-3 text-sm text-muted-foreground max-w-sm mx-auto">
-              {filter === 'all'
-                ? t('invoices.schedules.empty')
-                : t('invoices.schedules.emptyFiltered')}
-            </p>
-            {filter === 'all' && canWrite && (
-              <Button size="sm" className="mt-4" onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                {t('invoices.schedules.new')}
-              </Button>
-            )}
-          </div>
+          <EmptyState
+            icon={Repeat}
+            testId="schedules-empty"
+            title={filter === 'all' ? t('invoices.schedules.empty') : t('invoices.schedules.emptyFiltered')}
+            action={
+              filter === 'all' && canWrite ? (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus /> {t('invoices.schedules.new')}
+                </Button>
+              ) : undefined
+            }
+          />
         ) : (
-          <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
@@ -234,9 +236,9 @@ export default function InvoiceSchedulesPage() {
                 {list.map((schedule) => (
                   <tr
                     key={schedule.id}
-                    onClick={() => navigate(`/invoices/schedules/${schedule.id}`)}
+                    {...clickableRow(() => navigate(`/invoices/schedules/${schedule.id}`), { inTable: true })}
                     data-testid="schedule-row"
-                    className="border-b border-border last:border-0 hover:bg-muted transition-colors cursor-pointer"
+                    className={`border-b border-border last:border-0 hover:bg-muted transition-colors ${CLICKABLE_ROW_CLASS}`}
                   >
                     <td className="py-3 pl-4 sm:pl-5">
                       <div className="text-sm font-medium text-foreground truncate">{schedule.name}</div>
@@ -273,9 +275,10 @@ export default function InvoiceSchedulesPage() {
                 ))}
               </tbody>
             </table>
-          </div>
         )}
       </SectionCard>
+      )}
+      </div>
 
       <CreateScheduleDialog
         key={createOpen ? 'open' : 'closed'}
@@ -383,7 +386,7 @@ function CreateScheduleDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex flex-col max-h-[calc(100dvh-2rem)] sm:max-w-3xl">
+      <DialogContent size="lg" className="flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('invoices.schedules.new')}</DialogTitle>
           <DialogDescription>{t('invoices.schedules.newDescription')}</DialogDescription>
@@ -503,7 +506,7 @@ function CreateScheduleDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('common.cancel')}
           </Button>
           <Button
