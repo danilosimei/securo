@@ -9,7 +9,8 @@ import type { BreakdownRow } from '@/lib/api'
 import { formatCurrency } from '@/lib/format'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort, formatPercent } from '@/components/reports/common/chart-utils'
-import { CategoryIcon } from '@/components/category-icon'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import type { Glyph } from './explore-model'
 
 export const BARS_FIRST = 10
 
@@ -22,11 +23,11 @@ interface ExploreBarsProps {
   /** A second line under the name (the store's category). */
   sublabel?: (row: BreakdownRow) => string | null | undefined
   /** The group's or category's icon before the name (stores have none). */
-  iconOf?: (row: BreakdownRow) => string | null
+  glyphOf?: (row: BreakdownRow) => Glyph
   ariaLabel: string
 }
 
-export function ExploreBars({ rows, currency, locale, colorOf, onOpen, sublabel, iconOf, ariaLabel }: ExploreBarsProps) {
+export function ExploreBars({ rows, currency, locale, colorOf, onOpen, sublabel, glyphOf, ariaLabel }: ExploreBarsProps) {
   const { t } = useTranslation()
   const { mask } = usePrivacyMode()
   const [all, setAll] = useState(false)
@@ -43,6 +44,7 @@ export function ExploreBars({ rows, currency, locale, colorOf, onOpen, sublabel,
           const value = Number(row.total)
           const share = formatPercent(value / total, locale)
           const sub = sublabel?.(row)
+          const glyph = glyphOf?.(row)
           return (
             <li key={row.id ?? row.label}>
               <button
@@ -53,7 +55,7 @@ export function ExploreBars({ rows, currency, locale, colorOf, onOpen, sublabel,
                 className="group grid w-full grid-cols-[minmax(0,9rem)_1fr] items-center gap-3 rounded-md px-1.5 py-1.5 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[minmax(0,14rem)_1fr]"
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  {iconOf && <CategoryIcon icon={iconOf(row)} color={colorOf(row)} size="xs" />}
+                  {glyph && <CategoryGlyph icon={glyph.icon} color={glyph.color} />}
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-foreground group-hover:underline group-hover:decoration-foreground/30 group-hover:underline-offset-4">
                       {row.label}

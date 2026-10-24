@@ -9,7 +9,8 @@ import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort, niceTicks, useElementWidth, useIsNarrow } from '@/components/reports/common/chart-utils'
 import { ChartTooltip, TooltipRow } from '@/components/reports/common/report-block'
 import type { BreakdownRow } from '@/lib/api'
-import type { TrendSeries } from './explore-model'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import type { Glyph, TrendSeries } from './explore-model'
 
 const PAD = { top: 12, right: 12, bottom: 24, left: 52 }
 
@@ -21,9 +22,11 @@ interface ExploreTrendProps {
   currency: string
   locale: string
   ariaLabel: string
+  /** The group's or category's icon before a line's name. */
+  glyphOf?: (row: BreakdownRow) => Glyph
 }
 
-export function ExploreTrend({ series, months, colorOf, onOpen, currency, locale, ariaLabel }: ExploreTrendProps) {
+export function ExploreTrend({ series, months, colorOf, onOpen, currency, locale, ariaLabel, glyphOf }: ExploreTrendProps) {
   const { t } = useTranslation()
   const { mask, privacyMode } = usePrivacyMode()
   const narrow = useIsNarrow()
@@ -66,6 +69,7 @@ export function ExploreTrend({ series, months, colorOf, onOpen, currency, locale
                 className="flex items-center gap-1.5 rounded text-xs font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span aria-hidden="true" className="h-0.5 w-3.5 rounded-full" style={{ background: colorOf(s) }} />
+                {glyphOf && <CategoryGlyph icon={glyphOf(s.row).icon} color={glyphOf(s.row).color} size={12} />}
                 {s.label}
               </button>
             ) : (

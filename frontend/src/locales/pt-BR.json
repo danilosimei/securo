@@ -2159,6 +2159,61 @@
         "answerMore": "Você gastou {{value}} a mais que em {{b}} {{change}}",
         "answerLess": "Você gastou {{value}} a menos que em {{b}} {{change}}",
         "answerSame": "Você gastou o mesmo que em {{b}}"
+      },
+      "flow": {
+        "label": "Gasto ou renda",
+        "expense": "Gasto",
+        "income": "Renda"
+      },
+      "income": {
+        "spending": "Recebido",
+        "toCheck": "A conferir",
+        "empty": "Nada recebido entre {{from}} e {{to}}.",
+        "backToStores": "Todos que pagaram",
+        "backToCategory": "Quem pagou em {{category}}",
+        "view": {
+          "merchant": "Quem pagou"
+        },
+        "col": {
+          "category": "Categoria",
+          "merchant": "Quem pagou",
+          "account": "Conta"
+        },
+        "concentration": {
+          "category": "{{n}} de {{m}} categorias somam 80% do que você recebeu.",
+          "merchant": "{{n}} de {{m}} pagadores somam 80% do que você recebeu.",
+          "account": "{{n}} de {{m}} contas somam 80% do que você recebeu."
+        },
+        "bars": {
+          "aria": "Recebido de cada item, do maior para o menor; {{name}} é o maior."
+        },
+        "trend": {
+          "aria": "Recebido mês a mês dos maiores itens; {{name}} é o maior."
+        },
+        "month": {
+          "legend": "Mais escuro = recebeu mais",
+          "legendDark": "Mais claro = recebeu mais",
+          "aria": "Recebido em cada mês; {{name}} é o maior."
+        },
+        "treemap": {
+          "of": {
+            "category": "do recebido",
+            "merchant": "da categoria",
+            "account": "do recebido"
+          }
+        },
+        "compare": {
+          "empty": "Nada recebido nos dois períodos.",
+          "answerMore": "Você recebeu {{value}} a mais que em {{b}} {{change}}",
+          "answerLess": "Você recebeu {{value}} a menos que em {{b}} {{change}}",
+          "answerSame": "Você recebeu o mesmo que em {{b}}"
+        }
+      },
+      "assets": {
+        "title": "Vai para o patrimônio",
+        "hint": "Não entra no gasto: o dinheiro continua seu.",
+        "project": "Total do projeto",
+        "projectHint": "gasto + patrimônio"
       }
     },
     "common": {

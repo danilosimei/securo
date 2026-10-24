@@ -1,4 +1,5 @@
-/** "Comparar": the spending of the period (A) next to another period (B),
+/** "Comparar": the spending (or, with `flow=income`, the money received,
+ *  category by category) of the period (A) next to another period (B),
  *  group by group, with the difference written out ("R$ 1,2 mil a mais") and
  *  a small bar to the right (more) or to the left (less). B is the period
  *  right before, the same dates a year earlier, or dates of choice. A group
@@ -6,7 +7,14 @@
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, Scale } from 'lucide-react'
-import { reports, type BreakdownCompare, type BreakdownParams, type BreakdownRow, type ReportPeriodParams } from '@/lib/api'
+import {
+  reports,
+  type BreakdownCompare,
+  type BreakdownFlow,
+  type BreakdownParams,
+  type BreakdownRow,
+  type ReportPeriodParams,
+} from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/format'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
@@ -18,7 +26,8 @@ import { BlockError } from '@/components/reports/common/report-block'
 import { AnswerLine } from '@/components/reports/common/answer-line'
 import { answerParts } from '@/components/reports/common/answer-parts'
 import { formatMoneyShort } from '@/components/reports/common/chart-utils'
-import { rangeLabel } from './explore-model'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import { glyphOfRow, rangeLabel } from './explore-model'
 import type { GroupPalette } from '@/components/reports/common/group-colors'
 import { CUSTOM_RANGE_MAX_YEARS } from '@/components/reports/period-selector'
 
@@ -34,16 +43,22 @@ interface CompareViewProps {
   onMode: (mode: BreakdownCompare, range?: { from: string; to: string }) => void
   onOpenGroup: (row: BreakdownRow) => void
   onBack: () => void
+  /** Omitted = expense. */
+  flow?: BreakdownFlow
 }
 
-export function CompareView({ query, mode, from, to, group, groupLabel, palette, locale, onMode, onOpenGroup, onBack }: CompareViewProps) {
+export function CompareView({ query, mode, from, to, group, groupLabel, palette, locale, onMode, onOpenGroup, onBack, flow }: CompareViewProps) {
   const { t } = useTranslation()
   const { mask } = usePrivacyMode()
   const ready = mode !== 'custom' || (!!from && !!to)
+  // Income has no groups: its categories are compared straight away.
+  const income = flow === 'income'
+  const k = (key: string) => (income ? `reports.explore.income.compare.${key}` : `reports.explore.compare.${key}`)
   const params: BreakdownParams = {
     ...query,
-    level: group ? 'category' : 'group',
+    level: group || income ? 'category' : 'group',
     ...(group ? { group_id: group } : {}),
+    ...(income ? { flow: 'income' as const } : {}),
     compare: mode,
     ...(mode === 'custom' ? { compare_from: from, compare_to: to } : {}),
   }
@@ -64,9 +79,9 @@ export function CompareView({ query, mode, from, to, group, groupLabel, palette,
   const labelB = data ? rangeLabel(data.period.previous_from, data.period.previous_to, locale) : ''
   const diff = total - before
   const answer = data
-    ? answerParts(t, diff > 0 ? 'reports.explore.compare.answerMore' : diff < 0 ? 'reports.explore.compare.answerLess' : 'reports.explore.compare.answerSame', {
+    ? answerParts(t, k(diff > 0 ? 'answerMore' : diff < 0 ? 'answerLess' : 'answerSame'), {
         value: { kind: 'value', text: money(diff) },
-        change: { kind: 'delta', change: before > 0 ? diff / before : 0, good: diff < 0, locale },
+        change: { kind: 'delta', change: before > 0 ? diff / before : 0, good: income ? diff > 0 : diff < 0, locale },
         b: labelB,
       })
     : null
@@ -74,7 +89,6 @@ export function CompareView({ query, mode, from, to, group, groupLabel, palette,
   // Groups (or categories) present in A or in B, biggest A first.
   const rows = (data?.rows ?? []).filter((r) => Number(r.total) !== 0 || Number(r.previous_total) !== 0)
   const maxAbs = Math.max(...rows.map((r) => Math.abs(Number(r.total) - Number(r.previous_total))), 1)
-  const colorOf = (row: BreakdownRow) => (group ? palette.category(row.id, row.label) : palette.group(row.id, row.label))
 
   return (
     <div className="space-y-4" data-testid="compare-view">
@@ -146,13 +160,13 @@ export function CompareView({ query, mode, from, to, group, groupLabel, palette,
           </div>
 
           {rows.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">{t('reports.explore.compare.empty')}</p>
+            <p className="py-10 text-center text-sm text-muted-foreground">{t(k('empty'))}</p>
           ) : (
             <div className="rounded-xl border border-border bg-card shadow-sm">
               <table className="w-full table-fixed text-sm" data-testid="compare-table">
                 <thead>
                   <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
-                    <th className="px-3 py-2.5 sm:px-4">{t(group ? 'reports.explore.col.category' : 'reports.explore.col.group')}</th>
+                    <th className="px-3 py-2.5 sm:px-4">{t(group || income ? 'reports.explore.col.category' : 'reports.explore.col.group')}</th>
                     <th className="hidden w-32 px-2 py-2.5 text-right sm:table-cell" title={labelA}>A</th>
                     <th className="hidden w-32 px-2 py-2.5 text-right sm:table-cell" title={labelB}>B</th>
                     <th className="w-36 px-3 py-2.5 sm:w-52 sm:px-4">{t('reports.explore.compare.difference')}</th>
@@ -163,6 +177,9 @@ export function CompareView({ query, mode, from, to, group, groupLabel, palette,
                     const a = Number(row.total)
                     const b = Number(row.previous_total)
                     const d = a - b
+                    // More spending is bad; more money received is good.
+                    const worse = income ? d < 0 : d > 0
+                    const glyph = glyphOfRow(palette, row)
                     const canOpen = !group && row.kind === 'group' && row.id !== null
                     const diffText =
                       d === 0
@@ -182,10 +199,10 @@ export function CompareView({ query, mode, from, to, group, groupLabel, palette,
                       >
                         <td className="px-3 py-2.5 sm:px-4">
                           <span className="flex min-w-0 items-center gap-2">
-                            <span aria-hidden="true" className="size-2.5 shrink-0 rounded-sm" style={{ background: colorOf(row) }} />
+                            <CategoryGlyph icon={glyph.icon} color={glyph.color} />
                             <span className="truncate font-medium text-foreground">{row.label}</span>
                           </span>
-                          <span className="mt-0.5 block truncate pl-[18px] text-[11px] tabular-nums text-muted-foreground sm:hidden">
+                          <span className="mt-0.5 block truncate pl-[22px] text-[11px] tabular-nums text-muted-foreground sm:hidden">
                             {mask(formatMoneyShort(a, currency, locale))} · {mask(formatMoneyShort(b, currency, locale))}
                           </span>
                         </td>
@@ -195,7 +212,7 @@ export function CompareView({ query, mode, from, to, group, groupLabel, palette,
                           <span
                             className={cn(
                               'flex items-center gap-1 text-xs font-semibold tabular-nums',
-                              d > 0 ? 'text-rose-700 dark:text-rose-300' : d < 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground',
+                              d === 0 ? 'text-muted-foreground' : worse ? 'text-rose-700 dark:text-rose-300' : 'text-emerald-700 dark:text-emerald-300',
                             )}
                           >
                             {d !== 0 && <span aria-hidden="true">{d > 0 ? '▲' : '▼'}</span>}
@@ -206,7 +223,7 @@ export function CompareView({ query, mode, from, to, group, groupLabel, palette,
                             <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
                             {d !== 0 && (
                               <span
-                                className={cn('absolute inset-y-0 rounded-full', d > 0 ? 'bg-rose-500 dark:bg-rose-400' : 'bg-emerald-500 dark:bg-emerald-400')}
+                                className={cn('absolute inset-y-0 rounded-full', worse ? 'bg-rose-500 dark:bg-rose-400' : 'bg-emerald-500 dark:bg-emerald-400')}
                                 style={
                                   d > 0
                                     ? { left: '50%', width: `${(Math.abs(d) / maxAbs) * 50}%` }
