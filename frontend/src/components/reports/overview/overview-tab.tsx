@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { reports, type OverviewResponse } from '@/lib/api'
+import { reports } from '@/lib/api'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { useAuth } from '@/contexts/auth-context'
@@ -45,22 +45,11 @@ export function OverviewTab() {
   })
   const data = overview.data
   const stale = overview.isPlaceholderData
-  // The same report over the previous period feeds the "vs before" figures.
-  const previousQuery = data && !data.period.partial
-    ? { period: 'custom' as const, from: data.period.previous_from, to: data.period.previous_to }
-    : null
-  const previous = useQuery({
-    queryKey: ['reports', 'overview', previousQuery],
-    queryFn: () => reports.overview(previousQuery!),
-    enabled: previousQuery !== null && !stale,
-    placeholderData: keepPreviousData,
-  })
   useReportedRange(data?.period)
-  const prev: OverviewResponse | null = previousQuery && !stale ? (previous.data ?? null) : null
 
   const currency = data?.currency ?? user?.preferences?.currency_display ?? 'BRL'
   const money = (v: number) => mask(formatMoneyShort(v, currency, locale))
-  const headline = data ? overviewHeadline({ data, previous: prev, currency, locale, t, mask }) : null
+  const headline = data ? overviewHeadline({ data, currency, locale, t, mask }) : null
   const isEmpty = !!data && Number(data.kpis.spending) === 0 && Number(data.kpis.income) === 0
 
   const changes = data ? changesSummary(data.changes) : null
@@ -108,12 +97,17 @@ export function OverviewTab() {
 
           <KpiRow
             data={data}
-            previous={prev}
             currency={currency}
             locale={locale}
             stale={stale}
             fixedHref={tabLink('recurring', query).to}
           />
+
+          {(data?.unconverted_count ?? 0) > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400" data-testid="overview-unconverted">
+              {t('reports.explore.unconverted', { n: data?.unconverted_count })}
+            </p>
+          )}
 
           <ReportBlock
             title={t('reports.overview.highlights.title')}

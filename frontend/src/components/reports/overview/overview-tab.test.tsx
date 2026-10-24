@@ -6,8 +6,7 @@ import { OverviewTab } from '@/components/reports/overview/overview-tab'
 import { renderWithProviders, t } from '@/test/utils'
 import { pickPeriod } from '@/test/report-period-actions'
 import { WithPeriodBar } from '@/test/report-period'
-import { GROUPS, overviewFixture, previousOverview } from '@/test/reports-fixtures'
-import type { ReportPeriodParams } from '@/lib/api'
+import { GROUPS, overviewFixture } from '@/test/reports-fixtures'
 
 const api = vi.hoisted(() => ({
   reports: { overview: vi.fn() },
@@ -46,9 +45,7 @@ const where = () => screen.getByTestId('location').textContent ?? ''
 beforeEach(() => {
   vi.clearAllMocks()
   api.categoryGroups.list.mockResolvedValue(GROUPS)
-  api.reports.overview.mockImplementation((params: ReportPeriodParams) =>
-    Promise.resolve(params.period === 'custom' ? previousOverview() : overviewFixture()),
-  )
+  api.reports.overview.mockResolvedValue(overviewFixture())
 })
 
 describe('OverviewTab', () => {
@@ -63,8 +60,8 @@ describe('OverviewTab', () => {
     // The numbers stand out and the change is a pill, red: spending went up.
     expect(screen.getByTestId('delta-pill')).toHaveAttribute('data-tone', 'bad')
     expect(api.reports.overview).toHaveBeenCalledWith({ period: 'last_month' })
-    // The previous period is asked for with its real dates.
-    expect(api.reports.overview).toHaveBeenCalledWith({ period: 'custom', from: '2026-08-01', to: '2026-08-31' })
+    // The comparison rides in the same response: one call, not two.
+    expect(api.reports.overview).toHaveBeenCalledTimes(1)
   })
 
   it('shows the four numbers with their change against the previous period', async () => {
@@ -77,6 +74,20 @@ describe('OverviewTab', () => {
     expect(screen.getByTestId('kpi-left')).toHaveTextContent('R$39,796.55')
     expect(screen.getByTestId('kpi-fixed')).toHaveTextContent(t('reports.overview.kpi.fixedValue', { share: '38%' }))
     expect(screen.getByTestId('kpi-fixed')).toHaveAttribute('href', '/reports?tab=recurring&period=last_month')
+  })
+
+  it('warns when rows in another currency had no rate, and stays quiet otherwise', async () => {
+    api.reports.overview.mockResolvedValue(overviewFixture({ unconverted_count: 3 }))
+    const { unmount } = renderTab()
+    expect(await screen.findByTestId('overview-unconverted')).toHaveTextContent(
+      t('reports.explore.unconverted', { n: 3 }),
+    )
+    unmount()
+
+    api.reports.overview.mockResolvedValue(overviewFixture())
+    renderTab()
+    await screen.findByTestId('kpi-spending')
+    expect(screen.queryByTestId('overview-unconverted')).not.toBeInTheDocument()
   })
 
   it('turns each highlight into a card: tone, number, mini chart, what pulled it and what to do', async () => {
@@ -117,9 +128,7 @@ describe('OverviewTab', () => {
     data.highlights = data.highlights.map((h) =>
       h.rule === 'spike' ? { ...h, link: july, actions: [{ kind: 'month' as const, label: 'Ver Jul/26', link: july }] } : h,
     )
-    api.reports.overview.mockImplementation((params: ReportPeriodParams) =>
-      Promise.resolve(params.period === 'custom' ? previousOverview() : data),
-    )
+    api.reports.overview.mockResolvedValue(data)
     renderTab()
 
     const spike = await screen.findByTestId('highlight-spike')
@@ -149,9 +158,7 @@ describe('OverviewTab', () => {
       },
       ...data.highlights,
     ]
-    api.reports.overview.mockImplementation((params: ReportPeriodParams) =>
-      Promise.resolve(params.period === 'custom' ? previousOverview() : data),
-    )
+    api.reports.overview.mockResolvedValue(data)
     renderTab()
 
     const pace = await screen.findByTestId('month-pace')

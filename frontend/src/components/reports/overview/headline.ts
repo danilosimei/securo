@@ -7,8 +7,6 @@ import { answerParts, type AnswerPart } from '@/components/reports/common/answer
 
 interface HeadlineInput {
   data: OverviewResponse
-  /** The same report over the previous period, when it is comparable. */
-  previous?: OverviewResponse | null
   currency: string
   locale: string
   t: TFunction
@@ -17,15 +15,16 @@ interface HeadlineInput {
 
 /** Relative change of spending against the previous period, or null when
  *  there is nothing fair to compare with (a period still running, no base). */
-export function spendingChange(data: OverviewResponse, previous?: OverviewResponse | null): number | null {
+export function spendingChange(data: OverviewResponse): number | null {
+  const previous = data.kpis_previous
   if (!previous || data.period.partial) return null
   const now = Number(data.kpis.spending)
-  const before = Number(previous.kpis.spending)
+  const before = Number(previous.spending)
   if (!(before > 0)) return null
   return (now - before) / before
 }
 
-export function overviewHeadline({ data, previous, currency, locale, t, mask }: HeadlineInput): AnswerPart[] | null {
+export function overviewHeadline({ data, currency, locale, t, mask }: HeadlineInput): AnswerPart[] | null {
   const spending = Number(data.kpis.spending)
   const income = Number(data.kpis.income)
   const left = Number(data.kpis.left)
@@ -34,7 +33,7 @@ export function overviewHeadline({ data, previous, currency, locale, t, mask }: 
   const months = monthsBetween(data.period.from, data.period.to)
   const single = months.length === 1
   const value = (v: number) => ({ kind: 'value' as const, text: mask(formatMoneyShort(v, currency, locale)) })
-  const change = spendingChange(data, previous)
+  const change = spendingChange(data)
   // Under half a percent reads as "the same" and is not worth a clause.
   const direction = change === null || Math.abs(change) < 0.005 ? '' : change > 0 ? 'Up' : 'Down'
 

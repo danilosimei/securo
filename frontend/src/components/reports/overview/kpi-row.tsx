@@ -13,7 +13,6 @@ import { formatMoneyShort, formatPercent } from '@/components/reports/common/cha
 
 interface KpiRowProps {
   data: OverviewResponse | undefined
-  previous: OverviewResponse | null | undefined
   currency: string
   locale: string
   stale?: boolean
@@ -58,7 +57,7 @@ function Tile({ label, children, testId }: { label: string; children: React.Reac
 const ratio = (now: number, before: number | null) =>
   before === null || !(Math.abs(before) > 0) ? null : (now - before) / Math.abs(before)
 
-export function KpiRow({ data, previous, currency, locale, stale, fixedHref }: KpiRowProps) {
+export function KpiRow({ data, currency, locale, stale, fixedHref }: KpiRowProps) {
   const { t } = useTranslation()
   const { mask } = usePrivacyMode()
   if (!data) {
@@ -74,7 +73,7 @@ export function KpiRow({ data, previous, currency, locale, stale, fixedHref }: K
   const spending = Number(k.spending)
   const income = Number(k.income)
   const left = Number(k.left)
-  const comparable = previous && !data.period.partial ? previous.kpis : null
+  const comparable = data.kpis_previous && !data.period.partial ? data.kpis_previous : null
   const prev = (v: string | undefined) => (comparable && v !== undefined ? Number(v) : null)
   const short = left < 0
   // The full value from a tablet up; on a phone, the short one fits.

@@ -42,6 +42,9 @@ export function overviewFixture(overrides: Partial<OverviewResponse> = {}): Over
     period: { from: '2026-09-01', to: '2026-09-30', partial: false, previous_from: '2026-08-01', previous_to: '2026-08-31' },
     currency: 'BRL',
     kpis: { spending: '75803.12', income: '36006.57', left: '-39796.55', left_share: -1.105, fixed_share: 0.38 },
+    // August, the comparison period of the September fixture.
+    kpis_previous: { spending: '40805.50', income: '36000.00', left: '-4805.50', left_share: -0.133, fixed_share: 0.5 },
+    unconverted_count: 0,
     changes: [
       { kind: 'group', id: 'g-life', label: 'Estilo de Vida', change: 0.42, delta: '520.00' },
       { kind: 'group', id: 'g-food', label: 'Alimentação', change: -0.12, delta: '-310.00' },
@@ -109,9 +112,4 @@ export function overviewFixture(overrides: Partial<OverviewResponse> = {}): Over
   }
 }
 
-/** August, the previous period of the September fixture. */
-export const previousOverview = (): OverviewResponse =>
-  overviewFixture({
-    period: { from: '2026-08-01', to: '2026-08-31', partial: false, previous_from: '2026-07-01', previous_to: '2026-07-31' },
-    kpis: { spending: '40805.50', income: '36000.00', left: '-4805.50', left_share: -0.133, fixed_share: 0.5 },
-  })
+

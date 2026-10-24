@@ -1706,6 +1706,10 @@ export interface OverviewResponse {
   period: ReportPeriodInfo
   currency?: string
   kpis: OverviewKpis
+  /** The same numbers over the comparison period; null while the period is still open. */
+  kpis_previous?: OverviewKpis | null
+  /** Rows in another currency with no rate, left out of every total. */
+  unconverted_count?: number
   changes: OverviewChange[]
   highlights: OverviewHighlight[]
   /** Up to 8 stores, biggest spending per month first. */
