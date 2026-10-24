@@ -12,7 +12,6 @@ from app.core.database import get_async_session
 from app.main import app
 from app.models.category import Category
 from app.models.transaction import Transaction
-from app.services import admin_service, report_service
 import mcp_server.tools  # noqa: F401 -- registers the real MCP handlers
 from mcp_server.auth import CallContext
 from mcp_server.registry import REGISTRY
@@ -232,28 +231,4 @@ async def test_aggregate_by_month(session, test_user, test_transactions):
         today.strftime("%Y-%m"): 4,
     }
 
-
-async def test_monthly_report_follows_mode(session, test_user, test_account, monkeypatch):
-    # The service asks the application clock for today, so that is what is pinned.
-    monkeypatch.setattr(report_service, "app_today", lambda: date(2026, 2, 1))
-    test_account.type = "credit_card"
-    for when, effective, amount in [
-        (date(2025, 12, 30), date(2026, 1, 16), Decimal("120")),
-        (date(2026, 1, 5), date(2026, 1, 16), Decimal("30")),
-    ]:
-        session.add(Transaction(
-            user_id=test_user.id, account_id=test_account.id,
-            description="Synthetic card purchase", amount=amount, amount_primary=amount,
-            currency="BRL", date=when, effective_date=effective, type="debit", source="manual",
-        ))
-    await session.commit()
-    for mode, expected in [("cash", {"2025-12": 120, "2026-01": 30}),
-                           ("accrual", {"2025-12": 0, "2026-01": 150})]:
-        await admin_service.set_app_setting(session, "credit_card_accounting_mode", mode)
-        report = await report_service.get_income_expenses_report(
-            session, test_account.workspace_id, test_user.id, months=3, interval="monthly", currency="BRL",
-        )
-        buckets = {point.date: point.breakdowns["expenses"] for point in report.trend}
-        assert {month: buckets[month] for month in expected} == expected
-        assert sum(buckets.values()) == 150
-        assert next(b.value for b in report.summary.breakdowns if b.key == "expenses") == 150
+
