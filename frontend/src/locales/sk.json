@@ -1920,6 +1920,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Add up",
+      "all": "All",
+      "investmentsOnly": "Investments only",
+      "summary": "Adding up {{shown}} of {{total}} · {{value}}",
+      "showAll": "Show all"
+    },
     "title": "Aktíva",
     "addAsset": "Pridať aktívum",
     "oversellWarning": "Máš len {{available}} ks — krátke pozície nie sú podporované.",

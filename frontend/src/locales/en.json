@@ -1808,6 +1808,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Add up",
+      "all": "All",
+      "investmentsOnly": "Investments only",
+      "summary": "Adding up {{shown}} of {{total}} · {{value}}",
+      "showAll": "Show all"
+    },
     "title": "Assets",
     "addAsset": "New asset",
     "oversellWarning": "You only hold {{available}} units — short positions aren’t supported.",

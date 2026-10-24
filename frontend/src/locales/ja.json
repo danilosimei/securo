@@ -1808,6 +1808,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Add up",
+      "all": "All",
+      "investmentsOnly": "Investments only",
+      "summary": "Adding up {{shown}} of {{total}} · {{value}}",
+      "showAll": "Show all"
+    },
     "title": "資産",
     "addAsset": "資産を追加",
     "oversellWarning": "保有は{{available}}単位のみです — 空売りは対応していません。",

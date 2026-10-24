@@ -1808,6 +1808,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Add up",
+      "all": "All",
+      "investmentsOnly": "Investments only",
+      "summary": "Adding up {{shown}} of {{total}} · {{value}}",
+      "showAll": "Show all"
+    },
     "title": "संपत्तियाँ",
     "addAsset": "संपत्ति जोड़ें",
     "oversellWarning": "आपके पास केवल {{available}} इकाइयाँ हैं — शॉर्ट पोज़िशन समर्थित नहीं हैं।",

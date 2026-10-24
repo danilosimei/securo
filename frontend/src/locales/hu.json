@@ -1808,6 +1808,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Add up",
+      "all": "All",
+      "investmentsOnly": "Investments only",
+      "summary": "Adding up {{shown}} of {{total}} · {{value}}",
+      "showAll": "Show all"
+    },
     "title": "Eszközök",
     "addAsset": "Eszköz hozzáadása",
     "oversellWarning": "Csak {{available}} egységed van — short pozíció nem támogatott.",

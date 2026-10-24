@@ -1812,6 +1812,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Additionner",
+      "all": "Tous",
+      "investmentsOnly": "Placements uniquement",
+      "summary": "{{shown}} sur {{total}} additionnés · {{value}}",
+      "showAll": "Tout afficher"
+    },
     "title": "Actifs",
     "addAsset": "Ajouter un actif",
     "oversellWarning": "Vous ne détenez que {{available}} unités — les positions à découvert ne sont pas prises en charge.",

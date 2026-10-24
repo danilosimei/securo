@@ -1894,6 +1894,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Add up",
+      "all": "All",
+      "investmentsOnly": "Investments only",
+      "summary": "Adding up {{shown}} of {{total}} · {{value}}",
+      "showAll": "Show all"
+    },
     "title": "Aktywa",
     "addAsset": "Dodaj aktywo",
     "oversellWarning": "Masz tylko {{available}} jednostek — pozycje krótkie nie są obsługiwane.",

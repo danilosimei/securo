@@ -1810,6 +1810,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Add up",
+      "all": "All",
+      "investmentsOnly": "Investments only",
+      "summary": "Adding up {{shown}} of {{total}} · {{value}}",
+      "showAll": "Show all"
+    },
     "title": "Activa",
     "addAsset": "Voeg item toe",
     "oversellWarning": "U bezit alleen {{available}} eenheden; shortposities worden niet ondersteund.",

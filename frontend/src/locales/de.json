@@ -1809,6 +1809,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Summieren",
+      "all": "Alle",
+      "investmentsOnly": "Nur Anlagen",
+      "summary": "{{shown}} von {{total}} summiert · {{value}}",
+      "showAll": "Alle anzeigen"
+    },
     "title": "Vermögenswerte",
     "addAsset": "Vermögenswert hinzufügen",
     "oversellWarning": "Du besitzt nur {{available}} Einheiten — Leerverkäufe werden nicht unterstützt.",
