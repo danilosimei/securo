@@ -52,6 +52,15 @@ class BreakdownRow(BaseModel):
     category_label: Optional[str] = None
 
 
+class BreakdownAssetRow(BaseModel):
+    """A transfer-like category of the open group and what it moved in the
+    period (debits minus credits)."""
+
+    id: str
+    label: str
+    total: str
+
+
 class BreakdownResponse(BaseModel):
     period: BreakdownPeriod
     currency: str
@@ -59,6 +68,10 @@ class BreakdownResponse(BaseModel):
     previous_total: str
     rows: list[BreakdownRow]
     unconverted_count: int
+    #: Only on `level=category` of one group (or `none`) with flow=expense:
+    #: the group's money that went to the person's own assets (e.g. the
+    #: purchase of a home), never part of `total`. Empty otherwise.
+    to_assets: list[BreakdownAssetRow] = []
 
 
 def _scope_id(name: str, raw: str | None) -> tuple[uuid.UUID | None, bool]:
@@ -92,6 +105,10 @@ async def get_breakdown(
     ),
     compare_from: date | None = Query(None, description="Start of the comparison (compare=custom)"),
     compare_to: date | None = Query(None, description="End of the comparison (compare=custom)"),
+    flow: Literal["expense", "income"] = Query(
+        "expense",
+        description="expense = spending; income = money received (income categories and credits without a category), levels category/merchant/account",
+    ),
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
@@ -127,6 +144,7 @@ async def get_breakdown(
         no_category=no_category,
         all_categories=all_categories,
         account_id=account_id,
+        flow=flow,
     )
 
 

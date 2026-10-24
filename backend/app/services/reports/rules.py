@@ -25,7 +25,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Optional
 
-from sqlalchemy import case, func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.category import Category
@@ -58,6 +58,8 @@ class Flow:
     debit: Decimal = ZERO
     credit: Decimal = ZERO
     count: int = 0
+    #: How many of `count` are credits (income to check counts only those).
+    credit_count: int = 0
 
 
 @dataclass
@@ -178,6 +180,50 @@ async def collect_split_flows(
     return out
 
 
+def moves_own_money(category_ids: list[uuid.UUID]):
+    """SQL filter for the rows of these transfer-like categories
+    (`treat_as_transfer`: an investment, the purchase of a home) that the P/L
+    family leaves out only because of their category. The other exclusions
+    still hold: paired transfers, ignored rows, `exclude_from_pnl`,
+    settlements."""
+    return and_(
+        Transaction.transfer_pair_id.is_(None),
+        Transaction.is_ignored.is_(False),
+        Transaction.exclude_from_pnl.is_(False),
+        Transaction.source != "settlement",
+        Transaction.category_id.in_(category_ids),
+    )
+
+
+async def collect_own_money_flows(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    primary_currency: str,
+    segment: Segment,
+    category_ids: list[uuid.UUID],
+    account_ids: Optional[list[uuid.UUID]] = None,
+) -> SegmentFlows:
+    """Debits and credits per category of transfer-like categories inside one
+    segment: money that left for the person's own assets. Never spending nor
+    income; a screen shows it apart."""
+    out = SegmentFlows()
+    if not category_ids:
+        return out
+    async for _, (key,), is_unconverted, tx_type, total, count in _flow_rows(
+        session,
+        workspace_id=workspace_id,
+        primary_currency=primary_currency,
+        segments=[segment],
+        key_cols=(Transaction.category_id,),
+        filters=[],
+        account_ids=account_ids,
+        base_filter=moves_own_money(category_ids),
+    ):
+        _add_flow(out, key, is_unconverted, tx_type, total, count)
+    return out
+
+
 def _add_flow(
     seg: SegmentFlows, key: Any, is_unconverted: bool, tx_type: str, total: Any, count: int
 ) -> None:
@@ -188,6 +234,7 @@ def _add_flow(
     value = Decimal(total or 0)
     if tx_type == "credit":
         flow.credit += value
+        flow.credit_count += count
     else:
         flow.debit += value
     flow.count += count
@@ -202,9 +249,11 @@ async def _flow_rows(
     key_cols: tuple,
     filters: list,
     account_ids: Optional[list[uuid.UUID]],
+    base_filter: Any = None,
 ):
     """The one base query of every report: (segment index, keys,
-    unconverted?, type, sum, count) of the rows inside the segments."""
+    unconverted?, type, sum, count) of the rows inside the segments.
+    `base_filter` replaces the P/L family (`counts_as_user_pnl`)."""
     accounting_mode = await get_credit_card_accounting_mode(session)
     report_date = reporting_date_col(accounting_mode)
     lo = min(start for start, _ in segments)
@@ -236,7 +285,7 @@ async def _flow_rows(
             Transaction.status == "posted",
             report_date >= lo,
             report_date <= hi,
-            counts_as_user_pnl(),
+            counts_as_user_pnl() if base_filter is None else base_filter,
             *scope_filter,
         )
         .group_by(*key_cols, Transaction.type, unconverted, report_date)

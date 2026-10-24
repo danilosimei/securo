@@ -10,6 +10,8 @@ import { usePrivacyMode } from '@/hooks/use-privacy-mode'
 import { formatMoneyShort, formatPercent } from '@/components/reports/common/chart-utils'
 import type { GroupPalette } from '@/components/reports/common/group-colors'
 import { exploreLink } from '@/components/reports/common/report-url'
+import { CategoryGlyph } from '@/components/reports/common/category-glyph'
+import { categoryGlyph, groupGlyph } from '@/components/reports/common/glyph-of'
 
 interface ChangesChartProps {
   changes: OverviewChange[]
@@ -47,6 +49,7 @@ export function ChangesChart({ changes, query, currency, locale, palette }: Chan
         const width = `${(Math.abs(delta) / max) * 50}%`
         const value = `${up ? '+' : '−'}${mask(formatMoneyShort(Math.abs(delta), currency, locale))}`
         const pct = row.change === null ? null : formatPercent(row.change, locale, true)
+        const glyph = row.kind === 'group' ? groupGlyph(palette, row.id, row.label) : categoryGlyph(palette, row.id)
         const label = t('reports.overview.changes.row', {
           name: row.label,
           value,
@@ -61,7 +64,10 @@ export function ChangesChart({ changes, query, currency, locale, palette }: Chan
               aria-label={label}
               className="grid w-full grid-cols-[minmax(0,7.5rem)_1fr_minmax(0,6.5rem)] items-center gap-2 rounded-md px-1.5 py-1.5 text-left text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent sm:grid-cols-[minmax(0,10rem)_1fr_minmax(0,7.5rem)]"
             >
-              <span className="truncate font-medium text-foreground">{row.label}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                {glyph && <CategoryGlyph icon={glyph.icon} color={glyph.color} size={14} />}
+                <span className="truncate font-medium text-foreground">{row.label}</span>
+              </span>
               <span className="relative h-3" aria-hidden="true">
                 <span className="absolute inset-y-[-4px] left-1/2 w-px bg-border" />
                 <span

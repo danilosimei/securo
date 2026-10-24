@@ -1812,6 +1812,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Somar",
+      "all": "Todos",
+      "investmentsOnly": "Só investimentos",
+      "summary": "A somar {{shown}} de {{total}} · {{value}}",
+      "showAll": "Mostrar tudo"
+    },
     "title": "Património",
     "addAsset": "Novo ativo",
     "oversellWarning": "Só tens {{available}} unidades — posições vendidas (short) não são suportadas.",
@@ -2159,6 +2166,61 @@
         "answerMore": "Gastou mais {{value}} do que em {{b}} {{change}}",
         "answerLess": "Gastou menos {{value}} do que em {{b}} {{change}}",
         "answerSame": "Gastou o mesmo que em {{b}}"
+      },
+      "flow": {
+        "label": "Despesa ou rendimento",
+        "expense": "Gasto",
+        "income": "Rendimento"
+      },
+      "income": {
+        "spending": "Recebido",
+        "toCheck": "A verificar",
+        "empty": "Nada recebido entre {{from}} e {{to}}.",
+        "backToStores": "Todos os que pagaram",
+        "backToCategory": "Quem pagou em {{category}}",
+        "view": {
+          "merchant": "Quem pagou"
+        },
+        "col": {
+          "category": "Categoria",
+          "merchant": "Quem pagou",
+          "account": "Conta"
+        },
+        "concentration": {
+          "category": "{{n}} de {{m}} categorias somam 80% do que recebeu.",
+          "merchant": "{{n}} de {{m}} pagadores somam 80% do que recebeu.",
+          "account": "{{n}} de {{m}} contas somam 80% do que recebeu."
+        },
+        "bars": {
+          "aria": "Recebido de cada item, do maior para o menor; {{name}} é o maior."
+        },
+        "trend": {
+          "aria": "Recebido mês a mês dos maiores itens; {{name}} é o maior."
+        },
+        "month": {
+          "legend": "Mais escuro = recebeu mais",
+          "legendDark": "Mais claro = recebeu mais",
+          "aria": "Recebido em cada mês; {{name}} é o maior."
+        },
+        "treemap": {
+          "of": {
+            "category": "do recebido",
+            "merchant": "da categoria",
+            "account": "do recebido"
+          }
+        },
+        "compare": {
+          "empty": "Nada recebido nos dois períodos.",
+          "answerMore": "Recebeu mais {{value}} do que em {{b}} {{change}}",
+          "answerLess": "Recebeu menos {{value}} do que em {{b}} {{change}}",
+          "answerSame": "Recebeu o mesmo que em {{b}}"
+        }
+      },
+      "assets": {
+        "title": "Vai para o património",
+        "hint": "Não conta como despesa: o dinheiro continua a ser seu.",
+        "project": "Total do projeto",
+        "projectHint": "despesa + património"
       }
     },
     "common": {

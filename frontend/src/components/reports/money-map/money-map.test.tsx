@@ -140,8 +140,27 @@ describe('MoneyMapView', () => {
     expect(within(bars).getByText(t('reports.moneyMap.short'))).toBeInTheDocument()
 
     await user.click(within(bars).getByRole('button', { name: new RegExp(t('reports.moneyMap.spending')) }))
-    await user.click(within(bars).getByRole('button', { name: /Carro/ }))
+    const carro = within(bars).getByRole('button', { name: /Carro/ })
+    expect(within(carro).getByTestId('category-glyph')).toHaveStyle({ color: palette.group('g-car') })
+    await user.click(carro)
     expect(screen.getByTestId('location')).toHaveTextContent('group=g-car')
+  })
+
+  it('puts the group or category icon before each name, in the group color', () => {
+    renderMap(MAP, 'table')
+    const table = screen.getByTestId('money-map-table')
+    const row = (name: string) => within(table).getByText(name).closest('tr')!
+    expect(within(row('Carro')).getByTestId('category-glyph')).toHaveStyle({ color: palette.group('g-car') })
+    expect(within(row('Combustível')).getByTestId('category-glyph')).toHaveStyle({ color: palette.group('g-car') })
+    expect(within(row(t('reports.moneyMap.short'))).queryByTestId('category-glyph')).not.toBeInTheDocument()
+  })
+
+  it('the flow labels a group with its icon too', () => {
+    renderMap()
+    const home = screen.getAllByTestId('map-node-group').find((n) => n.getAttribute('data-label') === 'Moradia')!
+    expect(within(home).getByTestId('category-glyph')).toHaveStyle({ color: palette.group('g-home') })
+    const short = screen.getByTestId('map-node-short')
+    expect(within(short).queryByTestId('category-glyph')).not.toBeInTheDocument()
   })
 
   it('lists every row in the table view', () => {

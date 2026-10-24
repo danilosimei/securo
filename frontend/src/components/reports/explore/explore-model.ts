@@ -1,7 +1,7 @@
 /** Pure helpers of Explore's ways to look at the spending: what the URL
  *  asks for, how concentrated a list is, and the colors of accounts. */
-import type { BreakdownCompare, BreakdownRow } from '@/lib/api'
-import { NEUTRAL_COLOR } from '@/components/reports/common/group-colors'
+import type { BreakdownCompare, BreakdownFlow, BreakdownRow } from '@/lib/api'
+import { NEUTRAL_COLOR, type GroupPalette } from '@/components/reports/common/group-colors'
 import { monthName } from '@/components/reports/common/chart-utils'
 
 export const EXPLORE_VIEWS = ['group', 'merchant', 'month', 'account', 'compare'] as const
@@ -17,6 +17,25 @@ export const RANKING_VIEWS: ExploreView[] = ['group', 'merchant', 'account']
 
 export function parseView(value: string | null): ExploreView {
   return (EXPLORE_VIEWS as readonly string[]).includes(value ?? '') ? (value as ExploreView) : 'group'
+}
+
+/** The icon before a group's or category's name, in its group's color. */
+export interface Glyph {
+  icon: string | null
+  color: string
+}
+
+/** A group row wears its group's icon; a category row (the refunds line on
+ *  the group level, every row below it) its own icon, both in the group's
+ *  color. */
+export function glyphOfRow(palette: GroupPalette, row: BreakdownRow): Glyph {
+  if (row.kind === 'group') return { icon: palette.groupIcon(row.id), color: palette.group(row.id, row.label) }
+  return { icon: palette.categoryIcon(row.id), color: palette.group(row.id ? palette.groupOfCategory(row.id) : null) }
+}
+
+/** `?flow=income` shows the money received; anything else, the spending. */
+export function parseFlow(value: string | null): BreakdownFlow {
+  return value === 'income' ? 'income' : 'expense'
 }
 
 export function parseChart(value: string | null): ExploreChart {

@@ -7,6 +7,7 @@ import { renderWithProviders, t } from '@/test/utils'
 import { pickPeriod } from '@/test/report-period-actions'
 import { WithPeriodBar } from '@/test/report-period'
 import { GROUPS, overviewFixture } from '@/test/reports-fixtures'
+import { buildPalette } from '@/components/reports/common/group-colors'
 
 const api = vi.hoisted(() => ({
   reports: { overview: vi.fn() },
@@ -188,6 +189,20 @@ describe('OverviewTab', () => {
     expect(rows[2]).toHaveTextContent('−R$310')
     await user.click(rows[0])
     expect(where()).toBe('/reports?tab=explore&period=last_month&group=g-life')
+  })
+
+  it('puts the group or category icon, bare and in the group color, before the names', async () => {
+    renderTab()
+    const palette = buildPalette(GROUPS)
+    const card = await screen.findByTestId('highlight-heavy_group')
+    await waitFor(() => expect(within(card).getAllByTestId('category-glyph')).toHaveLength(2))
+    // Financiamento and Combustível are categories of Carro: Carro's color.
+    for (const glyph of within(card).getAllByTestId('category-glyph')) {
+      expect(glyph).toHaveStyle({ color: palette.group('g-car') })
+    }
+    const rows = within(screen.getByTestId('changes-chart')).getAllByRole('button')
+    expect(within(rows[0]).getByTestId('category-glyph')).toHaveStyle({ color: palette.group('g-life') })
+    expect(within(rows[1]).getByTestId('category-glyph')).toHaveStyle({ color: palette.group('g-car') })
   })
 
   it('a category in what changed opens it under its group', async () => {

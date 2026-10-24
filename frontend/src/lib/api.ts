@@ -1513,6 +1513,9 @@ export type BreakdownLevel = 'group' | 'category' | 'merchant' | 'account'
 /** What a period is compared with: the stretch right before it, the same
  *  dates a year earlier, or a range of choice (`compare_from`/`compare_to`). */
 export type BreakdownCompare = 'previous' | 'year_ago' | 'custom'
+/** Spending (default) or the money received: income categories plus the
+ *  credits without a category ("A conferir"), levels category/merchant/account. */
+export type BreakdownFlow = 'expense' | 'income'
 export type ReportPeriod =
   | 'this_month'
   | 'last_month'
@@ -1536,6 +1539,8 @@ export interface BreakdownParams {
   compare?: BreakdownCompare
   compare_from?: string
   compare_to?: string
+  /** Omitted = expense. */
+  flow?: BreakdownFlow
 }
 
 export interface BreakdownRow {
@@ -1572,6 +1577,17 @@ export interface BreakdownResponse {
   previous_total: string | null
   rows: BreakdownRow[]
   unconverted_count: number
+  /** Only on `level=category` of one group (spending): what the group's
+   *  transfer-like categories moved to the person's assets, never part of
+   *  `total`. Empty otherwise. */
+  to_assets?: BreakdownAssetRow[]
+}
+
+export interface BreakdownAssetRow {
+  id: string
+  label: string
+  /** Decimal string. */
+  total: string
 }
 
 /** `period`, plus `from`/`to` (YYYY-MM-DD) when it is `custom`. */

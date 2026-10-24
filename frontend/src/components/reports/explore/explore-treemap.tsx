@@ -32,9 +32,11 @@ interface TreemapProps {
   colorOf: (row: BreakdownRow) => string
   onOpen: (row: BreakdownRow) => void
   selected?: string | null
+  /** Money received instead of spending (the tooltip's "of what"). */
+  income?: boolean
 }
 
-export function ExploreTreemap({ rows, level, currency, locale, colorOf, onOpen, selected }: TreemapProps) {
+export function ExploreTreemap({ rows, level, currency, locale, colorOf, onOpen, selected, income }: TreemapProps) {
   const { t } = useTranslation()
   const { mask } = usePrivacyMode()
   const narrow = useIsNarrow()
@@ -136,7 +138,7 @@ export function ExploreTreemap({ rows, level, currency, locale, colorOf, onOpen,
           <p className="mb-1 font-semibold text-foreground">{hovered.tile.label}</p>
           <TooltipRow
             color={hovered.tile.color}
-            label={t(`reports.explore.treemap.of.${level}`)}
+            label={t(income ? `reports.explore.income.treemap.of.${level}` : `reports.explore.treemap.of.${level}`)}
             value={`${mask(formatCurrency(hovered.tile.value, currency, locale))} · ${formatPercent(hovered.tile.value / total, locale)}`}
             strong
           />

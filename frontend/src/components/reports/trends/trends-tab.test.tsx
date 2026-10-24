@@ -6,6 +6,7 @@ import { TrendsTab } from '@/components/reports/trends/trends-tab'
 import { buildLayers, categoryTrends } from '@/components/reports/trends/trends-model'
 import { renderWithProviders, t } from '@/test/utils'
 import { GROUPS } from '@/test/reports-fixtures'
+import { buildPalette } from '@/components/reports/common/group-colors'
 import type { BreakdownParams, BreakdownResponse, BreakdownRow } from '@/lib/api'
 
 const api = vi.hoisted(() => ({ reports: { breakdown: vi.fn() }, categoryGroups: { list: vi.fn() } }))
@@ -134,6 +135,20 @@ describe('TrendsTab', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(
       '/reports?tab=explore&period=last_6m&group=g-life&category=c-pets',
     )
+  })
+
+  it('puts the group or category icon, in the group color, before each name', async () => {
+    renderWithProviders(<TrendsTab />, { route: '/reports?tab=trends&period=last_6m' })
+    const palette = buildPalette(GROUPS)
+
+    const grid = await screen.findByTestId('trends-grid')
+    await waitFor(() =>
+      expect(within(within(grid).getAllByTestId('trends-card')[0]).getByTestId('category-glyph')).toHaveStyle({
+        color: palette.group('g-life'),
+      }),
+    )
+    const legend = screen.getAllByTestId('trends-legend-item')
+    expect(within(legend[1]).getByTestId('category-glyph')).toHaveStyle({ color: palette.group('g-car') })
   })
 
   it('offers a retry when a block fails', async () => {

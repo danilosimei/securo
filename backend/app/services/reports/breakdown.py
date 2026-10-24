@@ -1,4 +1,6 @@
-"""Spending broken down by group, by category, by store and by account.
+"""Spending broken down by group, by category, by store and by account; or,
+with `flow="income"`, the money received, by category, by who paid and by
+account.
 
 The levels share everything but the row a transaction falls into, so a level
 is one function from "category" (or store key, or account) to "row"; the
@@ -18,6 +20,7 @@ from app.models.account import Account
 from app.models.categorization import CategorizationSuggestion, MerchantMemory
 from app.models.category import Category
 from app.models.category_group import CategoryGroup
+from app.services.category_defaults import DEFAULT_CATEGORIES, name_variants
 from app.services.reports.merchant_labels import FIXED_LABELS, readable_label
 from app.services.reports.periods import Period, _month_end, _shift_months
 from app.services.reports.rules import (
@@ -25,16 +28,22 @@ from app.services.reports.rules import (
     KIND_INCOME,
     KIND_NORMAL,
     ZERO,
+    Flow,
     RangeTotals,
     SegmentFlows,
     collect_flows,
+    collect_own_money_flows,
     collect_split_flows,
+    income_of,
     load_category_kinds,
     spend_of,
     totals_from,
 )
 
 LEVELS = ("group", "category", "merchant", "account")
+FLOWS = ("expense", "income")
+#: Income starts at the category level: income categories are few.
+INCOME_LEVELS = ("category", "merchant", "account")
 SPARKLINE_MONTHS = 12
 
 # The two rows a level can need that no real group/category stands for.
@@ -42,6 +51,8 @@ SPARKLINE_MONTHS = 12
 NO_GROUP_LABEL = "Sem grupo"
 NO_CATEGORY_LABEL = "Sem categoria"
 NO_ACCOUNT_LABEL = "Conta sem nome"
+#: Credits without a category on the income side: income still to check.
+TO_CHECK_LABEL = "A conferir"
 
 
 @dataclass(frozen=True)
@@ -56,6 +67,9 @@ class RowRef:
 #: category id (None = no category) or store key -> the row its spending lands
 #: in; None leaves it out of the level.
 RowOf = Callable[[Any], Optional[RowRef]]
+#: Key -> how the money under it is read: a category's kind, None for rows
+#: without a category.
+KindOf = Callable[[Any], Optional[str]]
 
 
 def _money(value: Decimal) -> str:
@@ -275,6 +289,19 @@ def _main_category(flows: dict[Any, SegmentFlows], kinds: dict) -> dict[Any, Opt
     return out
 
 
+def _main_income_category(
+    flows: dict[Any, SegmentFlows], kind_of: KindOf
+) -> dict[Any, Optional[uuid.UUID]]:
+    """Store key -> the income category (None = to check) where the payer
+    weighs most in the period."""
+    out: dict[Any, Optional[uuid.UUID]] = {}
+    for key, seg in flows.items():
+        received = _income_totals([seg], kind_of).spend_by_category
+        if received:
+            out[key] = max(received, key=lambda c: (received[c], str(c)))
+    return out
+
+
 async def _account_names(session: AsyncSession, workspace_id: uuid.UUID) -> dict[Any, str]:
     rows = await session.execute(
         select(Account.id, Account.name, Account.display_name).where(
@@ -289,6 +316,166 @@ async def _category_names(session: AsyncSession, workspace_id: uuid.UUID) -> dic
         select(Category.id, Category.name).where(Category.workspace_id == workspace_id)
     )
     return {cid: name for cid, name in rows.all()}
+
+
+def _received(flow: Flow, kind: Optional[str]) -> Optional[tuple[Decimal, int]]:
+    """Money received through a flow and its rows, by the report rules: an
+    income category's credits minus its debits; without a category, credits
+    only (income to check); nothing for any other category."""
+    if kind is None:
+        return (flow.credit, flow.credit_count) if flow.credit_count else None
+    if kind == KIND_INCOME:
+        return income_of(flow, kind), flow.count
+    return None
+
+
+def _income_totals(segments: list[SegmentFlows], kind_of: KindOf) -> RangeTotals:
+    """Money received per key (category or store). Kept in the
+    `spend_by_category` slot: it is what the level ranks."""
+    received: dict[Any, Decimal] = {}
+    count: dict[Any, int] = {}
+    unconverted = 0
+    for seg in segments:
+        unconverted += seg.unconverted_count
+        for key, flow in seg.by_category.items():
+            got = _received(flow, kind_of(key))
+            if got is None or got == (ZERO, 0):
+                continue
+            received[key] = received.get(key, ZERO) + got[0]
+            count[key] = count.get(key, 0) + got[1]
+    return RangeTotals(
+        spend_by_category={k: v.quantize(CENT) for k, v in received.items()},
+        count_by_category=count,
+        income_by_category={},
+        uncategorized_income=ZERO,
+        unconverted_count=unconverted,
+    )
+
+
+def _split_income_totals(
+    segments: list[dict[Any, SegmentFlows]], kind_of: KindOf
+) -> list[RangeTotals]:
+    """Money received per split key (account or store) of each segment."""
+    out = []
+    for seg in segments:
+        received: dict[Any, Decimal] = {}
+        count: dict[Any, int] = {}
+        unconverted = 0
+        for split, flows in seg.items():
+            unconverted += flows.unconverted_count
+            totals = _income_totals([flows], kind_of)
+            if not totals.count_by_category:
+                continue
+            received[split] = sum(totals.spend_by_category.values(), ZERO)
+            count[split] = sum(totals.count_by_category.values())
+        out.append(
+            RangeTotals(
+                spend_by_category=received,
+                count_by_category=count,
+                income_by_category={},
+                uncategorized_income=ZERO,
+                unconverted_count=unconverted,
+            )
+        )
+    return out
+
+
+async def _income_category_level(
+    session: AsyncSession, workspace_id: uuid.UUID, with_group: bool
+) -> RowOf:
+    """Every income category, wherever it is filed, and one line for the
+    credits without a category."""
+    rows = (
+        await session.execute(
+            select(Category.id, Category.group_id, Category.name).where(
+                Category.workspace_id == workspace_id, Category.report_kind == KIND_INCOME
+            )
+        )
+    ).all()
+    group_names = {
+        gid: name
+        for gid, name in (
+            await session.execute(
+                select(CategoryGroup.id, CategoryGroup.name).where(
+                    CategoryGroup.workspace_id == workspace_id
+                )
+            )
+        ).all()
+    }
+    members = {
+        cid: RowRef(
+            str(cid),
+            name,
+            "category",
+            group_names.get(gid, NO_GROUP_LABEL) if with_group else None,
+        )
+        for cid, gid, name in rows
+    }
+    to_check = RowRef(None, TO_CHECK_LABEL, "category")
+
+    def row_of(category_id: Any) -> Optional[RowRef]:
+        return to_check if category_id is None else members.get(category_id)
+
+    return row_of
+
+
+async def _to_assets(
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    primary_currency: str,
+    period: Period,
+    group_id: Optional[uuid.UUID],
+    no_group: bool,
+    account_ids: Optional[list[uuid.UUID]],
+) -> list[dict]:
+    """What the group's transfer-like categories (`treat_as_transfer`, e.g.
+    the purchase of a home) moved in the period: money that went to the
+    person's own assets, shown apart and never added to the spending. The
+    default "Transfers" category only moves money between the person's own
+    accounts, and a category where more came back than left sent nothing."""
+    rows = (
+        await session.execute(
+            select(Category.id, Category.group_id, Category.name).where(
+                Category.workspace_id == workspace_id,
+                Category.treat_as_transfer.is_(True),
+                Category.is_ignored.is_(False),
+                ~(
+                    Category.is_system.is_(True)
+                    & Category.name.in_(name_variants(DEFAULT_CATEGORIES["transfers"]))
+                ),
+            )
+        )
+    ).all()
+    if not rows:
+        return []
+    group_ids = set(
+        (
+            await session.execute(
+                select(CategoryGroup.id).where(CategoryGroup.workspace_id == workspace_id)
+            )
+        ).scalars()
+    )
+    names = {
+        cid: name
+        for cid, gid, name in rows
+        if ((gid is None or gid not in group_ids) if no_group else gid == group_id)
+    }
+    flows = await collect_own_money_flows(
+        session,
+        workspace_id=workspace_id,
+        primary_currency=primary_currency,
+        segment=(period.from_, period.to),
+        category_ids=list(names),
+        account_ids=account_ids,
+    )
+    moved = [
+        (flow.debit - flow.credit, names[cid], cid)
+        for cid, flow in flows.by_category.items()
+        if cid in names and flow.debit > flow.credit
+    ]
+    moved.sort(key=lambda item: (-item[0], item[1]))
+    return [{"id": str(cid), "label": name, "total": _money(value)} for value, name, cid in moved]
 
 
 async def breakdown(
@@ -306,10 +493,20 @@ async def breakdown(
     no_category: bool = False,
     all_categories: bool = False,
     account_id: Optional[uuid.UUID] = None,
+    flow: str = "expense",
 ) -> dict:
-    if level not in LEVELS:
+    if flow not in FLOWS:
+        raise _bad_request("flow_unknown", f"Unknown flow '{flow}'")
+    income = flow == "income"
+    if level not in (INCOME_LEVELS if income else LEVELS):
         raise _bad_request("level_unknown", f"Unknown breakdown level '{level}'")
-    if level == "category" and group_id is None and not no_group and not all_groups:
+    if (
+        level == "category"
+        and not income
+        and group_id is None
+        and not no_group
+        and not all_groups
+    ):
         raise _bad_request("group_required", "The category level needs a group_id")
     if level == "merchant" and category_id is None and not no_category and not all_categories:
         raise _bad_request("category_required", "The store level needs a category_id")
@@ -326,6 +523,9 @@ async def breakdown(
     row_of: RowOf
     main_category: dict[Any, Optional[uuid.UUID]] = {}
     category_names: dict[Any, str] = {}
+
+    def category_kind(category: Any) -> Optional[str]:
+        return None if category is None else kinds.get(category, KIND_NORMAL)
     if level == "account" or (level == "merchant" and all_categories):
         split_by = "account" if level == "account" else "store"
         current_flows, previous_flows = await collect_split_flows(
@@ -334,15 +534,23 @@ async def breakdown(
         monthly = await collect_split_flows(
             session, segments=month_segments, split_by=split_by, **flow_kwargs
         )
-        current, previous = _split_totals([current_flows, previous_flows], kinds)
-        monthly_totals = _split_totals(monthly, kinds)
+        if income:
+            current, previous = _split_income_totals([current_flows, previous_flows], category_kind)
+            monthly_totals = _split_income_totals(monthly, category_kind)
+        else:
+            current, previous = _split_totals([current_flows, previous_flows], kinds)
+            monthly_totals = _split_totals(monthly, kinds)
         if level == "account":
             accounts = await _account_names(session, workspace_id)
 
             def row_of(key: Any) -> Optional[RowRef]:
                 return RowRef(str(key), accounts.get(key, NO_ACCOUNT_LABEL), "account")
         else:
-            main_category = _main_category(current_flows, kinds)
+            main_category = (
+                _main_income_category(current_flows, category_kind)
+                if income
+                else _main_category(current_flows, kinds)
+            )
             category_names = await _category_names(session, workspace_id)
             keys: set[str] = {k for k in current.count_by_category if isinstance(k, str)}
             names = await _store_names(session, workspace_id, keys)
@@ -353,10 +561,13 @@ async def breakdown(
     elif level == "merchant":
         scope = (None if no_category else category_id,)
         scope_kind = None if no_category else kinds.get(category_id, KIND_NORMAL)
-        if scope_kind == KIND_INCOME:  # income is not spending: nothing to list
+        # Spending lists no income category; income lists only those.
+        if (scope_kind == KIND_INCOME) != income and not no_category:
             scope = (uuid.UUID(int=0),)
 
         def fold(seg_flows: list[SegmentFlows]) -> RangeTotals:
+            if income:
+                return _income_totals(seg_flows, lambda _key: scope_kind)
             return _store_totals(seg_flows, scope_kind, not no_category)
 
         current_flows, previous_flows = await collect_flows(
@@ -375,7 +586,9 @@ async def breakdown(
             store = key if isinstance(key, str) else None
             return RowRef(store, names.get(key) or readable_label(store), "merchant")
     else:
-        if level == "group":
+        if income:
+            row_of = await _income_category_level(session, workspace_id, all_groups)
+        elif level == "group":
             row_of = await _group_level(session, workspace_id)
         else:
             row_of = await _category_level(session, workspace_id, group_id, no_group, all_groups)
@@ -383,9 +596,15 @@ async def breakdown(
             session, segments=segments, user_id=user_id, **flow_kwargs
         )
         monthly = await collect_flows(session, segments=month_segments, user_id=user_id, **flow_kwargs)
-        current = totals_from([current_flows], kinds)
-        previous = totals_from([previous_flows], kinds)
-        monthly_totals = [totals_from([seg], kinds) for seg in monthly]
+        if income:
+            current, previous = (
+                _income_totals([seg], category_kind) for seg in (current_flows, previous_flows)
+            )
+            monthly_totals = [_income_totals([seg], category_kind) for seg in monthly]
+        else:
+            current = totals_from([current_flows], kinds)
+            previous = totals_from([previous_flows], kinds)
+            monthly_totals = [totals_from([seg], kinds) for seg in monthly]
     monthly_by_row = [_spend_by_row(totals, row_of) for totals in monthly_totals]
 
     totals_by_row = _spend_by_row(current, row_of)
@@ -431,7 +650,21 @@ async def breakdown(
         for row in rows:
             main = main_category.get(row["id"])
             row["category_id"] = str(main) if main is not None else None
-            row["category_label"] = category_names.get(main, NO_CATEGORY_LABEL)
+            row["category_label"] = category_names.get(
+                main, TO_CHECK_LABEL if income else NO_CATEGORY_LABEL
+            )
+
+    to_assets: list[dict] = []
+    if not income and level == "category" and not all_groups:
+        to_assets = await _to_assets(
+            session,
+            workspace_id=workspace_id,
+            primary_currency=primary_currency,
+            period=period,
+            group_id=group_id,
+            no_group=no_group,
+            account_ids=account_ids,
+        )
 
     return {
         "period": {
@@ -446,4 +679,5 @@ async def breakdown(
         "previous_total": _money(previous_total),
         "rows": rows,
         "unconverted_count": current.unconverted_count,
+        "to_assets": to_assets,
     }

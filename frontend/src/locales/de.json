@@ -1809,6 +1809,13 @@
     }
   },
   "assets": {
+    "sumFilter": {
+      "label": "Summieren",
+      "all": "Alle",
+      "investmentsOnly": "Nur Anlagen",
+      "summary": "{{shown}} von {{total}} summiert · {{value}}",
+      "showAll": "Alle anzeigen"
+    },
     "title": "Vermögenswerte",
     "addAsset": "Vermögenswert hinzufügen",
     "oversellWarning": "Du besitzt nur {{available}} Einheiten — Leerverkäufe werden nicht unterstützt.",
@@ -2156,6 +2163,61 @@
         "answerMore": "Du hast {{value}} mehr ausgegeben als in {{b}} {{change}}",
         "answerLess": "Du hast {{value}} weniger ausgegeben als in {{b}} {{change}}",
         "answerSame": "Du hast gleich viel ausgegeben wie in {{b}}"
+      },
+      "flow": {
+        "label": "Spending or income",
+        "expense": "Spending",
+        "income": "Income"
+      },
+      "income": {
+        "spending": "Received",
+        "toCheck": "To check",
+        "empty": "Nothing received between {{from}} and {{to}}.",
+        "backToStores": "Everyone who paid",
+        "backToCategory": "Who paid in {{category}}",
+        "view": {
+          "merchant": "Who paid"
+        },
+        "col": {
+          "category": "Category",
+          "merchant": "Who paid",
+          "account": "Account"
+        },
+        "concentration": {
+          "category": "{{n}} of {{m}} categories make up 80% of what you received.",
+          "merchant": "{{n}} of {{m}} payers make up 80% of what you received.",
+          "account": "{{n}} of {{m}} accounts make up 80% of what you received."
+        },
+        "bars": {
+          "aria": "Received from each item, biggest first; {{name}} is the biggest."
+        },
+        "trend": {
+          "aria": "Month-by-month income of the biggest items; {{name}} is the biggest."
+        },
+        "month": {
+          "legend": "Darker = received more",
+          "legendDark": "Lighter = received more",
+          "aria": "Received in each month; {{name}} is the biggest."
+        },
+        "treemap": {
+          "of": {
+            "category": "of income",
+            "merchant": "of the category",
+            "account": "of income"
+          }
+        },
+        "compare": {
+          "empty": "Nothing received in either period.",
+          "answerMore": "You received {{value}} more than in {{b}} {{change}}",
+          "answerLess": "You received {{value}} less than in {{b}} {{change}}",
+          "answerSame": "You received the same as in {{b}}"
+        }
+      },
+      "assets": {
+        "title": "Goes to your assets",
+        "hint": "Not spending: the money is still yours.",
+        "project": "Project total",
+        "projectHint": "spending + assets"
       }
     },
     "common": {
