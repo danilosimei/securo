@@ -65,6 +65,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { useCreateTransaction } from '@/hooks/use-create-transaction'
 import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
 import { categoryChanged, withUndoneCategory, singleStoreReference, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
+import { newActionId } from '@/lib/action-id'
 import { MobileTransactionRow } from '@/components/mobile-transaction-row'
 import { useAuth } from '@/contexts/auth-context'
 import { useWorkspace } from '@/contexts/workspace-context'
@@ -567,17 +568,21 @@ export default function TransactionsPage() {
   } = useCreateTransaction({ onDone: () => setDialogOpen(false) })
 
   // After a category fix: "apply to the similar ones" / "create rule".
-  const { notifyCorrection } = useCategoryCorrectionToast({ onCreateRule: openRuleDialog })
+  const { notifyCorrection, notifyUndoable } = useCategoryCorrectionToast({ onCreateRule: openRuleDialog })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...data }: TransactionUpdatePayload & { id: string }) =>
-      transactions.update(id, data),
-    onSuccess: (_updated, { id, ...payload }) => {
+    // Named, so the toast can undo the save as one action.
+    mutationFn: async ({ id, ...data }: TransactionUpdatePayload & { id: string }) => {
+      const actionId = newActionId()
+      await transactions.update(id, data, actionId)
+      return actionId
+    },
+    onSuccess: (actionId, { id, ...payload }) => {
       const before = editingTx?.id === id ? editingTx : data?.items.find((tx) => tx.id === id)
       invalidateAfterTxMutation()
       setDialogOpen(false)
       setEditingTx(null)
-      if (categoryChanged(before, payload)) void notifyCorrection({ id })
+      if (categoryChanged(before, payload)) void notifyCorrection({ id }, { actionId })
       else toast.success(t('transactions.updated'))
     },
     onError: (error) => {
@@ -600,8 +605,10 @@ export default function TransactionsPage() {
   })
 
   const bulkCategorizeMutation = useMutation({
-    mutationFn: ({ ids, categoryId }: { ids: string[]; categoryId: string | null }) =>
-      transactions.bulkCategorize(ids, categoryId),
+    mutationFn: async ({ ids, categoryId }: { ids: string[]; categoryId: string | null }) => {
+      const actionId = newActionId()
+      return { ...(await transactions.bulkCategorize(ids, categoryId, actionId)), actionId }
+    },
     onSuccess: (result, { ids, categoryId }) => {
       invalidateAfterTxMutation()
       setSelectedIds(new Set())
@@ -610,8 +617,8 @@ export default function TransactionsPage() {
       // Shortcuts only when the selection is one store (all rows on screen).
       const rows = (data?.items ?? []).filter((tx) => ids.includes(tx.id))
       const reference = categoryId && rows.length === ids.length ? singleStoreReference(rows) : null
-      if (reference) void notifyCorrection(reference, { title })
-      else toast.success(title)
+      if (reference) void notifyCorrection(reference, { title, actionId: result.actionId })
+      else notifyUndoable(title, result.actionId)
     },
     onError: (error) => {
       toast.error(extractApiError(error))

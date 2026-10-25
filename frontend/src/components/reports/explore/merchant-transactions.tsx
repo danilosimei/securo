@@ -15,6 +15,8 @@ import { getAccountName } from '@/lib/account-utils'
 import { extractApiError } from '@/lib/api-errors'
 import { formatCurrency } from '@/lib/format'
 import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
+import { newActionId } from '@/lib/action-id'
+import { categoryChanged, useCategoryCorrectionToast, withUndoneCategory } from '@/hooks/use-category-correction-toast'
 import { cn } from '@/lib/utils'
 import { useDisplayLocale } from '@/hooks/use-display-locale'
 import { usePrivacyMode } from '@/hooks/use-privacy-mode'
@@ -65,9 +67,21 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
     invalidateFinancialQueries(queryClient)
     close()
   }
+  // After a category fix: "apply to the similar ones" and "undo", as in
+  // Transactions (no rule dialog here, so no "create rule").
+  const { notifyCorrection } = useCategoryCorrectionToast()
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...body }: TransactionSavePayload & { id: string }) => transactions.update(id, body),
-    onSuccess: done,
+    // Named, so the toast can undo the save as one action.
+    mutationFn: async ({ id, ...body }: TransactionSavePayload & { id: string }) => {
+      const actionId = newActionId()
+      await transactions.update(id, body, actionId)
+      return actionId
+    },
+    onSuccess: (actionId, { id, ...payload }) => {
+      const corrected = editing?.id === id && categoryChanged(editing, payload)
+      done()
+      if (corrected) void notifyCorrection({ id }, { actionId })
+    },
   })
   const deleteMutation = useMutation({
     mutationFn: (id: string) => transactions.delete(id),
@@ -213,6 +227,9 @@ export function MerchantTransactions({ merchantLabel, merchantKey, categoryId, r
           if (editing) deleteMutation.mutate(editing.id)
         }}
         onUnlinkTransfer={(pairId) => unlinkMutation.mutate(pairId)}
+        onCategoryUndone={(txId, categoryId, source) =>
+          setEditing((prev) => withUndoneCategory(prev, txId, categoryId, source))
+        }
         loading={updateMutation.isPending || deleteMutation.isPending || unlinkMutation.isPending}
         error={
           updateMutation.error

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { NumberFormat, DateFormat } from '@/lib/format'
+import { actionHeaders } from '@/lib/action-id'
 import type {
   AcceptRequest,
   AskRequest,
@@ -26,6 +27,9 @@ import type {
   RuleDraft,
   SimilarResult,
   UndoRequest,
+  HistoryPage,
+  HistoryRowsPage,
+  HistoryWho,
   UndoResult,
   User,
   AdminUser,
@@ -599,8 +603,9 @@ export const transactions = {
       apply_to_transfer_pair?: boolean
       apply_to?: TransactionApplyScope
     },
+    actionId?: string,
   ): Promise<Transaction> => {
-    const { data } = await api.patch(`/transactions/${id}`, transaction)
+    const { data } = await api.patch(`/transactions/${id}`, transaction, actionHeaders(actionId))
     return data
   },
   delete: async (id: string, applyTo: TransactionApplyScope = 'this'): Promise<void> => {
@@ -626,11 +631,16 @@ export const transactions = {
     const { data } = await api.post('/transactions/transfer', transfer)
     return data
   },
-  bulkCategorize: async (transactionIds: string[], categoryId: string | null): Promise<{ updated: number }> => {
-    const { data } = await api.patch('/transactions/bulk-categorize', {
-      transaction_ids: transactionIds,
-      category_id: categoryId,
-    })
+  bulkCategorize: async (
+    transactionIds: string[],
+    categoryId: string | null,
+    actionId?: string,
+  ): Promise<{ updated: number }> => {
+    const { data } = await api.patch(
+      '/transactions/bulk-categorize',
+      { transaction_ids: transactionIds, category_id: categoryId },
+      actionHeaders(actionId),
+    )
     return data
   },
   bulkAddTags: async (transactionIds: string[], tags: string[]): Promise<{ updated: number }> => {
@@ -2649,6 +2659,15 @@ export const categorization = {
     const { data } = await api.get('/categorization/scoreboard')
     return data
   },
+  /** Histórico: every category change, one line per action. */
+  history: async (params: { who?: HistoryWho; limit?: number; offset?: number } = {}): Promise<HistoryPage> => {
+    const { data } = await api.get('/categorization/history', { params })
+    return data
+  },
+  historyRows: async (actionId: string, params: { limit?: number; offset?: number } = {}): Promise<HistoryRowsPage> => {
+    const { data } = await api.get(`/categorization/history/${actionId}/rows`, { params })
+    return data
+  },
   undo: async (payload: UndoRequest): Promise<UndoResult> => {
     const { data } = await api.post('/categorization/undo', payload)
     return data
@@ -2676,13 +2695,17 @@ export const categorization = {
   /** With `transactionIds`, exactly those rows (the ones the person was shown). */
   applySimilar: async (
     transactionId: string,
-    opts: { excludeRule?: boolean; transactionIds?: string[] } = {},
+    opts: { excludeRule?: boolean; transactionIds?: string[]; actionId?: string } = {},
   ): Promise<SimilarAppliedResult> => {
-    const { data } = await api.post('/categorization/similar/apply', {
-      transaction_id: transactionId,
-      exclude_rule: opts.excludeRule ?? false,
-      ...(opts.transactionIds ? { transaction_ids: opts.transactionIds } : {}),
-    })
+    const { data } = await api.post(
+      '/categorization/similar/apply',
+      {
+        transaction_id: transactionId,
+        exclude_rule: opts.excludeRule ?? false,
+        ...(opts.transactionIds ? { transaction_ids: opts.transactionIds } : {}),
+      },
+      actionHeaders(opts.actionId),
+    )
     return data
   },
   ruleDraft: async (txId: string): Promise<RuleDraft> => {

@@ -12,9 +12,12 @@ const api = vi.hoisted(() => ({
   categories: { list: vi.fn().mockResolvedValue([]) },
   categoryGroups: { list: vi.fn().mockResolvedValue([]) },
   accounts: { list: vi.fn().mockResolvedValue([]) },
+  categorization: { similar: vi.fn(), ruleDraft: vi.fn(), applySimilar: vi.fn(), undo: vi.fn() },
 }))
+const toast = vi.hoisted(() => Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), info: vi.fn(), dismiss: vi.fn() }))
 
 vi.mock('@/lib/api', () => api)
+vi.mock('sonner', () => ({ toast }))
 vi.mock('@/hooks/use-display-locale', () => ({
   useDisplayLocale: () => 'en-US',
   useDateLocale: () => 'en-US',
@@ -37,6 +40,9 @@ vi.mock('@/components/transaction-dialog', () => ({
         {transaction?.description}
         <button type="button" onClick={() => onSave({ description: 'novo' })}>
           save-tx
+        </button>
+        <button type="button" onClick={() => onSave({ category_id: 'c2' })}>
+          save-category
         </button>
       </div>
     ) : null,
@@ -272,8 +278,33 @@ describe('Explore store transactions', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Parcela 1')
     await user.click(screen.getByRole('button', { name: 'save-tx' }))
 
-    await waitFor(() => expect(api.transactions.update).toHaveBeenCalledWith('t1', { description: 'novo' }))
+    await waitFor(() =>
+      expect(api.transactions.update).toHaveBeenCalledWith('t1', { description: 'novo' }, expect.any(String)),
+    )
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['reports'] }))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['transactions'] })
+    // Not a category fix: no shortcuts to offer.
+    expect(api.categorization.similar).not.toHaveBeenCalled()
+  })
+
+  it('after a category fix, offers the similar ones and undo, as in Transactions', async () => {
+    api.transactions.update.mockResolvedValue({})
+    api.categorization.similar.mockResolvedValue({ merchant_key: 'stellantis', count: 9, transaction_ids: [] })
+    api.categorization.ruleDraft.mockRejectedValue({ response: { status: 422 } })
+    const { user } = renderWithProviders(ui, { route })
+
+    await user.click(await screen.findByText('Parcela 1'))
+    await user.click(screen.getByRole('button', { name: 'save-category' }))
+
+    await waitFor(() => expect(api.categorization.similar).toHaveBeenCalledWith('t1'))
+    const actionId = api.transactions.update.mock.calls[0][2]
+    await waitFor(() => {
+      const last = toast.success.mock.calls[toast.success.mock.calls.length - 1][1]
+      expect(last.id).toBe(actionId)
+      expect(last.action.props.buttons.map((b: { label: string }) => b.label)).toEqual([
+        t('categorization.correction.applySimilar', { count: 9 }),
+        t('categorization.correction.undo'),
+      ])
+    })
   })
 })

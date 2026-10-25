@@ -3337,7 +3337,8 @@
     "tab": {
       "review": "Review",
       "applied": "Applied",
-      "organize": "Organize"
+      "organize": "Organize",
+      "history": "History"
     },
     "runNow": "Categorize now",
     "running": "Categorizing…",
@@ -3510,7 +3511,8 @@
       "undo": "Undo",
       "undone_one": "{{count}} undone",
       "undone_other": "{{count}} undone",
-      "undoError": "Could not undo"
+      "undoError": "Could not undo",
+      "viewHistory": "See in History"
     },
     "card": {
       "toReview_one": "{{count}} to review",
@@ -3724,6 +3726,42 @@
       "waiting_other": " · {{waiting}} waiting for the AI",
       "excluded": "Counts the transactions that can be categorized: transfers between your accounts, pending transactions and opening balances are left out.",
       "about": "What is counted"
+    },
+    "history": {
+      "hint": "Every category change, one line per action. Undo reverts what nobody changed since.",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "noCategory": "No category",
+      "categories_one": "{{count}} category",
+      "categories_other": "{{count}} categories",
+      "count_one": "{{count}} transaction",
+      "count_other": "{{count}} transactions",
+      "moreStores": "+{{count}}",
+      "undo": "Undo",
+      "undoSome": "Undo {{count}}",
+      "undoneAt": "undone at {{time}}",
+      "changedSince": "changed since",
+      "mergeNote": "a merge cannot be undone",
+      "partial_one": "{{count}} had changed since and stays as it is",
+      "partial_other": "{{count}} had changed since and stay as they are",
+      "empty": "No category changes yet.",
+      "error": "Could not load the history.",
+      "loadMore": "Load more",
+      "filter": {
+        "all": "All",
+        "you": "By you",
+        "ai": "AI",
+        "auto": "Automatic"
+      },
+      "who": {
+        "you": "You",
+        "ai": "AI",
+        "memory": "Memory",
+        "rule": "Rule",
+        "auto": "Automatic",
+        "undo": "You undid",
+        "merge": "Category merge"
+      }
     }
   },
   "notFound": {

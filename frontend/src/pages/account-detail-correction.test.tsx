@@ -96,8 +96,9 @@ describe('account detail: correction toast', () => {
     const { user } = await openRow()
     await user.click(screen.getByRole('button', { name: 'save c2' }))
     await waitFor(() => expect(notifyCorrection).toHaveBeenCalledTimes(1))
-    expect(api.transactions.update).toHaveBeenCalledWith('tx-1', { category_id: 'c2' })
-    expect(notifyCorrection).toHaveBeenCalledWith({ id: 'tx-1' })
+    expect(api.transactions.update).toHaveBeenCalledWith('tx-1', { category_id: 'c2' }, expect.any(String))
+    const actionId = api.transactions.update.mock.calls[0][2]
+    expect(notifyCorrection).toHaveBeenCalledWith({ id: 'tx-1' }, { actionId })
     expect(toast.success).not.toHaveBeenCalledWith(t('accounts.updated'))
   })
 

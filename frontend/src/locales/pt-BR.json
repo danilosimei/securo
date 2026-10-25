@@ -3337,7 +3337,8 @@
     "tab": {
       "review": "Revisar",
       "applied": "Aplicadas",
-      "organize": "Organizar"
+      "organize": "Organizar",
+      "history": "Histórico"
     },
     "runNow": "Categorizar agora",
     "running": "Categorizando…",
@@ -3510,7 +3511,8 @@
       "undo": "Desfazer",
       "undone_one": "{{count}} desfeita",
       "undone_other": "{{count}} desfeitas",
-      "undoError": "Não foi possível desfazer"
+      "undoError": "Não foi possível desfazer",
+      "viewHistory": "Ver no Histórico"
     },
     "card": {
       "toReview_one": "{{count}} para revisar",
@@ -3724,6 +3726,42 @@
       "waiting_other": " · {{waiting}} aguardando a IA",
       "excluded": "Conta as transações que podem ser categorizadas: transferências entre contas, pendentes e saldo inicial ficam de fora.",
       "about": "O que entra na conta"
+    },
+    "history": {
+      "hint": "Toda troca de categoria, uma linha por ação. Desfazer volta o que ninguém mudou depois.",
+      "today": "Hoje",
+      "yesterday": "Ontem",
+      "noCategory": "Sem categoria",
+      "categories_one": "{{count}} categoria",
+      "categories_other": "{{count}} categorias",
+      "count_one": "{{count}} transação",
+      "count_other": "{{count}} transações",
+      "moreStores": "+{{count}}",
+      "undo": "Desfazer",
+      "undoSome": "Desfazer {{count}}",
+      "undoneAt": "desfeito às {{time}}",
+      "changedSince": "já mudou depois",
+      "mergeNote": "fusão não se desfaz",
+      "partial_one": "{{count}} já tinha mudado depois e ficou como está",
+      "partial_other": "{{count}} já tinham mudado depois e ficaram como estão",
+      "empty": "Nenhuma troca de categoria ainda.",
+      "error": "Não foi possível carregar o histórico.",
+      "loadMore": "Carregar mais",
+      "filter": {
+        "all": "Todos",
+        "you": "Feitos por você",
+        "ai": "IA",
+        "auto": "Automáticos"
+      },
+      "who": {
+        "you": "Você",
+        "ai": "IA",
+        "memory": "Memória",
+        "rule": "Regra",
+        "auto": "Automático",
+        "undo": "Você desfez",
+        "merge": "Fusão de categorias"
+      }
     }
   },
   "notFound": {

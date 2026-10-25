@@ -47,6 +47,7 @@ import { CategorizationCard } from '@/components/categorization/categorization-c
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
 import { categoryChanged, withUndoneCategory, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
+import { newActionId } from '@/lib/action-id'
 import { useAuth } from '@/contexts/auth-context'
 import { useCollectionFilter } from '@/contexts/collection-filter-context'
 import type { Transaction } from '@/types'
@@ -222,14 +223,18 @@ export default function DashboardPage() {
   const { notifyCorrection } = useCategoryCorrectionToast({ onCreateRule: openRuleDialog })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, ...data }: TransactionSavePayload & { id: string }) =>
-      transactions.update(id, data),
-    onSuccess: (_updated, { id, ...payload }) => {
+    // Named, so the toast can undo the save as one action.
+    mutationFn: async ({ id, ...data }: TransactionSavePayload & { id: string }) => {
+      const actionId = newActionId()
+      await transactions.update(id, data, actionId)
+      return actionId
+    },
+    onSuccess: (actionId, { id, ...payload }) => {
       const corrected = editingTx?.id === id && categoryChanged(editingTx, payload)
       invalidateFinancialQueries(queryClient)
       setDialogOpen(false)
       setEditingTx(null)
-      if (corrected) void notifyCorrection({ id })
+      if (corrected) void notifyCorrection({ id }, { actionId })
     },
   })
 

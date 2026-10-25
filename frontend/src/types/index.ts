@@ -2072,6 +2072,55 @@ export interface Scoreboard {
 export interface UndoRequest {
   event_ids?: string[]
   run_id?: string
+  /** A line of Histórico: everything one click (or one run) changed. */
+  action_id?: string
+}
+
+/** Who a line of Histórico is filtered by. */
+export type HistoryWho = 'you' | 'ai' | 'auto'
+
+export type HistoryActor = 'you' | 'ai' | 'memory' | 'rule' | 'auto' | 'undo' | 'merge'
+
+export interface HistoryAction {
+  action_id: string
+  at: string
+  who: HistoryActor
+  count: number
+  /** How many of its changes an undo would still revert. */
+  standing: number
+  /** Set when every change of the line went back. */
+  undone_at: string | null
+  /** Up to 3, most frequent first; null is "no category". */
+  from_categories: (string | null)[]
+  from_total: number
+  to_categories: (string | null)[]
+  to_total: number
+  stores: string[]
+  stores_total: number
+}
+
+export interface HistoryPage {
+  items: HistoryAction[]
+  total: number
+}
+
+export interface HistoryRow {
+  event_id: string
+  transaction_id: string
+  date: string
+  description: string
+  amount: string
+  type: string
+  currency: string
+  from_category: string | null
+  to_category: string | null
+  undone_at: string | null
+  standing: boolean
+}
+
+export interface HistoryRowsPage {
+  items: HistoryRow[]
+  total: number
 }
 
 export interface UndoResult {
