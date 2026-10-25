@@ -947,6 +947,7 @@ async def undo(
     *,
     event_ids: list[uuid.UUID] | None = None,
     run_id: uuid.UUID | None = None,
+    action_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None,
 ) -> events.UndoResult:
     """`events.undo`, plus what the undone decisions had settled.
@@ -968,12 +969,19 @@ async def undo(
 
     Undoing a run ("Desfazer este lote") takes back only what it changed: a
     guess it confirmed at the same category stays settled, out of review.
-    An undo by event ids reverts whatever it names.
+    An undo by event ids reverts whatever it names; one by action, the whole
+    action (a run's action is the run, undone as one).
     """
+    if action_id is not None and await session.scalar(
+        select(CategorizationRun.id).where(
+            CategorizationRun.id == action_id, CategorizationRun.workspace_id == workspace_id
+        )
+    ):
+        run_id, action_id = action_id, None
     restorable: list[CategorizationEvent] = []
     automatic: list[CategorizationEvent] = []
     cleared: list[CategorizationEvent] = []
-    if event_ids is not None or run_id is not None:
+    if event_ids is not None or run_id is not None or action_id is not None:
         query = select(CategorizationEvent).where(
             CategorizationEvent.workspace_id == workspace_id,
             or_(
@@ -992,6 +1000,8 @@ async def undo(
             query = query.where(CategorizationEvent.id.in_(event_ids))
         if run_id is not None:
             query = query.where(CategorizationEvent.run_id == run_id, changes_category())
+        if action_id is not None:
+            query = query.where(CategorizationEvent.action_id == action_id)
         for ev in (await session.execute(query)).scalars().all():
             if ev.source == "user":
                 restorable.append(ev)
@@ -1001,8 +1011,8 @@ async def undo(
                 automatic.append(ev)
 
     result = await events.undo(
-        session, workspace_id, event_ids=event_ids, run_id=run_id, user_id=user_id,
-        changes_only=run_id is not None,
+        session, workspace_id, event_ids=event_ids, run_id=run_id, action_id=action_id,
+        user_id=user_id, changes_only=run_id is not None,
     )
     # Same session, same identity map: `events.undo` stamped these objects.
     restored = [ev for ev in restorable if ev.undone_at is not None]

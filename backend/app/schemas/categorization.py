@@ -339,6 +339,52 @@ class AppliedPage(BaseModel):
     total: int
 
 
+class HistoryAction(BaseModel):
+    """A line of Histórico: what one click (or one run) changed."""
+
+    action_id: uuid.UUID
+    #: When the last of its changes happened.
+    at: datetime
+    #: you · ai · memory · rule · auto (bank, import, installments) · undo · merge.
+    who: str
+    count: int
+    #: How many of its changes an undo would still revert.
+    standing: int
+    #: Set when every change of the line went back.
+    undone_at: Optional[datetime] = None
+    #: Up to 3 names, most frequent first; None is "no category".
+    from_categories: list[Optional[str]]
+    from_total: int
+    to_categories: list[Optional[str]]
+    to_total: int
+    stores: list[str]
+    stores_total: int
+
+
+class HistoryPage(BaseModel):
+    items: list[HistoryAction]
+    total: int
+
+
+class HistoryRow(BaseModel):
+    event_id: uuid.UUID
+    transaction_id: uuid.UUID
+    date: _Date
+    description: str
+    amount: Decimal
+    type: str
+    currency: str
+    from_category: Optional[str] = None
+    to_category: Optional[str] = None
+    undone_at: Optional[datetime] = None
+    standing: bool
+
+
+class HistoryRowsPage(BaseModel):
+    items: list[HistoryRow]
+    total: int
+
+
 class Scoreboard(BaseModel):
     """Categorizable rows (posted, no transfer pair, no opening balance, not
     ignored); `decided + to_review + waiting == total`."""
@@ -355,6 +401,8 @@ class Scoreboard(BaseModel):
 class UndoRequest(BaseModel):
     event_ids: Optional[list[uuid.UUID]] = Field(default=None, max_length=5000)
     run_id: Optional[uuid.UUID] = None
+    #: A line of Histórico: everything one click (or one run) changed.
+    action_id: Optional[uuid.UUID] = None
 
 
 class UndoResultRead(BaseModel):

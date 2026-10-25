@@ -157,7 +157,9 @@ class CategorizationEvent(Base):
 
     Carries the previous values so an undo is a lookup, not a guess.
     `undone_at` marks an event as reverted instead of deleting it: the
-    history of a mistake is worth keeping.
+    history of a mistake is worth keeping. `action_id` ties together the
+    events of one action (a click, a run), the line Histórico shows and
+    undoes as a whole.
     """
 
     __tablename__ = "categorization_events"
@@ -166,6 +168,7 @@ class CategorizationEvent(Base):
         Index("ix_categorization_events_workspace_created", "workspace_id", "created_at"),
         Index("ix_categorization_events_transaction_created", "transaction_id", "created_at"),
         Index("ix_categorization_events_run", "run_id"),
+        Index("ix_categorization_events_workspace_action", "workspace_id", "action_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -174,6 +177,7 @@ class CategorizationEvent(Base):
         UUID(as_uuid=True), ForeignKey("transactions.id", ondelete="CASCADE")
     )
     run_id: Mapped[Optional[uuid.UUID]] = _set_null_fk("categorization_runs.id")
+    action_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), default=uuid.uuid4)
     source: Mapped[str] = mapped_column(String(16))
     previous_source: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     previous_category_id: Mapped[Optional[uuid.UUID]] = _set_null_fk("categories.id")
