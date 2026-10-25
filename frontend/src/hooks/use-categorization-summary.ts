@@ -25,7 +25,8 @@ export function useCategorizationSummary({ enabled = true }: { enabled?: boolean
   })
 }
 
-/** Groups waiting for a person to review; 0 while loading. */
+/** Transactions waiting for a person in Revisar (every one with no
+ * category among them); 0 while loading. */
 export function useCategorizationPending(enabled = true): number {
-  return useCategorizationSummary({ enabled }).data?.pending_groups ?? 0
+  return useCategorizationSummary({ enabled }).data?.pending_transactions ?? 0
 }

@@ -65,6 +65,7 @@ function group(overrides: Partial<ReviewGroup> & { merchant_key: string }): Revi
   return {
     clean_name: null,
     count: 1,
+    uncategorized: 0,
     total: '10.00',
     samples: [],
     suggestion: null,
@@ -299,6 +300,18 @@ describe('ReviewTab', () => {
     // A second close callback does not send it twice.
     await act(async () => options.onDismiss())
     expect(api.categorization.dismiss).toHaveBeenCalledTimes(1)
+  })
+
+  it('loja com transação sem categoria não oferece ignorar, nem pelo atalho x', async () => {
+    serverGroups = [ifood, { ...uber, uncategorized: 1 }, maria]
+    const { user } = await renderTab()
+    expect(within(row('Uber')).queryByRole('button', { name: t('categorization.review.ignore') })).not.toBeInTheDocument()
+    expect(within(row('iFood')).getByRole('button', { name: t('categorization.review.ignore') })).toBeInTheDocument()
+
+    act(() => row('Uber').focus())
+    await user.keyboard('x')
+    expect(screen.getByText('Uber')).toBeInTheDocument()
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it('desfazer o ignorar devolve a linha sem chamar a API', async () => {

@@ -132,7 +132,6 @@ async def test_applied_user_lists_rows_by_origin(
     _tx(session, test_user, test_account, "UBER", source="ai", category_id=transport)
     _tx(session, test_user, test_account, "CLEARED", source="user", category_id=None)
     _tx(session, test_user, test_account, "ESTORNO", source="user", category_id=food, is_ignored=True)
-    _tx(session, test_user, test_account, "AGUARDANDO", source="user", category_id=food, status="pending")
     _tx(session, test_user, test_account, "SALDO", source="user", category_id=food, tx_source="opening_balance")
     _tx(session, test_user, test_account, "PARA CONTA", source="user", category_id=food,
         transfer_pair_id=uuid.uuid4())
@@ -215,9 +214,10 @@ async def test_scoreboard_sums_to_total(
     pending = _tx(session, test_user, test_account, "PADARIA")
     _tx(session, test_user, test_account, "MERCADO", source="ai", category_id=food)
     _tx(session, test_user, test_account, "AGUARDANDO A IA")
+    # Still pending at the bank, but categorized the day it arrives.
+    _tx(session, test_user, test_account, "AINDA PENDENTE", status="pending")
     # Outside the base, even with a category or a pending suggestion.
     paired = _tx(session, test_user, test_account, "PARA CONTA", transfer_pair_id=uuid.uuid4())
-    _tx(session, test_user, test_account, "AINDA PENDENTE", status="pending")
     _tx(session, test_user, test_account, "SALDO INICIAL", category_id=food, source="user",
         tx_source="opening_balance")
     _tx(session, test_user, test_account, "IGNORADA", category_id=food, source="user", is_ignored=True)
@@ -227,7 +227,7 @@ async def test_scoreboard_sums_to_total(
     await session.commit()
 
     board = await _scoreboard(client, auth_headers)
-    assert board == {"total": 3, "decided": 1, "to_review": 1, "waiting": 1}
+    assert board == {"total": 4, "decided": 1, "to_review": 1, "waiting": 2}
     assert board["decided"] + board["to_review"] + board["waiting"] == board["total"]
 
 
@@ -481,7 +481,7 @@ async def test_event_views_keep_to_the_categorizable_base(
     client, auth_headers, session, test_user, test_account, test_categories,
 ):
     """An AI or memory decision over a row that later left the base (a
-    transfer leg, ignored, still pending, an opening balance) is no longer
+    transfer leg, ignored, an opening balance) is no longer
     one the section reports: the default view, Confirmadas and
     `applied_last_7d` agree with the scoreboard, which does not count it."""
     food = test_categories[0].id
@@ -492,8 +492,6 @@ async def test_event_views_keep_to_the_categorizable_base(
             transfer_pair_id=uuid.uuid4()),
         _tx(session, test_user, test_account, "UBER", source="ai", category_id=food,
             is_ignored=True),
-        _tx(session, test_user, test_account, "UBER", source="ai", category_id=food,
-            status="pending"),
         _tx(session, test_user, test_account, "UBER", source="memory", category_id=food,
             tx_source="opening_balance"),
     ]

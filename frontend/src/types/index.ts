@@ -1877,6 +1877,9 @@ export interface ReviewGroup {
   merchant_key: string
   clean_name: string | null
   count: number
+  /** Rows of `count` with no category: "Ignorar" would leave them so, and
+   * they would come right back, so it is not offered. */
+  uncategorized: number
   /** Sum of absolute amounts, unmasked: mask it with `mask(formatCurrency(...))`. */
   total: number | string
   samples: string[]

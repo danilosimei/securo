@@ -120,7 +120,10 @@ async def get_review(
     ctx: WorkspaceContext = Depends(current_workspace),
     session: AsyncSession = Depends(get_async_session),
 ):
-    return await review.review_queue(session, ctx.workspace.id, limit=limit, offset=offset)
+    queue = await review.review_queue(session, ctx.workspace.id, limit=limit, offset=offset)
+    # Keep the questions it gave the rows with no category (as GET /summary).
+    await session.commit()
+    return queue
 
 
 @router.post("/review/accept", response_model=AppliedResult)

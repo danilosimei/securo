@@ -154,6 +154,8 @@ class ReviewGroup(BaseModel):
     merchant_key: str
     clean_name: Optional[str] = None
     count: int
+    #: Rows of `count` with no category: "Ignorar" would leave them so.
+    uncategorized: int = 0
     #: Sum of the absolute amounts, unmasked: the frontend masks it.
     total: Decimal
     samples: list[str]

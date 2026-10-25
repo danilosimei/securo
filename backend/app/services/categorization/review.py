@@ -51,7 +51,13 @@ from app.services.categorization.merchant_key import (
     sample_description,
     scrub_documents,
 )
-from app.services.categorization.pipeline import CHUNK, MAX_SAMPLES, categorizable, stored_key
+from app.services.categorization.pipeline import (
+    CHUNK,
+    MAX_SAMPLES,
+    SURFACED_REASON,
+    categorizable,
+    stored_key,
+)
 from app.services.categorization.prompts import prompt_sample
 from app.services.categorization.settings import find_ai_connection, get_settings
 
@@ -103,10 +109,14 @@ _norm_name = creation.norm_name
 
 def open_transaction(workspace_id: uuid.UUID) -> list[Any]:
     """A row a pending suggestion may still ask about: categorizable (the
-    pipeline's base) and not categorized by hand since."""
+    pipeline's base) and not categorized by hand since. A row with no
+    category is always open, whoever left it empty."""
     return [
         *categorizable(workspace_id),
-        Transaction.category_source.not_in(PROTECTED_SOURCES),
+        or_(
+            Transaction.category_source.not_in(PROTECTED_SOURCES),
+            Transaction.category_id.is_(None),
+        ),
     ]
 
 
@@ -144,6 +154,73 @@ def standing_event() -> Any:
 # --- summary ----------------------------------------------------------------
 
 
+def _waiting_for_category(workspace_id: uuid.UUID) -> list[Any]:
+    """Open rows with no category and no pending suggestion: nobody asked
+    the person about them yet."""
+    asked = (
+        select(CategorizationSuggestion.id)
+        .where(
+            CategorizationSuggestion.transaction_id == Transaction.id,
+            CategorizationSuggestion.status == "pending",
+        )
+        .exists()
+    )
+    return [*open_transaction(workspace_id), Transaction.category_id.is_(None), ~asked]
+
+
+async def surface_uncategorized(session: AsyncSession, workspace_id: uuid.UUID) -> int:
+    """Put every row with no category in Revisar; returns how many it added.
+
+    The pipeline asks only about the rows it collects. A row it never
+    reached, or one dismissed or cleared by hand later, would otherwise sit
+    with no category and no question. Each gets a model-less suggestion
+    (`SURFACED_REASON`), so Revisar, its badge and the answers (accept,
+    choose, create) handle it like any other; the pipeline may still
+    decide the row, which closes the question.
+    """
+    rows = list(
+        (
+            await session.execute(
+                select(Transaction.id, Transaction.merchant_key).where(
+                    *_waiting_for_category(workspace_id)
+                )
+            )
+        ).all()
+    )
+    now = _now()
+    for chunk in _chunks(rows):
+        await session.execute(
+            sa_insert(CategorizationSuggestion),
+            [
+                {
+                    "id": uuid.uuid4(),
+                    "workspace_id": workspace_id,
+                    "transaction_id": tx_id,
+                    "merchant_key": key or UNKNOWN_KEY,
+                    "status": "pending",
+                    "reason": SURFACED_REASON,
+                    "created_at": now,
+                }
+                for tx_id, key in chunk
+            ],
+        )
+    return len(rows)
+
+
+async def pending_counts(session: AsyncSession, workspace_id: uuid.UUID) -> tuple[int, int]:
+    """(stores, rows) Revisar lists, counting the rows `surface_uncategorized`
+    has yet to reach as it will file them, so a read-only caller agrees."""
+    latest = _latest_pending(workspace_id)
+    asked = (await session.execute(select(latest.c.merchant_key).where(latest.c.rank == 1))).scalars().all()
+    waiting = (
+        await session.execute(
+            select(Transaction.merchant_key).where(*_waiting_for_category(workspace_id))
+        )
+    ).scalars().all()
+    keys = [*asked, *(key or UNKNOWN_KEY for key in waiting)]
+    return len(set(keys)), len(keys)
+
+
 def _latest_pending(workspace_id: uuid.UUID) -> Any:
     """Pending suggestions over open rows, each with its rank among its
     row's (1 = the latest, as `_pending_groups` picks it)."""
@@ -169,16 +246,9 @@ def _latest_pending(workspace_id: uuid.UUID) -> Any:
 
 async def summary(session: AsyncSession, workspace_id: uuid.UUID) -> dict[str, Any]:
     # The badge counts what Revisar lists: each row once, under the store of
-    # its latest pending suggestion.
-    latest = _latest_pending(workspace_id)
-    groups, txs = (
-        await session.execute(
-            select(
-                func.count(func.distinct(latest.c.merchant_key)),
-                func.count(latest.c.transaction_id),
-            ).where(latest.c.rank == 1)
-        )
-    ).one()
+    # its latest pending suggestion. Every row with no category is there.
+    await surface_uncategorized(session, workspace_id)
+    groups, txs = await pending_counts(session, workspace_id)
     applied = await session.scalar(
         select(func.count(CategorizationEvent.id))
         # What the default Aplicadas list shows (`applied_events`).
@@ -236,6 +306,8 @@ class _Group:
     new_category: dict[str, str] | None = None
     total: Decimal = Decimal("0")
     tx_ids: list[uuid.UUID] = field(default_factory=list)
+    #: Rows with no category (Ignorar would leave them so).
+    uncategorized: int = 0
     descriptions: list[str] = field(default_factory=list)
     #: The first `REVIEW_PREVIEW` rows: the description as it is now, plus
     #: the bank's original when it was rewritten since.
@@ -265,6 +337,7 @@ async def _pending_groups(session: AsyncSession, workspace_id: uuid.UUID) -> lis
             Transaction.type,
             Transaction.currency,
             Transaction.original_description,
+            Transaction.category_id,
         )
         .join(Transaction, open_row(workspace_id))
         .where(
@@ -276,12 +349,14 @@ async def _pending_groups(session: AsyncSession, workspace_id: uuid.UUID) -> lis
     )
     groups: dict[str, _Group] = {}
     seen: set[uuid.UUID] = set()
-    for sug, description, amount, amount_primary, day, kind, currency, original in rows.all():
+    for sug, description, amount, amount_primary, day, kind, currency, original, category_id in rows.all():
         if sug.transaction_id in seen:
             continue
         seen.add(sug.transaction_id)
         group = groups.setdefault(sug.merchant_key, _Group(key=sug.merchant_key))
         group.tx_ids.append(sug.transaction_id)
+        if category_id is None:
+            group.uncategorized += 1
         group.descriptions.append(description or "")
         if len(group.preview) < REVIEW_PREVIEW:
             group.preview.append({
@@ -342,6 +417,7 @@ def _proposals(groups: list[_Group]) -> list[dict[str, Any]]:
 async def review_queue(
     session: AsyncSession, workspace_id: uuid.UUID, *, limit: int, offset: int
 ) -> dict[str, Any]:
+    await surface_uncategorized(session, workspace_id)
     groups = await _pending_groups(session, workspace_id)
     page = groups[offset:offset + limit]
     hits = await memory.lookup(session, workspace_id, [g.key for g in page])
@@ -351,6 +427,7 @@ async def review_queue(
                 "merchant_key": g.key,
                 "clean_name": g.clean_name,
                 "count": len(g.tx_ids),
+                "uncategorized": g.uncategorized,
                 "total": g.total,
                 "samples": _samples(g.descriptions),
                 "suggestion": g.suggestion,

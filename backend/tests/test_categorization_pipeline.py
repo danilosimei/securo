@@ -88,7 +88,7 @@ async def test_collect_candidates_includes_none_and_provider_excludes_user(
     _tx(session, test_user, test_account, "MERCADO", source="user", category_id=cat)
     _tx(session, test_user, test_account, "FARMACIA", source="legacy", category_id=cat)
     _tx(session, test_user, test_account, "REGRA", source="rule", category_id=cat)
-    _tx(session, test_user, test_account, "PENDENTE", status="pending")
+    pending_tx = _tx(session, test_user, test_account, "PENDENTE", status="pending")
     _tx(session, test_user, test_account, "TRANSF", transfer_pair_id=uuid.uuid4())
     _tx(session, test_user, test_account, "IGNORADA", is_ignored=True)
     _tx(session, test_user, test_account, "SALDO INICIAL", tx_source="opening_balance")
@@ -97,7 +97,8 @@ async def test_collect_candidates_includes_none_and_provider_excludes_user(
     cands = await collect_candidates(session, test_workspace.id)
 
     by_id = {c.tx_id: c for c in cands}
-    assert set(by_id) == {none_tx.id, provider_tx.id}
+    # A card purchase still pending is categorized the day it arrives.
+    assert set(by_id) == {none_tx.id, provider_tx.id, pending_tx.id}
     assert by_id[none_tx.id].key == "PADARIA PAO QUENTE"
     assert by_id[none_tx.id].account_type == "checking"
     assert by_id[provider_tx.id].current_category_id == cat
@@ -311,6 +312,29 @@ async def test_pipeline_skips_protected_sources(
     assert await _events(session) == []
     assert await _suggestions(session) == []
     assert run.status == "done"
+
+
+@pytest.mark.asyncio
+async def test_memory_files_a_pending_purchase_waiting_as_uncategorized(
+    session, test_user, test_workspace, test_account, test_categories
+):
+    """A row Revisar surfaced as uncategorized is still the memory's to
+    decide; the decision closes that question."""
+    from app.services.categorization import review
+
+    shopping = test_categories[0].id
+    await learn_choice(session, test_workspace.id, "ALIEXPRESS BR ALIP", shopping)
+    await learn_choice(session, test_workspace.id, "ALIEXPRESS BR ALIP", shopping)
+    tx = _tx(session, test_user, test_account, "Dl *Aliexpress Br Alip", status="pending")
+    await session.commit()
+    assert await review.surface_uncategorized(session, test_workspace.id) == 1
+    await session.commit()
+
+    await run_categorization(session, test_workspace.id, trigger="ingest", use_ai=False)
+
+    assert (tx.category_id, tx.category_source) == (shopping, "memory")
+    (sug,) = await _suggestions(session)
+    assert (sug.status, sug.reason) == ("dismissed", pipeline.SUPERSEDED_REASON)
 
 
 @pytest.mark.asyncio

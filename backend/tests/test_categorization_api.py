@@ -724,6 +724,68 @@ async def test_review_and_summary_ignore_suggestions_over_protected_rows(client,
 
 
 @pytest.mark.asyncio
+async def test_every_uncategorized_row_waits_in_review(client, auth_headers, session, test_user, test_account, test_categories):
+    """Revisar is the safety net: a row with no category is there even when
+    the pipeline left no question about it -- still pending at the bank,
+    dismissed before, or cleared by hand."""
+    pending = _tx(session, test_user, test_account, "Dl *Aliexpress Br Alip", status="pending")
+    dismissed = _tx(session, test_user, test_account, "GENILDAFERREIRA")
+    cleared = _tx(session, test_user, test_account, "PADARIA", source="user")
+    _tx(session, test_user, test_account, "MERCADO", source="user", category_id=test_categories[0].id)
+    _tx(session, test_user, test_account, "TRANSF", transfer_pair_id=uuid.uuid4())
+    _tx(session, test_user, test_account, "IGNORADA", is_ignored=True)
+    opening = _tx(session, test_user, test_account, "Saldo inicial")
+    opening.source = "opening_balance"
+    await session.flush()
+    old = _suggest(session, dismissed, "GENILDAFERREIRA")
+    old.status = "dismissed"
+    await session.commit()
+
+    summary = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+    assert (summary["pending_groups"], summary["pending_transactions"]) == (3, 3)
+    review = (await client.get(f"{API}/review", headers=auth_headers)).json()
+    groups = {g["merchant_key"]: g for g in review["groups"]}
+    assert set(groups) == {"ALIEXPRESS BR ALIP", "GENILDAFERREIRA", "PADARIA"}
+    assert groups["ALIEXPRESS BR ALIP"]["transaction_ids"] == [str(pending.id)]
+    assert groups["PADARIA"]["transaction_ids"] == [str(cleared.id)]
+    assert {g["suggestion"] is None for g in groups.values()} == {True}
+    assert {g["uncategorized"] for g in groups.values()} == {1}
+
+    # Asked again, nothing is duplicated: one open question per row.
+    again = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+    assert again["pending_transactions"] == 3
+    rows = (await session.execute(
+        select(CategorizationSuggestion).where(CategorizationSuggestion.status == "pending")
+    )).scalars().all()
+    assert len(rows) == 3
+
+    resp = await client.post(
+        f"{API}/review/accept", headers=auth_headers,
+        json={"merchant_key": "ALIEXPRESS BR ALIP", "category_id": str(test_categories[0].id)},
+    )
+    assert resp.status_code == 200, resp.text
+    filed = await _fresh(session, Transaction, pending.id)
+    assert (filed.category_id, filed.category_source) == (test_categories[0].id, "user")
+    after = (await client.get(f"{API}/summary", headers=auth_headers)).json()
+    assert after["pending_transactions"] == 2
+
+
+@pytest.mark.asyncio
+async def test_review_group_counts_its_rows_without_category(client, auth_headers, session, test_user, test_account, test_categories):
+    """`uncategorized` tells the screen whether "Ignorar" would leave rows
+    with no category (it then hides it: they would come right back)."""
+    blank = _tx(session, test_user, test_account, "UBER")
+    guessed = _tx(session, test_user, test_account, "UBER", source="provider", category_id=test_categories[1].id)
+    await session.flush()
+    _suggest(session, blank, "UBER", category_id=test_categories[1].id)
+    _suggest(session, guessed, "UBER", category_id=test_categories[1].id)
+    await session.commit()
+
+    (group,) = (await client.get(f"{API}/review", headers=auth_headers)).json()["groups"]
+    assert (group["count"], group["uncategorized"]) == (2, 1)
+
+
+@pytest.mark.asyncio
 async def test_review_group_carries_its_first_transactions(client, auth_headers, session, test_user, test_account):
     """Opening a store in Revisar costs no request per row: the queue
     carries the store's first rows (T12-1)."""

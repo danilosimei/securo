@@ -184,15 +184,22 @@ describe('SidebarNavLink', () => {
     expect(item).toMatchObject({ module: 'categories', badgeQueryKey: ['categorization', 'summary'] })
   })
 
-  it('shows the pending count and announces it in the link name', async () => {
+  it('counts the transactions waiting, not the stores, and announces them', async () => {
     renderLink()
-    expect(await screen.findByTestId('nav-badge')).toHaveTextContent('3')
-    expect(screen.getByRole('link', { name: /3 to review/ })).toBeInTheDocument()
+    expect(await screen.findByTestId('nav-badge')).toHaveTextContent('12')
+    expect(screen.getByRole('link', { name: /12 to review/ })).toBeInTheDocument()
+  })
+
+  it('caps the pill at 99+ but announces the real count', async () => {
+    api.categorization.summary.mockResolvedValue(summary({ pending_transactions: 347 }))
+    renderLink()
+    expect(await screen.findByTestId('nav-badge')).toHaveTextContent('99+')
+    expect(screen.getByRole('link', { name: /347 to review/ })).toBeInTheDocument()
   })
 
   it('announces the count when the sidebar is collapsed too', async () => {
     renderLink(true)
-    expect(await screen.findByRole('link', { name: /3 to review/ })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /12 to review/ })).toBeInTheDocument()
     expect(screen.getByTestId('nav-badge-dot')).toBeInTheDocument()
   })
 
@@ -212,7 +219,7 @@ describe('SidebarNavLink', () => {
   })
 
   it('has no badge and a plain name at zero', async () => {
-    api.categorization.summary.mockResolvedValue(summary({ pending_groups: 0 }))
+    api.categorization.summary.mockResolvedValue(summary({ pending_groups: 0, pending_transactions: 0 }))
     renderLink()
     await waitFor(() => expect(api.categorization.summary).toHaveBeenCalled())
     expect(screen.queryByTestId('nav-badge')).not.toBeInTheDocument()

@@ -311,8 +311,7 @@ async def _waiting(
 def _revisable(tx: Transaction) -> bool:
     """Still a candidate: counted, unpaired, and its category still a guess."""
     if (
-        tx.status != "posted"
-        or tx.transfer_pair_id is not None
+        tx.transfer_pair_id is not None
         or tx.is_ignored
         or tx.source == "opening_balance"
     ):

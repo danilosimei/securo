@@ -30,10 +30,9 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.categorization import CategorizationSuggestion
 from app.models.category import Category
 from app.services.reports.breakdown import RowRef, _spend_by_row
 from app.services.reports.periods import Period, _month_end, _shift_months
@@ -759,21 +758,19 @@ async def _small_purchases(ctx: Context, cards: _Cards) -> Optional[dict]:
 
 async def _to_review(ctx: Context, cards: _Cards) -> Optional[dict]:
     """Things waiting for a look, in a single card."""
-    pending = (
-        await ctx.session.execute(
-            select(func.count(CategorizationSuggestion.id)).where(
-                CategorizationSuggestion.workspace_id == ctx.workspace_id,
-                CategorizationSuggestion.status == "pending",
-            )
-        )
-    ).scalar_one()
+    from app.services.categorization.review import pending_counts
+
+    # What Revisar lists (and its badge counts): stale questions left out,
+    # rows with no category in.
+    _, pending = await pending_counts(ctx.session, ctx.workspace_id)
     parts = []
     count = 0
     if pending:
         count += pending
-        parts.append(f"{pending} {'sugestões' if pending > 1 else 'sugestão'} na Revisar")
+        parts.append(f"{pending} {'transações' if pending > 1 else 'transação'} na Revisar")
     if ctx.totals.uncategorized_income > 0:
-        count += 1
+        # Its rows have no category, so they are among Revisar's already.
+        count += 0 if pending else 1
         parts.append(f"{brl(ctx.totals.uncategorized_income)} de renda sem categoria")
     odd = [r for r in ctx.recurring if r.atypical_amount is not None]
     if odd:

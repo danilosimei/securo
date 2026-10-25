@@ -85,11 +85,15 @@ UNNAMED_REASON = "loja sem nome"
 #: memory or the model) replaced it. It is closed as `dismissed`, but it is
 #: not the person ignoring the store.
 SUPERSEDED_REASON = "substituída"
+#: `reason` of the model-less suggestion Revisar gives a row with no
+#: category the pipeline left no question about (`review.surface_uncategorized`).
+#: It never keeps the row from the pipeline: the memory or the model may
+#: still decide it, which closes it like a `NO_AI_REASON` one.
+SURFACED_REASON = "sem categoria"
 #: Run statuses whose `created_at` bounds what the next ingest looks at.
 FINISHED_STATUSES = ("done", "capped")
-#: An ingest run also revisits rows this much older than the previous run:
-#: a card purchase lands as `pending` and is promoted to `posted` days later
-#: keeping its `created_at`, and only posted rows are candidates.
+#: An ingest run also revisits rows this much older than the previous run,
+#: as a margin for rows that arrived while a run was going.
 INGEST_LOOKBACK = timedelta(days=30)
 
 
@@ -174,10 +178,14 @@ async def ingest_since(session: AsyncSession, workspace_id: uuid.UUID) -> dateti
     return _utc(last) - INGEST_LOOKBACK if last is not None else None
 
 
+#: Reasons of the suggestions made with no model behind them.
+_MODEL_LESS_REASONS = (NO_AI_REASON, SURFACED_REASON)
+
+
 def model_less_suggestion() -> Any:
     """A suggestion made with no model behind it."""
     return and_(
-        CategorizationSuggestion.reason == NO_AI_REASON,
+        CategorizationSuggestion.reason.in_(_MODEL_LESS_REASONS),
         CategorizationSuggestion.category_id.is_(None),
     )
 
@@ -187,18 +195,18 @@ def blocking_suggestion() -> Any:
     (a plain NOT is NULL, not true, when `reason` is NULL)."""
     return or_(
         CategorizationSuggestion.reason.is_(None),
-        CategorizationSuggestion.reason != NO_AI_REASON,
+        CategorizationSuggestion.reason.not_in(_MODEL_LESS_REASONS),
         CategorizationSuggestion.category_id.is_not(None),
     )
 
 
 def categorizable(workspace_id: uuid.UUID) -> list[Any]:
     """The rows categorization covers (its candidates, Revisar, Aplicadas by
-    origin, the scoreboard): posted, not one side of a transfer between
-    accounts, not an opening balance, not ignored."""
+    origin, the scoreboard): posted or still pending at the bank (a card
+    purchase keeps its row, and its category, when it posts), not one side
+    of a transfer between accounts, not an opening balance, not ignored."""
     return [
         Transaction.workspace_id == workspace_id,
-        Transaction.status == "posted",
         Transaction.transfer_pair_id.is_(None),
         Transaction.source != "opening_balance",
         Transaction.is_ignored.is_(False),
@@ -212,7 +220,7 @@ async def collect_candidates(
     *,
     revisit_no_ai: bool = False,
 ) -> list[Candidate]:
-    """Posted, unpaired, counted transactions whose category is still a guess.
+    """Unpaired, counted transactions whose category is still a guess.
 
     Left out: rows with a pending suggestion (already waiting for the
     person), and rows of a store whose suggestions the person dismissed
@@ -221,9 +229,18 @@ async def collect_candidates(
     `revisit_no_ai` (a model is available), a pending suggestion made
     without one does not keep its row out: the model may decide it now.
     One the model itself left undecided still does, so the same row is not
-    paid for twice. Rows a person cleared are flagged (`cleared`).
+    paid for twice. The question Revisar surfaces on its own never keeps a
+    row out. Rows a person cleared are flagged (`cleared`).
     """
-    blocking = [CategorizationSuggestion.status == "pending"]
+    blocking = [
+        CategorizationSuggestion.status == "pending",
+        # Not Revisar's own question (`SURFACED_REASON`), NULL-safe.
+        or_(
+            CategorizationSuggestion.reason.is_(None),
+            CategorizationSuggestion.reason != SURFACED_REASON,
+            CategorizationSuggestion.category_id.is_not(None),
+        ),
+    ]
     if revisit_no_ai:
         blocking.append(blocking_suggestion())
     pending = exists().where(
