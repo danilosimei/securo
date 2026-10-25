@@ -300,14 +300,18 @@ async def test_to_review_lists_pending_suggestions_and_unclassified_income(
 ):
     tx = world["add"]("Loja Estranha", None, 80, date(2026, 9, 11))
     world["add"]("Pagamento", None, 120, date(2026, 8, 9), "credit")
+    # Filed by hand after the question: Revisar no longer lists it.
+    stale = world["add"]("Feira", "mercado", 30, date(2026, 9, 12), source="user")
     await world["session"].flush()
     _suggest(world["session"], tx, "LOJA ESTRANHA", category_id=world["cats"]["mercado"].id)
+    _suggest(world["session"], stale, "FEIRA", category_id=world["cats"]["mercado"].id)
     await world["session"].commit()
     card = _rules(await _get(client, auth_headers))["to_review"]
+    # The suggested row and the uncategorized credit: what Revisar lists.
     assert card["title"] == "2 itens para revisar"
     assert card["tone"] == "info" and card["sparkline"] is None
     assert card["actions"] == [{"kind": "review", "label": "Revisar", "link": {"path": "/categorization"}}]
-    assert "1 sugestão na Revisar" in card["compare"]
+    assert "2 transações na Revisar" in card["compare"]
     assert "R$ 120 de renda sem categoria" in card["compare"]
 
 
