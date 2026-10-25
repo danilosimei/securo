@@ -15,8 +15,8 @@ PayeeType = Literal["person", "company"]
 
 #: Where a row came from. Never accepted from a request body: the server
 #: knows which code path inserted the row, and a client claiming otherwise
-#: would defeat the point.
-PayeeSource = Literal["manual", "sync", "import"]
+#: would defeat the point. `ai`: the categorizer named the store.
+PayeeSource = Literal["manual", "sync", "import", "ai"]
 
 
 class TaxIdInput(BaseModel):
