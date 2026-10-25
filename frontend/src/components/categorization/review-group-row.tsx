@@ -331,19 +331,22 @@ export function ReviewGroupRow({
               contentProps={{ className: 'w-72 p-0 overflow-hidden', align: 'end' }}
             />
             {askButton}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-full gap-1.5 text-muted-foreground sm:w-8 sm:px-0"
-              tabIndex={inner}
-              aria-label={t('categorization.review.ignore')}
-              aria-keyshortcuts="x"
-              title={t('categorization.review.ignoreHint')}
-              onClick={onDismiss}
-            >
-              <X size={14} />
-              <span className="sm:hidden">{t('categorization.review.ignore')}</span>
-            </Button>
+            {/* A row with no category would come straight back: it needs one. */}
+            {group.uncategorized === 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-full gap-1.5 text-muted-foreground sm:w-8 sm:px-0"
+                tabIndex={inner}
+                aria-label={t('categorization.review.ignore')}
+                aria-keyshortcuts="x"
+                title={t('categorization.review.ignoreHint')}
+                onClick={onDismiss}
+              >
+                <X size={14} />
+                <span className="sm:hidden">{t('categorization.review.ignore')}</span>
+              </Button>
+            )}
           </div>
         ) : (
           askButton && (

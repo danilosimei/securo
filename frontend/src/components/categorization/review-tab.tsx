@@ -726,7 +726,7 @@ export function ReviewTab() {
         break
       case 'x':
       case 'X':
-        if (canWrite) answer(() => dismiss(group))
+        if (canWrite && group.uncategorized === 0) answer(() => dismiss(group))
         break
       case 'i':
       case 'I':

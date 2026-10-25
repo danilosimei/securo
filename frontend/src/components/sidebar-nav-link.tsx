@@ -6,6 +6,9 @@ import type { NavItem } from '@/lib/nav-items'
 
 type LinkItem = Extract<NavItem, { type: 'link' }>
 
+/** Above this the pill reads "99+"; the link's name keeps the real count. */
+const MAX_SHOWN = 99
+
 /**
  * Pending-work pill for the categorization link: the same amber nudge the
  * rules queue wears, gone entirely at zero. Expanded sidebar shows the
@@ -24,7 +27,7 @@ function CategorizationBadge({ count, collapsed }: { count: number; collapsed: b
           collapsed && 'lg:hidden',
         )}
       >
-        {count}
+        {count > MAX_SHOWN ? `${MAX_SHOWN}+` : count}
       </span>
       <span
         data-testid="nav-badge-dot"
