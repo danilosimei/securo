@@ -215,3 +215,18 @@ async def test_the_api_exposes_source_so_a_picker_can_filter_on_it(
     body = resp.json()
     assert body["source"] == "manual"
     assert body["type"] is None
+
+
+@pytest.mark.asyncio
+async def test_the_list_shows_a_payee_the_categorizer_created(
+    client: AsyncClient, auth_headers, session: AsyncSession, test_user, test_workspace
+):
+    """The categorizer names stores with `source="ai"`; one such row used to
+    break the whole list."""
+    await get_or_create_payee(
+        session, test_user.id, "Padaria Real", workspace_id=test_workspace.id, source="ai"
+    )
+    await session.commit()
+    resp = await client.get("/api/payees", headers=auth_headers)
+    assert resp.status_code == 200
+    assert [p["source"] for p in resp.json() if p["name"] == "Padaria Real"] == ["ai"]

@@ -116,7 +116,10 @@ describe('transactions page: correction toast', () => {
     const { user } = await openRow()
     await user.click(screen.getByRole('button', { name: 'save c2' }))
     await waitFor(() => expect(notifyCorrection).toHaveBeenCalledTimes(1))
-    expect(notifyCorrection).toHaveBeenCalledWith({ id: 'tx-1' })
+    // The save named its action, so the toast can undo it.
+    const actionId = api.transactions.update.mock.calls[0][2]
+    expect(actionId).toEqual(expect.any(String))
+    expect(notifyCorrection).toHaveBeenCalledWith({ id: 'tx-1' }, { actionId })
     expect(toast.success).not.toHaveBeenCalledWith(t('transactions.updated'))
   })
 

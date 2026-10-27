@@ -18,11 +18,12 @@ import { FadePanel } from '@/components/ui/fade-panel'
 import { ReviewTab } from '@/components/categorization/review-tab'
 import { AppliedTab } from '@/components/categorization/applied-tab'
 import { OrganizeTab } from '@/components/categorization/organize-tab'
+import { HistoryTab } from '@/components/categorization/history-tab'
 import { AskProvider } from '@/components/categorization/ask-provider'
 import { Scoreboard } from '@/components/categorization/scoreboard'
 
-type Tab = 'review' | 'applied' | 'organize'
-const TABS: Tab[] = ['review', 'applied', 'organize']
+type Tab = 'review' | 'applied' | 'organize' | 'history'
+const TABS: Tab[] = ['review', 'applied', 'organize', 'history']
 
 export default function CategorizationPage() {
   const { t } = useTranslation()
@@ -127,6 +128,7 @@ export default function CategorizationPage() {
             { value: 'review', label: t('categorization.tab.review'), count: summary?.pending_groups },
             { value: 'applied', label: t('categorization.tab.applied') },
             { value: 'organize', label: t('categorization.tab.organize') },
+            { value: 'history', label: t('categorization.tab.history') },
           ]}
         />
         {statusLine && (
@@ -143,6 +145,7 @@ export default function CategorizationPage() {
           {tab === 'review' && <ReviewTab />}
           {tab === 'applied' && <AppliedTab />}
           {tab === 'organize' && <OrganizeTab />}
+          {tab === 'history' && <HistoryTab />}
         </FadePanel>
       </AskProvider>
     </div>

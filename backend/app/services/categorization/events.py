@@ -35,6 +35,7 @@ from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.action_context import current_action
 from app.models.categorization import CATEGORY_SOURCES, CategorizationEvent
 from app.models.transaction import Transaction
 
@@ -170,6 +171,12 @@ async def cleared_by_person(session: AsyncSession, tx_ids: list[uuid.UUID]) -> s
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _action(run_id: uuid.UUID | None = None) -> uuid.UUID:
+    """The action a write belongs to: its run, else the request's, else a
+    new one (each call outside a request is an action of its own)."""
+    return run_id or current_action() or uuid.uuid4()
 
 
 def _aware(value: datetime) -> datetime:
@@ -321,6 +328,7 @@ async def record_change(
                 workspace_id=tx.workspace_id,
                 transaction_id=tx.id,
                 run_id=run_id,
+                action_id=_action(run_id),
                 source=source,
                 previous_source=previous_source,
                 previous_category_id=previous_category_id,
@@ -410,12 +418,14 @@ async def write_staged(session: AsyncSession, staged: list[StagedChange]) -> int
         return 0
     await session.flush()
     event_ids = [uuid.uuid4() for _ in staged]
+    batch = current_action() or uuid.uuid4()
     payload = [
         {
             "id": event_id,
             "workspace_id": change.tx.workspace_id,
             "transaction_id": change.tx.id,
             "run_id": change.run_id,
+            "action_id": change.run_id or batch,
             "source": change.source,
             "previous_source": change.previous_source,
             "previous_category_id": change.previous_category_id,
@@ -547,11 +557,13 @@ async def record_moves(
     if not rows:
         return 0
     now = _now()
+    action_id = _action()
     payload = [
         {
             "id": uuid.uuid4(),
             "workspace_id": workspace_id,
             "transaction_id": row.id,
+            "action_id": action_id,
             "source": row.category_source or "none",
             "previous_source": row.category_source,
             "previous_category_id": from_category_id,
@@ -578,6 +590,7 @@ async def undo(
     *,
     event_ids: list[uuid.UUID] | None = None,
     run_id: uuid.UUID | None = None,
+    action_id: uuid.UUID | None = None,
     user_id: uuid.UUID | None,
     changes_only: bool = False,
 ) -> UndoResult:
@@ -591,7 +604,7 @@ async def undo(
     neither reverted nor counted. A confirmation left out still counts as a
     later standing event for the same row.
     """
-    if event_ids is None and run_id is None:
+    if event_ids is None and run_id is None and action_id is None:
         return UndoResult(0, 0)
 
     query = select(CategorizationEvent).where(CategorizationEvent.workspace_id == workspace_id)
@@ -599,6 +612,8 @@ async def undo(
         query = query.where(CategorizationEvent.id.in_(event_ids))
     if run_id is not None:
         query = query.where(CategorizationEvent.run_id == run_id)
+    if action_id is not None:
+        query = query.where(CategorizationEvent.action_id == action_id)
     if changes_only:
         query = query.where(changes_category())
     targets: list[Any] = list(
@@ -634,6 +649,8 @@ async def undo(
 
     undone_now: set[uuid.UUID] = set()
     restored = skipped = 0
+    # The undo is an action of its own (Histórico shows "you undid N").
+    undo_action = _action()
     for ev in targets:  # newest first, so chained events in one batch unwind in order
         if (
             ev.undone_at is not None
@@ -663,6 +680,7 @@ async def undo(
                 workspace_id=workspace_id,
                 transaction_id=tx.id,
                 run_id=None,
+                action_id=undo_action,
                 source="undo",
                 previous_source=tx.category_source,
                 previous_category_id=tx.category_id,

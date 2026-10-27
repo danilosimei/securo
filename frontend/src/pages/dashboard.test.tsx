@@ -262,8 +262,10 @@ describe('Dashboard categorization card', () => {
     const panel = (await screen.findByRole('heading', { name: t('dashboard.drillDownUncategorized') })).closest('.fixed')!
     await user.click(await within(panel as HTMLElement).findByText('IFOOD *PEDIDO'))
     await user.click(await screen.findByRole('button', { name: 'save c2' }))
-    await waitFor(() => expect(notifyCorrection).toHaveBeenCalledWith({ id: 'tx-1' }))
-    expect(api.transactions.update).toHaveBeenCalledWith('tx-1', { category_id: 'c2' })
+    await waitFor(() => expect(notifyCorrection).toHaveBeenCalled())
+    expect(api.transactions.update).toHaveBeenCalledWith('tx-1', { category_id: 'c2' }, expect.any(String))
+    const actionId = api.transactions.update.mock.calls[0][2]
+    expect(notifyCorrection).toHaveBeenCalledWith({ id: 'tx-1' }, { actionId })
   })
 })
 

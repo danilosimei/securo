@@ -44,6 +44,7 @@ import { useWorkspace } from '@/contexts/workspace-context'
 import { useCreateTransaction } from '@/hooks/use-create-transaction'
 import { useCreateRuleDialog } from '@/hooks/use-create-rule-dialog'
 import { categoryChanged, withUndoneCategory, useCategoryCorrectionToast } from '@/hooks/use-category-correction-toast'
+import { newActionId } from '@/lib/action-id'
 import { resolveDateFnsLocale } from '@/lib/date-fns-locale'
 import { formatCurrency } from '@/lib/format'
 import {
@@ -581,14 +582,18 @@ export default function AccountDetailPage() {
   const { notifyCorrection } = useCategoryCorrectionToast({ onCreateRule: openRuleDialog })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id: txId, ...data }: TransactionSavePayload & { id: string }) =>
-      transactions.update(txId, data),
-    onSuccess: (_updated, { id: txId, ...payload }) => {
+    // Named, so the toast can undo the save as one action.
+    mutationFn: async ({ id: txId, ...data }: TransactionSavePayload & { id: string }) => {
+      const actionId = newActionId()
+      await transactions.update(txId, data, actionId)
+      return actionId
+    },
+    onSuccess: (actionId, { id: txId, ...payload }) => {
       const corrected = editingTx?.id === txId && categoryChanged(editingTx, payload)
       invalidateFinancialQueries(queryClient)
       setDialogOpen(false)
       setEditingTx(null)
-      if (corrected) void notifyCorrection({ id: txId })
+      if (corrected) void notifyCorrection({ id: txId }, { actionId })
       else toast.success(t('accounts.updated'))
     },
     onError: (error) => {

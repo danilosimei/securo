@@ -1,16 +1,20 @@
 /** After a person fixes a category, offer the two shortcuts that save the
  *  next fixes: file the other rows of the same store the same way, or turn
- *  the store into a rule. Both ride on the confirmation toast. */
-import { useCallback } from 'react'
+ *  the store into a rule. Both ride on the confirmation toast, next to
+ *  "Undo" when the save named its action. */
+import { createElement, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { categorization as categorizationApi } from '@/lib/api'
+import { newActionId } from '@/lib/action-id'
 import { extractApiError } from '@/lib/api-errors'
 import { invalidateCategorizationQueries } from '@/lib/invalidate-queries'
 import type { RuleDialogInitialData } from '@/components/rule-dialog'
-import type { CategorySource, Transaction } from '@/types'
+import { ToastButtons, type ToastButton } from '@/components/toast-buttons'
+import type { CategorySource, Transaction, UndoRequest } from '@/types'
 
 /** Long enough to read the offer and reach for it. */
 const DURATION = 8000
@@ -23,6 +27,19 @@ interface Options {
 interface NotifyOptions {
   /** Confirmation line; "Category updated" by default. */
   title?: string
+  /** The save's action (`X-Action-Id`): offers to undo it. */
+  actionId?: string
+}
+
+/** Where Histórico opens one action's line. */
+export function historyLink(actionId: string): string {
+  return `/categorization?tab=history&action=${actionId}`
+}
+
+/** The toast's buttons: one is a plain action, more need the row. */
+function buttonsOption(buttons: ToastButton[], id?: string | number) {
+  if (buttons.length === 0) return {}
+  return { action: createElement(ToastButtons, { buttons, toastId: id }) }
 }
 
 /** A save that filed the row under a different, non-empty category. */
@@ -73,11 +90,12 @@ export function singleStoreReference<T extends Pick<Transaction, 'id' | 'descrip
 export function useCategoryCorrectionToast({ onCreateRule }: Options = {}) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   const undo = useCallback(
-    async (eventIds: string[]) => {
+    async (payload: UndoRequest) => {
       try {
-        const result = await categorizationApi.undo({ event_ids: eventIds })
+        const result = await categorizationApi.undo(payload)
         if (result.restored > 0) {
           toast.success(t('categorization.correction.undone', { count: result.restored }))
         } else if (result.skipped > 0) {
@@ -94,33 +112,42 @@ export function useCategoryCorrectionToast({ onCreateRule }: Options = {}) {
 
   const applySimilar = useCallback(
     async (transactionId: string) => {
+      const actionId = newActionId()
       try {
-        const result = await categorizationApi.applySimilar(transactionId)
+        const result = await categorizationApi.applySimilar(transactionId, { actionId })
         invalidateCategorizationQueries(queryClient)
         if (result.applied > 0) {
           toast.success(t('categorization.correction.applied', { count: result.applied }), {
-            action: {
-              label: t('categorization.correction.undo'),
-              onClick: () => void undo(result.event_ids),
-            },
+            id: actionId,
             duration: DURATION,
+            ...buttonsOption(
+              [
+                { label: t('categorization.correction.undo'), onClick: () => void undo({ action_id: actionId }) },
+                { label: t('categorization.correction.viewHistory'), onClick: () => navigate(historyLink(actionId)) },
+              ],
+              actionId,
+            ),
           })
         }
       } catch (err) {
         toast.error(extractApiError(err, t('categorization.correction.applyError')))
       }
     },
-    [queryClient, t, undo],
+    [navigate, queryClient, t, undo],
   )
 
   const notifyCorrection = useCallback(
-    async (tx: Pick<Transaction, 'id'>, { title }: NotifyOptions = {}) => {
+    async (tx: Pick<Transaction, 'id'>, { title, actionId }: NotifyOptions = {}) => {
       const message = title ?? t('categorization.correction.updated')
-      // Confirm at once; the offers are added to the same toast when known.
-      // No canWrite check: this only runs after the person's own save went
-      // through, which a viewer cannot make.
+      const undoButton: ToastButton | null = actionId
+        ? { label: t('categorization.correction.undo'), onClick: () => void undo({ action_id: actionId }) }
+        : null
+      // Confirm at once (with its undo); the offers are added to the same
+      // toast when known. No canWrite check: this only runs after the
+      // person's own save went through, which a viewer cannot make.
       // Already long, so it cannot expire and pop back while the offers load.
-      const id = toast.success(message, { duration: DURATION })
+      const id = actionId ?? newActionId()
+      toast.success(message, { id, duration: DURATION, ...buttonsOption(undoButton ? [undoButton] : [], id) })
 
       const [similar, draft] = await Promise.allSettled([
         categorizationApi.similar(tx.id),
@@ -130,14 +157,14 @@ export function useCategoryCorrectionToast({ onCreateRule }: Options = {}) {
       // A 422 means the store has no safe pattern: no rule to offer.
       const rule = draft.status === 'fulfilled' && draft.value.conditions.length > 0 ? draft.value : null
 
-      const apply =
+      const apply: ToastButton | null =
         count > 0
           ? {
               label: t('categorization.correction.applySimilar', { count }),
               onClick: () => void applySimilar(tx.id),
             }
-          : undefined
-      const createRule =
+          : null
+      const createRule: ToastButton | null =
         rule && onCreateRule
           ? {
               label: t('categorization.correction.createRule'),
@@ -149,18 +176,29 @@ export function useCategoryCorrectionToast({ onCreateRule }: Options = {}) {
                   applyToExisting: true,
                 }),
             }
-          : undefined
+          : null
 
       if (!apply && !createRule) return
-      toast.success(message, {
-        id,
-        action: apply ?? createRule,
-        cancel: apply ? createRule : undefined,
-        duration: DURATION,
-      })
+      const buttons = [apply, undoButton, createRule].filter((b): b is ToastButton => b !== null)
+      toast.success(message, { id, duration: DURATION, ...buttonsOption(buttons, id) })
     },
-    [applySimilar, onCreateRule, t],
+    [applySimilar, onCreateRule, t, undo],
   )
 
-  return { notifyCorrection }
+  /** A change with no shortcuts to offer (several stores): just its undo. */
+  const notifyUndoable = useCallback(
+    (message: string, actionId: string) => {
+      toast.success(message, {
+        id: actionId,
+        duration: DURATION,
+        ...buttonsOption(
+          [{ label: t('categorization.correction.undo'), onClick: () => void undo({ action_id: actionId }) }],
+          actionId,
+        ),
+      })
+    },
+    [t, undo],
+  )
+
+  return { notifyCorrection, notifyUndoable }
 }

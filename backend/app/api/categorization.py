@@ -35,6 +35,8 @@ from app.schemas.categorization import (
     CreateCategoryResult,
     DismissRequest,
     DismissResult,
+    HistoryPage,
+    HistoryRowsPage,
     NoteRead,
     NoteRequest,
     OrganizerApplyResult,
@@ -54,7 +56,7 @@ from app.schemas.categorization import (
     UndoResultRead,
 )
 from app.models.categorization import CategorizationRun
-from app.services.categorization import ask, choose, creation, memory, organizer, review
+from app.services.categorization import ask, choose, creation, history, memory, organizer, review
 from app.services.categorization.events import UNSET
 from app.services.categorization import settings as categorization_settings
 from app.tasks import categorization_tasks
@@ -393,6 +395,36 @@ async def list_applied(
     return {"items": items, "total": total}
 
 
+@router.get("/history", response_model=HistoryPage)
+async def list_history(
+    who: Optional[history.Who] = Query(None, description="you, ai or auto; all when left out"),
+    limit: int = Query(30, ge=1, le=MAX_PAGE),
+    offset: int = Query(0, ge=0),
+    ctx: WorkspaceContext = Depends(current_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Every category change, one line per action, newest first."""
+    items, total = await history.actions(session, ctx.workspace.id, who=who, limit=limit, offset=offset)
+    return {"items": items, "total": total}
+
+
+@router.get("/history/{action_id}/rows", response_model=HistoryRowsPage)
+async def list_history_rows(
+    action_id: uuid.UUID,
+    limit: int = Query(50, ge=1, le=MAX_PAGE),
+    offset: int = Query(0, ge=0),
+    ctx: WorkspaceContext = Depends(current_workspace),
+    session: AsyncSession = Depends(get_async_session),
+):
+    try:
+        items, total = await history.action_rows(
+            session, ctx.workspace.id, action_id, limit=limit, offset=offset
+        )
+    except review.NotFound as exc:
+        raise _not_found(exc)
+    return {"items": items, "total": total}
+
+
 @router.get("/scoreboard", response_model=Scoreboard)
 async def get_scoreboard(
     ctx: WorkspaceContext = Depends(current_workspace),
@@ -412,6 +444,7 @@ async def undo_changes(
         ctx.workspace.id,
         event_ids=data.event_ids,
         run_id=data.run_id,
+        action_id=data.action_id,
         user_id=ctx.user_id,
     )
     await session.commit()

@@ -3337,7 +3337,8 @@
     "tab": {
       "review": "Review",
       "applied": "Applied",
-      "organize": "Organize"
+      "organize": "Organize",
+      "history": "History"
     },
     "runNow": "Categorizar agora",
     "running": "Categorizando…",
@@ -3510,7 +3511,8 @@
       "undo": "Undo",
       "undone_one": "{{count}} desfeita",
       "undone_other": "{{count}} desfeitas",
-      "undoError": "Não foi possível desfazer"
+      "undoError": "Não foi possível desfazer",
+      "viewHistory": "See in History"
     },
     "card": {
       "toReview_one": "{{count}} para revisar",
@@ -3724,6 +3726,42 @@
       "waiting_other": " · {{waiting}} aguardando a IA",
       "excluded": "Conta as transações que podem ser categorizadas: transferências entre contas, pendentes e saldo inicial ficam de fora.",
       "about": "O que entra na conta"
+    },
+    "history": {
+      "hint": "Every category change, one line per action. Undo reverts what nobody changed since.",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "noCategory": "No category",
+      "categories_one": "{{count}} category",
+      "categories_other": "{{count}} categories",
+      "count_one": "{{count}} transaction",
+      "count_other": "{{count}} transactions",
+      "moreStores": "+{{count}}",
+      "undo": "Undo",
+      "undoSome": "Undo {{count}}",
+      "undoneAt": "undone at {{time}}",
+      "changedSince": "changed since",
+      "mergeNote": "a merge cannot be undone",
+      "partial_one": "{{count}} had changed since and stays as it is",
+      "partial_other": "{{count}} had changed since and stay as they are",
+      "empty": "No category changes yet.",
+      "error": "Could not load the history.",
+      "loadMore": "Load more",
+      "filter": {
+        "all": "All",
+        "you": "By you",
+        "ai": "AI",
+        "auto": "Automatic"
+      },
+      "who": {
+        "you": "You",
+        "ai": "AI",
+        "memory": "Memory",
+        "rule": "Rule",
+        "auto": "Automatic",
+        "undo": "You undid",
+        "merge": "Category merge"
+      }
     }
   },
   "notFound": {
