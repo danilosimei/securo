@@ -1957,6 +1957,26 @@
     "confirmDeleteValue": "Esto quita el registro del historial de valores."
   },
   "reports": {
+    "whereMoney": {
+      "ofTotal": "del gasto",
+      "ofGroup": "de {{group}}",
+      "vsPrevious": "vs. el período anterior ({{value}})",
+      "noPrevious": "Nada en el período anterior",
+      "count": "Transacciones: {{n}}",
+      "hintGroup": "Haz clic para ver las categorías",
+      "hintCategory": "Haz clic para ver los detalles",
+      "moreRest": "+{{n}} más",
+      "question": "¿A dónde fue el dinero?",
+      "title": "Gasto por grupo",
+      "answer": "{{name}} se llevó {{share}} del gasto",
+      "answerIn": "{{name}} se llevó {{share}} de {{group}}",
+      "byGroup": "Gasto por grupo",
+      "inGroup": "Categorías de {{group}}",
+      "total": "Gastado",
+      "others": "Otros",
+      "back": "Volver",
+      "empty": "Sin gastos en este período."
+    },
     "section": "Analítica",
     "netWorth": "Patrimonio neto",
     "trend": "A lo largo del tiempo",

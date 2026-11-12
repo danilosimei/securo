@@ -1957,6 +1957,26 @@
     "confirmDeleteValue": "Isto remove este registo do histórico de valores."
   },
   "reports": {
+    "whereMoney": {
+      "ofTotal": "da despesa",
+      "ofGroup": "de {{group}}",
+      "vsPrevious": "vs. período anterior ({{value}})",
+      "noPrevious": "Nada no período anterior",
+      "count": "Transações: {{n}}",
+      "hintGroup": "Clique para ver as categorias",
+      "hintCategory": "Clique para ver os detalhes",
+      "moreRest": "+{{n}} outros",
+      "question": "Para onde foi o dinheiro?",
+      "title": "Despesa por grupo",
+      "answer": "{{name}} levou {{share}} da despesa",
+      "answerIn": "{{name}} levou {{share}} de {{group}}",
+      "byGroup": "Despesa por grupo",
+      "inGroup": "Categorias de {{group}}",
+      "total": "Gasto",
+      "others": "Outros",
+      "back": "Voltar",
+      "empty": "Sem despesas neste período."
+    },
     "section": "Análises",
     "netWorth": "Património",
     "trend": "Ao Longo do Tempo",

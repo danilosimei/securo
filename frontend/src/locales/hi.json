@@ -1953,6 +1953,26 @@
     "confirmDeleteValue": "यह प्रविष्टि मान इतिहास से हटा दी जाएगी।"
   },
   "reports": {
+    "whereMoney": {
+      "ofTotal": "खर्च का",
+      "ofGroup": "{{group}} का",
+      "vsPrevious": "पिछली अवधि की तुलना में ({{value}})",
+      "noPrevious": "पिछली अवधि में कुछ नहीं",
+      "count": "लेन-देन: {{n}}",
+      "hintGroup": "श्रेणियाँ देखने के लिए क्लिक करें",
+      "hintCategory": "विवरण देखने के लिए क्लिक करें",
+      "moreRest": "+{{n}} और",
+      "question": "पैसा कहाँ गया?",
+      "title": "समूह के अनुसार खर्च",
+      "answer": "{{name}} ने खर्च का {{share}} लिया",
+      "answerIn": "{{name}} ने {{group}} का {{share}} लिया",
+      "byGroup": "समूह के अनुसार खर्च",
+      "inGroup": "{{group}} की श्रेणियाँ",
+      "total": "खर्च",
+      "others": "अन्य",
+      "back": "वापस",
+      "empty": "इस अवधि में कोई खर्च नहीं।"
+    },
     "section": "एनालिटिक्स",
     "netWorth": "निवल संपत्ति",
     "trend": "समय के साथ",

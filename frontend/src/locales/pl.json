@@ -2039,6 +2039,26 @@
     "confirmDeleteValue": "To usuwa wpis z historii wartości."
   },
   "reports": {
+    "whereMoney": {
+      "ofTotal": "wydatków",
+      "ofGroup": "grupy {{group}}",
+      "vsPrevious": "vs. poprzedni okres ({{value}})",
+      "noPrevious": "Nic w poprzednim okresie",
+      "count": "Transakcje: {{n}}",
+      "hintGroup": "Kliknij, aby zobaczyć kategorie",
+      "hintCategory": "Kliknij, aby zobaczyć szczegóły",
+      "moreRest": "+{{n}} więcej",
+      "question": "Na co poszły pieniądze?",
+      "title": "Wydatki według grup",
+      "answer": "{{name}} to {{share}} wydatków",
+      "answerIn": "{{name}} to {{share}} grupy {{group}}",
+      "byGroup": "Wydatki według grup",
+      "inGroup": "Kategorie grupy {{group}}",
+      "total": "Wydano",
+      "others": "Inne",
+      "back": "Wstecz",
+      "empty": "Brak wydatków w tym okresie."
+    },
     "section": "Analityka",
     "netWorth": "Majątek netto",
     "trend": "W czasie",

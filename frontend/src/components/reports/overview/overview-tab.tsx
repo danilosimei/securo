@@ -4,6 +4,7 @@
  *  The period lives in the URL; switching it keeps the previous numbers up,
  *  dimmed, until the new ones land. */
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { reports } from '@/lib/api'
@@ -18,9 +19,10 @@ import { AnswerLine } from '@/components/reports/common/answer-line'
 import { blockState } from '@/components/reports/common/block-state'
 import { formatMoneyShort, formatPercent, monthName } from '@/components/reports/common/chart-utils'
 import { useGroupPalette } from '@/components/reports/common/group-colors'
-import { tabLink, useReportPeriod } from '@/components/reports/common/report-url'
+import { exploreLink, tabLink, useReportPeriod } from '@/components/reports/common/report-url'
 import { MoneyMapView } from '@/components/reports/money-map/money-map'
 import { buildMapModel } from '@/components/reports/money-map/money-map-model'
+import { WhereMoneyCard } from '@/components/reports/where-money/where-money'
 import { overviewHeadline } from './headline'
 import { KpiRow } from './kpi-row'
 import { Highlights } from './highlights'
@@ -37,6 +39,7 @@ export function OverviewTab() {
   const palette = useGroupPalette()
   const { query } = useReportPeriod()
   const [mapView, setMapView] = useState<'chart' | 'table'>('chart')
+  const navigate = useNavigate()
 
   const overview = useQuery({
     queryKey: ['reports', 'overview', query],
@@ -108,6 +111,17 @@ export function OverviewTab() {
               {t('reports.explore.unconverted', { n: data?.unconverted_count })}
             </p>
           )}
+
+          <WhereMoneyCard
+            scope={query}
+            onCategory={(category, group) => {
+              const link = exploreLink(
+                { ...query, group: group?.id ?? null, category: category.id },
+                { group: group?.label, category: category.label },
+              )
+              navigate(link.to, { state: link.state })
+            }}
+          />
 
           <ReportBlock
             title={t('reports.overview.highlights.title')}

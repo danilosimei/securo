@@ -2081,6 +2081,26 @@
     "confirmDeleteValue": "Tím se záznam odstraní z historie hodnot."
   },
   "reports": {
+    "whereMoney": {
+      "ofTotal": "výdajů",
+      "ofGroup": "skupiny {{group}}",
+      "vsPrevious": "vs. předchozí období ({{value}})",
+      "noPrevious": "V předchozím období nic",
+      "count": "Transakce: {{n}}",
+      "hintGroup": "Klikněte pro kategorie",
+      "hintCategory": "Klikněte pro podrobnosti",
+      "moreRest": "+{{n}} dalších",
+      "question": "Kam šly peníze?",
+      "title": "Výdaje podle skupin",
+      "answer": "{{name}} tvoří {{share}} výdajů",
+      "answerIn": "{{name}} tvoří {{share}} skupiny {{group}}",
+      "byGroup": "Výdaje podle skupin",
+      "inGroup": "Kategorie skupiny {{group}}",
+      "total": "Utraceno",
+      "others": "Ostatní",
+      "back": "Zpět",
+      "empty": "V tomto období žádné výdaje."
+    },
     "section": "Analytika",
     "netWorth": "Čisté jmění",
     "trend": "V čase",

@@ -1954,6 +1954,26 @@
     "confirmDeleteValue": "Dadurch wird der Eintrag aus dem Wertverlauf entfernt."
   },
   "reports": {
+    "whereMoney": {
+      "ofTotal": "der Ausgaben",
+      "ofGroup": "von {{group}}",
+      "vsPrevious": "ggü. dem Vorzeitraum ({{value}})",
+      "noPrevious": "Nichts im Vorzeitraum",
+      "count": "Buchungen: {{n}}",
+      "hintGroup": "Klicken, um die Kategorien zu sehen",
+      "hintCategory": "Klicken, um Details zu sehen",
+      "moreRest": "+{{n}} weitere",
+      "question": "Wohin ist das Geld geflossen?",
+      "title": "Ausgaben nach Gruppe",
+      "answer": "{{name}} macht {{share}} der Ausgaben aus",
+      "answerIn": "{{name}} macht {{share}} von {{group}} aus",
+      "byGroup": "Ausgaben nach Gruppe",
+      "inGroup": "Kategorien von {{group}}",
+      "total": "Ausgegeben",
+      "others": "Sonstige",
+      "back": "Zurück",
+      "empty": "Keine Ausgaben in diesem Zeitraum."
+    },
     "section": "Analysen",
     "netWorth": "Nettovermögen",
     "trend": "Im Zeitverlauf",
