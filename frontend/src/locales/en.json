@@ -1954,6 +1954,14 @@
   },
   "reports": {
     "whereMoney": {
+      "ofTotal": "of the spending",
+      "ofGroup": "of {{group}}",
+      "vsPrevious": "vs. the period before ({{value}})",
+      "noPrevious": "Nothing in the period before",
+      "count": "Transactions: {{n}}",
+      "hintGroup": "Click to see the categories",
+      "hintCategory": "Click to see the details",
+      "moreRest": "+{{n}} more",
       "question": "Where did the money go?",
       "title": "Spending by group",
       "answer": "{{name}} took {{share}} of the spending",

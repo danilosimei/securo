@@ -1955,6 +1955,14 @@
   },
   "reports": {
     "whereMoney": {
+      "ofTotal": "der Ausgaben",
+      "ofGroup": "von {{group}}",
+      "vsPrevious": "ggü. dem Vorzeitraum ({{value}})",
+      "noPrevious": "Nichts im Vorzeitraum",
+      "count": "Buchungen: {{n}}",
+      "hintGroup": "Klicken, um die Kategorien zu sehen",
+      "hintCategory": "Klicken, um Details zu sehen",
+      "moreRest": "+{{n}} weitere",
       "question": "Wohin ist das Geld geflossen?",
       "title": "Ausgaben nach Gruppe",
       "answer": "{{name}} macht {{share}} der Ausgaben aus",

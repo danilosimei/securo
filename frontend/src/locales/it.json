@@ -1958,6 +1958,14 @@
   },
   "reports": {
     "whereMoney": {
+      "ofTotal": "delle spese",
+      "ofGroup": "di {{group}}",
+      "vsPrevious": "vs. periodo precedente ({{value}})",
+      "noPrevious": "Niente nel periodo precedente",
+      "count": "Transazioni: {{n}}",
+      "hintGroup": "Clicca per vedere le categorie",
+      "hintCategory": "Clicca per vedere i dettagli",
+      "moreRest": "+{{n}} altri",
       "question": "Dove sono finiti i soldi?",
       "title": "Spese per gruppo",
       "answer": "{{name}} ha preso il {{share}} delle spese",

@@ -2082,6 +2082,14 @@
   },
   "reports": {
     "whereMoney": {
+      "ofTotal": "výdajů",
+      "ofGroup": "skupiny {{group}}",
+      "vsPrevious": "vs. předchozí období ({{value}})",
+      "noPrevious": "V předchozím období nic",
+      "count": "Transakce: {{n}}",
+      "hintGroup": "Klikněte pro kategorie",
+      "hintCategory": "Klikněte pro podrobnosti",
+      "moreRest": "+{{n}} dalších",
       "question": "Kam šly peníze?",
       "title": "Výdaje podle skupin",
       "answer": "{{name}} tvoří {{share}} výdajů",

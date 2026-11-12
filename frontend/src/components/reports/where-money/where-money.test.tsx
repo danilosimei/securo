@@ -58,6 +58,9 @@ describe('buildSlices', () => {
     expect(slices.slice(0, 6).map((s) => s.key)).toEqual(['g0', 'g1', 'g2', 'g3', 'g4', 'g5'])
     const rest = slices[6]
     expect(rest).toMatchObject({ key: 'rest', label: 'Others', value: 30 + 20 + 10, row: null })
+    // The tooltip of "Others" names what it holds, biggest first.
+    expect(rest.folded.map((r) => r.id)).toEqual(['g6', 'g7', 'g8'])
+    expect(slices[0].folded).toEqual([])
   })
 
   it('does not fold when the rows fit', () => {
@@ -102,6 +105,50 @@ describe('WhereMoneyCard', () => {
     ])
     expect(screen.getByTestId('where-money-total')).toHaveTextContent('R$1,000')
     expect(api.reports.breakdown).toHaveBeenCalledWith({ level: 'group', ...scope })
+  })
+
+  it('puts the hovered line in the middle of the donut, and the total back when it leaves', async () => {
+    renderWithProviders(<WhereMoneyCard scope={scope} onCategory={vi.fn()} />)
+    const line = await screen.findByRole('button', { name: /^Compras:/ })
+    const center = screen.getByTestId('where-money-center')
+
+    fireEvent.mouseEnter(line.closest('li')!)
+    expect(center).toHaveTextContent('Compras')
+    expect(center).toHaveTextContent('R$300')
+    expect(center).toHaveTextContent('30%')
+
+    fireEvent.mouseLeave(line.closest('li')!)
+    expect(center).toHaveTextContent(t('reports.whereMoney.total'))
+    expect(center).toHaveTextContent('R$1,000')
+  })
+
+  it('opens a tooltip on the donut: value, share, change, count and what a click does', async () => {
+    api.reports.breakdown.mockResolvedValue(
+      resp([row({ id: 'g-food', label: 'Alimentação', total: '600.00', previous_total: '480.00', change: 0.25, count: 14 })], '600.00'),
+    )
+    const { container } = renderWithProviders(<WhereMoneyCard scope={scope} onCategory={vi.fn()} />)
+    await screen.findByRole('button', { name: /^Alimentação:/ })
+    const donut = screen.getByTestId('where-money-center').parentElement!
+    fireEvent.mouseMove(donut, { clientX: 40, clientY: 40 })
+    // Recharts swaps the sector nodes while it animates: take the one on
+    // screen now.
+    const sector = await waitFor(() => {
+      const found = container.querySelector('.recharts-pie-sector')
+      expect(found).not.toBeNull()
+      return found!
+    })
+    fireEvent.mouseEnter(sector)
+    const tip = await screen.findByTestId('where-money-tooltip')
+    expect(tip).toHaveTextContent('Alimentação')
+    expect(tip).toHaveTextContent('R$600.00 · 100%')
+    expect(tip).toHaveTextContent(t('reports.whereMoney.ofTotal'))
+    expect(tip).toHaveTextContent('+25%')
+    expect(tip).toHaveTextContent(t('reports.whereMoney.vsPrevious', { value: 'R$480' }))
+    expect(tip).toHaveTextContent(t('reports.whereMoney.count', { n: 14 }))
+    expect(tip).toHaveTextContent(t('reports.whereMoney.hintGroup'))
+
+    fireEvent.mouseLeave(donut)
+    expect(screen.queryByTestId('where-money-tooltip')).not.toBeInTheDocument()
   })
 
   it('opens the categories of a group and goes back', async () => {

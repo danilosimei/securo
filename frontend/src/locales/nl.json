@@ -1956,6 +1956,14 @@
   },
   "reports": {
     "whereMoney": {
+      "ofTotal": "van de uitgaven",
+      "ofGroup": "van {{group}}",
+      "vsPrevious": "vs. de vorige periode ({{value}})",
+      "noPrevious": "Niets in de vorige periode",
+      "count": "Transacties: {{n}}",
+      "hintGroup": "Klik om de categorieën te zien",
+      "hintCategory": "Klik voor details",
+      "moreRest": "+{{n}} meer",
       "question": "Waar is het geld gebleven?",
       "title": "Uitgaven per groep",
       "answer": "{{name}} nam {{share}} van de uitgaven",

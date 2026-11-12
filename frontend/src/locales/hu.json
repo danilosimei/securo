@@ -1954,6 +1954,14 @@
   },
   "reports": {
     "whereMoney": {
+      "ofTotal": "a kiadásokból",
+      "ofGroup": "{{group}} csoportból",
+      "vsPrevious": "vs. előző időszak ({{value}})",
+      "noPrevious": "Az előző időszakban semmi",
+      "count": "Tranzakciók: {{n}}",
+      "hintGroup": "Kattintson a kategóriákért",
+      "hintCategory": "Kattintson a részletekért",
+      "moreRest": "+{{n}} további",
       "question": "Hová ment a pénz?",
       "title": "Kiadások csoportonként",
       "answer": "{{name}} a kiadások {{share}}-a",

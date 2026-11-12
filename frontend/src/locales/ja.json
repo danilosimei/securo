@@ -1954,6 +1954,14 @@
   },
   "reports": {
     "whereMoney": {
+      "ofTotal": "支出のうち",
+      "ofGroup": "{{group}}のうち",
+      "vsPrevious": "前の期間比（{{value}}）",
+      "noPrevious": "前の期間はなし",
+      "count": "取引: {{n}}件",
+      "hintGroup": "クリックしてカテゴリを表示",
+      "hintCategory": "クリックして詳細を表示",
+      "moreRest": "ほか{{n}}件",
       "question": "お金はどこへ？",
       "title": "グループ別の支出",
       "answer": "{{name}}が支出の{{share}}",

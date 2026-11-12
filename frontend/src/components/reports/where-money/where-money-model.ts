@@ -14,6 +14,8 @@ export interface Slice {
   share: number
   /** Null on the folded "Others" slice, which does not open. */
   row: BreakdownRow | null
+  /** What the "Others" slice holds, biggest first; empty on any other. */
+  folded: BreakdownRow[]
 }
 
 export function buildSlices(rows: BreakdownRow[], othersLabel: string, max = MAX_SLICES): Slice[] {
@@ -30,10 +32,19 @@ export function buildSlices(rows: BreakdownRow[], othersLabel: string, max = MAX
     value,
     share: value / sum,
     row,
+    folded: [],
   }))
   if (kept.length < positive.length) {
-    const rest = positive.slice(kept.length).reduce((s, r) => s + r.value, 0)
-    slices.push({ key: 'rest', label: othersLabel, value: rest, share: rest / sum, row: null })
+    const folded = positive.slice(kept.length)
+    const rest = folded.reduce((s, r) => s + r.value, 0)
+    slices.push({
+      key: 'rest',
+      label: othersLabel,
+      value: rest,
+      share: rest / sum,
+      row: null,
+      folded: folded.map((r) => r.row),
+    })
   }
   return slices
 }

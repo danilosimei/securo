@@ -1954,6 +1954,14 @@
   },
   "reports": {
     "whereMoney": {
+      "ofTotal": "खर्च का",
+      "ofGroup": "{{group}} का",
+      "vsPrevious": "पिछली अवधि की तुलना में ({{value}})",
+      "noPrevious": "पिछली अवधि में कुछ नहीं",
+      "count": "लेन-देन: {{n}}",
+      "hintGroup": "श्रेणियाँ देखने के लिए क्लिक करें",
+      "hintCategory": "विवरण देखने के लिए क्लिक करें",
+      "moreRest": "+{{n}} और",
       "question": "पैसा कहाँ गया?",
       "title": "समूह के अनुसार खर्च",
       "answer": "{{name}} ने खर्च का {{share}} लिया",
