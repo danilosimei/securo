@@ -36,7 +36,8 @@ export interface PickedGroup {
 }
 
 interface WhereMoneyCardProps {
-  scope: ReportPeriodParams
+  /** Null when there is no period to ask for yet (a month still to come). */
+  scope: ReportPeriodParams | null
   onCategory: (category: PickedCategory, group: PickedGroup | null) => void
   className?: string
 }
@@ -49,17 +50,20 @@ export function WhereMoneyCard({ scope, onCategory, className }: WhereMoneyCardP
   const reduceMotion = usePrefersReducedMotion()
   const [group, setGroup] = useState<PickedGroup | null>(null)
 
-  const params: BreakdownParams = group ? { level: 'category', group_id: group.id, ...scope } : { level: 'group', ...scope }
+  // Without a period the query stays off; the fallback only fills the key.
+  const period = scope ?? { period: 'this_month' as const }
+  const params: BreakdownParams = group ? { level: 'category', group_id: group.id, ...period } : { level: 'group', ...period }
   const query = useQuery({
     queryKey: ['reports', 'breakdown', params],
     queryFn: () => reports.breakdown(params),
+    enabled: scope !== null,
     // A period switch keeps the old donut up; another level is another list.
     placeholderData: (previous, previousQuery) =>
       (previousQuery?.queryKey[2] as BreakdownParams | undefined)?.group_id === params.group_id
         ? previous
         : undefined,
   })
-  const data = query.data
+  const data = scope ? query.data : undefined
   const stale = query.isPlaceholderData
   const currency = data?.currency ?? 'BRL'
   const slices = data ? buildSlices(data.rows, t('reports.whereMoney.others')) : []
@@ -97,7 +101,7 @@ export function WhereMoneyCard({ scope, onCategory, className }: WhereMoneyCardP
     <ReportBlock
       question={group ? group.label : t('reports.whereMoney.question')}
       title={title}
-      state={blockState(query, !!data && slices.length === 0)}
+      state={scope ? blockState(query, !!data && slices.length === 0) : 'empty'}
       emptyText={t('reports.whereMoney.empty')}
       stale={stale}
       onRetry={() => query.refetch()}

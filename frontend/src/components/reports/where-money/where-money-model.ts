@@ -1,7 +1,8 @@
 /** Slices of the "Para onde foi o dinheiro" donut: only what took money
  *  (refunds stay out), biggest first, and past the last slice everything
  *  folds into one "Others" slice so the donut never turns into confetti. */
-import type { BreakdownRow } from '@/lib/api'
+import type { BreakdownRow, ReportPeriodParams } from '@/lib/api'
+import { monthRange } from '@/lib/month-utils'
 
 export const MAX_SLICES = 7
 
@@ -35,4 +36,14 @@ export function buildSlices(rows: BreakdownRow[], othersLabel: string, max = MAX
     slices.push({ key: 'rest', label: othersLabel, value: rest, share: rest / sum, row: null })
   }
   return slices
+}
+
+/** The period of the Dashboard's month (YYYY-MM) for the reports API, which
+ *  refuses a custom range that ends after today: the current month is "this
+ *  month" (up to today), a past month its whole range, and a month still to
+ *  come has nothing to ask for (null). */
+export function monthScope(month: string, current: string): ReportPeriodParams | null {
+  if (month === current) return { period: 'this_month' }
+  if (month > current) return null
+  return { period: 'custom', ...monthRange(month) }
 }

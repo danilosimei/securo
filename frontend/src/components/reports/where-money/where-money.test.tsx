@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 
 import { WhereMoneyCard } from '@/components/reports/where-money/where-money'
-import { buildSlices } from '@/components/reports/where-money/where-money-model'
+import { buildSlices, monthScope } from '@/components/reports/where-money/where-money-model'
 import { renderWithProviders, t } from '@/test/utils'
 import type { BreakdownParams, BreakdownResponse, BreakdownRow } from '@/lib/api'
 
@@ -66,6 +66,22 @@ describe('buildSlices', () => {
   })
 })
 
+describe('monthScope', () => {
+  // The backend refuses a custom period that ends after today.
+  it('asks for "this month" in the current month, never a range past today', () => {
+    expect(monthScope('2026-11', '2026-11')).toEqual({ period: 'this_month' })
+  })
+
+  it('asks for the whole month when it is over', () => {
+    expect(monthScope('2026-10', '2026-11')).toEqual({ period: 'custom', from: '2026-10-01', to: '2026-10-31' })
+    expect(monthScope('2025-12', '2026-01')).toEqual({ period: 'custom', from: '2025-12-01', to: '2025-12-31' })
+  })
+
+  it('asks for nothing in a month still to come', () => {
+    expect(monthScope('2026-12', '2026-11')).toBeNull()
+  })
+})
+
 describe('WhereMoneyCard', () => {
   const scope = { period: 'custom' as const, from: '2026-10-01', to: '2026-10-31' }
 
@@ -120,6 +136,12 @@ describe('WhereMoneyCard', () => {
       { id: 'c-rest', label: 'Restaurantes' },
       { id: 'g-food', label: 'Alimentação' },
     )
+  })
+
+  it('shows nothing spent, without asking, when there is no period yet', async () => {
+    renderWithProviders(<WhereMoneyCard scope={null} onCategory={vi.fn()} />)
+    expect(await screen.findByText(t('reports.whereMoney.empty'))).toBeInTheDocument()
+    expect(api.reports.breakdown).not.toHaveBeenCalled()
   })
 
   it('says so when nothing was spent', async () => {
