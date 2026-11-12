@@ -1953,6 +1953,18 @@
     "confirmDeleteValue": "Ez eltávolítja a bejegyzést az értéktörténetből."
   },
   "reports": {
+    "whereMoney": {
+      "question": "Hová ment a pénz?",
+      "title": "Kiadások csoportonként",
+      "answer": "{{name}} a kiadások {{share}}-a",
+      "answerIn": "{{name}} a(z) {{group}} {{share}}-a",
+      "byGroup": "Kiadások csoportonként",
+      "inGroup": "{{group}} kategóriái",
+      "total": "Elköltve",
+      "others": "Egyéb",
+      "back": "Vissza",
+      "empty": "Nincs kiadás ebben az időszakban."
+    },
     "section": "Elemzések",
     "netWorth": "Nettó vagyon",
     "trend": "Időbeli alakulás",

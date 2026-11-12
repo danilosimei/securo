@@ -37,6 +37,7 @@ import { PageHeader } from '@/components/page-header'
 import { CategoryIcon } from '@/components/category-icon'
 import { AccountIcon } from '@/components/account-icon'
 import { TransactionDrillDown, type DrillDownFilter } from '@/components/transaction-drill-down'
+import { WhereMoneyCard } from '@/components/reports/where-money/where-money'
 import { TransactionDialog, type TransactionSavePayload } from '@/components/transaction-dialog'
 import { extractApiError } from '@/lib/api-errors'
 import { TransactionCalendarView } from '@/components/transaction-calendar-view'
@@ -768,6 +769,19 @@ export default function DashboardPage() {
         onOpenUncategorized={() => setDrillDown({
           title: t('dashboard.drillDownUncategorized'),
           uncategorized: true,
+        })}
+      />
+
+      {/* Where the money went: spending by group, opening into categories */}
+      <WhereMoneyCard
+        className="mb-5"
+        scope={{ period: 'custom', from: monthStart, to: monthEnd }}
+        onCategory={(category) => setDrillDown({
+          title: t('dashboard.drillDownCategory', { category: category.label, month: monthLabelStr }),
+          ...(category.id === 'none' ? { uncategorized: true } : { category_id: category.id }),
+          type: 'debit',
+          from: monthStart,
+          to: monthEnd,
         })}
       />
 

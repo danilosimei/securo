@@ -2039,6 +2039,18 @@
     "confirmDeleteValue": "To usuwa wpis z historii wartości."
   },
   "reports": {
+    "whereMoney": {
+      "question": "Na co poszły pieniądze?",
+      "title": "Wydatki według grup",
+      "answer": "{{name}} to {{share}} wydatków",
+      "answerIn": "{{name}} to {{share}} grupy {{group}}",
+      "byGroup": "Wydatki według grup",
+      "inGroup": "Kategorie grupy {{group}}",
+      "total": "Wydano",
+      "others": "Inne",
+      "back": "Wstecz",
+      "empty": "Brak wydatków w tym okresie."
+    },
     "section": "Analityka",
     "netWorth": "Majątek netto",
     "trend": "W czasie",

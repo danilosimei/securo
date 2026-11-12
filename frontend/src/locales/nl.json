@@ -1955,6 +1955,18 @@
     "confirmDeleteValue": "Hierdoor verdwijnt de invoer uit de waardegeschiedenis."
   },
   "reports": {
+    "whereMoney": {
+      "question": "Waar is het geld gebleven?",
+      "title": "Uitgaven per groep",
+      "answer": "{{name}} nam {{share}} van de uitgaven",
+      "answerIn": "{{name}} nam {{share}} van {{group}}",
+      "byGroup": "Uitgaven per groep",
+      "inGroup": "Categorieën van {{group}}",
+      "total": "Uitgegeven",
+      "others": "Overig",
+      "back": "Terug",
+      "empty": "Geen uitgaven in deze periode."
+    },
     "section": "Analyses",
     "netWorth": "Netto waarde",
     "trend": "Na verloop van tijd",

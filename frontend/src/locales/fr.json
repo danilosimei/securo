@@ -1957,6 +1957,18 @@
     "confirmDeleteValue": "Cela retire l'entrée de l'historique des valeurs."
   },
   "reports": {
+    "whereMoney": {
+      "question": "Où est passé l'argent ?",
+      "title": "Dépenses par groupe",
+      "answer": "{{name}} représente {{share}} des dépenses",
+      "answerIn": "{{name}} représente {{share}} de {{group}}",
+      "byGroup": "Dépenses par groupe",
+      "inGroup": "Catégories de {{group}}",
+      "total": "Dépensé",
+      "others": "Autres",
+      "back": "Retour",
+      "empty": "Aucune dépense sur cette période."
+    },
     "section": "Analyses",
     "netWorth": "Valeur nette",
     "trend": "Dans le temps",

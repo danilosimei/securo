@@ -1953,6 +1953,18 @@
     "confirmDeleteValue": "この記録は値の履歴から削除されます。"
   },
   "reports": {
+    "whereMoney": {
+      "question": "お金はどこへ？",
+      "title": "グループ別の支出",
+      "answer": "{{name}}が支出の{{share}}",
+      "answerIn": "{{name}}が{{group}}の{{share}}",
+      "byGroup": "グループ別の支出",
+      "inGroup": "{{group}}のカテゴリ",
+      "total": "支出",
+      "others": "その他",
+      "back": "戻る",
+      "empty": "この期間の支出はありません。"
+    },
     "section": "分析",
     "netWorth": "純資産",
     "trend": "推移",

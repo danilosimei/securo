@@ -1957,6 +1957,18 @@
     "confirmDeleteValue": "Questo rimuove la voce dallo storico dei valori."
   },
   "reports": {
+    "whereMoney": {
+      "question": "Dove sono finiti i soldi?",
+      "title": "Spese per gruppo",
+      "answer": "{{name}} ha preso il {{share}} delle spese",
+      "answerIn": "{{name}} ha preso il {{share}} di {{group}}",
+      "byGroup": "Spese per gruppo",
+      "inGroup": "Categorie di {{group}}",
+      "total": "Speso",
+      "others": "Altro",
+      "back": "Indietro",
+      "empty": "Nessuna spesa in questo periodo."
+    },
     "section": "Analisi",
     "netWorth": "Patrimonio netto",
     "trend": "Nel tempo",

@@ -8,9 +8,10 @@ import { pickPeriod } from '@/test/report-period-actions'
 import { WithPeriodBar } from '@/test/report-period'
 import { GROUPS, overviewFixture } from '@/test/reports-fixtures'
 import { buildPalette } from '@/components/reports/common/group-colors'
+import type { BreakdownParams, BreakdownResponse, BreakdownRow } from '@/lib/api'
 
 const api = vi.hoisted(() => ({
-  reports: { overview: vi.fn() },
+  reports: { overview: vi.fn(), breakdown: vi.fn() },
   categoryGroups: { list: vi.fn() },
 }))
 
@@ -41,12 +42,27 @@ function renderTab(route = '/reports?tab=overview&period=last_month') {
   )
 }
 
+const bRow = (id: string, label: string, kind: BreakdownRow['kind'], total: string): BreakdownRow => ({
+  id, label, kind, total, share: 0, previous_total: '0', change: null, count: 1, sparkline: [],
+})
+function breakdownFixture(p: BreakdownParams): BreakdownResponse {
+  const rows = p.level === 'category'
+    ? [bRow('c-pets', 'Pets', 'category', '300.00'), bRow('c-health', 'Saúde', 'category', '100.00')]
+    : [bRow('g-life', 'Estilo de Vida', 'group', '400.00'), bRow('g-food', 'Alimentação', 'group', '100.00')]
+  const total = rows.reduce((sum, r) => sum + Number(r.total), 0).toFixed(2)
+  return {
+    period: { from: '2026-09-01', to: '2026-09-30', partial: false, previous_from: '2026-08-01', previous_to: '2026-08-31' },
+    currency: 'BRL', total, previous_total: null, rows, unconverted_count: 0,
+  }
+}
+
 const where = () => screen.getByTestId('location').textContent ?? ''
 
 beforeEach(() => {
   vi.clearAllMocks()
   api.categoryGroups.list.mockResolvedValue(GROUPS)
   api.reports.overview.mockResolvedValue(overviewFixture())
+  api.reports.breakdown.mockImplementation(async (p: BreakdownParams) => breakdownFixture(p))
 })
 
 describe('OverviewTab', () => {
@@ -189,6 +205,15 @@ describe('OverviewTab', () => {
     expect(rows[2]).toHaveTextContent('−R$310')
     await user.click(rows[0])
     expect(where()).toBe('/reports?tab=explore&period=last_month&group=g-life')
+  })
+
+  it('shows where the money went by group; a group opens its categories and a category opens Explore', async () => {
+    const { user } = renderTab()
+
+    const card = await screen.findByTestId('block-where-money')
+    await user.click(await within(card).findByRole('button', { name: /^Estilo de Vida:/ }))
+    await user.click(await within(card).findByRole('button', { name: /^Pets:/ }))
+    expect(where()).toBe('/reports?tab=explore&period=last_month&group=g-life&category=c-pets')
   })
 
   it('puts the group or category icon, bare and in the group color, before the names', async () => {

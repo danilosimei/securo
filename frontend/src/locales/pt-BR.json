@@ -1957,6 +1957,18 @@
     "confirmDeleteValue": "Isso remove este registro do histórico de valores."
   },
   "reports": {
+    "whereMoney": {
+      "question": "Para onde foi o dinheiro?",
+      "title": "Gasto por grupo",
+      "answer": "{{name}} levou {{share}} do gasto",
+      "answerIn": "{{name}} levou {{share}} de {{group}}",
+      "byGroup": "Gasto por grupo",
+      "inGroup": "Categorias de {{group}}",
+      "total": "Gasto",
+      "others": "Outros",
+      "back": "Voltar",
+      "empty": "Nenhum gasto neste período."
+    },
     "section": "Análises",
     "netWorth": "Patrimônio",
     "trend": "Ao Longo do Tempo",

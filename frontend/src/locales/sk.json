@@ -2065,6 +2065,18 @@
     "confirmDeleteValue": "Tým sa záznam odstráni z histórie hodnôt."
   },
   "reports": {
+    "whereMoney": {
+      "question": "Kam išli peniaze?",
+      "title": "Výdavky podľa skupín",
+      "answer": "{{name}} tvorí {{share}} výdavkov",
+      "answerIn": "{{name}} tvorí {{share}} skupiny {{group}}",
+      "byGroup": "Výdavky podľa skupín",
+      "inGroup": "Kategórie skupiny {{group}}",
+      "total": "Minuté",
+      "others": "Ostatné",
+      "back": "Späť",
+      "empty": "V tomto období žiadne výdavky."
+    },
     "section": "Analytika",
     "netWorth": "Čisté imanie",
     "trend": "V čase",
